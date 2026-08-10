@@ -165,9 +165,9 @@ export const compareModelIds = (left: string, right: string): number => {
 export const compareUnrankedModelIds = (left: string, right: string): number => compareModelIds(left, right) || left.localeCompare(right);
 
 /* THE SAME TIER SCALE READ FROM THE OTHER END, for the one caller that wants the WEAKEST model rather than the
- * strongest: the quick model behind a one-click helper (the commit box's autofill). A picker orders a catalog by
- * what a user reaches for; this orders it by what a helper should spend, and the two are exact opposites — so
- * they share TIER_RANK rather than each naming its own list of cheap ids.
+ * strongest: the quick model behind an automatic helper (the commit message written at land time). A picker
+ * orders a catalog by what a user reaches for; this orders it by what a helper should spend, and the two are
+ * exact opposites — so they share TIER_RANK rather than each naming its own list of cheap ids.
  *
  * The direction of UNRANKED is the reason this can't just be compareModelIds reversed. There, an unrecognized
  * family LEADS, because an id carrying no tier word is the provider's base line and a family nobody here has

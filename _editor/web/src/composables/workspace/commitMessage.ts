@@ -16,7 +16,7 @@ import { useSandbox } from "../sandbox/useSandbox";
  *
  * WHAT THE USER TYPED IS UNTOUCHABLE, which is why a fill records the exact text it wrote. A later fill may
  * replace its own output, and clicking off the legend takes its own output back; neither may touch a keystroke.
- * There is no Undo here for the same reason (the AI autofill next door needs one — it overwrites on purpose).
+ * That is also why there is no Undo here: nothing in this box ever overwrites something the user wrote.
  *
  * THE COMMIT BOX'S DRAFT, OUTLIVING ITS INPUT. The Changes panel is mounted behind a v-if — the sidebar's
  * Files|Changes|History switch and the mobile segment both destroy it — so a message held in the component died
@@ -46,8 +46,8 @@ const read = (sandboxId: string | undefined): string => {
 
 const { activeSandboxId } = useSandbox();
 
-// What the user has typed, accepted from the AI autofill, or filed in from a From chip, for this sandbox.
-// Empty = nothing at all, which is also what a successful commit leaves behind.
+// What the user has typed, or filed in from a From chip, for this sandbox. Empty = nothing at all, which is
+// also what a successful commit leaves behind.
 const draft = ref(read(activeSandboxId.value));
 
 /* The exact text the last legend fill wrote, while the box still holds it verbatim. This is the whole of the
@@ -63,8 +63,8 @@ const filled = ref<string | undefined>(undefined);
 export const commitMessage = computed<string>({
     get: () => draft.value,
     set: (message) => {
-        // Any write that isn't the fill's own output ends the fill's claim — a keystroke, the AI autofill, the
-        // clear a successful commit does. Set before the draft so a watcher on the message sees the final state.
+        // Any write that isn't the fill's own output ends the fill's claim — a keystroke, the clear a successful
+        // commit does. Set before the draft so a watcher on the message sees the final state.
         if (message !== filled.value) {
             filled.value = undefined;
         }
@@ -72,18 +72,10 @@ export const commitMessage = computed<string>({
     },
 });
 
-/* Whether a fill would land at all — the same test fillCommitMessage makes below, asked BEFORE the work of
- * producing something to fill with.
- *
- * It is separate because the legend's click now PAYS for its line: with nothing drafted at land time the chip
- * reads the session's diff and writes a message on the spot, and spending a model call on a box that is going
- * to decline the result is pure cost with nothing on screen to show for it. */
-export const canFillCommitMessage = (): boolean => draft.value === `` || draft.value === filled.value;
-
 // The message for a session's work, filed by the From legend's click. Declines while the box holds anything the
-// fill did not put there.
+// fill did not put there — an empty box, or the fill's own last line, is all it may write over.
 export const fillCommitMessage = (message: string): void => {
-    if (!canFillCommitMessage()) {
+    if (draft.value !== `` && draft.value !== filled.value) {
         return;
     }
     filled.value = message;

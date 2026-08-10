@@ -21,7 +21,7 @@ import ProviderLogo from "../../../chat/ProviderLogo.vue";
  *   QUICK MODEL — no conversation, no tools, one string back (a commit message, a session title). An ORDERED
  *   LIST, walked top to bottom until one answers, because the failure this row actually has is a connected
  *   model that will not answer today: the account's allowance went on the chat, and one spent provider takes
- *   every sparkle in the app down for hours while the others sit idle. Auto is the default and it is DERIVED,
+ *   every one of those jobs down for hours while the others sit idle. Auto is the default and it is DERIVED,
  *   not stored: an empty list means "work it out from whatever is connected right now" (resolveQuickModels —
  *   cheapest tier first, free channel before a paid one, every connected provider in that order), so connecting
  *   an account tomorrow improves the answer by itself. Cheapest wins BECAUSE the job is small; being frontier
@@ -156,7 +156,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
         <Row
             icon="sparkles"
             title="Quick model"
-            description="The cheap, fast models behind one-click helpers like the commit-message autofill — tried in order, so a spent account doesn't take the feature down."
+            description="The cheap, fast models behind small automatic jobs like the commit message written when an agent's work lands — tried in order, so a spent account doesn't take the feature down."
         >
             <template #control>
                 <Picker

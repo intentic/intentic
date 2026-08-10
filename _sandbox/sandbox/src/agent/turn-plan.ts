@@ -429,7 +429,7 @@ const TURN_RULE_OUTPUT_BYTES = 4_000;
 
 /* The Claude Code harness — a native Claude turn's subscription OAuth (with its mid-turn refresh callback), or
  * the translator endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
- * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
+ * which the quick-model one-shot behind the landed-work messages reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
 export const planHarnessTurn = async (
     services: Services,

@@ -21,7 +21,7 @@ import { cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePro
  * would spend quota.
  *
  * THE SAME READING THE COMMIT WILL MAKE. The diff comes from the paths this agent CLAIMS in the main tree
- * (agents/origins.ts) through the same collectRepoDiff the sparkle button uses — so the sentence describes
+ * (agents/origins.ts) through collectRepoDiff, the same reader a commit's own diff goes through — so the sentence describes
  * exactly the set of files the chip narrows to and the commit records, and the two ways of naming a commit
  * cannot come back in different styles. It is the claim rather than the patch just applied, which is what
  * makes a second land describe the WHOLE outstanding claim: the user commits what the chip shows, not what

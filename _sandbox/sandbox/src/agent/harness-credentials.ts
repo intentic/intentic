@@ -15,7 +15,7 @@ import type { TurnLimit } from "../usage/translator-usage.js";
 
 /* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider — the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
- * and the quick-model one-shot behind the commit box's autofill. It lives here rather than inline in
+ * and the quick-model one-shot behind the messages written at land time. It lives here rather than inline in
  * agent.routes.ts because the alternative is two places deciding which providers ride the translator, and they
  * would drift silently — a helper that resolves credentials a different
  * way than the chat does is a helper that fails only for the users whose setup differs from the developer's.

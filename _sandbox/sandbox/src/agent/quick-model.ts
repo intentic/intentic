@@ -90,18 +90,18 @@ const refusalText = (error: unknown): string => (error instanceof Error ? error.
  *
  * EVERY REFUSAL IS WORTH STEPPING OVER, and the walk deliberately does not try to sort them. A spent allowance
  * is the case the chain exists for, but a revoked token, a provider having an outage and a translator that
- * cannot route this model all leave the user in exactly the same place — looking at a sparkle that does
- * nothing — while the next account down could have answered in two seconds. Classifying would only add ways to
+ * cannot route this model all leave the user in exactly the same place — nothing written, no reason given —
+ * while the next account down could have answered in two seconds. Classifying would only add ways to
  * get the answer wrong, and the cost of over-stepping is one extra one-shot on a cheap rung.
  *
- * THE USER'S OWN CANCEL IS NOT A REFUSAL. A second click on the busy button aborts the turn, and continuing
- * down the chain after it would spend three more calls nobody is waiting for.
+ * THE USER'S OWN CANCEL IS NOT A REFUSAL. A caller whose signal aborts (a loop the user stopped) is done, and
+ * continuing down the chain after it would spend three more calls nobody is waiting for.
  *
  * Both terminal refusals are thrown rather than returned, and that is the opposite of harness-credentials.ts on
  * purpose: there, "no translator in this image" is a state several callers render differently, while here every
- * caller is a click that already has one place to print a failure. Nothing connected is a message about the
- * sandbox; a chain that is spent to the bottom names every model it asked and what each one said, because
- * "couldn't draft a message" without that is indistinguishable from a button that is simply broken. */
+ * caller already has one place to record a failure. Nothing connected is a message about the sandbox; a chain
+ * that is spent to the bottom names every model it asked and what each one said, because "couldn't draft a
+ * message" without that is indistinguishable from a helper that is simply broken. */
 export const askQuickModel = async (services: Services, prompt: string, signal: AbortSignal): Promise<QuickModelAnswer> => {
     const chain = resolveQuickModels(await quickModelSources(services), (await services.sandboxSettings.get()).quickModel);
     if (chain.length === 0) {

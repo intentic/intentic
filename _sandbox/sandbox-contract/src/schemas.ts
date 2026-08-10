@@ -1418,13 +1418,14 @@ export const SandboxSettingsSchema = z.object({
     iqContextHoldout: z.number().min(0).max(1).default(0),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
-    /* The models behind the one-click helpers that are not a conversation — today the commit box's autofill.
-     * An ORDERED list of `${provider}:${modelId}`, tried top to bottom, or EMPTY for Auto.
+    /* The models behind the small automatic jobs that are not a conversation — today the commit message
+     * written when an agent's work lands. An ORDERED list of `${provider}:${modelId}`, tried top to bottom, or
+     * EMPTY for Auto.
      *
      * A LIST rather than a pick, because the single interesting failure of this feature is a model that is
      * connected and simply will not answer today: the account's allowance went on the chat, and one spent
-     * provider then takes the sparkle down for hours while the others sit idle. Written in order, the daemon
-     * steps over the spent one and the click still lands (agent/quick-model.ts walks it).
+     * provider then takes the job down for hours while the others sit idle. Written in order, the daemon steps
+     * over the spent one and the message still gets written (agent/quick-model.ts walks it).
      *
      * Empty is the default and still the interesting case: Auto is resolved from whatever accounts are
      * connected at the moment it is read (resolveQuickModels), so it can never name a provider this sandbox has
@@ -1798,34 +1799,6 @@ export const GitFileSchema = z.object({ path: z.string(), content: z.string() })
 export const RepoPathsSchema = z.object({ repo: z.string().min(1), paths: z.array(z.string().min(1)).max(500).optional() });
 export type RepoPaths = z.infer<typeof RepoPathsSchema>;
 
-/* AI-drafted commit message. Workspace-wide, not per repo, because the commit box's target IS a set of repos
- * sharing one message — so the draft has to see every one of their diffs to describe what the commit actually
- * records. The input mirrors CommitSchema field for field, which is the whole point: whatever the commit is
- * about to do is what gets described, and the two cannot drift.
- *   repos[].paths ⇒ the subset that commit will stage — read the WORKTREE, narrowed to those paths
- *   all: true     ⇒ the whole worktree, untracked included (what "Commit all" sweeps)
- *   neither       ⇒ the INDEX (what a bare commit records)
- * Getting that wrong would describe changes the commit isn't going to contain. */
-export const CommitMessageDraftSchema = z.object({
-    repos: z.array(RepoPathsSchema).min(1).max(50),
-    all: z.boolean().optional(),
-});
-// The draft plus WHICH model wrote it, so the surface can name it rather than claiming an anonymous "AI" —
-// that name is also the only place the resolved quick model is visible before anyone opens settings.
-export const CommitMessageSchema = z.object({
-    message: z.string(),
-    provider: z.string(),
-    model: z.string(),
-    /* The models ahead of it in the chain that refused, in the order they were tried. Reported rather than
-     * swallowed because a silent fallback is a bill the user cannot see: the message arrives written by a model
-     * they did not expect, on an account they did not expect to spend, and nothing on screen says why their
-     * first choice was skipped. One line in the panel's readout closes that gap. */
-    skipped: z
-        .array(z.object({ model: z.string(), reason: z.string() }))
-        .max(10)
-        .default([]),
-});
-export type CommitMessageDraft = z.infer<typeof CommitMessageSchema>;
 // One change to a file — an uncommitted working-tree change (status vs HEAD, untracked included), an agent
 // worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
 // undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).

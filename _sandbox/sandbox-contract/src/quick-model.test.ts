@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { type QuickModelChoice, type QuickModelSource, quickModelKey, resolveQuickModels } from "./quick-model.js";
 
-/* Which models a one-click helper spends, and in which order. The rule answers two surfaces at once — the
- * daemon walks it, the browser names its head in the sparkle's tooltip — so what these tests pin is that a
+/* Which models a small automatic helper spends, and in which order. The rule answers two surfaces at once —
+ * the daemon walks it, the browser names its head in the settings row — so what these tests pin is that a
  * sandbox's connections alone decide it, with no stored id to go stale, and that there is always a rung
  * underneath the first one whenever the sandbox has another account to reach for. */
 
@@ -25,7 +25,7 @@ test("reaches for the efficient rung of the one connected provider, never its fl
 
 test("spends the FREE channel over the subscription when both offer the same rung", () => {
     // Both publish a cheap-tier row, so nothing separates them on capability — and one of them costs the user
-    // nothing while the other eats headroom they watch. Clicking sparkle should not quietly bill the Claude plan.
+    // nothing while the other eats headroom they watch. A background helper should not quietly bill the Claude plan.
     expect(head([CLAUDE, GOOGLE], [])).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
 });
 
@@ -132,7 +132,7 @@ test("Auto is a ladder too — every connected provider's cheap rung, best first
 
 /* A MODEL ENDPOINT the user configured is a provider like any other here, and the reason it has to be is the
  * settings row: its options are built from the same picker catalog, so a pin naming one that this resolver
- * dropped would print one model's name under the sparkle and spend a different account entirely. */
+ * dropped would print one model's name in the settings row and spend a different account entirely. */
 const OLLAMA: QuickModelSource = { provider: `endpoint/ollama`, ready: true, models: [`qwen3-coder`, `gemma3-27b`] };
 
 test("honours a pin on a configured endpoint — the whole id, not the half before its slash", () => {

@@ -12,11 +12,8 @@ import { useCodeStats } from "../../composables/workspace/useCodeStats";
 import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
-import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
-import { useReceipts } from "../../composables/receipts";
-import { canFillCommitMessage, clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
-import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
+import { clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
 import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
@@ -193,9 +190,8 @@ const originNote = (id: string): string | undefined => {
  * the opening prompt (see the daemon's landed-subject.ts) — so a conversation that opened "audit the review
  * panel" and then fixed what the audit found kept filing `chore: audit review panel` over a diff full of
  * fixes. The subject is read off the code instead, at land time, so it says what the commit actually contains.
- * It arrives already in the repo's own house style and goes in VERBATIM: it was drafted by the same reader the
- * sparkle button uses, against the same paths, so re-prefixing it here would put a second convention on a line
- * that already has one.
+ * It arrives already in the repo's own house style and goes in VERBATIM: it was drafted at land time against
+ * exactly these paths, so re-prefixing it here would put a second convention on a line that already has one.
  *
  * THERE IS NO LONGER A TITLE FALLBACK. A verb table used to turn the session's name into a subject whenever no
  * drafted one existed — `Review panel · audit` filed as `chore: review panel audit` — and that guess is the
@@ -203,9 +199,9 @@ const originNote = (id: string): string | undefined => {
  * confidently. It also had no way to tell a real title from a bad one, so a naming pass that failed and asked
  * for more context went into the commit box verbatim, wearing a `feat:` the table had picked for it.
  *
- * What replaces it is not another guess: a chip with nothing drafted asks the daemon to read that session's
- * diff and write one now (see toggleOrigin). It costs a moment where the guess cost nothing, and it is the only
- * version of this that can be right. */
+ * Nothing replaces it, on purpose: a chip with no drafted sentence behind it files nothing and simply filters,
+ * which is the honest answer. An empty box the user can type into beats a confident line about a change nobody
+ * read. */
 const originSubject = (id: string): string | undefined => originOf(id)?.subject;
 
 /* What the chip actually files: the subject, the drafted facts under it, and the `Release-Note:` trailer at the
@@ -230,17 +226,21 @@ const originMessage = (id: string): string | undefined => {
  * into one line — a message nobody chose, that changed under them whenever another agent landed. Naming a
  * commit is now something you ASK for, and the ask is the click you were already making.
  *
- * A session whose work landed before a quick model was connected — or whose draft failed — has no stored
- * message, and rather than guess one from its name the click READS THE CODE: the same prompt, the same reader
- * and the same paths the sparkle button uses, against exactly the files this chip just narrowed to. It costs a
- * moment where the old guess cost nothing, and it is the only version of this that describes the change.
- *
- * The filter always applies, drafted line or not — you can narrow to a session nothing can name.
- *
- * DEFINED FURTHER DOWN, beside runAutofill, because it now needs the same three things that one does: the draft
- * client, the readiness computed and the receipts channel. The two are the same gesture at different scopes —
- * "name this session's work" and "name this commit" — so they read better together than this one would up here
- * ahead of everything it calls. */
+ * A session whose work landed with no sentence written for it (nothing connected to write one at the time) files
+ * nothing, and the box stays the user's to type in. The filter always applies either way — you can narrow to a
+ * session nothing can name. */
+const toggleOrigin = (id: string): void => {
+    const next = originFilter.value === id ? undefined : id;
+    originFilter.value = next;
+    // Toggled off, or moved to "you", or nothing was ever written for this session: the line the legend put
+    // there no longer has a chip behind it. Anything the user has made their own survives this.
+    const stored = next === undefined || next === YOURS ? undefined : originMessage(next);
+    if (stored === undefined) {
+        clearFilledMessage();
+        return;
+    }
+    fillCommitMessage(stored);
+};
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -651,147 +651,44 @@ const doCommit = async (): Promise<void> => {
     await runCommit(commitGroups.value);
 };
 
-/* --- AI autofill ---------------------------------------------------------------------------------------------
- * One click drafts the subject line from what this commit will actually record — the same `commitTarget` and
- * `commitAll` the button below reads, so the message can never describe a different set of changes than the
- * commit contains.
+/* HOW TALL THE BOX IS — one row until the message needs more, then as many as it takes, to a stop.
  *
- * It runs on the sandbox's QUICK MODEL (the cheap rung — see the contract's quick-model.ts), never on whatever
- * the chat is set to: a commit subject is a mechanical job, and spending a frontier model's quota on one is the
- * thing this whole feature exists to avoid. The tooltip names the model and where to change it, which is how
- * the setting on Sandbox ▸ Agent gets discovered at all.
+ * The box is a textarea rather than a single-line input because a commit message HAS a body: a release-note
+ * trailer, or the facts under the subject that a session's landed sentence brings with it. In an `input` those
+ * had nowhere to go — the message was cut to its first line before it ever reached the user.
  *
- * Everything it has to say goes in the READOUT SLOT the blocker notice already owns — "Drafted with X · Undo",
- * or why it failed. Same reasoning as blockerNotice: that line answers "what is this box about to do", a draft
- * is an answer to exactly that, and a two-line box cannot afford a row per state.
- *
- * IT NEVER SITS THERE DEAD. The button used to be `disabled` whenever it could not run, which meant the two
- * states it most needed to explain — nothing staged, and no account connected — reached the user as a click
- * that did nothing at all, with the reason parked in a tooltip that touch never opens. So it stays live and
- * ANSWERS: the readout takes the reason, and the app's quiet channel says it again where the user is actually
- * looking (composables/receipts.ts), because a sidebar line under a sparkle they clicked in the corner of the
- * screen is exactly the kind of feedback people miss. Same for a draft that FAILS: the whole chain being spent
- * is a real afternoon-long state, and "nothing happened" is the one way of reporting it that teaches people the
- * feature is broken. */
-const commitDraft = useCommitDraft();
-const quickModel = useQuickModel();
-const { warn } = useReceipts();
-// Off when there is nothing to describe or nothing to describe it with. `commitTarget` is empty in exactly the
-// cases the Commit button is also off, so the two never disagree about whether this commit exists.
-const autofillReady = computed(() => commitTarget.value.length > 0 && quickModel.choice.value !== undefined && !commitDraft.busy.value);
-
-// The From legend's click — see the block above originMessage for what it is and why it stopped guessing.
-const toggleOrigin = async (id: string): Promise<void> => {
-    const next = originFilter.value === id ? undefined : id;
-    originFilter.value = next;
-    if (next === undefined || next === YOURS) {
-        // Toggled off or moved to "you" — the line the legend put there no longer has a chip behind it. Anything
-        // the user has made their own survives this.
-        clearFilledMessage();
-        return;
-    }
-    const stored = originMessage(next);
-    if (stored !== undefined) {
-        fillCommitMessage(stored);
-        return;
-    }
-    // Asked BEFORE the model call rather than after: a box holding the user's own text will refuse the fill, and
-    // an unconnected sandbox has nothing to ask — in both cases the call would be paid for and thrown away.
-    if (!canFillCommitMessage() || !autofillReady.value) {
-        clearFilledMessage();
-        return;
-    }
-    const drafted = await commitDraft.draft(filteredGroups.value, false, commitMessage.value);
-    if (drafted === undefined) {
-        // A cancel says nothing on purpose; a real failure is worth one line, because the user clicked expecting
-        // a message and the box is about to stay empty.
-        if (commitDraft.error.value !== undefined) {
-            warn(commitDraft.error.value);
-        }
-        return;
-    }
-    // The legend may have been clicked again while the model was thinking. Filing now would put a message about
-    // one session over a filter pointing at another, which is the one outcome worse than an empty box.
-    if (originFilter.value === next) {
-        fillCommitMessage(drafted);
-    }
-};
-// Why it cannot run, when it cannot — and what it is about to do when it can. One string, because the tooltip
-// and the refusal are the same sentence read at two different moments.
-const autofillHint = computed(() => {
-    if (quickModel.choice.value === undefined) {
-        return `Connect an AI account in Sandbox ▸ Agent to draft commit messages.`;
-    }
-    if (commitTarget.value.length === 0) {
-        return `Nothing to describe yet — stage the changes you want to commit.`;
-    }
-    const scope = commitAll.value
-        ? `every uncommitted change`
-        : commitFiles.value > 0
-          ? `the ${plural(commitFiles.value, `file`)} from ${filterLabel.value}`
-          : `the staged changes`;
-    // The fallbacks are named too: which account a click spends is the point of naming any of it, and on the
-    // day the first one is out the second is the one that actually gets billed.
-    const fallbacks = quickModel.fallbackLabels.value;
-    const order = fallbacks.length === 0 ? `` : `, or ${fallbacks.join(`, then `)} if it is out`;
-    return `Draft a message from ${scope} using ${quickModel.label.value}${order} — change the order in Sandbox ▸ Agent.`;
-});
-const runAutofill = async (): Promise<void> => {
-    // A click while it is running means stop, not "run it again" — the model call is already paid for either
-    // way, and queueing a second would only overwrite the first answer with a near-identical one.
-    if (commitDraft.busy.value) {
-        commitDraft.cancel();
-        return;
-    }
-    if (!autofillReady.value) {
-        blockerNotice.value = autofillHint.value;
-        warn(autofillHint.value);
-        return;
-    }
-    const message = await commitDraft.draft(commitGroups.value, commitAll.value, commitMessage.value);
-    if (message === undefined) {
-        // Undefined is also the user's own cancel, which says nothing on purpose — `error` is only set for a
-        // failure they did not ask for.
-        if (commitDraft.error.value !== undefined) {
-            warn(commitDraft.error.value);
-        }
-        return;
-    }
-    commitMessage.value = message;
-    // It worked, but not on the model the tooltip promised. Said once, quietly, because the alternative is a
-    // user who notices weeks later that "Drafted with …" has been naming an account they never chose.
-    const skipped = commitDraft.drafted.value?.skipped ?? [];
-    if (skipped.length > 0) {
-        warn(`${skipped.map((refusal) => refusal.model).join(`, `)} couldn't answer — drafted with ${commitDraft.drafted.value?.model} instead.`);
-    }
-};
-const undoAutofill = (): void => {
-    const restored = commitDraft.undo();
-    if (restored !== undefined) {
-        commitMessage.value = restored;
-    }
-};
-// The user has taken the message somewhere else — "Undo" would now restore text that predates their edit, and
-// "Drafted with X" would be describing a message they have since rewritten. Compared against the draft rather
-// than watching blindly so writing the draft itself doesn't immediately clear its own readout.
-watch(commitMessage, (message) => {
-    if (commitDraft.drafted.value !== undefined && message !== commitDraft.drafted.value.message) {
-        commitDraft.forget();
-    }
-});
-
-/* HOW TALL THE BOX IS — one row until there is a second line, then as many as the message needs, to a stop.
- *
- * The box is a textarea rather than a single-line input because a commit message HAS a body: the release-note
- * trailer the drafter writes for a repo that keeps a changelog lands under the subject, and in an `input` it
- * had nowhere to go — the draft was truncated to its first line before it ever reached the user. Growing with
- * the content rather than sitting permanently tall keeps the ordinary case (a subject, no body) looking exactly
- * as it did, which is the case almost every commit is.
+ * MEASURED, NOT COUNTED. Counting "\n" got a pasted body right and the ordinary long subject wrong: a single
+ * line that WRAPS is still one line to `split`, so the box stayed one row tall and hid the rest behind a scroll
+ * nobody expected. The browser already knows the answer — `scrollHeight`, with the height released first — so it
+ * is read off the element, which makes wrapping, font size and the sidebar's own width count for free.
  *
  * Capped, because this panel is a review surface: past a handful of lines the message would push the file list
  * off the screen the user is describing, and the textarea scrolls instead. */
-const MAX_COMMIT_ROWS = 6;
-const commitRows = computed(() => Math.min(MAX_COMMIT_ROWS, commitMessage.value.split(`\n`).length));
+// Eight lines exactly, at this box's font and padding — the composer's own ceiling (ChatPane), scaled to a
+// sidebar. Spelled again as the box's own `max-h`, which is what caps it in the frame before this first runs.
+const MAX_COMMIT_HEIGHT = 142;
+// The border this box wears itself, which the composer's does not (there it sits on the wrapper). scrollHeight
+// counts the padding and never the border, so with `border-box` sizing a height set straight from it is two
+// pixels short of its own text — enough to put a scrollbar on a single-line message.
+const COMMIT_BOX_BORDER = 2;
+const commitBox = ref<HTMLTextAreaElement | null>(null);
+// Manual textarea auto-grow, the composer's own: reset to one line, then size to content up to the maximum.
+// `auto` first because a height already set is a floor scrollHeight can never report under — without it the box
+// would grow for a long message and stay tall after the message got shorter.
+const growCommitBox = (): void => {
+    const el = commitBox.value;
+    if (!el) {
+        return;
+    }
+    el.style.height = `auto`;
+    el.style.height = `${Math.min(el.scrollHeight + COMMIT_BOX_BORDER, MAX_COMMIT_HEIGHT)}px`;
+};
+/* Watched rather than hung off `@input`, because most of what lands in this box is not typing: a From chip
+ * files a whole message, a commit clears it, switching sandboxes swaps it for that tree's own. `post` runs it
+ * after the DOM has the new text — measuring before that measures the previous message. The sidebar's width is
+ * in the list for the same reason as the text: dragging it narrower re-wraps the lines, and the height that
+ * fitted at 400px hides a line at 270px. */
+watch([commitBox, commitMessage, layout.sidebarWidth], growCommitBox, { flush: `post` });
 
 // --- stage / unstage ---------------------------------------------------------------------------------------
 // `staged` is the one side that moves BACK out of the index; the other two move in. For a conflict that inward
@@ -1058,39 +955,19 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
-            <!-- The AI autofill sits INSIDE the input's right edge (VSCode's "Generate Commit Message"
-                 placement): it acts on the field it is drawn in, and the sidebar has no room for a second
-                 labelled button beside Commit. Extra right padding keeps a long message from running under it. -->
-            <div class="relative">
-                <!-- A textarea, not an input: a commit message has a body, and the release-note trailer written
-                     for a changelog repo lives in it. Enter breaks the line (which is what a body needs);
-                     Ctrl/Cmd+Enter still commits, as the placeholder says. -->
-                <textarea
-                    v-model="commitMessage"
-                    :rows="commitRows"
-                    placeholder="Message (Ctrl+Enter to commit)"
-                    class="w-full min-w-0 resize-none rounded-md border border-line bg-canvas py-1 pl-2 pr-7 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                    @keydown.ctrl.enter="doCommit"
-                    @keydown.meta.enter="doCommit"
-                ></textarea>
-                <!-- Never disabled, only dimmed: a button that cannot run still has the one thing the user
-                     wants, which is the reason it cannot. Clicking a dim sparkle says it out loud (runAutofill),
-                     where a `disabled` attribute swallows the click and leaves the reason in a tooltip touch
-                     never opens.
-
-                     Pinned to the TOP of the box rather than centred in it: the box grows downwards with the
-                     body, and a vertically-centred button would drift away from the subject line it acts on. -->
-                <button
-                    type="button"
-                    class="absolute right-1 top-1 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
-                    :class="autofillReady || commitDraft.busy.value ? `` : `opacity-40`"
-                    @click="runAutofill"
-                    v-tooltip.right="commitDraft.busy.value ? 'Stop drafting' : autofillHint"
-                    :aria-label="commitDraft.busy.value ? 'Stop drafting the commit message' : 'Draft the commit message with AI'"
-                >
-                    <Icon :name="commitDraft.busy.value ? 'spinner' : 'sparkles'" class="text-2xs" :spin="commitDraft.busy.value" />
-                </button>
-            </div>
+            <!-- A textarea, not an input: a commit message has a body, and the release-note trailer a session's
+                 landed sentence carries lives in it. Enter breaks the line (which is what a body needs);
+                 Ctrl/Cmd+Enter still commits, as the placeholder says. One row to start with — growCommitBox
+                 takes it from there, on the real height of what is in it, and it scrolls past the ceiling. -->
+            <textarea
+                ref="commitBox"
+                v-model="commitMessage"
+                rows="1"
+                placeholder="Message (Ctrl+Enter to commit)"
+                class="scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto rounded-md border border-line bg-canvas px-2 py-1 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                @keydown.ctrl.enter="doCommit"
+                @keydown.meta.enter="doCommit"
+            ></textarea>
             <!-- What the commit will record, then the one button that records it. No checkboxes: the sentence
                  on the left is a readout of the index, not a control. A conflict replaces it outright — nothing
                  about the index matters while git is refusing to commit at all. -->
@@ -1099,9 +976,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     Resolve conflicts first
                 </span>
                 <!-- WHERE the commit is happening, which is the one thing the button next to it cannot say.
-                     Ahead of the draft readout and the staged count on purpose: both describe a commit that is
-                     no longer being composed, and "Drafted with Haiku · Undo" beside a running commit invites an
-                     undo of a message git has already recorded. -->
+                     Ahead of the staged count on purpose: that one describes a commit that is no longer being
+                     composed. -->
                 <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     Committing {{ committingNow.join(`, `) }}…
                 </span>
@@ -1113,49 +989,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     v-tooltip.right.overflow="blockerNotice"
                 >
                     {{ blockerNotice }}
-                </span>
-                <!-- The autofill failed. Same slot, same reasoning: the user clicked a button in this box and
-                     nothing appeared, so the answer belongs where they are already looking. -->
-                <span
-                    v-else-if="commitDraft.error.value"
-                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger"
-                    v-tooltip.right.overflow="commitDraft.error.value"
-                >
-                    {{ commitDraft.error.value }}
-                </span>
-                <!-- The message on screen was written by a model, and by WHICH one — with the single click that
-                     takes it back. Undo has to be offered explicitly because writing through v-model leaves the
-                     browser's own Ctrl+Z with nothing to restore; it is also what makes overwriting a typed
-                     message safe enough to need no confirmation. -->
-                <span v-else-if="commitDraft.drafted.value" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-muted">
-                    <!-- The model that actually wrote it, plus what it stood in for. A fallback the user is not
-                         told about is an account they did not choose to spend, noticed weeks later. -->
-                    <span
-                        class="min-w-0 truncate whitespace-nowrap"
-                        v-tooltip.right.overflow="
-                            commitDraft.drafted.value.skipped.length === 0
-                                ? `Drafted with ${commitDraft.drafted.value.model}`
-                                : commitDraft.drafted.value.skipped.map((s) => `${s.model} — ${s.reason}`).join(`\n`)
-                        "
-                    >
-                        Drafted with {{ commitDraft.drafted.value.model }}
-                        <template v-if="commitDraft.drafted.value.skipped.length > 0">
-                            (after {{ commitDraft.drafted.value.skipped.map((s) => s.model).join(`, `) }})
-                        </template>
-                    </span>
-                    <button
-                        v-if="commitDraft.previous.value !== undefined"
-                        type="button"
-                        class="shrink-0 rounded px-1 text-2xs text-muted underline decoration-dotted transition-colors hover:text-content"
-                        @click="undoAutofill"
-                        v-tooltip.right="
-                            commitDraft.previous.value === ``
-                                ? `Clear the drafted message`
-                                : `Put back what you had typed: ${commitDraft.previous.value}`
-                        "
-                    >
-                        Undo
-                    </button>
                 </span>
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
@@ -1320,8 +1153,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              inline. Everything else stays a hover away, on the SAME card the file rows and the chat tab strip
              raise for that session. What the click does needs no words either: the chips visibly dim to leave
              the filtered one lit.
-             The click ALSO names the commit, with that session's title (toggleOrigin) — the second half of the
-             "commit this agent's work" intent the filter was always the first half of. And a chip whose session
+             The click ALSO names the commit, with the sentence written for that session's work when it landed
+             (toggleOrigin) — the second half of the "commit this agent's work" intent the filter was always the
+             first half of; a session with no such sentence just filters. And a chip whose session
              has not finished wears a leading dot, because a count from a session still running is an instalment
              rather than a total, and every other reading on this panel silently assumes a total. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">

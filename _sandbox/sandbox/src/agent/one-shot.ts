@@ -17,7 +17,7 @@ import { isFailureSentence } from "./failure-sentences.js";
  *                         session, no transcript" for a while before it was true. The SDK writes every query
  *                         to ~/.claude/projects/<cwd>/, and the cwd here is the WORKSPACE ROOT — the exact
  *                         project key the chat-history list reads (sessions.ts listWorkspaceSessions) and the
- *                         recall index scans. So every sparkle click filed a one-turn "session" whose title is
+ *                         recall index scans. So every helper call filed a one-turn "session" whose title is
  *                         its own prompt, and the history menu filled up with "Name this coding-agent
  *                         session…" rows: 123 of 204 stored transcripts at the time this was found. Nothing
  *                         here is ever resumed, so the write bought nothing and cost the feature it polluted.
@@ -31,13 +31,13 @@ import { isFailureSentence } from "./failure-sentences.js";
  * the SDK's DEFAULT on every model that supports it, quick rungs included, so a helper that says nothing gets
  * it — and then spends thousands of reasoning tokens deciding a single line. Measured on Haiku 4.5 against an
  * ordinary commit diff: 27s and ~2.9k output tokens with the default, 2s and ~12 tokens with it disabled, for
- * the same subject line. That is the difference between a sparkle click that feels instant and one the user
- * assumes is broken. Every caller of this seam is a one-liner (a commit subject, a session title) where the
+ * the same subject line. That is the difference between an answer that lands while the user is still looking
+ * and one that arrives long after. Every caller of this seam is a one-liner (a commit subject, a session title) where the
  * answer is a rewrite of material already in the prompt, so there is nothing for a reasoning pass to add.
  *
  * It runs on the same credentials the chat does (harness-credentials.ts), including the withholding rule that
  * keeps a subscription token away from a foreign endpoint — a helper is not a reason to authenticate a second
- * way. Errors propagate: every caller here is a click that can report its own failure, and swallowing a
+ * way. Errors propagate: every caller here decides for itself what a failure means, and swallowing a
  * credential problem into an empty string would make it look like the model had nothing to say. */
 
 /* How long a helper will wait out a retry that is NOT a spent allowance — a connection blip, a 500, a momentary

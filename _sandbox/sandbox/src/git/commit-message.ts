@@ -2,17 +2,17 @@ import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace-files.js";
 
-/* THE MATERIAL A COMMIT MESSAGE IS DRAFTED FROM, and the one rule that matters here: it describes what the
- * Commit button is ABOUT TO RECORD, not what the repo happens to contain. Those differ constantly — a partially
- * staged file, an unstaged edit the user is not ready to commit — and describing the wrong one produces a
- * message that is confidently about changes the commit will not contain. So the three shapes mirror the panel's
- * own target exactly, one per shape of CommitSchema:
+/* THE MATERIAL A COMMIT MESSAGE IS DRAFTED FROM, and the one rule that matters here: it describes what a commit
+ * WOULD RECORD, not what the repo happens to contain. Those differ constantly — a partially staged file, an
+ * unstaged edit the user is not ready to commit — and describing the wrong one produces a message that is
+ * confidently about changes the commit will not contain. So the scope is stated per call, one shape per shape
+ * of CommitSchema (the live caller is agents/landed-subject.ts, which passes the paths one):
  *
  *   staged (default)  → the INDEX vs HEAD; what a bare `git commit` records
- *   all               → the WORKTREE, untracked files included; what "Commit all" sweeps, since gitCommitAll
- *                       runs `git add -A` first and `git diff HEAD` alone would miss every new file
- *   paths             → the same WORKTREE reading, narrowed by pathspec: a commit that stages a subset first
- *                       (the Changes panel's origin filter) records exactly those paths and nothing else
+ *   all               → the WORKTREE, untracked files included; what a commit that runs `git add -A` first
+ *                       sweeps, since `git diff HEAD` alone would miss every new file
+ *   paths             → the same WORKTREE reading, narrowed by pathspec: the files one agent landed, or any
+ *                       commit that stages a subset first, records exactly those paths and nothing else
  *
  * THE CODE IS THE ONLY WITNESS. This prompt used to also carry the session's title as an `intent` hint — what
  * the conversation was ASKED to do — on the theory that a diff shows what moved and leaves the reason to be
@@ -410,20 +410,4 @@ export const cleanCommitBody = (reply: string): string =>
 export const cleanReleaseNote = (reply: string): string => {
     const line = replyLines(reply).find(isNoteLine);
     return line === undefined ? `` : unwrap(line.slice(RELEASE_NOTE_TRAILER.length));
-};
-
-/* The whole message the commit box receives: the subject, the body under it, and the note as a trailer beneath
- * both. The blank lines are load-bearing — they are what make the body a body and the note a git trailer rather
- * than two more lines of the subject's own paragraph, and without them `git log` reads the lot as one run-on
- * subject.
- *
- * With neither body nor note this returns the subject alone, which is the right answer for the many commits
- * whose subject says everything. */
-export const cleanCommitMessage = (reply: string): string => {
-    const subject = cleanCommitSubject(reply);
-    if (subject === ``) {
-        return ``;
-    }
-    const note = cleanReleaseNote(reply);
-    return [subject, cleanCommitBody(reply), note === `` ? `` : `${RELEASE_NOTE_TRAILER} ${note}`].filter((part) => part !== ``).join(`\n\n`);
 };

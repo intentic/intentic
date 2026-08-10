@@ -2,21 +2,22 @@ import { ACCESS_COST, accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
 import type { AgentProvider } from "./schemas.js";
 
-/* THE QUICK MODEL — the cheap, fast model a one-click helper spends instead of the frontier model the chat runs
- * on. Today that is the commit box's autofill; anything else of that shape (a branch name, a PR description)
- * reads the same answer, which is the reason this is a `quickModel` setting rather than a commit-message one.
+/* THE QUICK MODEL — the cheap, fast model a small automatic job spends instead of the frontier model the chat
+ * runs on. Today that is the commit message written when an agent's work lands; anything else of that shape (a
+ * branch name, a PR description) reads the same answer, which is the reason this is a `quickModel` setting
+ * rather than a commit-message one.
  *
  * IT IS AN ORDER, NOT A MODEL, and that is the whole shape of this file. A single pick is a single point of
- * failure: the account it names spends its allowance on the chat all morning, and every sparkle click for the
- * rest of the day fails on a limit while three other connected providers sit idle. So the setting is a LIST
+ * failure: the account it names spends its allowance on the chat all morning, and every job for the rest of the
+ * day fails on a limit while three other connected providers sit idle. So the setting is a LIST
  * read top to bottom, the resolver hands back the whole ladder, and the daemon walks it until one answers.
  * Nothing here decides WHICH failures are worth stepping over — that is the daemon's, since only it has run
  * the call — this side only says what the running order is.
  *
  * The rule lives in the contract because BOTH sides need the same answer for different jobs: the daemon runs
- * the model, and the browser has to NAME it — in the sparkle's tooltip and in the settings row's "Auto (…)"
- * label — before anything has been run. Two implementations would drift precisely where it matters most, since
- * a tooltip promising Haiku while the daemon bills Opus is worse than no tooltip.
+ * the model, and the browser has to NAME it — in the settings row's "Auto (…)" label — before anything has been
+ * run. Two implementations would drift precisely where it matters most, since a label promising Haiku while the
+ * daemon bills Opus is worse than no label.
  *
  * The default is DERIVED, NEVER STORED. `quickModel` ships EMPTY and that means "work it out from whatever is
  * connected right now", so connecting a Google account tomorrow improves the default by itself and

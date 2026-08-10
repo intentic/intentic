@@ -4,15 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import {
-    cleanCommitBody,
-    cleanCommitMessage,
-    cleanCommitSubject,
-    cleanReleaseNote,
-    collectRepoDiff,
-    commitMessagePrompt,
-    type RepoDiff,
-} from "./commit-message.js";
+import { cleanCommitBody, cleanCommitSubject, cleanReleaseNote, collectRepoDiff, commitMessagePrompt, type RepoDiff } from "./commit-message.js";
 
 /* The material an AI-drafted commit message is written from. Run against REAL repos, like the rest of git/,
  * because the whole risk here is describing the wrong side: the index and the worktree disagree constantly, and
@@ -314,23 +306,6 @@ test("a note-first reply still yields the subject, not the note", () => {
     expect(cleanCommitSubject("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("feat: ordered model picker");
     // …and the note does not fall through into the body either.
     expect(cleanCommitBody("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("");
-});
-
-test("composes subject, body and note into one message, each separated as git reads them", () => {
-    // The blank line is what makes it a trailer rather than the second line of the subject's paragraph.
-    expect(cleanCommitMessage("feat: ordered model picker\nRelease-Note: Your models stay put.")).toBe(
-        "feat: ordered model picker\n\nRelease-Note: Your models stay put.",
-    );
-    expect(cleanCommitMessage("feat: ordered model picker\n\n- keeps resolveQuickModels in the configured order")).toBe(
-        "feat: ordered model picker\n\n- keeps resolveQuickModels in the configured order",
-    );
-    expect(cleanCommitMessage("feat: ordered picker\n\n- keeps the configured order\n\nRelease-Note: Your models stay put.")).toBe(
-        "feat: ordered picker\n\n- keeps the configured order\n\nRelease-Note: Your models stay put.",
-    );
-    // A subject that says everything is the whole message.
-    expect(cleanCommitMessage("refactor: split the picker component")).toBe("refactor: split the picker component");
-    // Nothing at all is still nothing — the caller reports the model said nothing rather than committing a trailer.
-    expect(cleanCommitMessage("Release-Note: orphaned note")).toBe("");
 });
 
 test("leaves quotes that are part of the subject alone", () => {

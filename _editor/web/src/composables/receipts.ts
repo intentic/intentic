@@ -23,11 +23,11 @@ import { ref } from "vue";
  * one the user is looking for — a queue would make them wait for the first to expire before being told what
  * just happened.
  *
- * AND THE THIRD THING THAT CAN HAPPEN: not done, not alarming. A one-click helper that could not answer — the
- * commit-message autofill with every connected model spent — belongs in neither of the two channels the app
- * had. It is not a completion, and the red box is for a failure the user has to act on: nothing is broken, no
- * work was lost, and there is nothing to fix but wait. Left with only those two, it went in the silent one, so
- * clicking sparkle did nothing at all and looked like a dead button.
+ * AND THE THIRD THING THAT CAN HAPPEN: not done, not alarming. A background helper that could not answer — a
+ * quick-model job with every connected model spent — belongs in neither of the two channels the app had. It is
+ * not a completion, and the red box is for a failure the user has to act on: nothing is broken, no work was
+ * lost, and there is nothing to fix but wait. Left with only those two, it went in the silent one, so the
+ * gesture did nothing at all and looked like a dead control.
  *
  * So a receipt carries a TONE. Same pill, same dwell, same self-retiring contract — one glyph and one colour
  * apart, because "it didn't work" said calmly is still the same KIND of message as "it worked": something
