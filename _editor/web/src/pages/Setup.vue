@@ -952,9 +952,29 @@ const startFresh = (): void => {
 
 // Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
 const timer = setInterval(() => void check(), 3000);
+
+/* And again the instant this page comes back to the front, rather than up to one tick later.
+ *
+ * Three seconds is the right cadence for a page someone is watching, and the wrong one for a page nobody is:
+ * a hidden tab has its timers throttled to something closer to a minute, and inside the desktop app this page
+ * is hidden for the WHOLE install — the app's own window takes the frame while the script runs (windows.rs).
+ * So the poll that is supposed to notice a live daemon in three seconds noticed it minutes later, and
+ * `sandbox_connected` carried that lateness into the funnel with it. Coming back to the front is precisely
+ * when the answer is most likely to have changed, so it is worth a poll of its own. `check` is re-entrant
+ * (it guards on `checking`), so this costing nothing when a tick is already in flight is by construction. */
+const recheck = (): void => {
+    if (document.visibilityState === `visible`) {
+        void check();
+    }
+};
+document.addEventListener(`visibilitychange`, recheck);
+window.addEventListener(`focus`, recheck);
+
 onUnmounted(() => {
     clearInterval(timer);
     clearTimeout(mintTimer);
+    document.removeEventListener(`visibilitychange`, recheck);
+    window.removeEventListener(`focus`, recheck);
 });
 
 // Mint the setup code whenever the chosen target is complete, debounced so subdomain/folder keystrokes don't

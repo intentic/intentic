@@ -53,6 +53,8 @@ pub struct AppState {
     /// slug → display name, ours to remember: docker knows only container names, and the name the user typed
     /// into the SPA never reaches the machine any other way.
     names: Mutex<BTreeMap<String, String>>,
+    /// Minted on first read, then held for the process — see [`AppState::install_id`].
+    install_id: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -67,6 +69,7 @@ impl AppState {
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
             names: Mutex::new(names),
+            install_id: Mutex::new(None),
         })
     }
 
@@ -109,6 +112,36 @@ impl AppState {
         self.config_dir.join("close-action.json")
     }
 
+    /* THE ONE THING THAT TIES THIS APP'S TWO FACES TOGETHER IN ANALYTICS.
+     *
+     * The launcher and the workspace are separate webviews with separate storage, so a product event from the
+     * install screen and one from the SPA a minute later have nothing in common — different anonymous ids,
+     * two unrelated strangers. Both are handed THIS value instead: the launcher sends its events under it, and
+     * the SPA carries it as a property, so the install a person ran and the workspace they landed in can be
+     * read as one story.
+     *
+     * A random id per install and nothing else — never a hostname, a username or a machine fingerprint. It
+     * identifies an installation of this app, which is what the question "did the install finish" is about,
+     * and it is per-OS-user already because that is where the config dir lives.
+     *
+     * Minted on first read and cached for the process, so a config dir that has gone read-only produces one
+     * id for this run rather than a fresh one per event — degraded, but not noise.
+     */
+    pub fn install_id(&self) -> String {
+        let mut cached = self.install_id.lock().unwrap();
+        if let Some(id) = cached.as_ref() {
+            return id.clone();
+        }
+        let path = self.config_dir.join("install-id.json");
+        let id = read_json::<String>(&path).unwrap_or_else(|| {
+            let minted = uuid::Uuid::new_v4().to_string();
+            write_json(&path, &minted);
+            minted
+        });
+        *cached = Some(id.clone());
+        id
+    }
+
     pub fn name_of(&self, slug: &str) -> Option<String> {
         self.names.lock().unwrap().get(slug).cloned()
     }
@@ -142,6 +175,39 @@ fn write_json<T: Serialize>(path: &Path, value: &T) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn state_in(config_dir: &Path) -> AppState {
+        AppState {
+            config_dir: config_dir.to_path_buf(),
+            settings: Mutex::new(Settings::default()),
+            pending: Mutex::new(None),
+            pending_recreate: Mutex::new(None),
+            names: Mutex::new(BTreeMap::new()),
+            install_id: Mutex::new(None),
+        }
+    }
+
+    /* THE JOIN IS ONLY WORTH ANYTHING IF IT OUTLIVES THE PROCESS.
+     *
+     * This id is what ties an install the app ran to the workspace the user landed in afterwards, and those
+     * two are often not the same run of the app — a setup ends, the window is handed over, the machine gets
+     * restarted. An id minted per launch would still produce events; they would just quietly describe a new
+     * stranger every time, which is the failure mode that looks like working software. */
+    #[test]
+    fn the_install_id_survives_a_restart() {
+        let dir =
+            std::env::temp_dir().join(format!("intentic-install-id-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+
+        let minted = state_in(&dir).install_id();
+        // A second AppState over the same config dir is what the next launch of the app is.
+        let after_restart = state_in(&dir).install_id();
+
+        assert_eq!(minted, after_restart);
+        assert!(!minted.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /* THE DEFAULT, PINNED TO THE CONNECT FLOW'S OWN.
      *

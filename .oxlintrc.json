@@ -22,7 +22,7 @@
         ],
         "no-underscore-dangle": [
             "error",
-            { "allow": ["__API_URL__", "__intentic", "__INTENTIC_DESKTOP__", "__termFrames", "_core", "_renderService"] }
+            { "allow": ["__API_URL__", "__POSTHOG_KEY__", "__intentic", "__INTENTIC_DESKTOP__", "__termFrames", "_core", "_renderService"] }
         ],
         "no-await-in-loop": "off"
     },

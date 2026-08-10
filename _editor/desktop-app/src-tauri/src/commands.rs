@@ -24,6 +24,9 @@ pub struct DesktopInfo {
     /// tell those apart themselves (winget on Windows, get.docker.com on Linux), so the launcher only needs
     /// to know whether setup will have to ask for elevation.
     pub docker_ready: bool,
+    /// This installation's own id, which the launcher's analytics send their events under — the same value the
+    /// workspace window is marked with, so both faces report as one app (state.rs).
+    pub install_id: String,
 }
 
 #[tauri::command]
@@ -34,6 +37,7 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         app_url: state.app_url(),
         platform_url: state.platform_url(),
         docker_ready: scripts::docker_ready(),
+        install_id: state.install_id(),
     }
 }
 

@@ -34,6 +34,10 @@ export interface DesktopInfo {
     appUrl: string;
     platformUrl: string;
     dockerReady: boolean;
+    /// This installation's own id, minted once and kept in the app's config dir. It is what this screen's
+    /// analytics report under, and the same value the workspace window is marked with — the only thread
+    /// between what the app did to the machine and what the user then did in the SPA (analytics.ts).
+    installId: string;
 }
 
 export interface Settings {

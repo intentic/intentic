@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { watch } from "vue";
+import { desktopApp } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { useAuth } from "./useAuth";
 
@@ -41,6 +42,8 @@ export const initAnalytics = (): void => {
         },
     });
 
+    registerClient();
+
     const { user } = useAuth();
     // Session resolves (sign-in or reload) → stable identity; sign-out / account deletion → drop it.
     watch(user, (current, previous) => {
@@ -50,8 +53,23 @@ export const initAnalytics = (): void => {
         }
         if (previous) {
             posthog.reset();
+            // reset() empties the whole store, super properties included — so which client this is has to be
+            // said again, or every event after a sign-out reports as coming from nowhere in particular.
+            registerClient();
         }
     });
+};
+
+/* WHICH CLIENT THIS IS, ON EVERY EVENT — the desktop app loads this very SPA, so without it an app user is
+ * indistinguishable from a browser one and reports break them down by the webview's user agent instead
+ * (Safari on Linux, Edge on Windows). Registered as super properties rather than passed per call, because the
+ * question "was this the app" applies to autocapture and pageviews too, not just our own milestones. The
+ * install id is what joins these to what the app's own screens report about the same install (desktop.ts). */
+const registerClient = (): void => {
+    const app = desktopApp();
+    posthog.register(
+        app === undefined ? { client: `browser` } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId },
+    );
 };
 
 // Funnel milestone events from action call sites. No-op until initAnalytics has run (dev has no key) —

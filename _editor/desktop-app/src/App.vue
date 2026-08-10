@@ -4,10 +4,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
+import { initAnalytics, track } from "./analytics";
 import RunLog from "./components/RunLog.vue";
 import SandboxCard from "./components/SandboxCard.vue";
 import {
     desktopInfo,
+    isStep,
     machineReport,
     onPendingRecreate,
     onPendingSetup,
@@ -19,6 +21,7 @@ import {
     sandboxRecreate,
     sandboxRemove,
     setupRun,
+    stepLabel,
     takePendingRecreate,
     workspaceOpen,
     type DesktopInfo,
@@ -112,6 +115,28 @@ const syncLineFor = (sandbox: SandboxStatus): string | undefined => {
     return ports === 0 ? where : `${where} · ${ports} port${ports === 1 ? `` : `s`} on localhost`;
 };
 
+/* HOW A FINISHED RUN IS REPORTED — the outcome, and where it stopped, and nothing else.
+ *
+ * The scripts narrate themselves in `intentic: …` lines (desktop.ts), so the last one before a failure is the
+ * most specific thing anybody can say about where an install died — and it is a string this repo writes rather
+ * than machine output, which is what makes it safe to send. The log beside it is full of paths, names and
+ * tokens and none of that leaves here. */
+const isStepLine = (event: RunEvent): boolean => event.kind === `line` && event.stream === `stdout` && isStep(event.text);
+
+const runOutcome = (id: string, ok: boolean, startedAt: number): Record<string, unknown> => {
+    const events = eventsOf(id);
+    const exit = events.findLast((event) => event.kind === `exit`);
+    const last = events.findLast(isStepLine);
+    return {
+        ok,
+        durationMs: Date.now() - startedAt,
+        exitCode: exit?.kind === `exit` ? exit.code : null,
+        steps: events.filter(isStepLine).length,
+        // Only on the way out: on a run that worked, the last step is just the last step.
+        ...(ok || last?.kind !== `line` ? {} : { failedStep: stepLabel(last.text) }),
+    };
+};
+
 /* Every operation is one script run and they all report the same way, so there is one place that starts a
  * run, one that renders it, and no per-action progress state. `activeRun` is what serializes them: the
  * scripts all drive docker on this one machine, and two recreates at once is not a thing to support. */
@@ -134,8 +159,17 @@ const runSetup = async (): Promise<void> => {
     if (args === undefined || running.value) {
         return;
     }
+    const startedAt = Date.now();
+    track(`desktop_install_started`, { dockerReady: info.value?.dockerReady ?? null, sync: (args.syncDir ?? ``) !== `` });
     setupError.value = await start(`setup`, () => setupRun(args));
-    if (setupError.value === undefined) {
+    const ok = setupError.value === undefined;
+    /* THE DESKTOP FUNNEL'S LAST STEP, REPORTED FROM WHERE IT ACTUALLY HAPPENS. The SPA has its own
+     * `sandbox_connected`, but on this path it is fired by a page that has been behind this window for the
+     * whole install — late at best, and never at all when the handover came from a browser tab the user then
+     * closed. Exit zero here means the daemon booted and announced itself, which is the same fact that page
+     * was waiting to observe. */
+    track(`desktop_install_finished`, runOutcome(`setup`, ok, startedAt));
+    if (ok) {
         pending.value = undefined;
         // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
         // has been polling for — so handing the window back is one poll away from showing the workspace.
@@ -162,9 +196,18 @@ const power = async (slug: string, startIt: boolean): Promise<void> => {
     busy.value = undefined;
 };
 
-const update = async (slug: string, hash?: string): Promise<void> => {
+/* `source` is the one thing the event cannot work out for itself: the same operation arrives either as a click
+ * on this screen's own list, or as the SPA's Update/Environment card handing it over (`drainRecreate`). Which
+ * of the two people actually use is the question the app's existence rests on. */
+const update = async (slug: string, hash?: string, source: `manager` | `link` = `manager`): Promise<void> => {
     busy.value = { slug, action: `update` };
-    await start(`recreate:${slug}`, () => sandboxRecreate(slug, hash));
+    const startedAt = Date.now();
+    // The mode rides the argument shape here exactly as it does in the script (recreate.sh): a hash means the
+    // owner-approved overlay, no hash means the fresh :stable base.
+    const mode = hash === undefined ? `update` : `rebuild`;
+    track(`desktop_recreate_started`, { mode, source });
+    const failure = await start(`recreate:${slug}`, () => sandboxRecreate(slug, hash));
+    track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
     busy.value = undefined;
 };
 
@@ -176,7 +219,7 @@ const drainRecreate = async (): Promise<void> => {
     if (requested === null || running.value) {
         return;
     }
-    await update(requested.slug, requested.hash);
+    await update(requested.slug, requested.hash, `link`);
 };
 
 // Removing a sandbox deletes its /work and /history volumes, which is not recoverable and not what the
@@ -204,6 +247,10 @@ const busyFor = (slug: string): string | null => (busy.value?.slug === slug ? bu
 let stop: Array<() => void> = [];
 onMounted(async () => {
     info.value = await desktopInfo();
+    // Before the parked work below, because the first thing this screen does is often the setup it was opened
+    // to run — and an install that reports nothing is exactly what this is here to stop happening.
+    initAnalytics(info.value);
+    track(`desktop_app_opened`, { dockerReady: info.value.dockerReady });
     /* Listeners BEFORE the parked work, not after: `loadPending` starts the handed-over setup the moment it
      * finds one, and a script reaches this screen only as events — so a run begun before `onRun` is listening
      * would show an empty log through its first, most informative seconds. */

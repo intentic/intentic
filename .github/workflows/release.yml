@@ -63,6 +63,9 @@ jobs:
       CARGO_TARGET_DIR: /ci-cache/desktop-release-windows-target
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # Baked into the launcher UI at build time (desktop-app/vite.config.ts). Released installers only — a CI
+      # or nightly build gets no key, so the artifacts nobody installs report nothing.
+      POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -188,6 +191,9 @@ jobs:
       XWIN_CACHE_DIR: /ci-cache/xwin
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # As in the Windows candidate job above: the Linux bundles built here carry the key too, so all four
+      # released installers report the same way.
+      POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:

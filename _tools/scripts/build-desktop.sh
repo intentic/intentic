@@ -13,6 +13,12 @@
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
+# Analytics: POSTHOG_KEY is baked into the launcher UI here (desktop-app/vite.config.ts), because a compiled
+# app has no container entrypoint to substitute one at start the way the web image does. Unset — which is
+# every local build and every CI/nightly build — leaves the app's own analytics off, so only installers a user
+# actually downloads report anything. Nothing about the workspace window depends on it: that face is the
+# hosted SPA and carries the key its own deployment was given.
+#
 # The artifacts land in _editor/desktop-app/dist-bin/, from where publish-github.sh attaches them to the GitHub
 # Release — the download surface the site and the updater both point at.
 set -euo pipefail

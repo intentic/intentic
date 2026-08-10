@@ -17,11 +17,16 @@ import { environment } from "./environment";
 
 declare global {
     interface Window {
-        __INTENTIC_DESKTOP__?: { version: string };
+        __INTENTIC_DESKTOP__?: { version: string; installId: string };
     }
 }
 
-export const desktopVersion = (): string | undefined => window.__INTENTIC_DESKTOP__?.version;
+/* What the app tells the page about itself: the version, and a random id for that installation of the app.
+ * The id is the only thread between this window's events and the ones the app's own screens report — two
+ * webviews with separate storage, which analytics would otherwise read as two unrelated people (analytics.ts). */
+export const desktopApp = (): { version: string; installId: string } | undefined => window.__INTENTIC_DESKTOP__;
+
+export const desktopVersion = (): string | undefined => desktopApp()?.version;
 
 export interface DesktopSetupArgs {
     code: string;

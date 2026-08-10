@@ -198,11 +198,46 @@ path does not:
 Neither is exercised by firing a link at a running app, which is why the smoke tier fires one at a stopped one
 too.
 
+## What it reports about itself
+
+The workspace face is the hosted SPA and carries that app's instrumentation. This face is the half that touches
+the machine, and it used to report nothing — so every desktop funnel ended at *"clicked the button"* and the
+install's outcome was invisible. It now sends five named events of its own
+([`src/analytics.ts`](src/analytics.ts)):
+
+| Event | When | Carries |
+| --- | --- | --- |
+| `desktop_app_opened` | the launcher mounts | whether Docker already answers |
+| `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
+| `desktop_recreate_started` / `_finished` | an update or an environment rebuild | the same, plus which of the two, and whether it came from this screen or from the SPA's card |
+
+`desktop_install_finished` is **the desktop funnel's last step**. The SPA has its own `sandbox_connected`, but
+on this path it is fired by a page that spent the whole install parked behind this window — late where a hidden
+webview throttles its timers, and never where the handover came from a browser tab the user then closed. Exit
+zero here is the same fact that page was waiting to observe, reported from where it happens.
+
+Two things make the join and the restraint work:
+
+- **The install id** (`state.rs`) — random, minted once, kept in the app's config dir. The launcher sends its
+  events under it, and the workspace window is marked with it, so the SPA carries it as a property too
+  ([`web/src/composables/analytics.ts`](../web/src/composables/analytics.ts)). Without it the two webviews —
+  separate origins, separate storage — read as two unrelated strangers. It says *this installation*, never a
+  hostname, a username or anything about the machine.
+- **What may be sent**: outcomes, durations, and the `intentic: …` step labels the scripts print about
+  themselves — strings this repo writes. Never a sandbox name, a setup code, a folder path, a Cloudflare token,
+  or a line of script output, all of which are on screen in the log beside them.
+
+A plain `POST` per event rather than `posthog-js`, because everything the SDK is worth carrying for is
+something this screen must not do: autocapture and pageviews on one log and three buttons, session replay of a
+machine's install output, a storage layer for an id already on disk. The key is baked in at build time and is
+**empty in every local and CI build**, which switches the whole thing off — only installers a user downloads
+report anything.
+
 ## Layout
 
 - `src/` — the app's own UI (Vue + `@intentic/ui`): the setup screen and the sandbox manager, switched on
-  whether a setup is in hand. Two components and one bridge module; the archived three-persona wizard is not
-  here.
+  whether a setup is in hand. Two components, one bridge module (`desktop.ts`) and one reporter
+  (`analytics.ts`); the archived three-persona wizard is not here.
 - `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the one-window swap + link interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
   `setup_link.rs`.
@@ -220,6 +255,10 @@ Release**, exactly like `intentic-sync` and `intentic-host`.
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
 `tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json`.
+
+`POSTHOG_KEY` is the release workflow's other secret, and it is set on the desktop jobs only — a compiled app
+has no entrypoint to substitute one at start the way the web image does, so it is baked into the launcher UI
+here. CI and nightly builds get none, which is what keeps artifacts nobody installs out of the numbers.
 
 ## How it is tested
 

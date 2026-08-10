@@ -60,9 +60,13 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
 /// navigation this window intercepts, so no IPC is ever exposed to remote content.
-fn workspace_init_script() -> String {
+///
+/// The install id rides along so the SPA's analytics can say which app an event came from, and join it to what
+/// the launcher reported about the same install (state.rs). It is a random per-install id and grants nothing:
+/// remote content that reads it learns only that it is inside an app, which the version already told it.
+fn workspace_init_script(install_id: &str) -> String {
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\" }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\" }}); }} }})();",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -76,7 +80,9 @@ fn workspace_init_script() -> String {
 /// heuristic. Sign-in now happens in the real browser (auth.rs), so nothing in this window ever talks to
 /// Google and the webview can present itself honestly.
 pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
-    let base = app.state::<crate::state::AppState>().app_url();
+    let state = app.state::<crate::state::AppState>();
+    let base = state.app_url();
+    let install_id = state.install_id();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
         None => base,
@@ -107,7 +113,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false)
-        .initialization_script(workspace_init_script())
+        .initialization_script(workspace_init_script(&install_id))
         .on_navigation(move |url| {
             if url.scheme() == "intentic" {
                 // Handle off the navigation callback — creating a window inside the webview's navigation
