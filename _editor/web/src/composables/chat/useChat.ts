@@ -241,6 +241,12 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;
     }
+    // The persona comes back with the tab for the same reason, and with more riding on it than the rest of this
+    // line: nothing else remembers it (it is never a global default), so a reload that dropped it would quietly
+    // hand a chat every account back and the composer would say so only if the user looked.
+    if (tab.actsAs !== undefined) {
+        conversation.actsAs.value = tab.actsAs;
+    }
     if (tab.session !== undefined) {
         // A session resumes only on the account that minted it, so it keeps its OWN pin rather than adopting the
         // tab's: forging the match would resume another account's session, and faking a mismatch would retire a
@@ -303,6 +309,7 @@ watch(
                 account: conversation.account.value,
                 model: conversation.model.value,
                 effort: conversation.effortPick.value,
+                actsAs: conversation.actsAs.value,
                 thinking: conversation.thinking.value,
                 fast: conversation.fast.value,
                 harness: conversation.harness.value,
@@ -463,6 +470,18 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     account: computed<string | undefined>(() => conversation.value.account.value),
     selectAccount: (id: string): void => conversation.value.selectAccount(id),
     accounts: computed<readonly OauthAccount[]>(() => accountsOf(conversation.value.provider.value)),
+    /* The persona this chat acts as (read + write) — the composer's persona pill drives it, and it is the one
+     * control on this list that is about the outside world rather than about the model. Undefined is "anyone":
+     * every connected account stays reachable, which is what an attended chat gets when it names nobody.
+     *
+     * Switchable at any point, including mid-conversation: the daemon resolves the card per TURN, so the pick
+     * lands on the next message rather than needing a fresh chat. */
+    actsAs: computed<string | undefined>({
+        get: () => conversation.value.actsAs.value,
+        set: (value) => {
+            conversation.value.actsAs.value = value;
+        },
+    }),
     // Whether this conversation's selection can actually send — the composer gate.
     connected: computed(() => chatReady(conversation.value.provider.value, conversation.value.harness.value)),
     // This conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the

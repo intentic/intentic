@@ -17,6 +17,11 @@ export interface TurnSettings {
     readonly harness: AgentHarness;
     // Which connected account of the provider serves the turn; undefined ⇒ the daemon's first account.
     readonly account: string | undefined;
+    /* WHO THE TURN IS TO THE OUTSIDE WORLD — a persona id, and the one setting on this line that is not about
+     * the model. `account` above pays for the turn; this decides whose logged-in accounts it may act through
+     * and how big a toolbox it holds. Undefined is the ordinary chat: somebody is watching, so every connected
+     * account stays reachable (the daemon's own rule — see turnPersona). */
+    readonly actsAs: string | undefined;
     readonly model: string;
     readonly effort: string;
     readonly thinking: boolean;
@@ -85,6 +90,10 @@ export const turnRequestBody = (input: {
     ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
     // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
     account: input.settings.account,
+    // The persona this turn wears. Omitted when none is picked, which for an attended chat means "every
+    // connected account" — sending an empty string instead would name a card that does not exist, and a named
+    // card that cannot be found is the one case the daemon answers with nothing at all.
+    ...(input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
     sessionId: input.resume?.id,
     ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
     // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the

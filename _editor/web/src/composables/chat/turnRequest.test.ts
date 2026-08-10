@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { turnRequestBody } from "./turnRequest";
 
 // The turn selection a send runs under — the same shape the composer captures.
-const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false, fast: false } as const;
+const settings = {
+    agent: `claude`,
+    harness: `native`,
+    account: undefined,
+    actsAs: undefined,
+    model: `opus`,
+    effort: `high`,
+    thinking: false,
+    fast: false,
+} as const;
 
 /* The wire body on its own. Every assertion here is about an OMISSION, because that is where the daemon's
  * defaults live: a key that isn't sent is the daemon resolving its own catalog default, running the native
@@ -59,6 +68,15 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, forkOf: { conversationId: `c0`, keep: 4, files: `then` } }))).toMatchObject({
             forkOf: { conversationId: `c0`, keep: 4, files: `then` },
         });
+    });
+
+    /* THE PERSONA IS THE ONE OMISSION THAT IS NOT A DEFAULT BUT A POSTURE. An absent `actsAs` on an attended
+     * turn keeps every connected account; the same absence on an unattended wake reaches none. So this key must
+     * be missing when nobody is picked rather than sent as an empty string — a named card the daemon cannot
+     * find is the fail-closed case, and "" names nothing at all. */
+    it(`carries the persona only once one is picked`, () => {
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);
+        expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
     });
 
     it(`omits an absent title, attachments and editor context rather than sending empties`, () => {

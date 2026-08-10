@@ -38,6 +38,10 @@ export interface StoredTab {
     // of this chat, and a reload should show the same chat back — but a new chat starts from off (turnDefaults
     // deliberately doesn't carry it; see Conversation.fast).
     readonly fast?: boolean;
+    // The persona this tab acts as, by id. Per TAB and nowhere else: it is never a remembered default (a
+    // narrowing must not follow the user into their next chat), so this store is the only thing standing
+    // between a picked persona and a page reload. Absent ⇒ the ordinary chat, every account reachable.
+    readonly actsAs?: string;
     // `account` is the one the SESSION was minted on, which is not always the tab's current pick — a mid-chat
     // switch takes effect at the next send, and until then the two differ on purpose (that difference is what
     // retires the session then). Restoring both keeps a reload from either forging the match or faking the
@@ -107,6 +111,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readText(`account`, raw[`account`]),
         ...readText(`model`, raw[`model`]),
         ...readText(`effort`, raw[`effort`]),
+        ...readText(`actsAs`, raw[`actsAs`]),
         ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
         ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),

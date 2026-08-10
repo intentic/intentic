@@ -96,6 +96,21 @@ Two details that matter:
   precisely the accident the layer exists to prevent — and a missing card is ordinary (a workspace cloned
   before its personas were committed).
 
+## Who names one
+
+Two places, and the difference between them is the supervision above.
+
+- **A scheduled or triggered job** names its persona when it is written, on the automation's own form. It is
+  the field that decides whether that job can post at all, so it is answered once and stays answered.
+- **A chat** names one in the composer, beside the model and the mode, and starts at *anyone* — the attended
+  default the rule above describes. Pick a persona and the pill wears its name until you change it: the pick
+  belongs to that chat, rides every message it sends, and can be changed mid-conversation, because the card is
+  resolved per turn rather than at the moment the conversation opened. It is deliberately **not** remembered
+  for the next chat: a narrowing that followed you into a new chat is one you would not remember making.
+
+A chat that names a persona whose accounts are all still signed out says so under the box. The turn would run
+and simply reach nothing — the one persona state a pill cannot show by wearing a name.
+
 ## Two very different things both called "account"
 
 The one confusion worth naming out loud, because the two words sit one line apart on the same form:
@@ -145,3 +160,4 @@ there) and mildly confusing to read.
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
 | The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
+| Picking one for a chat | [ChatPersonaMenu.vue](../_editor/web/src/chat/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../_editor/web/src/chat/ChatPane.vue) (the pill and what it warns about) |

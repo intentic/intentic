@@ -18,6 +18,7 @@ import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -40,6 +41,7 @@ import ChatForkLine from "./ChatForkLine.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
+import ChatPersonaMenu from "./ChatPersonaMenu.vue";
 import ChatWorkflowMenu from "./ChatWorkflowMenu.vue";
 import LoopDialog from "../agents/LoopDialog.vue";
 import { stopLoop } from "../composables/agents/useLoops";
@@ -170,9 +172,11 @@ const input = ref<HTMLTextAreaElement>();
 const modelOpen = ref(false);
 const modeOpen = ref(false);
 const workflowOpen = ref(false);
+const personaOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
 const workflowPill = ref<HTMLElement>();
+const personaPill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the pane only says when a NEW
@@ -731,6 +735,7 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
     if (!isConnected || workflow !== undefined) {
         modelOpen.value = false;
         modeOpen.value = false;
+        personaOpen.value = false;
     }
 });
 
@@ -738,6 +743,53 @@ const pickWorkflow = (workflow: Workflow | undefined): void => {
     workflowOpen.value = false;
     workflowFailure.value = undefined;
     props.conversation.workflowId.value = workflow?.id;
+};
+
+/* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD. The pick lives on the conversation (and rides every turn
+ * it sends); what the pane adds is the card behind the id — the name on the pill, and the one state worth
+ * interrupting for.
+ *
+ * The cards are read here rather than passed in because the answer is workspace-wide and cached: several panes
+ * asking is one request. */
+const { personas: personaCards, isConnected: personaSignedIn } = usePersonas();
+const pickedPersona = computed(() => personaCards.value.find((persona) => persona.id === props.conversation.actsAs.value));
+const personaName = computed(() => pickedPersona.value?.label ?? pickedPersona.value?.id ?? props.conversation.actsAs.value);
+
+/* THE ONE PERSONA STATE THE COMPOSER INTERRUPTS FOR, and only ever a state the user cannot see from the pill.
+ * A working persona says everything it needs to by being named on the pill; these two do not.
+ *
+ * The missing card is first and is a WARNING rather than an aside: a chat pinned to a persona this workspace no
+ * longer has gets no accounts and no tools at all (the daemon fails closed on a name it cannot resolve), and
+ * the pill alone would read as a perfectly ordinary pick. */
+const personaNotice = computed<string | undefined>(() => {
+    const pinned = props.conversation.actsAs.value;
+    if (pinned === undefined) {
+        return undefined;
+    }
+    if (pickedPersona.value === undefined) {
+        return `This chat acts as “${pinned}”, which no longer exists — it would reach no account and no tools. Pick another persona.`;
+    }
+    if (pickedPersona.value.capabilities.length === 0) {
+        return `${personaName.value} holds no accounts, so this chat can work but can't post, reply or send as anyone.`;
+    }
+    return pickedPersona.value.capabilities.some((held) => personaSignedIn(held))
+        ? undefined
+        : `${personaName.value} isn't signed in yet, so this chat can't act as it. Finish its login under Capabilities.`;
+});
+
+const pickPersona = (id: string | undefined): void => {
+    personaOpen.value = false;
+    props.conversation.actsAs.value = id;
+    /* A CARD THAT SAYS WHERE IT WORKS MOVES THE CHAT THERE — but only before the chat has started, which is
+     * exactly the moment the daemon reads the same field (it decides placement on a conversation's FIRST turn
+     * and follows its own registry entry after that). Mirrored here so the two agree from the pick onwards:
+     * `isolated` is not display-only on this side — the tab's name, a fork's "files as they were", and every
+     * diff link in the transcript are drawn from it, so a chat working in its own copy while this said
+     * otherwise would point them all at the wrong tree. */
+    const copy = personaCards.value.find((persona) => persona.id === id)?.workspace?.copy;
+    if (copy !== undefined && !props.conversation.registered.value) {
+        props.conversation.isolated.value = copy === `own`;
+    }
 };
 
 /* Send the draft as a run's request. The draft is cleared on success for the reason an ordinary send clears it
@@ -1488,10 +1540,45 @@ watch(
                                         label-class="@max-sm:hidden"
                                     />
 
+                                    <!-- PERSONA — who the chat IS when it reaches outside, and the first of the
+                                         right-hand group because it is a question about the message rather than
+                                         about the model: which of your accounts this turn may speak through,
+                                         and how much of the toolbox it holds.
+
+                                         A BADGE like the workflow pill beside it, for the same reason: unpicked
+                                         it is a bare glyph, because most chats are nobody in particular and a
+                                         name would be noise; picked it NAMES the persona in the active tint,
+                                         because a message about to go out under somebody's account must say
+                                         whose before it is sent, not after. -->
+                                    <button
+                                        ref="personaPill"
+                                        type="button"
+                                        class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{
+                                            'composer-active': conversation.actsAs.value !== undefined && pickedWorkflow === undefined,
+                                            'composer-steered': pickedWorkflow !== undefined,
+                                        }"
+                                        :disabled="pickedWorkflow !== undefined"
+                                        @click="personaOpen = !personaOpen"
+                                        v-tooltip.top="
+                                            conversation.actsAs.value !== undefined
+                                                ? `This chat acts as ${personaName} — only its accounts are in reach`
+                                                : `Act as one of your personas — only that person's accounts`
+                                        "
+                                        :aria-expanded="personaOpen"
+                                        :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
+                                    >
+                                        <Icon name="users" class="text-2xs" :class="conversation.actsAs.value !== undefined ? 'text-link' : ''" />
+                                        <span v-if="conversation.actsAs.value !== undefined" class="max-w-32 truncate @max-md:hidden">
+                                            {{ personaName }}
+                                        </span>
+                                        <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
+                                    </button>
+
                                     <button
                                         ref="modePill"
                                         type="button"
-                                        class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                         :class="{ 'composer-steered': pickedWorkflow !== undefined }"
                                         :disabled="pickedWorkflow !== undefined"
                                         @click="modeOpen = !modeOpen"
@@ -1610,6 +1697,14 @@ watch(
                                 <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts “{{ pickedWorkflow.name }}” — this message is
                                 what every step is asked to do. Model, effort, mode and looping are each step's own.
                             </p>
+                            <!-- A persona that CANNOT do what the pill implies, said where the message is being
+                                 written rather than discovered when the turn comes back empty-handed. Only ever
+                                 the states the pill itself can't show: a card that has gone missing, one with no
+                                 accounts on it, one whose accounts are all still signed out. A working persona
+                                 says everything it needs to by being named above. -->
+                            <p v-else-if="personaNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">
+                                <Icon name="exclamation-circle" class="shrink-0 text-2xs" />{{ personaNotice }}
+                            </p>
                         </template>
                     </template>
                 </div>
@@ -1669,7 +1764,7 @@ watch(
             </div>
         </div>
 
-        <!-- The three composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
+        <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
              — the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
              itself to it, so a picker fits whether this panel is docked in a column or floating in a window the
@@ -1680,6 +1775,9 @@ watch(
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="modeOpen" :anchor="modePill" cross="end" header="Agent mode" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
+        </ResponsiveOverlay>
+        <ResponsiveOverlay v-model="personaOpen" :anchor="personaPill" cross="end" header="Acts as" panel-class="w-80 p-1">
+            <ChatPersonaMenu :picked="conversation.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end" header="Run through a workflow" panel-class="w-80 p-1">
             <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />

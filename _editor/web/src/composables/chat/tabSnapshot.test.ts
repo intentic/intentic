@@ -177,6 +177,21 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
+    /* The persona has more riding on this store than the picks above it: it is deliberately never a remembered
+     * default (a narrowing must not follow someone into their next chat), so this blob is the ONLY thing
+     * standing between a picked persona and a page reload. Dropped when it isn't a usable id, which restores as
+     * the ordinary chat rather than as a pin to a card named "". */
+    it(`restores the persona the tab acts as, and drops one that names nothing`, () => {
+        const stored = (actsAs: unknown): unknown =>
+            JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [], queued: [] }] });
+
+        session.set(KEY, stored(`work`) as string);
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ actsAs: `work` });
+
+        session.set(KEY, stored(``) as string);
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).not.toHaveProperty(`actsAs`);
+    });
+
     it(`drops turn settings that aren't usable values, leaving the restore to fall back`, () => {
         session.set(
             KEY,

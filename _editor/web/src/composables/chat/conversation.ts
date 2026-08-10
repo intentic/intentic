@@ -225,6 +225,19 @@ export class Conversation {
      * from off, every time, and says so per conversation. (The daemon takes the same position for the same
      * reason — see the fastModePerSessionOptIn note in agent.ts.) */
     readonly fast = ref<boolean>(false);
+    /* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD — the id of one of the workspace's personas, or
+     * undefined for the ordinary chat that keeps every connected account.
+     *
+     * Per turn on the wire and so switchable mid-chat, which is the point: "now act as Work and post this"
+     * is one pick away, and the turn it applies to is the next one rather than a new conversation. The card
+     * bounds the turn where it counts — the accounts it can act through, the shelves of its toolbox — so
+     * nothing here needs to be true for the session already running.
+     *
+     * Deliberately NOT seeded from turnDefaults and never sticky, unlike the model/effort picks two lines up.
+     * A persona takes accounts AWAY, and a narrowing that follows the user into the next chat is one they
+     * would not remember making — so every new chat starts as everyone, and the pick belongs to the chat it
+     * was made in (it is persisted with the tab, so a reload keeps it). */
+    readonly actsAs = ref<string | undefined>();
     /* THE WORKFLOW THIS COMPOSER'S NEXT MESSAGE RUNS THROUGH, if any — the id of a saved design, or undefined
      * for the ordinary thing where the message is a turn on this chat.
      *
@@ -981,6 +994,10 @@ export class Conversation {
             agent: this.provider.value,
             harness: this.harness.value,
             account: this.account.value,
+            // Read at delivery like the rest of this: a message queued behind a running turn goes out as
+            // whoever the composer says at the moment it actually leaves, not as whoever was picked when it
+            // was typed.
+            actsAs: this.actsAs.value,
             model: this.model.value,
             effort: this.effort.value,
             thinking: this.thinking.value,

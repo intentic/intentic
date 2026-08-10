@@ -114,7 +114,16 @@ const turnBodies = (): Record<string, unknown>[] =>
         .filter(([path]) => path === `/agent`)
         .map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
 
-const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false, fast: false } as const;
+const settings = {
+    agent: `claude`,
+    harness: `native`,
+    account: undefined,
+    actsAs: undefined,
+    model: `opus`,
+    effort: `high`,
+    thinking: false,
+    fast: false,
+} as const;
 
 describe(`Conversation`, () => {
     it(`streams deltas into the assistant bubble and captures session, model, and title`, async () => {
@@ -381,6 +390,7 @@ describe(`Conversation`, () => {
             agent: conversation.provider.value,
             harness: conversation.harness.value,
             account: conversation.account.value,
+            actsAs: conversation.actsAs.value,
             model: conversation.model.value,
             effort: conversation.effort.value,
             thinking: false,
@@ -394,6 +404,24 @@ describe(`Conversation`, () => {
         conversation.selectProvider(`claude`);
         expect(conversation.provider.value).toBe(`claude`);
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+    });
+
+    /* THE PERSONA IS PART OF THE TURN, not of the conversation's opening — which is what makes "now act as Work
+     * and post this" one pick rather than a new chat. The daemon resolves the card per turn, so the pick is read
+     * at DELIVERY (turnSettings) and the same conversation can send one message as nobody and the next as Work.
+     *
+     * The first half matters as much as the second: an attended chat that names nobody must send no `actsAs` at
+     * all, because that absence is what keeps every connected account in reach. */
+    it(`sends the persona a turn is acting as, and nothing at all when the chat is nobody`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+
+        await conversation.send(`check our mentions`, conversation.turnSettings());
+        expect(`actsAs` in turnBodies()[0]!).toBe(false);
+
+        conversation.actsAs.value = `work`;
+        await conversation.send(`reply to the top one`, conversation.turnSettings());
+        expect(turnBodies()[1]![`actsAs`]).toBe(`work`);
     });
 
     it(`restores the per-provider model when switching provider away and back`, () => {
@@ -1739,6 +1767,7 @@ describe(`Conversation`, () => {
         await conversation.send(`land the branch`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -1770,6 +1799,7 @@ describe(`Conversation`, () => {
         await conversation.send(`/workspace view does not remember the file tree`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -1800,6 +1830,7 @@ describe(`Conversation`, () => {
         await conversation.send(`redesign the settings page`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -1824,6 +1855,7 @@ describe(`Conversation`, () => {
         await conversation.send(`and the docs`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -1843,6 +1875,7 @@ describe(`Conversation`, () => {
         await conversation.send(`land the branch`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -1871,6 +1904,7 @@ describe(`Conversation`, () => {
         await conversation.send(`hi`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -1882,6 +1916,7 @@ describe(`Conversation`, () => {
         await conversation.send(`again`, {
             agent: `claude`,
             harness: `native`,
+            actsAs: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
