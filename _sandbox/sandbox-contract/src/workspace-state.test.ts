@@ -234,6 +234,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/extension-enablement.json`,
             `.intentic/personas.json`,
             `.intentic/settings.json`,
+            // The skills the owner wrote. Tracked for the reason the rules in settings.json are: text that
+            // changes how the agent behaves is worth a diff and a line in `git log`.
+            `.intentic/skills/`,
             `.intentic/templates.json`,
             `.intentic/workflows.json`,
         ]);

@@ -61,6 +61,10 @@ import {
     SnapshotDiffSchema,
     SnapshotSchema,
     SnapshotsListSchema,
+    SkillBodySchema,
+    SkillDraftSchema,
+    SkillOriginSchema,
+    SkillSummarySchema,
     SnapshotTriggerSchema,
     TemplatesListSchema,
     TemplateSummarySchema,
@@ -136,6 +140,11 @@ export {
     SandboxSettingsSchema,
     ServiceEntrySchema,
     ServiceKindSchema,
+    SkillBodySchema,
+    SkillDraftSchema,
+    SkillOriginSchema,
+    SkillsListSchema,
+    SkillSummarySchema,
     TemplatesListSchema,
     TemplateSummarySchema,
     TerminalSessionSchema,
@@ -173,6 +182,10 @@ export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 export type DraftsList = z.infer<typeof DraftsListSchema>;
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 export type Rule = z.infer<typeof RuleSchema>;
+export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
+export type SkillSummary = z.infer<typeof SkillSummarySchema>;
+export type SkillBody = z.infer<typeof SkillBodySchema>;
+export type SkillDraft = z.infer<typeof SkillDraftSchema>;
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;

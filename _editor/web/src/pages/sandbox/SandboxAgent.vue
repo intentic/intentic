@@ -14,6 +14,7 @@ import AgentMemory from "./agent/AgentMemory.vue";
 import AgentModels from "./agent/AgentModels.vue";
 import AgentRecovery from "./agent/AgentRecovery.vue";
 import AgentRules from "./agent/AgentRules.vue";
+import AgentSkills from "./agent/AgentSkills.vue";
 import AgentSubagents from "./agent/AgentSubagents.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The provider accounts
@@ -67,6 +68,10 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- Directly under the accounts, because it is a choice OVER them. -->
         <AgentModels />
         <AgentInstructions />
+        <!-- Directly under Instructions, because it is the same subject one step out: those are what the
+             assistant is told on every turn, and these are what it is told when a job matches one of them.
+             Reading them in that order is what makes a skill legible as an instruction rather than as a plugin. -->
+        <AgentSkills />
         <AgentCodeSearch />
         <AgentCommandOutput />
         <AgentSubagents />

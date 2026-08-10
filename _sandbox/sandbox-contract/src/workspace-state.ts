@@ -345,6 +345,15 @@ const STATE_FILES = [
         note: "Extensions re-clone from the capability manifest on the target's next reconcile.",
     },
     { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
+    /* THE SKILLS THE OWNER WROTE THEMSELVES, one directory per skill — the source of truth the reconciler copies
+     * into `.claude/skills` for the ones currently switched on (settings.json's `skills` list). It is here rather
+     * than in `.claude/` for the reason the plugin dirs are: that tree is Claude Code's to manage, and a skill
+     * switched off has to keep its text somewhere the loader will not read it from.
+     *
+     * `versioned`, like the rest of the config slice: a skill changes how the agent behaves, so it earns a diff
+     * in the Changes review and a line in `git log` the same way a rule or a persona does. `carry` for the same
+     * reason — it is text the owner wrote, with no credential in it and nothing about this machine. */
+    { path: ".intentic/skills/", invalidates: ["skills"], portability: "carry", versioned: true },
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;

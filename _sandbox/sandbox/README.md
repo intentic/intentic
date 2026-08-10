@@ -40,6 +40,15 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   The plain switches take their tools out of the turn, and the folder limit refuses file tool calls that point
   outside. Naming no persona keeps the full toolbox and reaches no logged-in account; naming one that does not
   exist gets neither.
+- Say what the agent actually KNOWS, and own the half of it the owner wrote (src/settings/skill-inventory.ts).
+  Skills reach the agent from six directions — this image's baked tools, the owner's own, the cheatsheet every
+  connection writes, an installed extension's checkout, a plugin capability's clone, and whatever is simply
+  sitting in the loaded folder — and nothing joined them, so "what is my agent carrying" had no answer. The
+  inventory reads all six off disk and reports where each came from, which is what decides whether a row may be
+  switched, rewritten or deleted at all: a control the source would undo on the next reconcile is not offered.
+  The owner's own skills are stored APART from the folder the agent reads (`.intentic/skills/`, reconciled into
+  `.claude/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote — in the loaded
+  folder, "off" and "deleted" would be the same operation.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.

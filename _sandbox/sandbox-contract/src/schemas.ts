@@ -1317,6 +1317,91 @@ export type Rule = z.infer<typeof RuleSchema>;
 export const RuleFiringsSchema = z.record(z.string(), z.number());
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 
+/* WHERE A SKILL CAME FROM — the fact that decides everything else about its row.
+ *
+ * A skill is inert text the agent reads, and this sandbox grows them from six directions at once: the daemon
+ * writes one per baked tool and one per core feature that has a cheatsheet, connecting a tool or a machine
+ * writes one for that connection, the owner writes their own, an installed extension ships some inside its
+ * checkout, and a plugin capability clones a repo full of them. Nothing used to LIST the result, which is the
+ * whole gap this vocabulary closes — "what does my agent know right now" had no answer on screen, and a skill
+ * spends the agent's attention whether or not anyone remembers adding it.
+ *
+ *   builtin      this image ships it — a baked tool's cheatsheet, or a core feature's
+ *   own          the owner wrote it (.intentic/skills/), and only these are editable here
+ *   capability   something connected brought it: a CLI tool, a machine, a browser account, a VPN
+ *   extension    an installed extension ships it inside its checkout
+ *   plugin       a plugin capability cloned a repo that holds it
+ *   dropped      it is simply sitting in the loaded folder — put there by hand, or by the agent itself
+ *
+ * `dropped` is the honest bottom of the list rather than a category anything creates on purpose: the promise
+ * this surface makes is that it shows EVERYTHING the agent knows, so a file nothing else claims has to list as
+ * the loose file it is instead of being quietly left out.
+ *
+ * Deliberately NOT a capability kind. A capability holds a credential, can be broken right now, and wants a
+ * status light; a skill either exists or it does not. See _sandbox/sandbox/src/settings/skill-inventory.ts. */
+export const SkillOriginSchema = z.enum(["builtin", "own", "capability", "extension", "plugin", "dropped"]);
+export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
+
+/* A skill's own name — the directory it lives in and the word the agent invokes it by. Same slug shape the SDK's
+ * loader accepts, checked here so a bad name is a refused save rather than a skill that silently never loads. */
+export const SkillNameSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "a skill name is lowercase letters, digits and dashes");
+
+export const SkillSummarySchema = z.object({
+    /* The handle the read/remove routes take. An `own` or `builtin` skill IS its name (they share one directory,
+     * so names there are already unique); one that belongs to something else is `<origin>:<owner>:<name>`,
+     * because two plugins may each ship a `review` and the list has to be able to tell them apart. */
+    id: z.string(),
+    name: z.string(),
+    // The frontmatter line the agent routes on — empty when a shipped skill declares none, which is worth
+    // showing as the blank it is rather than papering over: a skill with no description is rarely picked.
+    description: z.string(),
+    origin: SkillOriginSchema,
+    // Who ships it, as the row names it — an extension's title, a plugin capability's id, a setting's name.
+    owner: z.string().optional(),
+    enabled: z.boolean(),
+    /* Whether THIS surface can switch it. True only for the skills the settings `skills` list governs (baked
+     * tools and the owner's own): everything else is on because its extension, its plugin or another setting is,
+     * and a switch here that silently did nothing would be worse than no switch at all — the row names its
+     * owner instead. */
+    switchable: z.boolean(),
+    // Whether the owner may rewrite the text here. Their own skills only — a shipped one is its author's, and
+    // editing it in place would be undone the next time the thing that ships it reconciles.
+    editable: z.boolean(),
+    /* Whether it can be deleted from this surface. Wider than `editable` by exactly one case: a skill someone
+     * dropped into the loaded folder is not the owner's to edit (its home is that folder, not their store) but is
+     * absolutely theirs to clear out, and with no switch and no owning extension there would otherwise be no way
+     * to get rid of it short of the file tree. */
+    removable: z.boolean(),
+});
+export type SkillSummary = z.infer<typeof SkillSummarySchema>;
+
+export const SkillsListSchema = z.array(SkillSummarySchema);
+
+// One skill's full text, for reading it on screen. Its own route rather than a field on the summary: bodies run
+// to thousands of words and a list of twenty would cost a hundred kilobytes to draw a group of one-line rows.
+export const SkillBodySchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    // Everything after the frontmatter — the instructions themselves, as written.
+    body: z.string(),
+});
+export type SkillBody = z.infer<typeof SkillBodySchema>;
+
+export const SkillIdSchema = z.object({ id: z.string().min(1) });
+
+/* A skill the owner writes. Three fields because a skill IS three things — what it is called, when to reach for
+ * it, and what to do — and the daemon assembles the frontmatter from the first two so a saved skill can never
+ * be one the loader skips over. `description` is required for the reason above: it is the only part the model
+ * reads before deciding whether to open the rest. */
+export const SkillDraftSchema = z.object({
+    name: SkillNameSchema,
+    description: z.string().min(1).max(1024),
+    body: z.string().min(1),
+});
+export type SkillDraft = z.infer<typeof SkillDraftSchema>;
+
+export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
+
 // Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
