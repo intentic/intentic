@@ -16,6 +16,13 @@ import type { LandStandings } from "./standing.js";
 // same last-frame-wins contract as presence), which system.routes relays onto /events.
 
 const MAX_TITLE_LENGTH = 80;
+/* A RELEASE NOTE IS NOT A TITLE, and this limit is what makes that concrete. Both are one bounded line, so the
+ * note and its breaking sibling used to ride the title's 80 — which is a CARD'S width, not a sentence's, and 80
+ * is where a note stops being cropped and starts being cut mid-word. It published four of the first five
+ * changelog entries ending in "…versus addin", and it would have cut a breaking warning before the half that
+ * says what to do instead. Long enough for any one-sentence note, short enough that a model which ignored "one
+ * plain sentence" cannot put a page of prose onto a published Release. */
+const MAX_NOTE_LENGTH = 300;
 /* Long enough for the provider's own explanation — the entitlement refusal that prompted this field runs to 140
  * characters and names both ways out of it — and short enough that a stack trace or an HTML error page cannot
  * ride into the roster, which every connected browser re-reads in full on every card change. */
@@ -29,14 +36,24 @@ const sanitizeFailure = (message: string): string | undefined => {
 // The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
 // source reads as `derived`, i.e. as replaceable by anything better.
 const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
-const sanitizeTitle = (prompt: string): string | undefined => {
-    const clean = prompt
+/* ONE BOUNDED LINE: control characters and runs of whitespace collapse to single spaces, and the whole thing is
+ * cut to the caller's limit. The limit is a parameter rather than a constant because that is the only difference
+ * between the two things scrubbed this way — a title read in a card's width, and a sentence read in a changelog
+ * entry — and sharing the constant as well as the scrub is what truncated the notes. */
+const sanitizeLine = (text: string, limit: number): string | undefined => {
+    const clean = text
         .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
         .replaceAll(/\s+/gu, " ")
         .trim()
-        .slice(0, MAX_TITLE_LENGTH);
+        .slice(0, limit);
     return clean === "" ? undefined : clean;
 };
+
+const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
+
+// The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub — these are read as
+// one line in a changelog entry and in the update card — and emphatically NOT the title's ceiling.
+const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
 
 /* The same scrub for a drafted commit BODY, which differs from a title in the one way that matters: its
  * newlines are the content. The body arrives as "- " fact lines and is read back as those lines, so collapsing
@@ -707,8 +724,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
              * stands, so a second land that turned out to need neither must not leave the previous land's
              * facts standing over a subject that has since been rewritten. */
             const cleanBody = draft.body === undefined ? undefined : sanitizeBody(draft.body);
-            const cleanNote = draft.note === undefined ? undefined : sanitizeTitle(draft.note);
-            const cleanBreaking = draft.breaking === undefined ? undefined : sanitizeTitle(draft.breaking);
+            const cleanNote = draft.note === undefined ? undefined : sanitizeNote(draft.note);
+            const cleanBreaking = draft.breaking === undefined ? undefined : sanitizeNote(draft.breaking);
             replace({
                 ...entry,
                 landedSubject: clean,

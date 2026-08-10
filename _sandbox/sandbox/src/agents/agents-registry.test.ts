@@ -885,6 +885,30 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
+    /* A RELEASE NOTE IS NOT A TITLE, which is what this pins. The note and its breaking sibling used to be
+     * scrubbed through the title's cleaner, so every sentence longer than a card's 80 characters reached the
+     * published Release — and the changelog page, and the update card — cut mid-word: four of the first five
+     * entries ended like "…versus addin". The subject is still one bounded line; the sentences written for users
+     * are not bounded by a card's width, only by a ceiling a page of prose cannot pass. */
+    it("setLandedSubject keeps the release note and the breaking warning whole, and still bounds the subject", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        const note = "You can now create, edit, and manage custom skills for your agent directly in the sandbox, without editing a file by hand.";
+        const breaking =
+            "The old skills folder is no longer read — move anything you keep there into the skills panel before updating, or it stops loading.";
+        await registry.setLandedSubject("c1", { subject: "f".repeat(120), note, breaking });
+        const saved = () => store.saved().find((entry) => entry.id === "c1");
+        expect(saved()?.landedNote).toBe(note);
+        expect(saved()?.landedBreaking).toBe(breaking);
+        expect(saved()?.landedSubject).toHaveLength(80);
+
+        // The ceiling is still a ceiling: a model that ignored "one plain sentence" cannot put a page onto a Release.
+        await registry.setLandedSubject("c1", { subject: "skills panel", note: "n".repeat(500) });
+        expect(saved()?.landedNote).toHaveLength(300);
+    });
+
     // A card that says "Resolve conflict" but cannot say WHAT blocked is the dead end this report exists to
     // prevent, so it has to outlive the land that produced it — and has to disappear the moment a later land
     // succeeds, or the review keeps offering a resolution for something already resolved. (It is EVIDENCE, not
