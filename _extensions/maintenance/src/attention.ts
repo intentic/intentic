@@ -1,7 +1,8 @@
 import { assessReport, type ChoreVerdict, ledgerKey, unseenVerdicts } from "@intentic/sandbox-contract/chores";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ChoresReportSchema, STATE_DIR } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { ref } from "vue";
+import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
 
 /* THE RAIL BADGE, and the several things it is deliberately NOT.
@@ -61,7 +62,14 @@ const scan = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        const report = ChoresReportSchema.parse(await api.sandbox.json(`/chores`));
+        /* THROUGH THE HOST'S CACHE, not straight at the route — so this poll and the panel are one read.
+         *
+         * The badge has to keep its own timer (see above: nothing observes an unmounted view, so neither the
+         * file push nor the panel's query can serve it), but "its own timer" never had to mean "its own copy".
+         * It was fetching precisely what the panel renders, six times an hour, and handing it to nobody else;
+         * the panel then opened on a skeleton and asked again. Filed under the panel's key, the most recent
+         * poll IS what the panel paints from the moment it is opened. */
+        const report = await api.sandbox.fetch(choresReportQuery());
         unseen.value = unseenVerdicts(assessReport(report, Date.now()), await readSeen());
     } catch {
         // Leave the previous verdict standing: a transient read failure is not evidence that nothing is waiting.

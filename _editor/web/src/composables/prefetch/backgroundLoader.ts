@@ -28,6 +28,10 @@ import type { WarmTask } from "./warmPlan";
  *     follows makes the same request for real and shows the user whatever went wrong. A RUN of failures means
  *     the daemon is gone rather than that one file is unreadable, so it sleeps the whole loader off for a while
  *     instead of walking the rest of the plan into the same wall.
+ *   · AND NEITHER DOES A SUCCESS THAT CHANGED NOTHING. A read that resolves without its wish becoming satisfied
+ *     is the one failure mode the rules above do not cover: it is not an error, so nothing counts it, and the
+ *     loader takes the first unsatisfied wish — so it would pick the same one again on the very next beat, and
+ *     on every beat after that, forever. One wish shaped that way is the whole plan lost. See STALL_RETRY_MS.
  *
  * Nothing here reports and nothing here is user-visible. A loader that surfaced its own progress would be
  * telling the user about work that exists precisely so they never have to think about it. */
@@ -57,6 +61,21 @@ const IDLE_BEAT_MS = 1_000;
  * one extra request beside a request that is never coming back is not the thing that broke that session. */
 const MAX_YIELDS = 10;
 
+/* HOW LONG A WISH THAT WILL NOT SETTLE IS LEFT ALONE.
+ *
+ * A read that resolves is supposed to make its wish satisfied — `have` is a cache lookup and the read is the
+ * fetch that fills it (warmQuery). When those two agree, this constant never comes into play: the wish flips to
+ * "in hand" and the walk moves on. When they DISAGREE, this is the only thing standing between one malformed
+ * wish and a loader that spends the entire session re-reading it, because a stall is not an error and the
+ * failure streak above never sees it.
+ *
+ * So a wish that read cleanly and is still not in hand is set aside for a minute and the walk continues past it.
+ * Set aside rather than dropped, because the honest reading of a stall is "not yet": a query whose entry was
+ * collected the instant it landed, a surface mid-teardown, an extension whose key moved. A minute is long enough
+ * that the waste is a rounding error against everything else the loader does, and short enough that a wish which
+ * starts settling is picked back up while the user is still in the same session. */
+const STALL_RETRY_MS = 60_000;
+
 // Consecutive failures that mean "the daemon is not there", rather than "that one file could not be read".
 const FAILURE_STREAK = 3;
 // …and how long the loader stands down after one. The reconnect machinery is already working the problem; this
@@ -83,9 +102,13 @@ export interface LoaderPace {
     readonly now: () => number;
 }
 
-// What one beat did, for the tests and for the debug counters — never for the user (see the header).
+/* What one beat did, for the tests and for the debug counters — never for the user (see the header).
+ *
+ * `stalled` is its own outcome rather than a flavour of `read`: the request was made and answered, so it cost
+ * exactly what a read costs, but the plan is no closer to being warm than it was — and a loader reporting those
+ * as reads would look like it was working while getting nothing done. */
 export interface LoaderBeat {
-    readonly outcome: "read" | "failed" | "idle" | "paused" | "yielded";
+    readonly outcome: "read" | "stalled" | "failed" | "idle" | "paused" | "yielded";
     readonly key?: string;
 }
 
@@ -94,22 +117,29 @@ export interface LoaderBeat {
  * pacing policy and a test that has to reproduce the arithmetic to assert on it is testing its own copy. */
 export const gapAfter = (elapsedMs: number): number => Math.min(MAX_GAP_MS, Math.max(MIN_GAP_MS, elapsedMs * GAP_RATIO));
 
-/* The first thing in the plan that is not already in hand.
+// Answered defensively: a `have` that throws is a surface reading a cache that has been torn down under it.
+// Treat it as "in hand" — the safe answer, because the alternative is warming into a store that is gone.
+const inHand = (task: WarmTask): boolean => {
+    try {
+        return task.have();
+    } catch {
+        return true;
+    }
+};
+
+/* The first thing in the plan that is not already in hand and is not being left alone.
  *
  * A linear scan, every beat, over a plan bounded at PLAN_LIMIT. That looks wasteful and is the point: `have` is
  * a cache lookup, so scanning past four hundred satisfied wishes costs less than one of the round trips it
  * avoids — and it means a wish that goes COLD AGAIN (its list refreshed, its query invalidated) is picked up on
  * the very next beat without anything having to notify the loader that it did. A source can therefore declare
- * its list once and leave it declared, which is the property that makes the whole registry cheap to use. */
-const nextTask = (plan: readonly WarmTask[]): WarmTask | undefined =>
+ * its list once and leave it declared, which is the property that makes the whole registry cheap to use.
+ *
+ * `resting` is the stall set (STALL_RETRY_MS), keyed by wish and holding the time each was set aside. */
+const nextTask = (plan: readonly WarmTask[], resting: ReadonlyMap<string, number>, now: number): WarmTask | undefined =>
     plan.find((task) => {
-        try {
-            return !task.have();
-        } catch {
-            // A `have` that throws is a surface reading a cache that has been torn down under it. Treat it as
-            // "in hand" — the safe answer, because the alternative is warming into a store that is gone.
-            return false;
-        }
+        const restedAt = resting.get(task.key);
+        return (restedAt === undefined || now - restedAt >= STALL_RETRY_MS) && !inHand(task);
     });
 
 /* Run until `stopped`. One loader per signed-in session; the caller owns starting and stopping it.
@@ -126,6 +156,10 @@ export const runBackgroundLoader = async (
 ): Promise<void> => {
     let failures = 0;
     let yields = 0;
+    // Wishes that read cleanly and were still not in hand afterwards, and when each was set aside. Never
+    // pruned: a plan is bounded at PLAN_LIMIT, so this is bounded by it too, and an entry for a wish that has
+    // since left the plan costs one map lookup that no scan will ever reach.
+    const resting = new Map<string, number>();
     while (!stopped()) {
         // Idle FIRST, always — before the gates are even read. Whatever this beat turns out to be, it happens in
         // a gap the browser offered rather than in the middle of a frame the user is watching.
@@ -145,7 +179,7 @@ export const runBackgroundLoader = async (
             continue;
         }
         yields = 0;
-        const task = nextTask(plan());
+        const task = nextTask(plan(), resting, pace.now());
         if (task === undefined) {
             onBeat({ outcome: `idle` });
             await pace.wait(IDLE_BEAT_MS);
@@ -159,12 +193,21 @@ export const runBackgroundLoader = async (
         if (stopped()) {
             return;
         }
-        onBeat({ outcome: ok ? `read` : `failed`, key: task.key });
         if (ok) {
             failures = 0;
+            // Did the read do what the wish said it would? Asked once, here, rather than trusted — see
+            // STALL_RETRY_MS for what one wish that answers "no" costs everything behind it.
+            const settled = inHand(task);
+            if (settled) {
+                resting.delete(task.key);
+            } else {
+                resting.set(task.key, pace.now());
+            }
+            onBeat({ outcome: settled ? `read` : `stalled`, key: task.key });
             await pace.wait(gapAfter(pace.now() - started));
             continue;
         }
+        onBeat({ outcome: `failed`, key: task.key });
         failures += 1;
         if (failures >= FAILURE_STREAK) {
             failures = 0;

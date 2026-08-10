@@ -109,12 +109,18 @@ export const readAgentFileDiff = async (agentId: string, repo: string, path: str
     return body;
 };
 
-export const agentFileDiff = (agentId: string, repo: string, path: string): Promise<FileDiffResponse> =>
-    queryClient.fetchQuery({
-        queryKey: agentFileDiffKey(agentId, repo, path),
-        queryFn: () => readAgentFileDiff(agentId, repo, path),
-        ...AGENT_FILE_DIFF_OPTIONS,
-    });
+/* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
+ * that fetches it — see agentTranscriptQuery for what having those two halves separable cost. */
+export const agentFileDiffQuery = (agentId: string, repo: string, path: string) => ({
+    queryKey: agentFileDiffKey(agentId, repo, path),
+    queryFn: () => readAgentFileDiff(agentId, repo, path),
+    ...AGENT_FILE_DIFF_OPTIONS,
+});
+
+// Module-local: the loader takes the query above rather than a function that runs it, so the panel below is the
+// only caller left.
+const agentFileDiff = (agentId: string, repo: string, path: string): Promise<FileDiffResponse> =>
+    queryClient.fetchQuery(agentFileDiffQuery(agentId, repo, path));
 
 // Files/±lines of a review subset — the header's split chips total code and tests through this one shape.
 const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions: number; deletions: number } => ({

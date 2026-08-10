@@ -1,5 +1,6 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { maintenanceBadge, startMaintenanceAttention } from "./attention.js";
+import { choresReportQuery, choresRunsQuery } from "./choresQuery.js";
 import { bindHost } from "./host.js";
 
 /* ext-maintenance activation: bind the host handle, start the badge's background poll, then register the two
@@ -38,6 +39,13 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
              * glyph a reader already has a fixed meaning for is the one it must not borrow. */
             detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `wrench` }]),
             badge: maintenanceBadge,
+            /* The two reads this page opens on, so the host reads them ahead of the click. Worth asking for
+             * here more than on most tiles, and for a reason the badge makes plain: this is a surface people
+             * reach BECAUSE it lit up, so the arrival is the whole interaction — and its run history is a
+             * directory walk plus two files per run, which is a visible wait over a tunnel. Neither read is
+             * urgent (probes move on a daily-to-weekly TTL), which is exactly what makes them safe to have
+             * early. */
+            warm: () => [choresReportQuery(), choresRunsQuery()],
             view: async () => (await import(`./MaintenanceView.vue`)).default,
         }),
     );

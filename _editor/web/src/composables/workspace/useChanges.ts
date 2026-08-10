@@ -202,24 +202,28 @@ const countDiff = (repo: string, path: string, side: GitDiffSide, body: FileDiff
     void useCodeStats().record(workingStatKey(repo, side, path), path, body.before ?? ``, body.after ?? ``);
 };
 
-export const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
-    queryClient.fetchQuery({
-        queryKey: fileDiffKey(repo, path, side),
-        queryFn: async () => {
-            const body = await sandboxJson<FileDiffResponse>(
-                `/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`,
-            );
-            countDiff(repo, path, side, body);
-            return body;
-        },
-        staleTime: Infinity,
-        gcTime: FILE_DIFF_GC_MS,
-        // No retry, which is what this read has always done (it was a bare fetch) and what the loader needs it to
-        // keep doing: a daemon hiccup during a read-ahead would otherwise turn one quiet walk into four times the
-        // requests, which is the burst the pacing exists to avoid. A failure leaves nothing cached, so the click
-        // that follows asks again for real.
-        retry: false,
-    });
+/* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
+ * that fetches it — see agentTranscriptQuery for what having those two halves separable cost. */
+export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
+    queryKey: fileDiffKey(repo, path, side),
+    queryFn: async (): Promise<FileDiffResponse> => {
+        const body = await sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`);
+        countDiff(repo, path, side, body);
+        return body;
+    },
+    staleTime: Infinity,
+    gcTime: FILE_DIFF_GC_MS,
+    // No retry, which is what this read has always done (it was a bare fetch) and what the loader needs it to
+    // keep doing: a daemon hiccup during a read-ahead would otherwise turn one quiet walk into four times the
+    // requests, which is the burst the pacing exists to avoid. A failure leaves nothing cached, so the click
+    // that follows asks again for real.
+    retry: false as const,
+});
+
+// Module-local: the loader takes the query above rather than a function that runs it, so the panel below is the
+// only caller left.
+const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
+    queryClient.fetchQuery(fileDiffQuery(repo, path, side));
 
 // The review set itself — named apart from the composable that observes it so the background loader can warm
 // the same entry rather than a parallel one. `sandboxKey("git","changes")` is also the PREFIX every file diff

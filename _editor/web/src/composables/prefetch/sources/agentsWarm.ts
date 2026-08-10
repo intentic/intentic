@@ -1,9 +1,9 @@
 import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import { router } from "../../../router";
-import { agentChangesKey, agentFileDiff, agentFileDiffKey, fetchAgentChanges } from "../../agents/useAgentChanges";
+import { agentChangesKey, agentFileDiffQuery, fetchAgentChanges } from "../../agents/useAgentChanges";
 import { unregistered } from "../../agents/agentStatus";
 import { type FleetAgent, useAgents, windowFinished } from "../../agents/useAgents";
-import { agentTranscript, agentTranscriptKey } from "../../chat/agentTranscript";
+import { agentTranscriptQuery } from "../../chat/agentTranscript";
 import { useChat } from "../../chat/useChat";
 import { queryClient } from "../../queryPersistence";
 import type { WarmBand, WarmTask } from "../warmPlan";
@@ -48,8 +48,8 @@ const { active } = useChat();
 const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => {
     const band: WarmBand = focused ? `now` : `near`;
     return [
-        warmQuery(`agent:${agent.id}:transcript`, band, agentTranscriptKey(agent.id), () => agentTranscript(agent.id)),
-        warmQuery(`agent:${agent.id}:changes`, band, agentChangesKey(agent.id), () => fetchAgentChanges(agent.id)),
+        warmQuery(`agent:${agent.id}:transcript`, band, agentTranscriptQuery(agent.id)),
+        warmQuery(`agent:${agent.id}:changes`, band, { queryKey: agentChangesKey(agent.id), queryFn: () => fetchAgentChanges(agent.id) }),
     ];
 };
 
@@ -68,11 +68,7 @@ const openReviewWishes = (): readonly WarmTask[] => {
     return (held?.repos ?? [])
         .flatMap((group) => group.changes.map((change) => ({ repo: group.repo, path: change.path })))
         .slice(0, MAX_REVIEW_ROWS)
-        .map((row) =>
-            warmQuery(`agent:${agentId}:diff:${row.repo}:${row.path}`, `now`, agentFileDiffKey(agentId, row.repo, row.path), () =>
-                agentFileDiff(agentId, row.repo, row.path),
-            ),
-        );
+        .map((row) => warmQuery(`agent:${agentId}:diff:${row.repo}:${row.path}`, `now`, agentFileDiffQuery(agentId, row.repo, row.path)));
 };
 
 export const agentsWarmSource = (): readonly WarmTask[] => {

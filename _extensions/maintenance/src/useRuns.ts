@@ -1,22 +1,10 @@
 import type { ChoreVerdict } from "@intentic/sandbox-contract/chores";
-import { type AgentSummary, AgentsListSchema, StartedTurnSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentsListSchema, StartedTurnSchema } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { choresRunsQuery } from "./choresQuery";
 import { host } from "./host";
-import {
-    ANY_RUN_PREFIX,
-    conversationIdOf,
-    parseManifest,
-    parseResult,
-    reportingClause,
-    resultPath,
-    type RunManifest,
-    type RunResult,
-    runIdAt,
-    runManifestPath,
-    RUNS_DIR,
-    SCAN_RUNS,
-} from "./runs";
+import { ANY_RUN_PREFIX, conversationIdOf, reportingClause, type RunManifest, type RunResult, runIdAt, runManifestPath } from "./runs";
 
 /* CHORE RUNS — starting them, watching them, and promoting the finished ones into the ledger.
  *
@@ -49,47 +37,16 @@ export function useRuns() {
     const runsKey = computed(() => api.sandbox.key(`maintenance-runs`));
     const agentsKey = computed(() => api.sandbox.key(`maintenance-runs`, `agents`));
 
-    const json = async <T>(path: string): Promise<T | undefined> => {
-        try {
-            return (await api.sandbox.json(path)) as T;
-        } catch {
-            return undefined;
-        }
-    };
-
     // The manifests and whatever results exist beside them, newest first. Both files are read in the same pass:
     // a run's result is a few hundred bytes, the walk is capped at SCAN_RUNS, and needing a second query to know
     // whether a run finished is what makes a history list flicker.
+    //
+    // The read itself lives in choresQuery, shared with the host's read-ahead — this is the slowest thing the
+    // view does (a directory walk, then two files per run), so it is the one most worth already having.
     const runsQuery = useQuery({
         queryKey: runsKey,
         enabled: computed(() => api.sandbox.reachable()),
-        queryFn: async (): Promise<{ manifest: RunManifest; result: RunResult | undefined }[]> => {
-            // No runs directory yet is the ordinary first state, not an error.
-            const listing = await json<unknown>(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`);
-            if (listing === undefined) {
-                return [];
-            }
-            const dirs = WorkspaceChildrenSchema.parse(listing)
-                .entries.filter((entry) => entry.type === `dir`)
-                // Run ids sort by their base-36 timestamp, so newest-first is a reverse lexical sort — no manifest
-                // read needed to decide which SCAN_RUNS to read at all.
-                .toSorted((left, right) => right.path.localeCompare(left.path))
-                .slice(0, SCAN_RUNS);
-            const runs = await Promise.all(
-                dirs.map(async (entry) => {
-                    const text = await api.workspace.file(`${entry.path}/run.json`);
-                    const manifest = text === undefined ? undefined : parseManifest(text);
-                    if (manifest === undefined) {
-                        return undefined;
-                    }
-                    const resultText = await api.workspace.file(resultPath(manifest.runId));
-                    return { manifest, result: resultText === undefined ? undefined : parseResult(resultText) };
-                }),
-            );
-            return runs
-                .flatMap((run) => (run === undefined ? [] : [run]))
-                .toSorted((left, right) => right.manifest.createdAt - left.manifest.createdAt);
-        },
+        queryFn: () => choresRunsQuery().queryFn(),
     });
 
     // The fleet roster, polled only while some run still has work in flight. `GET /agents` is the whole fleet; the

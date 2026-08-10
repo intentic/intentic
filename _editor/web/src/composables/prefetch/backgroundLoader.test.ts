@@ -71,6 +71,20 @@ const task = (log: string[], key: string, band: WarmBand, onRead: () => void = (
 
 const dead = (key: string): WarmTask => ({ key, band: `now`, have: () => false, read: () => Promise.reject(new Error(`daemon said no`)) });
 
+// A wish whose read SUCCEEDS and leaves it exactly as cold as it was — the shape a wish takes when the key it
+// says it is satisfied by is not the key its read fills. Every real wish used to be free to be this (its read
+// was a separate callback), and eight of them were; warmQuery now builds both halves out of one query so it
+// cannot be said in the app. The loop still has to survive being handed one, because an extension can.
+const stalling = (log: string[], key: string): WarmTask => ({
+    key,
+    band: `now`,
+    have: () => false,
+    read: () => {
+        log.push(key);
+        return Promise.resolve();
+    },
+});
+
 describe(`the background loader`, () => {
     it(`reads one thing at a time, in band order`, async () => {
         const read: string[] = [];
@@ -222,6 +236,45 @@ describe(`the background loader`, () => {
         expect(beats.map((beat) => beat.outcome)).toEqual([`failed`, `failed`, `failed`]);
         // The first two pace off normally; the third trips the streak and stands the loader down.
         expect(bench.waits.at(-1)).toBe(30_000);
+        stopped = true;
+    });
+
+    it(`sets aside a wish that reads cleanly and is still not in hand, instead of reading it forever`, async () => {
+        const read: string[] = [];
+        const beats: LoaderBeat[] = [];
+        const bench = harness();
+        let stopped = false;
+        // One instance each, not rebuilt per beat, so `have` latches the way a cache does.
+        const plan = [stalling(read, `never-settles`), task(read, `settles`, `now`)];
+        void runBackgroundLoader(
+            () => plan,
+            OPEN,
+            bench.pace,
+            () => stopped,
+            (beat) => {
+                beats.push(beat);
+            },
+        );
+
+        // Read, answered, and no closer to warm — reported as its own outcome rather than as a read.
+        await bench.step();
+        expect(read).toEqual([`never-settles`]);
+        expect(beats.at(-1)).toEqual({ outcome: `stalled`, key: `never-settles` });
+
+        // THE POINT: the walk carries on past it. Before, the loop took the first unsatisfied wish every beat,
+        // so this second one was never reached — on the real plan that was everything behind the agent board.
+        await bench.step();
+        expect(read).toEqual([`never-settles`, `settles`]);
+
+        // And with the rest of the plan in hand it goes quiet, rather than spending every beat re-reading it.
+        await bench.step();
+        expect(read).toEqual([`never-settles`, `settles`]);
+        expect(beats.at(-1)?.outcome).toBe(`idle`);
+
+        // Set aside, not given up on: a minute later it gets one more try, in case the stall was "not yet".
+        bench.advance(60_000);
+        await bench.step();
+        expect(read).toEqual([`never-settles`, `settles`, `never-settles`]);
         stopped = true;
     });
 

@@ -1,7 +1,7 @@
 import type { GitChangesResponse } from "@intentic-app/api-contract";
 import { router } from "../../../router";
 import { queryClient } from "../../queryPersistence";
-import { changesKey, fetchChanges, fileDiff, fileDiffKey } from "../../workspace/useChanges";
+import { changesKey, fetchChanges, fileDiffQuery } from "../../workspace/useChanges";
 import type { WarmBand, WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 import { warmRows } from "./warmRows";
@@ -30,16 +30,14 @@ import { warmRows } from "./warmRows";
 const band = (): WarmBand => (router.currentRoute.value.name === `workspace` ? `near` : `work`);
 
 export const changesWarmSource = (): readonly WarmTask[] => {
-    const list = warmQuery(`changes:list`, `work`, changesKey(), fetchChanges);
+    const list = warmQuery(`changes:list`, `work`, { queryKey: changesKey(), queryFn: fetchChanges });
     const held = queryClient.getQueryData<GitChangesResponse>(changesKey());
     if (held === undefined) {
         // Nothing to walk yet — the list itself is the only wish, and the rows follow on the beat after it lands.
         return [list];
     }
     const rows = warmRows(held.repos ?? []).map((row) =>
-        warmQuery(`diff:${row.repo}:${row.side}:${row.path}`, band(), fileDiffKey(row.repo, row.path, row.side), () =>
-            fileDiff(row.repo, row.path, row.side),
-        ),
+        warmQuery(`diff:${row.repo}:${row.side}:${row.path}`, band(), fileDiffQuery(row.repo, row.path, row.side)),
     );
     return [list, ...rows];
 };

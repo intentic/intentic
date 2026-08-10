@@ -1,7 +1,7 @@
 import { assessReport, type ChoreVerdict, CHORES } from "@intentic/sandbox-contract/chores";
-import { type ChoresReport, ChoresReportSchema } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
 
 /* The evidence, and what it means. One request — `GET /chores` carries every repository's cached probe results,
@@ -34,7 +34,9 @@ export function useChores() {
         queryKey: reportKey,
         enabled: computed(() => api.sandbox.reachable()),
         refetchInterval: POLL_MS,
-        queryFn: async (): Promise<ChoresReport> => ChoresReportSchema.parse(await api.sandbox.json(`/chores`)),
+        // The shared definition, so this panel, the rail badge's timer and the host's read-ahead all fill and
+        // read ONE entry — see choresQuery. Opening this view usually finds it already answered.
+        queryFn: () => choresReportQuery().queryFn(),
     });
 
     /* Re-derived on every render tick rather than memoised against a clock: two of the verdicts depend on elapsed

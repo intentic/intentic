@@ -19,6 +19,7 @@ import { useAgents } from "../composables/agents/useAgents";
 import { startAgent } from "../composables/agents/agentActions";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
+import { queryClient } from "../composables/queryPersistence";
 import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { gatedSandboxRpc } from "../composables/sandbox/sandboxRpc";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -301,6 +302,9 @@ export const createExtensionApi = (
                 guardSandbox(path, init);
                 return sandboxJson(path, init);
             },
+            // No guard of its own: `queryFn` is the extension's, and whatever it reaches for goes through
+            // `request`/`json`/`rpc` above, each of which checks the manifest. This is cache plumbing.
+            fetch: (query) => queryClient.fetchQuery({ ...query, queryKey: [...query.queryKey] }),
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
             origin: () => {

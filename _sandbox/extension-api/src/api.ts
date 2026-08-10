@@ -60,6 +60,26 @@ export interface ViewBadge {
     readonly tooltip?: string | undefined;
 }
 
+/* ONE CACHED READ, described rather than performed — the currency both `ViewRegistration.warm` and
+ * `api.sandbox.fetch` deal in.
+ *
+ * It is deliberately the shape a vue-query `useQuery` already takes, because that is the point: the entry a
+ * view warms, the entry its badge fills from a timer and the entry the view's own `useQuery` observes are ONE
+ * entry, and they are one entry because all three name it the same way. Two of the three used to be separate
+ * reads of the same route in this app's own extensions — the tile fetched the report every ten minutes and kept
+ * it privately, and the view it badged for started from nothing every time it was opened.
+ *
+ * The caching terms are optional and yours: `staleTime` is how long an answer stays believable without a
+ * refetch (Infinity for something only an invalidation can make wrong), `gcTime` how long it survives with
+ * nothing observing it. Both default to the host's. */
+export interface HostQuery<T = unknown> {
+    // MUST be scoped by api.sandbox.key(...), so nothing bleeds across a sandbox switch.
+    readonly queryKey: readonly unknown[];
+    readonly queryFn: () => Promise<T>;
+    readonly staleTime?: number | undefined;
+    readonly gcTime?: number | undefined;
+}
+
 // A view's runtime registration — for third-party extensions, `id`, `label` and `surface` must match a
 // `contributes.views` entry in the approved manifest or the host refuses the registration.
 export interface ViewRegistration {
@@ -86,6 +106,25 @@ export interface ViewRegistration {
     // The source has to stay alive while the view is UNMOUNTED (a badge you only see once you have already
     // navigated to the view is pointless), so it belongs in module state owned by activate(), not in the view.
     readonly badge?: ((activation: Activation) => ViewBadge | undefined) | undefined;
+    /* WHAT THIS VIEW WOULD LIKE IN HAND BEFORE ANYONE OPENS IT — read ahead by the host's background loader in
+     * the gaps between what the user is already doing, so the tile opens with content instead of a skeleton.
+     *
+     * A rail tile is at the far end of the loader's priority order (the user is not there, they might GO
+     * there), so this is a wish and never a guarantee: on a workspace busy enough that nothing is spare, none
+     * of it is read and the view costs exactly what it cost before. Nothing here is user-visible, nothing
+     * retries, and a failed warm is simply a warm that did not happen.
+     *
+     * DECLARE THE QUERY, not a function that fetches it — that is the whole reason this takes a HostQuery. The
+     * host's own wishes used to carry a cache key and a separate "how to read it" callback, and for most of
+     * them the callback fetched the data and returned it to its caller without ever filing it under that key.
+     * The wish could then never be satisfied, and since the loader always takes the first unsatisfied wish, one
+     * of them was enough to park it for the whole session. Handing over the query makes the two halves the same
+     * object. Use the SAME key your view's `useQuery` reads (api.sandbox.key(...)), or you are warming an entry
+     * nothing will look in.
+     *
+     * Called on every beat of the loader, so it must be cheap and pure — derive from state you already keep,
+     * never fetch. A throwing warm contributes nothing that beat. */
+    readonly warm?: (() => readonly HostQuery[]) | undefined;
     // A fallback view's activations are dropped for repos already claimed by a non-fallback one.
     readonly fallback?: true | undefined;
     // An AUXILIARY view adds a surface BESIDE whatever else serves the repo instead of replacing it — a test
@@ -250,6 +289,17 @@ export interface IntenticApi {
         readonly rpc: ContractRouterClient<typeof sandboxContract>;
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
+        /* READ THROUGH THE HOST'S CACHE, from outside a component — the door for the module-level timers that
+         * badge a rail tile, which is where `useQuery` cannot reach.
+         *
+         * Concurrent callers of one key share a single request, and a caller inside `staleTime` is answered
+         * from cache with no round trip at all. Which is what makes this worth using over `json`: a badge that
+         * polls a route on its own timer and hands the answer only to itself makes the view it badges for pay
+         * for the same read again on open. Through here, the badge's poll IS the view's first paint.
+         *
+         * The route is gated exactly as `json` is — `queryFn` is your function, and whatever it calls carries
+         * its own manifest check. */
+        fetch<T>(query: HostQuery<T>): Promise<T>;
         // Whether the active sandbox is currently reachable — reactive when read inside a computed, so it
         // drives host-provided vue-query `enabled` options.
         reachable(): boolean;

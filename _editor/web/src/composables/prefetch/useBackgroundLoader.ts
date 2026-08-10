@@ -6,6 +6,7 @@ import { useSandbox } from "../sandbox/useSandbox";
 import { browserPace, runBackgroundLoader, type LoaderGates } from "./backgroundLoader";
 import { agentsWarmSource } from "./sources/agentsWarm";
 import { changesWarmSource } from "./sources/changesWarm";
+import { extensionsWarmSource } from "./sources/extensionsWarm";
 import { railWarmSource } from "./sources/railWarm";
 import { registerWarmSource, warmPlan } from "./warmPlan";
 
@@ -24,8 +25,10 @@ const { conversations } = useChat();
 /* REGISTRATION ORDER IS THE TIE-BREAK WITHIN A BAND (warmPlan), so it is the app's own answer to "which of two
  * equally-near things first". The board's cards lead: opening an agent is the most repeated gesture in the
  * product, and the two reads behind it are the ones the user waits on today. Then the review's diffs, then the
- * rail. */
-const SOURCES = [agentsWarmSource, changesWarmSource, railWarmSource];
+ * rail — the shell's own furniture before the extensions', because two of the shell's reads (the panels, the
+ * capability manifest) are what the rail DETECTS its extension tiles from, so a tile whose data arrived before
+ * the tile itself would have gained nothing by going first. */
+const SOURCES = [agentsWarmSource, changesWarmSource, railWarmSource, extensionsWarmSource];
 
 const gates: LoaderGates = {
     /* NOBODY LOOKING, OR NOTHING TO LOOK AT. `onScreen` is asked of every window this tab renders into rather

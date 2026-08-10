@@ -6,13 +6,22 @@ import { coreViews } from "./coreViews";
  * through api.views.register. A module-level singleton ref (the app's no-Pinia convention), so every host —
  * rail, mobile menu, ExtensionHost, DirectoryOperator — recomputes off the same reactive list. */
 
-interface RegisteredView {
+export interface RegisteredView {
     // "builtin" or the owning extension's id — error attribution and manifest-gating key off this.
     readonly owner: string;
     readonly registration: ViewRegistration;
 }
 
 const views = shallowRef<readonly RegisteredView[]>(coreViews.map((registration) => ({ owner: `builtin`, registration })));
+
+/* EVERY LIVE REGISTRATION, whether or not it currently detects — the list the background loader reads to
+ * collect what each view wants warmed (composables/prefetch/sources/extensionsWarm).
+ *
+ * Deliberately not filtered by detection. Detection needs the panels and the capability manifest, which are
+ * themselves two of the things being warmed, so a warm list gated on them would be cold exactly when the app
+ * has just connected and everything is cold — the moment it is worth the most. A registration only exists for
+ * an extension the owner has installed and switched on, which is evidence enough to read one list ahead. */
+export const registeredViews = (): readonly RegisteredView[] => views.value;
 
 // A registration is IDENTIFIED by owner + view id, not by object identity: the same extension registering the
 // same view id again can only mean it is being re-activated (the dev server hot-reloading the host module while

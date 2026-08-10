@@ -55,14 +55,19 @@ const read = async (conversationId: string): Promise<AgentTranscript> => {
 // gives the memory back. Collection makes the loader re-read it, which is a trickle rather than a cost.
 const TRANSCRIPT_GC_MS = 30 * 60 * 1000;
 
-export const agentTranscript = (conversationId: string): Promise<AgentTranscript> =>
-    queryClient.fetchQuery({
-        queryKey: agentTranscriptKey(conversationId),
-        queryFn: () => read(conversationId),
-        staleTime: Infinity,
-        gcTime: TRANSCRIPT_GC_MS,
-        // No retry, for the same reason the file diffs don't: a daemon hiccup during a read-ahead would turn one
-        // quiet walk into four times the requests. A failure leaves nothing cached, so the click that follows
-        // asks again for real and reports whatever went wrong where the user can act on it.
-        retry: false,
-    });
+/* The query, named apart from the call — because the background loader warms this same entry and must be handed
+ * the QUERY rather than a function that fetches it. A wish that carries a key and a separate "how to read it" is
+ * a wish whose two halves can disagree about where the answer lands, which is exactly how the loader once ended
+ * up re-reading one thing forever (composables/prefetch/warmQuery). */
+export const agentTranscriptQuery = (conversationId: string) => ({
+    queryKey: agentTranscriptKey(conversationId),
+    queryFn: () => read(conversationId),
+    staleTime: Infinity,
+    gcTime: TRANSCRIPT_GC_MS,
+    // No retry, for the same reason the file diffs don't: a daemon hiccup during a read-ahead would turn one
+    // quiet walk into four times the requests. A failure leaves nothing cached, so the click that follows
+    // asks again for real and reports whatever went wrong where the user can act on it.
+    retry: false as const,
+});
+
+export const agentTranscript = (conversationId: string): Promise<AgentTranscript> => queryClient.fetchQuery(agentTranscriptQuery(conversationId));

@@ -22,21 +22,23 @@ import { warmQuery } from "../warmQuery";
  * reconnect when everything is invalidated at once. The tree and the module layout are the two that are
  * genuinely cold — nothing observes them until the workspace itself is open.
  *
- * There is deliberately no entry here for an EXTENSION's own data. An extension that wants its view warm
- * registers its own source (warmPlan's registry is the public shape); a table of other people's queries kept in
- * the core is the list nobody remembers to extend. */
+ * There is deliberately no entry here for an EXTENSION's own data — a table of other people's queries kept in
+ * the core is the list nobody remembers to extend. An extension declares what its view wants on the view itself
+ * (ViewRegistration.warm), and extensionsWarm next door collects them. That door had to be BUILT: this note
+ * used to point at the plan's registry as "the public shape", which it was not — nothing in the extension API
+ * reached it, so every rail tile the product ships as an extension went unwarmed while the note said otherwise. */
 
 export const railWarmSource = (): readonly WarmTask[] => [
     // The workspace, first among these: it is the rail's other permanent surface, and the tree is what the whole
     // view is built out of.
-    warmQuery(`rail:workspace-tree`, `rail`, workspaceTreeKey(), fetchWorkspaceTree),
+    warmQuery(`rail:workspace-tree`, `rail`, { queryKey: workspaceTreeKey(), queryFn: fetchWorkspaceTree }),
     // The package layout the Changes panel groups its rows by — cheap, held long, and the difference between a
     // review that groups on arrival and one that regroups a beat later. (The agent review needs no entry here:
     // its layout rides its own diff, which this loader already warms.)
-    warmQuery(`rail:workspace-modules`, `rail`, modulesKey(), fetchModules),
-    warmQuery(`rail:drafts`, `rail`, draftsKey, fetchDrafts),
-    warmQuery(`rail:panels`, `rail`, panelsKey, fetchPanels),
-    warmQuery(`rail:capabilities`, `rail`, capabilitiesKey, fetchCapabilities),
-    warmQuery(`rail:browsers`, `rail`, browsersKey, fetchBrowsers),
-    warmQuery(`rail:subagents`, `rail`, subagentsKey, fetchSubagents),
+    warmQuery(`rail:workspace-modules`, `rail`, { queryKey: modulesKey(), queryFn: fetchModules }),
+    warmQuery(`rail:drafts`, `rail`, { queryKey: draftsKey, queryFn: fetchDrafts }),
+    warmQuery(`rail:panels`, `rail`, { queryKey: panelsKey, queryFn: fetchPanels }),
+    warmQuery(`rail:capabilities`, `rail`, { queryKey: capabilitiesKey, queryFn: fetchCapabilities }),
+    warmQuery(`rail:browsers`, `rail`, { queryKey: browsersKey, queryFn: fetchBrowsers }),
+    warmQuery(`rail:subagents`, `rail`, { queryKey: subagentsKey, queryFn: fetchSubagents }),
 ];
