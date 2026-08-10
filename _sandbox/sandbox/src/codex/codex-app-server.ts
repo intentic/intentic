@@ -195,7 +195,7 @@ const normalizeItem = (value: unknown): CodexItem | undefined => {
         if (!Array.isArray(rawChanges)) {
             throw new Error("Codex app-server sent invalid fileChange.changes");
         }
-        const changes = rawChanges.map((value, index) => {
+        const changes = rawChanges.map((value, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
             const change = object(value, `fileChange.changes[${index}]`);
             const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);
             if (kind !== "add" && kind !== "delete" && kind !== "update") {
