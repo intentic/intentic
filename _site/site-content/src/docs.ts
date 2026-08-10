@@ -310,11 +310,11 @@ export const docsSections: DocsSection[] = [
                                  * build it, describe it, publish it, get paid for it. */
                                 id: "extensions/economics",
                                 title: "The creator pool",
-                                blurb: "Premium listings, the revenue split, and the public ledger",
+                                blurb: "Premium listings, credits, the revenue split, and the public ledger",
                                 meta: {
                                     title: "The creator pool · intentic docs",
                                     description:
-                                        "How premium extensions earn: the membership, the published split, the active-day unit, the anti-gaming rule, and the transparency ledger anyone can read.",
+                                        "How premium extensions and services earn: the membership, daily credits with per-run pricing and no charge on failure, the published split, the active-day unit, the anti-gaming rule, and the transparency ledger anyone can read.",
                                     datePublished: "2026-08-10",
                                 },
                             },

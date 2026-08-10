@@ -331,6 +331,16 @@ export const MembershipStateSchema = z.object({
     renewsAt: z.iso.datetime().optional(),
     priceUsd: z.number(),
     creatorShare: z.number(),
+    // The daily credit meter for metered service runs — present exactly when the caller is a member,
+    // because only a member has one. `resetsAt` is the next UTC midnight, rendered locally by the card.
+    credits: z
+        .object({
+            allowance: z.number(),
+            used: z.number(),
+            remaining: z.number(),
+            resetsAt: z.iso.datetime(),
+        })
+        .optional(),
 });
 export type MembershipState = z.infer<typeof MembershipStateSchema>;
 

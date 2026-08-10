@@ -53,18 +53,37 @@ const entry = `{
         row like every other trust decision. YouTube took a decade to write this down; we are writing it down on day one.
     </p>
 
+    <h2>Services &amp; credits: runs with real costs</h2>
+    <p>
+        Some tools aren't a prompt and glue — they call paid data APIs or burn real compute per run. Those are <strong>services</strong>,
+        and they run on <strong>credits</strong>: a membership includes a daily allowance (1000 credits, resetting at UTC midnight, same
+        honest reset as the free trial), and a service publishes its credit price. The rules a member can hold us to:
+    </p>
+    <ul>
+        <li><strong>The price is visible before the run.</strong> Any surface can ask what a run costs and what's left today; a refusal for lack of credits answers with the remaining count and when it resets.</li>
+        <li><strong>No charge on failure.</strong> Credits are spent atomically before the call and refunded automatically when the provider errors or never answers. A provider's "your query was malformed" is an answer — that one is paid for and relayed verbatim.</li>
+        <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is; the user never holds a provider account or key. Every forwarded call is signed so a provider can verify it came from intentic and drop everything else.</li>
+    </ul>
+    <p>
+        A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. A service's provider earns a
+        published share (70%) of the credit value members actually consume — and those earnings settle <strong>out of the pool first</strong>,
+        because services carry real upstream costs; what remains is what active-days divide among premium extensions. The order is printed in
+        the ledger itself, month by month.
+    </p>
+
     <h2>The ledger is public</h2>
     <p>
         The platform serves <code>GET /pool/transparency</code> to anyone, no login: member count, gross revenue, the split, the pool, and
-        every premium extension's active-days, share, and slice — this month and the two before it. The share percentages are exact,
-        computed from the same ledger the payouts will settle on. Member counts for past months are today's snapshot (the platform keeps
-        no status history), and the page you are reading says so rather than dressing an estimate up as an audit.
+        every premium extension's active-days, share, and slice — plus every service's runs, credits, and earnings — this month and the two
+        before it. The share percentages are exact, computed from the same ledger the payouts will settle on. Member counts for past months
+        are today's snapshot (the platform keeps no status history), and the page you are reading says so rather than dressing an estimate
+        up as an audit.
     </p>
 
     <h2>What exists today, honestly</h2>
     <ul>
-        <li><strong>Working now:</strong> premium listings, the membership, the premium gate, use-day metering, the pool math, and the public ledger.</li>
-        <li><strong>Not yet:</strong> payout rails. The ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating.</li>
+        <li><strong>Working now:</strong> premium listings, the membership, the premium gate, use-day metering, credits and metered service runs (spend, refund, signed forwarding), the pool math, and the public ledger.</li>
+        <li><strong>Not yet:</strong> payout rails — the ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating. Also not yet: credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
     </ul>
     <p>
         The split (70%) is configuration the platform publishes on the ledger itself, so this page and the endpoint cannot quietly

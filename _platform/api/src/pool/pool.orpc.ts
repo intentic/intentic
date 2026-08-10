@@ -2,6 +2,7 @@ import { apiContract, type MembershipState } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
+import { creditStatus } from "./pool-credits.js";
 import { isPremium, poolEnabled } from "./pool-membership.js";
 import { type StripeGateway, stripeGateway } from "./pool-stripe.js";
 
@@ -22,12 +23,15 @@ export const poolRoutes = (gateway?: StripeGateway) => ({
             return { ...disabled, enabled: true };
         }
         const membership = await prisma.membership.findUnique({ where: { userId: context.user.id } });
+        const member = isPremium(membership);
         return {
             enabled: true,
-            member: isPremium(membership),
+            member,
             ...(membership !== null ? { status: membership.status, renewsAt: membership.currentPeriodEnd.toISOString() } : {}),
             priceUsd: config.pool.priceUsd,
             creatorShare: config.pool.creatorShare,
+            // Only a member has a meter — the card shows the allowance beside the membership it belongs to.
+            ...(member ? { credits: await creditStatus(prisma, config, context.user.id, new Date()) } : {}),
         };
     }),
     checkout: os.pool.checkout.handler(async ({ context }) => {

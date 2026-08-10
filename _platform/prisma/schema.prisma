@@ -31,6 +31,8 @@ model User {
     trialUsage       TrialUsage[]
     membership       Membership?
     extensionUseDays ExtensionUseDay[]
+    creditSpends     CreditSpend[]
+    serviceRuns      ServiceRun[]
 
     @@map("user")
 }
@@ -226,12 +228,14 @@ model DesktopHandoff {
 // accepted invitee has daemon access immediately. inviteToken/inviteExpiresAt gate the accept link (resend mints
 // fresh ones); an unaccepted invite that expires is inert — the invitee never received a connect token.
 // ---------------------------------------------------------------------------
-// The creator pool. Two tables, and deliberately no more: the membership a user
-// bought (mirrored from Stripe by webhook — Stripe stays the source of truth for
-// money, this row is the platform's fast local answer to "is this user premium"),
-// and the use-day ledger the pool's revenue share is computed from. The pool's
-// numbers are PUBLIC by design (GET /pool/transparency), so neither table may
-// ever hold more than ids, statuses and days.
+// The creator pool. The membership a user bought (mirrored from Stripe by
+// webhook — Stripe stays the source of truth for money, this row is the
+// platform's fast local answer to "is this user premium"), the use-day ledger
+// the pool's revenue share is computed from, and the services economy on top:
+// the catalog of priced upstreams, the per-day credit meter, and the run
+// ledger. The pool's numbers are PUBLIC by design (GET /pool/transparency),
+// so no table here may ever hold more than ids, statuses, counts and days —
+// the one secret (a service's signing key) is encrypted at rest.
 // ---------------------------------------------------------------------------
 
 // One row per user who ever completed a membership checkout. `status` is Stripe's subscription status
@@ -271,6 +275,65 @@ model ExtensionUseDay {
     // userId and can't serve them.
     @@index([day])
     @@map("extension_use_day")
+}
+
+// A priced upstream the platform will meter and forward to — one row per premium service, created by the
+// PLATFORM OPERATOR (no self-serve onboarding in v1; the docs say so). `slug` is the public id extensions
+// call it by; `secret` is the provider's signing key (encrypted at rest, api crypto.ts — the one secret in
+// the pool's tables), spent on the HMAC that lets the provider verify a forwarded call came from intentic.
+// `creditsPerRun` is the visible price; `active: false` delists without deleting the run history.
+model Service {
+    id            String       @id @default(cuid())
+    slug          String       @unique
+    publisher     String
+    name          String
+    description   String
+    upstreamUrl   String
+    secret        String
+    creditsPerRun Int
+    active        Boolean      @default(true)
+    createdAt     DateTime     @default(now())
+    updatedAt     DateTime     @updatedAt
+    runs          ServiceRun[]
+
+    @@map("service")
+}
+
+// The credit meter: what a member has spent today, the trial_usage shape verbatim — atomic upsert on
+// (userId, day) so a spend is one statement, refusal decided from the post-increment value. The allowance
+// itself is config (pool.dailyCredits), never a row. Swept by retention.ts; cascades with the user.
+model CreditSpend {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    day       String
+    credits   Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([userId, day])
+    @@index([day])
+    @@map("credit_spend")
+}
+
+// One metered call to a service — what provider earnings and the transparency page's services section are
+// computed from. `status` is "ok" or "refunded" (provider failure gave the credits back; the row stays, so
+// a flaky service is visible in its own public numbers). Swept with the use-day window; cascades with user.
+model ServiceRun {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    serviceId String
+    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+    credits   Int
+    status    String
+    createdAt DateTime @default(now())
+
+    // Earnings and transparency aggregate by service and by time; the FK columns get no automatic index.
+    @@index([serviceId, createdAt])
+    @@index([userId])
+    @@index([createdAt])
+    @@map("service_run")
 }
 
 model SandboxMember {

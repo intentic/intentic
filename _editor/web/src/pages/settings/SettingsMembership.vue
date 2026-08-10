@@ -38,6 +38,17 @@ const renewsOn = computed(() => {
 
 const sharePercent = computed(() => Math.round((membership.value?.creatorShare ?? 0) * 100));
 
+// The daily credit meter for metered service runs — present exactly when the caller is a member. Reset is
+// UTC midnight; rendered as the reader's local time so "resets at" is a clock they own.
+const creditsLine = computed(() => {
+    const credits = membership.value?.credits;
+    if (credits === undefined) {
+        return undefined;
+    }
+    const resets = new Date(credits.resetsAt).toLocaleTimeString(undefined, { hour: `numeric`, minute: `2-digit` });
+    return `${credits.remaining} of ${credits.allowance} service credits left today — resets at ${resets}.`;
+});
+
 // The public ledger, served by the platform for anyone — members are exactly who should read it.
 const transparencyUrl = `${environment.api.url}/pool/transparency`;
 
@@ -73,6 +84,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 <p class="text-sm">
                     You're a member<template v-if="renewsOn"> — renews on {{ renewsOn }}</template>.
                 </p>
+                <p v-if="creditsLine" class="text-xs text-muted">{{ creditsLine }}</p>
                 <p v-if="membership.status && membership.status !== `active`" class="text-xs text-muted">
                     Stripe reports this membership as “{{ membership.status }}” — manage it below if something needs attention.
                 </p>

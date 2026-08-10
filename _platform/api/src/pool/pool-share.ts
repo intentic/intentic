@@ -13,6 +13,28 @@ export interface UseDayRow {
     readonly userId: string;
 }
 
+// One credit's value in cents, derived from the published numbers rather than configured separately, so the
+// three figures (price, allowance, credit value) cannot disagree: a month's allowance is 30 × dailyCredits.
+export const creditCents = (config: Config): number => (config.pool.priceUsd * 100) / (30 * config.pool.dailyCredits);
+
+// A month's served runs for one service, already aggregated (the route sums; this prices).
+export interface ServiceAggregate {
+    readonly slug: string;
+    readonly publisher: string;
+    readonly runs: number;
+    readonly credits: number;
+}
+
+export interface ServiceEarnings extends ServiceAggregate {
+    // credits × credit value × serviceShare, floored to whole cents.
+    readonly earningsCents: number;
+}
+
+export const computeServiceEarnings = (aggregates: readonly ServiceAggregate[], config: Config): ServiceEarnings[] =>
+    aggregates
+        .map((aggregate) => ({ ...aggregate, earningsCents: Math.floor(aggregate.credits * creditCents(config) * config.pool.serviceShare) }))
+        .toSorted((a, b) => b.credits - a.credits || a.slug.localeCompare(b.slug));
+
 export interface ExtensionShare {
     readonly extensionId: string;
     // Member active-days this month.
@@ -29,15 +51,29 @@ export interface MonthReport {
     // members × priceUsd, in cents.
     readonly grossCents: number;
     readonly creatorShare: number;
-    // grossCents × creatorShare — what the creators split.
+    // grossCents × creatorShare — what the creators split, services first.
     readonly poolCents: number;
+    /* The settlement order, stated in the numbers themselves: services carry real upstream costs, so their
+     * earnings settle out of the pool FIRST (capped at the pool — a month where metered runs outgrow the
+     * pool pays services the whole pool and extensions nothing, rather than inventing money), and what
+     * remains is what active-days divide. */
+    readonly servicePoolCents: number;
+    readonly extensionPoolCents: number;
     readonly memberActiveDays: number;
     // Active-days from non-members — shown, not paid.
     readonly otherActiveDays: number;
     readonly extensions: readonly ExtensionShare[];
+    readonly services: readonly ServiceEarnings[];
 }
 
-export const computeMonth = (month: string, rows: readonly UseDayRow[], memberIds: ReadonlySet<string>, members: number, config: Config): MonthReport => {
+export const computeMonth = (
+    month: string,
+    rows: readonly UseDayRow[],
+    memberIds: ReadonlySet<string>,
+    members: number,
+    config: Config,
+    serviceAggregates: readonly ServiceAggregate[] = [],
+): MonthReport => {
     const memberRows = rows.filter((row) => memberIds.has(row.userId));
     const byExtension = new Map<string, number>();
     for (const row of memberRows) {
@@ -45,13 +81,19 @@ export const computeMonth = (month: string, rows: readonly UseDayRow[], memberId
     }
     const grossCents = Math.round(members * config.pool.priceUsd * 100);
     const poolCents = Math.round(grossCents * config.pool.creatorShare);
+    const services = computeServiceEarnings(serviceAggregates, config);
+    const servicePoolCents = Math.min(
+        poolCents,
+        services.reduce((sum, service) => sum + service.earningsCents, 0),
+    );
+    const extensionPoolCents = poolCents - servicePoolCents;
     const total = memberRows.length;
     const extensions = [...byExtension.entries()]
         .map(([extensionId, activeDays]) => ({
             extensionId,
             activeDays,
             share: total === 0 ? 0 : activeDays / total,
-            amountCents: total === 0 ? 0 : Math.floor((poolCents * activeDays) / total),
+            amountCents: total === 0 ? 0 : Math.floor((extensionPoolCents * activeDays) / total),
         }))
         // Largest slice first — the order every reader wants, and a stable tiebreak so the page never jitters.
         .toSorted((a, b) => b.activeDays - a.activeDays || a.extensionId.localeCompare(b.extensionId));
@@ -61,8 +103,11 @@ export const computeMonth = (month: string, rows: readonly UseDayRow[], memberId
         grossCents,
         creatorShare: config.pool.creatorShare,
         poolCents,
+        servicePoolCents,
+        extensionPoolCents,
         memberActiveDays: total,
         otherActiveDays: rows.length - total,
         extensions,
+        services,
     };
 };

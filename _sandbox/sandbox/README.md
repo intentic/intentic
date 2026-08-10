@@ -55,8 +55,11 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Hold up the daemon's end of the creator pool: gate installing/enabling a `tier: "premium"` extension on the
   owner's membership (asked of the platform fresh at the gate, src/platform/pool-status.ts), record a per-day
   "was used" bit for premium extensions only (src/extensions/extension-active-use.ts — id + UTC day is ALL that
-  is recorded or reported, and free/private extensions report nothing, not even their names), and re-send the
-  idempotent 7-day tail to the platform's ledger every few hours (src/platform/pool-report.ts).
+  is recorded or reported, and free/private extensions report nothing, not even their names), re-send the
+  idempotent 7-day tail to the platform's ledger every few hours (src/platform/pool-report.ts), and relay
+  metered service runs verbatim (src/platform/pool-services.ts): the daemon adds the connect token and nothing
+  else — the member gate, the credit meter and the refund discipline are the platform's, and which services an
+  extension backend may spend the owner's credits on is a `permissions.daemon` glob approved at install.
 
 ## Key files
 

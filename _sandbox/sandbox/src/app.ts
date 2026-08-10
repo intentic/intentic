@@ -44,6 +44,7 @@ import {
     syncSshHostname,
     verifySyncToken,
 } from "./platform/sync.js";
+import { relayServiceCatalog, relayServiceRun } from "./platform/pool-services.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
@@ -1048,6 +1049,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }
         }
         return new Response(upstream.body, { status: upstream.status, headers: endToEndHeaders(upstream.headers) });
+    });
+
+    /* The creator pool's metered services, relayed to the platform verbatim (platform/pool-services.ts) —
+     * the catalog with the owner's credit meter, and one priced run. The daemon contributes the connect
+     * token and nothing else; the platform holds the member gate, the meter and the refund discipline, and
+     * its refusals are already written for the reader. These are the routes an extension backend declares
+     * in `permissions.daemon` to spend the owner's credits — a mutation, so the bearer middleware floors
+     * the run at maintainer for browsers, like every unlisted POST. */
+    app.get("/pool/services", async (c) => {
+        const answer = await relayServiceCatalog(services.config);
+        return c.newResponse(answer.body, answer.status as 200, { "content-type": answer.contentType });
+    });
+    app.post("/pool/services/:slug/run", async (c) => {
+        const answer = await relayServiceRun(services.config, c.req.param("slug"), await c.req.text());
+        return c.newResponse(answer.body, answer.status as 200, { "content-type": answer.contentType });
     });
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via

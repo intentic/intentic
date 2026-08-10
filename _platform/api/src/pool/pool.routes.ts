@@ -4,9 +4,12 @@ import { Hono } from "hono";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
+import { decryptSecret } from "../crypto.js";
+import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
 import { applySubscription, isPremium, poolEnabled, premiumOf } from "./pool-membership.js";
+import { forwardToService } from "./pool-services.js";
 import { type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
-import { computeMonth } from "./pool-share.js";
+import { computeMonth, type ServiceAggregate } from "./pool-share.js";
 
 /* THE CREATOR POOL's sandbox-facing and public routes. The browser-facing half (membership state, checkout,
  * portal) rides the oRPC contract in pool.orpc.ts; what lives here is what a BROWSER SESSION cannot
@@ -53,10 +56,12 @@ export interface PoolDeps {
     readonly prisma: PrismaClient;
     // Injectable so tests drive checkout/webhook flows without Stripe, like the trial pool's fetchFn.
     readonly gateway?: StripeGateway;
+    // Injectable so tests drive the service forward without a network — the trial pool's pattern.
+    readonly fetchFn?: typeof fetch;
     readonly now?: () => Date;
 }
 
-export const poolHttpRoutes = ({ config, prisma, gateway, now = () => new Date() }: PoolDeps) => {
+export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now = () => new Date() }: PoolDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
     // Lazy: built on the first webhook that needs it, so mounting the sub-app on a pool-less platform (every
     // test config, most self-hosted ones) constructs nothing Stripe-shaped.
@@ -112,6 +117,92 @@ export const poolHttpRoutes = ({ config, prisma, gateway, now = () => new Date()
         return c.json({ premium: await premiumOf(prisma, ownerId) });
     });
 
+    /* The services catalog, plus where the caller's allowance stands — the read behind every "this run costs
+     * N credits (M left today)" surface. Everyone with a sandbox sees the catalog (a non-member deciding
+     * whether to join should see what membership buys); only a member gets a credit meter, because only a
+     * member has one. */
+    app.get(`/services`, async (c) => {
+        if (!poolEnabled(config)) {
+            return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
+        }
+        const ownerId = await ownerOf(c);
+        if (ownerId === undefined) {
+            return c.json({ error: `unknown sandbox` }, 404);
+        }
+        const [services, member] = await Promise.all([
+            prisma.service.findMany({
+                where: { active: true },
+                select: { slug: true, publisher: true, name: true, description: true, creditsPerRun: true },
+                orderBy: { slug: `asc` },
+            }),
+            premiumOf(prisma, ownerId),
+        ]);
+        const credits = member ? await creditStatus(prisma, config, ownerId, now()) : undefined;
+        return c.json({ member, services, ...(credits !== undefined ? { credits } : {}) });
+    });
+
+    /* ONE METERED RUN — the whole intermediary in one handler. Spend first (atomic, or two concurrent runs
+     * race through the same headroom), forward signed, refund whatever did not serve. Two different
+     * refusals with two different refunds:
+     *   - insufficient credits → the optimistic increment is given back (unlike the trial's 1-message slot,
+     *     an N-credit bite out of a refused attempt would eat real remaining allowance);
+     *   - provider failure (5xx / timeout / dead socket) → full refund, and the run row says `refunded`, so
+     *     a flaky service is visible in its own public numbers.
+     * A provider's 4xx is an ANSWER — the caller pays for it and reads it verbatim, because "your query was
+     * malformed" is the service serving exactly what was asked. */
+    app.post(`/services/:slug/run`, async (c) => {
+        if (!poolEnabled(config)) {
+            return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
+        }
+        const ownerId = await ownerOf(c);
+        if (ownerId === undefined) {
+            return c.json({ error: `unknown sandbox` }, 404);
+        }
+        const service = await prisma.service.findUnique({ where: { slug: c.req.param(`slug`) } });
+        if (service === null || !service.active) {
+            return c.json({ error: `no such service` }, 404);
+        }
+        if (!(await premiumOf(prisma, ownerId))) {
+            return c.json({ error: { type: `membership_required`, message: `Running ${service.name} needs an intentic membership.` } }, 403);
+        }
+        const body = await c.req.text();
+        if (body.length > 1_000_000) {
+            return c.json({ error: `request too large` }, 413);
+        }
+        const at = now();
+        const spend = await spendCredits(prisma, config, ownerId, service.creditsPerRun, at);
+        if (!spend.allowed) {
+            await refundCredits(prisma, ownerId, service.creditsPerRun, at);
+            return c.json(
+                {
+                    error: {
+                        type: `insufficient_credits`,
+                        message: `This run costs ${service.creditsPerRun} credits and ${spend.remaining} are left today. The allowance resets at ${spend.resetsAt}.`,
+                    },
+                    credits: { allowance: spend.allowance, remaining: spend.remaining, resetsAt: spend.resetsAt },
+                },
+                429,
+            );
+        }
+        const result = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, fetchFn, () => at);
+        await prisma.serviceRun.create({
+            data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: result.served ? `ok` : `refunded` },
+        });
+        if (!result.served) {
+            await refundCredits(prisma, ownerId, service.creditsPerRun, at);
+            c.get(`logger`)?.warn({ service: service.slug, status: result.status }, `pool: service did not serve — run refunded`);
+            return c.json(
+                { error: { type: `service_unavailable`, message: `${service.name} did not answer — nothing was charged. Please try again shortly.` } },
+                502,
+            );
+        }
+        return c.newResponse(result.body, result.status as 200, {
+            "content-type": result.contentType,
+            // Advisory, like the trial's remaining-count header: any UI can show the meter without a second call.
+            "x-intentic-credits-remaining": String(spend.remaining),
+        });
+    });
+
     /* The public ledger: this month and the two before it, as the pool math states them (pool-share.ts).
      * Member count is TODAY's active-membership count for every month shown — the platform keeps no status
      * history, and publishing an exact-looking reconstruction would be less honest than a stated snapshot.
@@ -122,17 +213,42 @@ export const poolHttpRoutes = ({ config, prisma, gateway, now = () => new Date()
         }
         const at = now();
         const months = [2, 1, 0].map((shift) => monthShifted(at, shift));
-        const [rows, memberships] = await Promise.all([
+        const [rows, memberships, runs] = await Promise.all([
             prisma.extensionUseDay.findMany({
                 where: { day: { gte: `${months[0]}-01` } },
                 select: { extensionId: true, userId: true, day: true },
             }),
             prisma.membership.findMany({ select: { userId: true, status: true } }),
+            // Only served runs earn — a refunded run charged nobody and pays nobody, but its row keeps the
+            // service's reliability visible to anyone who queries deeper.
+            prisma.serviceRun.findMany({
+                where: { status: `ok`, createdAt: { gte: new Date(`${months[0]}-01T00:00:00.000Z`) } },
+                select: { credits: true, createdAt: true, service: { select: { slug: true, publisher: true } } },
+            }),
         ]);
         const memberIds = new Set(memberships.filter((membership) => isPremium(membership)).map((membership) => membership.userId));
+        // (month, slug) → aggregate, priced by pool-share.ts inside computeMonth.
+        const aggregatesOf = (month: string): ServiceAggregate[] => {
+            const byService = new Map<string, ServiceAggregate>();
+            for (const run of runs) {
+                if (!run.createdAt.toISOString().startsWith(`${month}-`)) {
+                    continue;
+                }
+                const previous = byService.get(run.service.slug);
+                byService.set(run.service.slug, {
+                    slug: run.service.slug,
+                    publisher: run.service.publisher,
+                    runs: (previous?.runs ?? 0) + 1,
+                    credits: (previous?.credits ?? 0) + run.credits,
+                });
+            }
+            return [...byService.values()];
+        };
         return c.json({
             priceUsd: config.pool.priceUsd,
             creatorShare: config.pool.creatorShare,
+            serviceShare: config.pool.serviceShare,
+            dailyCredits: config.pool.dailyCredits,
             months: months
                 .map((month) =>
                     computeMonth(
@@ -141,6 +257,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, now = () => new Date()
                         memberIds,
                         memberIds.size,
                         config,
+                        aggregatesOf(month),
                     ),
                 )
                 .toReversed(),

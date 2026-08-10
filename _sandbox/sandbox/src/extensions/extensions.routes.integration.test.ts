@@ -68,6 +68,22 @@ test("re-enabling a premium extension re-checks the membership and refuses witho
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: false });
 });
 
+test("a service run on a platform-less sandbox refuses with the reason, charging nothing", async () => {
+    // The harness config has no platform URL — the relay's one local answer. Everything else about a run
+    // (member gate, meter, refunds) is the platform's and tested there; what the daemon owes is an honest
+    // sentence instead of a hang.
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-service-")));
+    const svc = services({ workspace });
+    const app = createApp(svc);
+    const response = await app.request("/pool/services/acme-research/run", {
+        method: "POST",
+        body: `{"query":"x"}`,
+        headers: { "content-type": "application/json", authorization: "Bearer test-owner" },
+    });
+    expect(response.status).toBe(502);
+    expect(((await response.json()) as { error: string }).error).toContain("not connected to a platform");
+});
+
 test("a workspace extension lists like any other and serves its bundle by content hash", async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-workspace-")));
     const dir = join(workspaceExtensionsRoot(workspace.root), "hello");

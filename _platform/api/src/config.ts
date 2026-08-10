@@ -122,6 +122,14 @@ const configSchema = z.object({
             // The fraction of membership revenue that forms the creator pool. The published number the whole
             // model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
             creatorShare: z.coerce.number().min(0).max(1).default(0.7),
+            // A member's daily credit allowance for metered service runs, reset at UTC midnight like the
+            // trial. The membership's cost ceiling: 1000/day bounds what a member can spend, which is what
+            // lets a flat price fund per-run services at all. POOL_DAILY_CREDITS.
+            dailyCredits: z.coerce.number().int().nonnegative().default(1000),
+            // The fraction of consumed credit VALUE a service's provider earns (credit value is derived and
+            // published: priceUsd / (30 × dailyCredits)). Paid out of the creator pool BEFORE the active-day
+            // split — services carry real upstream costs, so they settle first. POOL_SERVICE_SHARE.
+            serviceShare: z.coerce.number().min(0).max(1).default(0.7),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`
