@@ -106,65 +106,29 @@ const buildingBlocks = [
     },
 ];
 
-/* The lifecycle figure that replaces the old "how to read this page" prose: the same drawn-in-markup
- * convention as the figure up top, so the page has two figures of one family bracketing the gallery. The
- * top row is the calm, neutral path a listing travels; the tinted panel under it is the highlight the ask
- * asked for — how a creator is actually paid. Every honesty caveat the old prose carried is folded into a
- * step (order-isn't-quality → Discover, listing-isn't-an-audit → Verify, install-is-consent → Install), so
- * nothing legible was traded away for the picture. */
-const lifecycle = [
-    {
-        name: "Build",
-        glyph: glyph('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>'),
-        detail: "Package your own tools as one extension. Your repository stays the artifact — nothing is uploaded to us.",
-    },
-    {
-        name: "List",
-        glyph: glyph('<path d="M3 12V6a3 3 0 0 1 3-3h6l9 9-9 9z"/><circle cx="8" cy="8" r="1.4"/>'),
-        detail: "Tag your repo and a nightly job opens the pull request for you. No account, no upload, no packaging step.",
-    },
-    {
-        name: "Verify",
-        glyph: glyph('<path d="M12 3 5 6v5c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/>'),
-        detail: "We check the pointer resolves and the publisher is who they say. A reviewer can read the source to mark it verified — a listing is never an audit.",
-    },
-    {
-        name: "Discover",
-        glyph: glyph('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
-        detail: "It joins the gallery, ordered by real use and reviews — not a ranking of quality, and a spot near the top is never for sale.",
-    },
-    {
-        name: "Install",
-        glyph: glyph('<path d="M12 3v11"/><path d="m8 11 4 4 4-4"/><path d="M5 20h14"/>'),
-        detail: "One click from Capabilities → Add → Extension approves exactly what it may touch, at one exact version — and it can't quietly grow past that.",
-    },
-];
+/* The lifecycle diagram that replaces the old prose — deliberately NOT the card figure up top. Delivery is a
+ * light one-way flow of chips; the half that matters, how a premium extension pays, is a drawn revenue cycle.
+ * The ring geometry is computed so four arrowheads sit tangent to a clockwise loop (members → pool → split →
+ * paid → renews). Labels stay terse; the one honesty line rides underneath. */
+const delivery = ["Build", "List", "Verify", "Discover", "Install"];
 
-/* The revenue loop — the opt-in premium path, stated in plain UX terms. Free extensions never enter it; the
- * caption and the footnotes keep that promise load-bearing, because the whole page is an argument about
- * bounded, legible trust and money is the easiest place to lose it. */
-const revenueFlow = [
-    {
-        name: "Members pay",
-        glyph: glyph('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/>'),
-        detail: "A monthly membership unlocks premium extensions. Free ones stay free — no membership needed, and no cut taken.",
-    },
-    {
-        name: "A share is pooled",
-        glyph: glyph('<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>'),
-        detail: "A published share of that membership money — most of it — goes into one creator pool every month.",
-    },
-    {
-        name: "Split by real use",
-        glyph: glyph('<circle cx="12" cy="12" r="9"/><path d="M12 12V3M12 12l7.8 4.5"/>'),
-        detail: "Your slice is your share of the days members actually used your extension. Not installs, not clicks — use they came back for.",
-    },
-    {
-        name: "Creators paid",
-        glyph: glyph('<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 12h.01M17.5 12h.01"/>'),
-        detail: "Paid out monthly, with the whole split published in the open — every member count and number there for anyone to check.",
-    },
+const ring = { cx: 150, cy: 150, r: 96 };
+const ringStr = (deg, rr = ring.r) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(ring.cx + rr * Math.cos(a)).toFixed(1)} ${(ring.cy + rr * Math.sin(a)).toFixed(1)}`;
+};
+const ringXY = (deg, rr = ring.r) => {
+    const a = (deg * Math.PI) / 180;
+    return [Number((ring.cx + rr * Math.cos(a)).toFixed(1)), Number((ring.cy + rr * Math.sin(a)).toFixed(1))];
+};
+const revNodes = [
+    { label: "Members pay", xy: ringXY(270), anchor: "middle", lx: 150, ly: 30 },
+    { label: "Pooled monthly", xy: ringXY(0), anchor: "start", lx: 262, ly: 155 },
+    { label: "Split by real use", xy: ringXY(90), anchor: "middle", lx: 150, ly: 286 },
+    { label: "Paid to creators", xy: ringXY(180), anchor: "end", lx: 38, ly: 155 },
 ];
+// four short arcs at the quadrant midpoints; each carries one auto-oriented arrowhead so the loop reads clockwise
+const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} ${ring.r} 0 0 1 ${ringStr(m + 3)}`);
 ---
 
 <BaseLayout
@@ -333,88 +297,76 @@ const revenueFlow = [
 
             <section aria-labelledby="lifecycle-heading">
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a share of the revenue</h2>
-                    <p class="text-xs text-subtle">The whole path an extension travels — and where its author gets paid.</p>
+                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout</h2>
+                    <p class="text-xs text-subtle">Delivered once. Paid while it's used.</p>
                 </div>
 
-                <figure class="mt-6 space-y-5 rounded-2xl border border-line bg-canvas/40 p-5 sm:p-7">
-                    {/* The delivery path: five calm, numbered steps, in the same card family as the core row up top. */}
-                    <div class="card p-5 sm:p-6">
-                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <div class="eyebrow text-link">Getting delivered</div>
-                            <p class="text-2xs text-subtle">from an idea in your repo to a click in someone's sandbox</p>
-                        </div>
-                        <ol class="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                            {
-                                lifecycle.map((step, i) => (
-                                    <li class="rounded-xl border border-line bg-overlay/40 p-4">
-                                        <div class="flex items-center justify-between">
-                                            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-content/5 text-link">
-                                                <Fragment set:html={step.glyph} />
-                                            </span>
-                                            <span class="text-2xs font-semibold text-subtle">Step {i + 1}</span>
-                                        </div>
-                                        <div class="mt-3 text-sm font-medium text-content">{step.name}</div>
-                                        <p class="mt-1.5 text-xs leading-relaxed text-subtle">{step.detail}</p>
-                                    </li>
-                                ))
-                            }
-                        </ol>
-                    </div>
+                {/* One-way delivery, pivoting into the earn side. */}
+                <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
+                    <span class="eyebrow mr-1 text-subtle">Ship</span>
+                    {
+                        delivery.map((step, i) => (
+                            <Fragment>
+                                {i > 0 && <span class="text-line-strong" aria-hidden="true">→</span>}
+                                <span class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content">{step}</span>
+                            </Fragment>
+                        ))
+                    }
+                    <span class="text-line-strong" aria-hidden="true">→</span>
+                    <span class="rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link">Earn</span>
+                </div>
 
-                    <div class="flex items-center justify-center gap-2 text-center text-2xs text-subtle">
-                        <span class="h-px w-6 bg-line-strong sm:w-10" />
-                        if it's a premium extension, using it is what pays its author
-                        <span aria-hidden="true">↓</span>
-                        <span class="h-px w-6 bg-line-strong sm:w-10" />
+                {/* The highlight: a drawn revenue cycle on a blueprint canvas — not the card figure up top. */}
+                <div class="relative mt-4 overflow-hidden rounded-2xl border border-line bg-canvas/60">
+                    <div class="grid-overlay"></div>
+                    <div
+                        class="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                        style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 16%, transparent), transparent 70%)"
+                        aria-hidden="true"
+                    >
                     </div>
-
-                    {/* The highlight: how a paid extension actually earns — a transparent pool, drawn as a flow. */}
-                    <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-5 sm:p-6">
-                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <div class="eyebrow text-link">How a paid extension earns</div>
-                            <p class="text-2xs text-subtle">a transparent pool, split by the use people actually keep</p>
-                        </div>
-                        <div class="mt-5 flex flex-col gap-3 lg:flex-row lg:items-stretch">
+                    <div class="relative flex flex-col items-center px-5 py-9 text-center">
+                        <div class="eyebrow text-link">How a premium extension earns</div>
+                        <svg
+                            viewBox="-80 0 476 300"
+                            class="mt-4 h-auto w-full max-w-[560px] text-link"
+                            role="img"
+                            aria-label="A monthly cycle: members pay, a share is pooled, the pool is split by real use, and creators are paid — then it renews."
+                        >
+                            <defs>
+                                <marker id="rev-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+                                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                                </marker>
+                            </defs>
+                            <circle cx="150" cy="150" r="96" fill="none" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="3 6" />
+                            {revArcs.map((d) => <path d={d} fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#rev-arrow)" />)}
+                            <circle cx="150" cy="150" r="30" fill="color-mix(in srgb, var(--color-primary-500) 12%, transparent)" stroke="currentColor" stroke-opacity="0.35" />
+                            <text x="150" y="151" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="700" style="fill: var(--color-link)">$</text>
                             {
-                                revenueFlow.map((node, i) => (
+                                revNodes.map((n) => (
                                     <Fragment>
-                                        {i > 0 && (
-                                            <span class="flex shrink-0 items-center justify-center text-line-strong" aria-hidden="true">
-                                                <span class="lg:hidden">↓</span>
-                                                <span class="hidden lg:inline">→</span>
-                                            </span>
-                                        )}
-                                        <div class="flex-1 rounded-lg border border-primary-600/20 bg-canvas/50 p-4">
-                                            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600/15 text-link">
-                                                <Fragment set:html={node.glyph} />
-                                            </span>
-                                            <div class="mt-3 text-sm font-medium text-content">{node.name}</div>
-                                            <p class="mt-1.5 text-xs leading-relaxed text-muted">{node.detail}</p>
-                                        </div>
+                                        <circle cx={n.xy[0]} cy={n.xy[1]} r="11" fill="var(--color-canvas)" stroke="currentColor" stroke-opacity="0.35" />
+                                        <circle cx={n.xy[0]} cy={n.xy[1]} r="5" fill="currentColor" />
+                                        <text x={n.lx} y={n.ly} text-anchor={n.anchor} dominant-baseline="central" font-size="13.5" font-weight="500" style="fill: var(--color-content)">
+                                            {n.label}
+                                        </text>
                                     </Fragment>
                                 ))
                             }
-                        </div>
-                        <div class="mt-5 grid gap-x-4 gap-y-2 border-t border-primary-600/20 pt-4 text-2xs leading-relaxed text-subtle sm:grid-cols-3">
-                            <p><span class="font-medium text-muted">Free stays free.</span> The revenue share is the opt-in premium path; free extensions never pay a cut.</p>
-                            <p><span class="font-medium text-muted">Open by default.</span> The split, the member count and every number behind a payout are published each month.</p>
-                            <p><span class="font-medium text-muted">Real use only.</span> Nagged, faked or background “use” doesn't count — farming it is grounds to be delisted.</p>
-                        </div>
+                        </svg>
+                        <p class="mt-2 max-w-md text-2xs leading-relaxed text-subtle">
+                            A monthly pool, split by real use and published in the open — free extensions never enter it; premium is opt-in.
+                        </p>
                     </div>
-
-                    <figcaption class="text-center text-2xs text-subtle">
-                        Placement in the gallery above follows the same rule as the pool: real use and reviews, never who paid.
-                    </figcaption>
-                </figure>
-
-                <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                    <a class="text-link hover:underline" href="/docs/extensions/publish/">How listing &amp; ranking work</a>
-                    <a class="text-link hover:underline" href="/docs/extensions/manifest/">What you approve on install</a>
-                    <a class="text-link hover:underline" href="/docs/extensions/build/">Build an extension</a>
                 </div>
 
-                {scannedNote && <p class="mt-5 border-t border-line pt-4 text-2xs text-subtle">{scannedNote}</p>}
+                <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                    <a class="text-link hover:underline" href="/docs/extensions/publish/">Listing &amp; ranking</a>
+                    <a class="text-link hover:underline" href="/docs/extensions/manifest/">What you approve</a>
+                    <a class="text-link hover:underline" href="/docs/extensions/build/">Build one</a>
+                </div>
+
+                {scannedNote && <p class="mt-4 text-2xs text-subtle">{scannedNote}</p>}
             </section>
         </div>
 
