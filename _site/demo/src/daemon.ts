@@ -39,7 +39,15 @@ import {
     saveKnowledgeNote,
 } from "./fixture/knowledge";
 import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
-import { demoCapabilities, demoEnvironment, demoExtensions, demoPanels, demoUsageRollup, setExtensionEnabled } from "./fixture/sandbox";
+import {
+    demoCapabilities,
+    demoEnvironment,
+    demoEnvironmentContents,
+    demoExtensions,
+    demoPanels,
+    demoUsageRollup,
+    setExtensionEnabled,
+} from "./fixture/sandbox";
 import { transcriptFor } from "./fixture/transcripts";
 import {
     agentChanges,
@@ -498,6 +506,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/drafts`, () => json({ drafts: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
+    [`GET`, `/environment/contents`, () => json(demoEnvironmentContents())],
 ];
 
 const DEMO_COMMANDS = [

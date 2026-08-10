@@ -44,7 +44,9 @@ import {
     syncSshHostname,
     verifySyncToken,
 } from "./platform/sync.js";
+import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
@@ -824,6 +826,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // runs OUTSIDE the container — recreate.sh locally, the workspace provider on a server — pinned to the
     // approved hash, so approval here never mutates the running sandbox.
     app.get("/environment", async (c) => c.json(await readEnvironment(services)));
+    /* The same sandbox read as CONTENTS rather than as a recipe — what it has, with each tool's version read back
+     * from the tool. A route of its own because it costs process spawns: /environment above is polled by the
+     * shell's rebuild banner and re-fetched on every write under .intentic/environment., and making that pay for
+     * forty version checks would be a tax on the whole app for one tab. `refresh` re-probes, which is what the
+     * card's refresh button is for — a tool installed mid-session is otherwise cached as missing. */
+    app.get("/environment/contents", async (c) => {
+        if (c.req.query("refresh") !== undefined) {
+            clearVersionCache();
+        }
+        return c.json(await readEnvironmentContents(services));
+    });
     app.post("/environment/approve", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {

@@ -18,6 +18,7 @@ import {
     DraftStatusSchema,
     DraftsListSchema,
     DraftSummarySchema,
+    EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
     GrantedRoleSchema,
@@ -112,6 +113,7 @@ export {
     DraftStatusSchema,
     DraftsListSchema,
     DraftSummarySchema,
+    EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
     BundleExportsSchema,
@@ -156,6 +158,8 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
+export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
+export type EnvironmentItem = EnvironmentContents["items"][number];
 export type ImportReport = z.infer<typeof ImportReportSchema>;
 export type BundleExport = z.infer<typeof BundleExportSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;

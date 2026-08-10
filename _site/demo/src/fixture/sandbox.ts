@@ -1,6 +1,6 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import { builtinModules } from "@intentic-app/web/builtins";
-import type { Environment, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 import { demoMode } from "../mode";
 
 /* The sandbox's own furniture for the recorded workspace: what acme-shop is made of, what it is wired to, which
@@ -280,6 +280,145 @@ RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
  && rm -rf /var/lib/apt/lists/*
 `,
     },
+});
+
+/* The same environment read as CONTENTS — what the sandbox has rather than how it was built, which is the view
+ * the Environment tab opens on. Every state the rows can be in is represented, because each one is a different
+ * sentence to a visitor: installed and answering, approved but waiting on a rebuild, and proposed by the agent
+ * and waiting on them. Versions are what the tools report in a real sandbox, so they are written as real
+ * versions here rather than as round numbers. */
+export const demoEnvironmentContents = (): EnvironmentContents => ({
+    items: [
+        {
+            id: `custom:postgresql-client`,
+            name: `Postgresql client`,
+            origin: `custom`,
+            state: `active`,
+            tools: [{ name: `psql`, version: `16.4` }],
+            purpose: `Reads the production replica directly, so a schema question is a query rather than a guess.`,
+            detail:
+                `Pinned to 16 to match the managed database — a newer client warns on every connect and its \\copy output drifts ` +
+                `from what the runbooks show.`,
+            commands: `RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\\n && rm -rf /var/lib/apt/lists/*`,
+        },
+        {
+            id: `custom:playwright`,
+            name: `Playwright`,
+            origin: `custom`,
+            state: `active`,
+            tools: [
+                { name: `playwright`, version: `1.56.2` },
+                { name: `chromium`, version: `140.0.7339` },
+                { name: `node`, version: `24.18.0` },
+                { name: `xvfb-run` },
+            ],
+            extras: 34,
+            purpose: `Runs the end-to-end suite the release agent goes through before it lands anything.`,
+            detail:
+                `Headed under a virtual display rather than headless: the headless shell is fingerprinted and blocked by the ` +
+                `checkout provider's bot protection, so a headless run fails on the one journey that matters most.`,
+            commands: `ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright\nRUN pnpm dlx playwright@1.56 install --with-deps chromium`,
+        },
+        {
+            id: `custom:imagemagick`,
+            name: `Imagemagick`,
+            origin: `custom`,
+            state: `awaiting-approval`,
+            tools: [],
+            purpose: `Resizes and re-encodes the product images the checkout page serves.`,
+            detail:
+                `The uploads arrive as 4000px JPEGs and the page wants three widths of WebP, which nothing in this sandbox can ` +
+                `currently produce.`,
+            commands: `RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\\n && rm -rf /var/lib/apt/lists/*`,
+        },
+        {
+            id: `capability:whisper`,
+            name: `Whisper`,
+            origin: `capability`,
+            originLabel: `discord capability`,
+            state: `after-rebuild`,
+            tools: [],
+            purpose: `Turns voice-channel audio into text on this machine, without sending it anywhere.`,
+            detail: `Built from source and pinned to v1.9.1, so a transcript made today can be reproduced next year.`,
+            commands: `RUN git clone --depth 1 --branch v1.9.1 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \\\n    && cmake --build /tmp/whisper.cpp/build -j --target whisper-cli`,
+        },
+        {
+            id: `capability:docker`,
+            name: `Docker`,
+            origin: `capability`,
+            originLabel: `docker capability`,
+            state: `active`,
+            tools: [
+                { name: `docker`, version: `27.3.1` },
+                { name: `containerd`, version: `1.7.22` },
+            ],
+            purpose: `Builds and runs containers inside the sandbox, for the compose stack the shop's API needs.`,
+        },
+        {
+            id: `base:node`,
+            name: `Node.js`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `node`, version: `24.18.0` }],
+            purpose: `The runtime everything JavaScript in here runs on.`,
+        },
+        {
+            id: `base:pnpm`,
+            name: `pnpm`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `pnpm`, version: `11.13.1` }],
+            purpose: `Installs and runs workspace packages.`,
+        },
+        {
+            id: `base:git`,
+            name: `Git`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `git`, version: `2.47.3` }],
+            purpose: `Every repo in the workspace is a real git repo.`,
+        },
+        {
+            id: `base:python3`,
+            name: `Python`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `python3`, version: `3.11.2` }],
+            purpose: `Scripting, plus anything reached for with pip inside a virtual environment.`,
+        },
+        {
+            id: `base:rg`,
+            name: `ripgrep`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `rg`, version: `14.1.1` }],
+            purpose: `Fast text search across the workspace, and the engine behind code search.`,
+        },
+        {
+            id: `base:jq`,
+            name: `jq`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `jq`, version: `1.7.1` }],
+            purpose: `Reads and rewrites JSON on the command line.`,
+        },
+        {
+            id: `base:sqlite3`,
+            name: `SQLite`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `sqlite3`, version: `3.40.1` }],
+            purpose: `Opens and queries a local database file.`,
+        },
+        {
+            id: `base:cloudflared`,
+            name: `cloudflared`,
+            origin: `base`,
+            state: `active`,
+            tools: [{ name: `cloudflared`, version: `2026.7.3` }],
+            purpose: `Puts a local port on a public URL.`,
+        },
+    ],
 });
 
 /* The spend ledger the Usage tab projects: real turns cost real money on YOUR subscription, and the sandbox

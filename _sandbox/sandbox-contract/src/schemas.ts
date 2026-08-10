@@ -5042,6 +5042,60 @@ export const EnvironmentSchema = z.object({
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });
 
+/* ---- environment CONTENTS: what the sandbox has, as opposed to how it was built ----
+ *
+ * The overlay above answers "what was added on top, and do you approve it?". Nobody opens the Environment tab
+ * asking that — they ask "can this sandbox compile my Rust app / transcode a video / drive a browser?", and a
+ * build recipe is a bad answer to it: it is install plumbing, it names packages rather than abilities, and it is
+ * only the DELTA, so an inventory read off it alone would claim a sandbox has ffmpeg and no Node.
+ *
+ * So this is a second read of the same sandbox, and its authority is different in a way that matters: NAMES,
+ * GROUPING and RATIONALE come from the recipe (which is where the agent wrote them), while PRESENCE and VERSION
+ * come from asking the environment itself. That split is what makes it honest. A version is never parsed out of
+ * an install line — half the entries pin nothing, and a pinned number is a lie the moment something is approved
+ * but not yet rebuilt — so an item whose tools cannot be probed carries no version at all rather than a guess.
+ * And presence is OBSERVED, which is what makes per-item state exact without diffing anything: an item the
+ * recipe contains and the probe cannot find is precisely one that arrives with the next rebuild.
+ */
+
+const environmentToolSchema = z.object({
+    // The binary as it is invoked (`rustc`, `ffmpeg`), because that is what somebody types next.
+    name: z.string(),
+    // What the binary itself reports, absent when it is not installed (yet) or answers no version flag.
+    version: z.string().optional(),
+});
+
+export const EnvironmentItemSchema = z.object({
+    id: z.string(),
+    // The block's own name — how the thing is referred to, not the packages it happens to install.
+    name: z.string(),
+    /* WHY IT IS HERE, which is also whether the reader may remove it: `custom` is what an agent asked for and the
+     * owner approved for this workspace, `capability` is the cost of a capability they turned on, `base` comes
+     * with every sandbox and is nobody's decision. */
+    origin: z.enum(["custom", "capability", "base"]),
+    // Which capability/extension/pack pulled it in — the answer to "why do I have this?" for an origin the
+    // reader did not choose item by item.
+    originLabel: z.string().optional(),
+    // Observed, not inferred: `active` means the probe found it, `after-rebuild` that the recipe has it and the
+    // container does not, `awaiting-approval` that it is in a proposal nobody has approved yet.
+    state: z.enum(["active", "after-rebuild", "awaiting-approval"]),
+    // Every binary this one block puts on PATH, with the version each reports. Usually one; a toolchain is several.
+    tools: z.array(environmentToolSchema),
+    // How many further packages the block installs that are not commands anyone runs (libraries, headers). A
+    // count rather than a list: eleven rows of `libssl-dev` is noise, "+11 packages" is the same fact.
+    extras: z.number().optional(),
+    // One standalone line, from the block's opening comment — the part everyone reads.
+    purpose: z.string().optional(),
+    // The rest of that comment, as prose. Long (the rationale for a toolchain runs to paragraphs), so it lives
+    // behind a disclosure rather than on the row.
+    detail: z.string().optional(),
+    // The block's own instruction lines, for the reader who wants to see exactly what runs.
+    commands: z.string().optional(),
+});
+export type EnvironmentItem = z.infer<typeof EnvironmentItemSchema>;
+export const EnvironmentContentsSchema = z.object({ items: z.array(EnvironmentItemSchema) });
+export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
+
 /* ---- portability: exporting a sandbox's environment and restoring it into a fresh one ----
  *
  * A sandbox is four stores, not one: `/work` (the workspace and the daemon's manifests), `/history` (every
