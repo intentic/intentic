@@ -3,7 +3,8 @@ import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
 
 const permissions = `"permissions": {
-    "sandbox": ["GET /panels", "POST /panels/*/start", "GET /memory/file"]
+    "sandbox": ["GET /panels", "POST /panels/*/start", "GET /memory/file"],
+    "daemon": ["GET /capabilities/*/connection"]
 }`;
 
 const connector = `"capabilities": [
@@ -58,26 +59,52 @@ const processes = `"processes": [
             <tr><td><code>publisher</code></td><td>yes</td><td>Lowercase slug. With <code>name</code> it derives the extension id, <code>acme.incidents</code>.</td></tr>
             <tr><td><code>name</code></td><td>yes</td><td>Lowercase slug, unique within the publisher.</td></tr>
             <tr><td><code>version</code></td><td>yes</td><td>Your semver, for display. The <em>code</em> identity is always the installed commit sha.</td></tr>
-            <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>2.0.0</strong>.</td></tr>
+            <tr><td><code>engines.intentic</code></td><td>yes</td><td>Semver range over the host's extension-API version, checked before activation. Current API: <strong>2.1.0</strong>.</td></tr>
             <tr><td><code>category</code></td><td>no</td><td>The section your extension sits under in the sandbox's Extensions tab: <code>work</code>, <code>workspace</code>, <code>connections</code>, <code>knowledge</code> or <code>sandbox</code>. Anything else (or nothing) lists it under <em>Other</em>; it installs and runs either way.</td></tr>
             <tr><td><code>logo</code></td><td>no</td><td>A <a href="https://simpleicons.org/" rel="noopener">simple-icons</a> slug — <code>"linear"</code>, <code>"notion"</code> — drawn wherever your extension is listed. Add <code>"/&lt;hex&gt;"</code> (<code>"github/f5f5f5"</code>) to force a colour for a mark that would otherwise vanish against the surface.</td></tr>
             <tr><td><code>icon</code></td><td>no</td><td>A glyph from the app's own icon set, drawn when there is no brand to use — and when an offline sandbox can't reach the icon CDN. Neither field is required and neither can break the page: a slug that 404s, a glyph this build has never heard of, or nothing at all all fall through to your extension's initials.</td></tr>
-            <tr><td><code>permissions.sandbox</code></td><td>no</td><td>The daemon routes you may call. Omit if you call none.</td></tr>
+            <tr><td><code>entry</code></td><td>no</td><td>Checkout-relative path of the prebuilt single-file ESM bundle exporting <code>activate()</code>. Omit for an extension with no UI.</td></tr>
+            <tr><td><code>server</code></td><td>no</td><td>Checkout-relative path of the prebuilt node ESM bundle exporting <code>activateServer()</code> — the extension's <a href="#backend">backend half</a>. Omit for an extension with no backend.</td></tr>
+            <tr><td><code>permissions.sandbox</code></td><td>no</td><td>The daemon routes the <strong>UI half</strong> may call. Omit if it calls none.</td></tr>
+            <tr><td><code>permissions.daemon</code></td><td>no</td><td>The daemon routes the <strong>backend half</strong> may call. Omit if it calls none.</td></tr>
             <tr><td><code>contributes</code></td><td>no</td><td>Everything below.</td></tr>
         </tbody>
     </table>
 
-    <h2>permissions.sandbox</h2>
+    <h2>permissions</h2>
     <p>
-        Each entry is <code>"&lt;METHOD&gt; &lt;path-glob&gt;"</code>, where <code>*</code> matches exactly one path segment. Every door in
-        <code>api.sandbox</code> is checked against it — the typed <code>rpc</code> client resolves to a method and a concrete path and is
-        gated on that, exactly as <code>request</code> and <code>json</code> are — so a call to anything not covered throws. An extension has
-        no ambient client to your daemon.
+        Each entry is <code>"&lt;METHOD&gt; &lt;path-glob&gt;"</code>, where <code>*</code> matches exactly one path segment — one grammar for
+        both halves, because the install dialog, the gate and the usage ledger all read it. The two lists are separate because the halves run
+        as different principals: the UI acts with the owner's session, the backend with a token minted for exactly this extension, and a
+        grant to one must never quietly widen the other.
     </p>
+    <ul>
+        <li><code>sandbox</code> — the routes the <strong>UI half</strong> may call. Every door in <code>api.sandbox</code> is checked against it — the typed <code>rpc</code> client resolves to a method and a concrete path and is gated on that, exactly as <code>request</code> and <code>json</code> are — so a call to anything not covered throws. An extension has no ambient client to your daemon.</li>
+        <li><code>daemon</code> — the routes the <strong>backend half</strong> may call through <code>api.daemon</code>, enforced daemon-side against its minted token.</li>
+    </ul>
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
     <p>
-        Keep it as narrow as the feature needs. This list is what a reviewer reads to decide what your extension can reach. The
-        <a href="/docs/sandbox-api/">HTTP API</a> page is what the routes are.
+        Keep both as narrow as the feature needs. These lists are what a reviewer reads to decide what your extension can reach. The
+        <a href="/docs/sandbox-api/">HTTP API</a> page is what the routes are. An extension's <em>own</em> namespace, <code>/x/&lt;id&gt;/…</code>,
+        needs no entry on either list: its backend is its own code from the same approved checkout.
+    </p>
+
+    <h2 id="backend">server — the backend half</h2>
+    <p>
+        A manifest <code>server</code> entry names a prebuilt, self-contained node ESM bundle exporting
+        <code>activateServer(api, context)</code>. That is the extension's backend: real server code of its own, for the features a browser
+        bundle can't carry — a client library for somebody else's API, work that must outlive the tab, state assembled from workspace files.
+    </p>
+    <ul>
+        <li><strong>Its own route namespace.</strong> The backend serves <code>/x/&lt;id&gt;/…</code>, proxied by the daemon through its ordinary auth — the backend never sees an unauthenticated request and never sees a credential. The extension's UI calls its own namespace freely; no <code>permissions.sandbox</code> entry is needed for it, because the backend is the extension's own code from the same approved checkout.</li>
+        <li><strong>One supervised host process.</strong> Every enabled backend runs in the daemon's single backend-host process, not in the daemon itself. Loaded code can't be unloaded, so the off switch, an update and a live edit all work the same way: the host restarts. The restart <em>is</em> the reload.</li>
+        <li><strong>Declared reach back into the daemon.</strong> The backend's calls into the daemon's own routes go through <code>api.daemon</code> and are gated by <code>permissions.daemon</code>, with a per-extension token — the same honesty rule as the UI half, enforced against a different principal.</li>
+        <li><strong>Self-contained by construction.</strong> The installed checkout has no <code>node_modules</code> and the host provides no import map, so everything except node builtins must be bundled in.</li>
+    </ul>
+    <p>
+        The backend's API surface — <code>routes.mount</code>, <code>api.daemon</code>, <code>workspaceRoot</code> — is on the
+        <a href="/docs/sandbox-api/host/#backend">Host API</a> page. A backend requires <code>engines.intentic</code> of
+        <code>^2.1.0</code> or wider.
     </p>
 
     <h2>contributes.views</h2>
@@ -133,6 +160,26 @@ const processes = `"processes": [
         </tbody>
     </table>
 
+    <h2>contributes.documents</h2>
+    <p>
+        A per-directory document family: your provider marks the Workspace-tree rows it can explain with an icon, and the host opens your
+        component as a tab beside the code. This is how the commit graph sits on every repository row, and how a package's architecture page
+        sits on the packages that have one.
+    </p>
+    <table>
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+            <tr><td><code>id</code></td><td>Kebab-case slug, matched to your runtime registration.</td></tr>
+            <tr><td><code>label</code></td><td>The family's human name, shown in the install dialog.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Only the id and label are declared, deliberately. A viewer takes files over and a command can claim a global shortcut, so those are
+        approved field by field; a document provider takes nothing over — it adds an icon to rows it has something for, and every such row is
+        evidence the owner can see. So the manifest gates <em>whether</em> you may mark up the tree at all, and the per-row wording stays with
+        your provider, which is the only thing that knows what it found.
+    </p>
+
     <h2>contributes.commands</h2>
     <table>
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
@@ -177,15 +224,22 @@ const processes = `"processes": [
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
             <tr><td><code>id</code></td><td>Slug the card is keyed by, unique within its <code>kind</code>. It becomes the card's URL and the hidden field tying each connection back to it.</td></tr>
-            <tr><td><code>kind</code></td><td><code>"cli"</code> a command-line tool the agent drives; <code>"browser"</code> a site the agent acts on as the user (add a <code>loginUrl</code>); <code>"host"</code> an operating-system guide for a connected computer; <code>"agent"</code> a preset for an outside chat agent (fields only).</td></tr>
-            <tr><td><code>catalog</code></td><td>The card: <code>name</code>, <code>description</code>, <code>category</code>, an optional brand <code>logo</code> or fallback <code>icon</code>, and a <code>guide</code> walking the user through creating the credential.</td></tr>
-            <tr><td><code>fields</code></td><td>The config form: <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate.</td></tr>
+            <tr><td><code>kind</code></td><td><code>"cli"</code> a command-line tool the agent drives; <code>"browser"</code> a site the agent acts on as the user; <code>"host"</code> an operating-system guide for a connected computer; <code>"agent"</code> a preset for an outside chat agent (fields only).</td></tr>
+            <tr><td><code>catalog</code></td><td>The card: <code>name</code>, <code>description</code> (one line — the grid clamps it at two), <code>category</code>, an optional brand <code>logo</code> or fallback <code>icon</code>, a <code>hint</code> paragraph the form prints in full and the catalog search reads, and a <code>guide</code> walking the user through creating the credential.</td></tr>
+            <tr><td><code>fields</code></td><td>The config form: <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate. A <code>boolean</code> field renders as a quiet opt-in switch; <code>hint</code> puts a line under one control; <code>value</code> bakes a fixed value in without rendering anything; <code>rebuild</code> chips a field whose value only lands at the next image rebuild; <code>totp</code> marks an authenticator seed — see below.</td></tr>
+            <tr><td><code>loginUrl</code>, <code>homeUrl</code></td><td><code>browser</code> only, both optional: where the sign-in window opens, and where the connected profile opens once it has one. A card either pins them or declares a field that supplies them — leaving both out is what the one generic "browser session" card does, so users can connect a site nobody shipped a card for.</td></tr>
             <tr><td><code>env</code></td><td>Environment variables for the agent, templated over the fields: <code>{"${field}"}</code> substitutes, <code>{"${field:uri}"}</code> percent-encodes.</td></tr>
             <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool. Two placeholders are substituted when a user adds it: <code>{"${id}"}</code> becomes the name they chose, and <code>{"${tools}"}</code> becomes the built-in note for that kind (how to drive the shared browser, what a connected computer's tools are).</td></tr>
             <tr><td><code>fragment</code></td><td>Optional image fragment installing the client binary. <code>cli</code> only.</td></tr>
         </tbody>
     </table>
     <p>This is the highest-leverage contribution point in the manifest: one entry plus two files adds an integration to the product.</p>
+    <p>
+        One field flag carries a security rule. A field marked <code>totp</code> (declared with <code>secret</code>) holds the seed an
+        authenticator app would hold — so unlike an ordinary secret it never enters the agent's environment either. The daemon mints the
+        six-digit codes on demand and only those cross, each dead within its period; an <code>env</code> template that references a totp
+        field fails to parse rather than handing the agent the second factor itself.
+    </p>
 
     <h2>contributes.processes and contributes.listener</h2>
     <p>
@@ -248,7 +302,8 @@ const processes = `"processes": [
     <table>
         <thead><tr><th>Contribution</th><th>Applies</th></tr></thead>
         <tbody>
-            <tr><td><code>views</code>, <code>viewers</code>, <code>commands</code>, <code>files</code>, <code>settings</code>, <code>processes</code>, <code>capabilities</code>, <code>listener</code></td><td>Immediately</td></tr>
+            <tr><td><code>views</code>, <code>viewers</code>, <code>documents</code>, <code>commands</code>, <code>files</code>, <code>settings</code>, <code>processes</code>, <code>capabilities</code>, <code>listener</code></td><td>Immediately</td></tr>
+            <tr><td><code>server</code></td><td>Immediately — the backend host restarts with the new code</td></tr>
             <tr><td><code>agent</code>, <code>bin</code></td><td>Next agent turn</td></tr>
             <tr><td><code>environment</code></td><td>Next image rebuild</td></tr>
         </tbody>

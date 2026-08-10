@@ -215,7 +215,7 @@ export const docsSections: DocsSection[] = [
                 meta: {
                     title: "Extensions · intentic docs",
                     description:
-                        "intentic is a lean core plus an extension system. An extension is a directory with a manifest, and it extends the agent as well as the UI.",
+                        "intentic is a lean core plus one extension format: a directory with a manifest whose every part is optional. It extends the agent, the UI and the backend.",
                     datePublished: "2026-07-31",
                 },
             },
@@ -237,7 +237,7 @@ export const docsSections: DocsSection[] = [
                 meta: {
                     title: "Extension manifest reference · intentic docs",
                     description:
-                        "Every field of intentic-extension.json: views, commands, settings, connectors, processes, listeners, agent plugins, and the route allowlist.",
+                        "Every field of intentic-extension.json: views, viewers, commands, settings, capability cards, processes, listeners, agent plugins, the backend, permissions.",
                     datePublished: "2026-07-31",
                 },
             },
@@ -275,7 +275,7 @@ export const docsSections: DocsSection[] = [
                 meta: {
                     title: "Extension host API reference · intentic docs",
                     description:
-                        "Every member of the IntenticApi object: the typed daemon client, workspace facts and files, views, documents, commands, models and routing.",
+                        "Every member of the IntenticApi object — the typed daemon client, views, documents, commands, models, routing — and the backend's activateServer surface.",
                     datePublished: "2026-08-07",
                 },
             },

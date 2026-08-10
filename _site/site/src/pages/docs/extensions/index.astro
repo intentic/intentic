@@ -19,6 +19,7 @@ const manifest = `{
 const uiPoints = [
     { name: "views", what: "A tile in the left rail, a per-repo panel in the Workspace tree, or a tab on the Sandbox hub." },
     { name: "viewers", what: "A renderer for a file type: the host fetches the bytes, your component draws them." },
+    { name: "documents", what: "A per-directory page in the Workspace tree — an icon on the rows your provider can explain, opened as a tab." },
     { name: "commands", what: "An entry in the command palette, optionally with a global keyboard shortcut." },
     { name: "settings", what: "Typed settings the host renders and stores for you, including secrets and env vars for the agent." },
     { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
@@ -82,9 +83,47 @@ const agentPoints = [
             {agentPoints.map((point) => (<tr><td><code>{point.name}</code></td><td>{point.what}</td></tr>))}
         </tbody>
     </table>
+    <h3>The backend half</h3>
     <p>
-        Nothing says you have to use both halves. A connector is a manifest and two files with <strong>no code at all</strong>. A skill pack
-        is a directory. An extension that ships a CLI for the agent and never draws a pixel is a perfectly ordinary extension.
+        An extension can also ship a <strong>backend</strong>: a manifest <code>server</code> entry naming a bundle of real server code. It
+        runs beside the daemon, serves the extension's own route namespace behind the daemon's ordinary auth, and reaches the daemon's own
+        routes only through a second declared allowlist. That is what lets an extension be a whole product — a client for somebody else's
+        API, work that outlives the browser tab — while its reach stays a list the owner read and approved.
+    </p>
+
+    <h2>One format, any subset</h2>
+    <p>
+        Everything above ships in <strong>one envelope</strong>. There is no separate skill-pack format, theme format, connector format or
+        app format — there is one manifest, and every part of it is optional. What you fill in is what your extension is:
+    </p>
+    <table>
+        <thead><tr><th>You fill in</th><th>What you've made</th></tr></thead>
+        <tbody>
+            <tr><td><code>agent</code> only</td><td>A skill pack. No code runs anywhere; the agent learns something.</td></tr>
+            <tr><td><code>capabilities</code> only</td><td>A connector: a card, a config form, env vars and a cheatsheet — data, not code.</td></tr>
+            <tr><td><code>entry</code> + views</td><td>A UI extension, like an editor plugin.</td></tr>
+            <tr><td><code>processes</code> + <code>listener</code></td><td>A realtime gateway that wakes the agent, the way Discord and IMAP do.</td></tr>
+            <tr><td><code>entry</code> + <code>server</code> + <code>agent</code> + <code>bin</code></td><td>A whole product: its screen, its backend, its skills, its CLI.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        One envelope because the things it groups succeed or fail together. A user installs a <em>product</em> — "deployments", "knowledge",
+        "Reddit research" — not a skill here, a view there and a background process somewhere third. One install is one identity, one trust
+        decision, one on/off switch that unwires all of it, one row a marketplace can list and attribute. Split those across four package
+        kinds and every one of those sentences needs four answers.
+    </p>
+    <p>
+        The grouping never taxes the small case: a manifest with one section filled in is complete, installs the same way, and shows the
+        owner a one-line approval instead of a four-line one. And the parts that are portable stay portable — the <code>agent</code>
+        contribution <em>is</em> a standard agent-plugin directory (skills, subagents, hooks, MCP servers) that works in other harnesses
+        unchanged, and a registry file is the same marketplace format those harnesses already read. The envelope wraps the standard; it
+        doesn't fork it.
+    </p>
+    <p>
+        The one deliberate limit: an extension contributes <em>cards and code</em>, never <em>privilege</em>. The handlers that grant real
+        power — running the sandbox privileged, joining a private network, installing other extensions — stay in the core, and a manifest
+        that tries to name one fails to parse. Shared surfaces stay core too: the model picker, the terminal, the chat are things an
+        extension asks the shell for, so every extension offers the same, current list instead of five worse copies of it.
     </p>
 
     <h2>The trust model</h2>
@@ -105,9 +144,10 @@ const agentPoints = [
             runtime. An extension cannot grow new powers after you said yes.
         </li>
         <li>
-            <strong>Backend reach is an allowlist.</strong> An extension has no ambient client to your daemon. It declares the routes it
-            calls as <code>"GET /logs"</code>-style entries and the host refuses everything else, so "what can this thing actually touch"
-            is a list you can read in the diff.
+            <strong>Daemon reach is an allowlist — for both halves.</strong> Neither the UI bundle nor the backend has an ambient client to
+            your daemon. Each declares the routes it calls as <code>"GET /logs"</code>-style entries, in two separate lists because they run
+            as different principals, and everything undeclared is refused — so "what can this thing actually touch" is a list you can read
+            in the diff.
         </li>
     </ul>
     <p>
@@ -117,10 +157,10 @@ const agentPoints = [
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Thirteen of the features you already use are extensions: Activity, Automations, Logs, Memory, Pipelines, Preview, Acceptance, the
-        file viewers, the Discord and IMAP gateways, the connector catalog. They ship through the same
-        <code>@intentic/extension-api</code> a third-party bundle compiles against, and a lint rule fails the build if one of them reaches
-        into app internals instead.
+        Most of the product you already use is extensions — over twenty-five of them: Activity, Automations, Memory, Knowledge,
+        Deployments, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google
+        Workspace connection, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
+        compiles against, and a lint rule fails the build if one of them reaches into app internals instead.
     </p>
     <p>
         That's a deliberate constraint rather than a boast: it means the public API is the API the product is built on, so it can't quietly

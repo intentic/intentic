@@ -281,11 +281,37 @@ const packages = [
         then work for free.
     </p>
 
+    <h2 id="backend">The backend half — activateServer()</h2>
+    <p>
+        An extension with a manifest <code>server</code> entry has a second, smaller surface. The bundle exports
+        <code>activateServer(api, context)</code>, and the daemon's backend host — one supervised node process shared by every enabled
+        backend — imports it and calls it once per host start. There is no deactivate: retirement is the host process ending, which is the
+        one teardown that cannot leak.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Member</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>routes.mount(handler)</code></td><td>Serve your extension's own <code>/x/&lt;id&gt;/…</code> namespace. The daemon proxies requests here through its ordinary auth, with the prefix already stripped, so your handler sees your own paths and never an unauthenticated request. Return <code>undefined</code> for "not mine" and the host answers 404 for you. A second mount replaces the first.</td></tr>
+            <tr><td><code>daemon.request(path)</code>, <code>daemon.json(path)</code></td><td>The backend's authenticated transport into the daemon's own routes — its <code>api.sandbox</code>. Auth is a minted per-extension token injected here, and every call is checked against the manifest's <code>permissions.daemon</code> allowlist.</td></tr>
+            <tr><td><code>workspaceRoot</code></td><td>The workspace root, absolute. The backend is full-trust code in the sandbox, so files are plain <code>node:fs</code> under this path — no file service in between. Durable state belongs in workspace files, same rule as the UI half.</td></tr>
+            <tr><td><code>extensionDir</code></td><td>Your own checkout, absolute — where your bundled assets sit.</td></tr>
+            <tr><td><code>log(message)</code></td><td>A line in the daemon's log, attributed to your extension.</td></tr>
+            <tr><td><code>context.extensionId</code></td><td>Your routing id — the <code>/x/&lt;id&gt;</code> segment your UI half calls.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        The surface is deliberately small because the trust model is full trust: installs are owner-only and sha-pinned, and the backend runs
+        as the same user the daemon does. What the API mediates is exactly the two things a path cannot carry — your route namespace, and
+        your declared reach into the daemon.
+    </p>
+
     <h2>Versioning</h2>
     <p>
         <code>api.apiVersion</code> is the host's extension-API version, and it is what your manifest's <code>engines.intentic</code> range
-        is checked against <em>before</em> your code is loaded. Current API: <strong>2.0.0</strong>. Additive surface is a minor bump,
-        breaking is a major — so <code>"^2.0.0"</code> is the range you want.
+        is checked against <em>before</em> your code is loaded. Current API: <strong>2.1.0</strong>. Additive surface is a minor bump,
+        breaking is a major — so <code>"^2.0.0"</code> is the range you want, or <code>"^2.1.0"</code> if you ship a backend.
     </p>
 
     <h2>The packages</h2>

@@ -91,6 +91,19 @@ git add -f dist/extension.js
 git commit -m "release 1.0.0"
 git push && git rev-parse HEAD   # this sha is what you install`;
 
+const server = `import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
+
+export const activateServer = (api: ExtensionServerApi, _context: ExtensionServerContext): void => {
+    api.routes.mount(async (request) => {
+        const url = new URL(request.url);
+        // The daemon proxies /x/<your id>/incidents here, prefix already stripped, auth already checked.
+        if (url.pathname === "/incidents") {
+            return Response.json({ open: 3 });
+        }
+        return undefined; // "not mine" — the host answers 404 for you
+    });
+};`;
+
 const workspace = `.intentic/workspace-extensions/
 └── incidents/
     ├── intentic-extension.json   # the manifest, at the root of the directory
@@ -183,6 +196,21 @@ const workspace = `.intentic/workspace-extensions/
     <p>
         Reload the app and your view is in the rail. Agent-side contributions (<code>agent</code>, <code>bin</code>) apply from the next
         turn; an <code>environment</code> fragment applies at the next image rebuild.
+    </p>
+
+    <h2>Optional: give it a backend</h2>
+    <p>
+        When the view needs more than the daemon's routes offer — a client for somebody else's API, work that outlives the tab — add a
+        second bundle and name it in the manifest as <code>"server": "dist/server.js"</code> (with
+        <code>"engines": &#123; "intentic": "^2.1.0" &#125;</code>). It exports one function:
+    </p>
+    <DocsCodeBlock code={server} lang="typescript" title="src/server.ts" />
+    <p>
+        Your UI half calls its own namespace with <code>api.sandbox</code> and no extra permission — the backend is your own code from the
+        same approved checkout. The backend's reach the <em>other</em> way, into the daemon's routes via <code>api.daemon</code>, is the
+        manifest's <code>permissions.daemon</code> allowlist. Bundle the server self-contained: everything except node builtins goes in,
+        because the installed checkout has no <code>node_modules</code>. The
+        <a href="/docs/sandbox-api/host/#backend">Host API page</a> documents the whole server surface.
     </p>
 
     <h2 id="workspace">Skip all of that: write it in the workspace</h2>
