@@ -250,9 +250,28 @@ const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at ca
 const selections = ref<Record<number, string[]>>({});
 const otherTexts = ref<Record<number, string>>({});
 // One free-text field per question row, kept by index so picking the row can put the caret straight into it.
-const otherInputs = ref<Record<number, HTMLInputElement | undefined>>({});
+const otherInputs = ref<Record<number, HTMLTextAreaElement | undefined>>({});
+// Manual auto-grow, the composer's own: reset to one line, then size to content up to the max-height. An answer
+// in your own words is the one that can run long, and a box that hides its own start while you write it is the
+// box you stop trusting.
+const growOther = (el: HTMLTextAreaElement | undefined): void => {
+    if (el === undefined) {
+        return;
+    }
+    el.style.height = `auto`;
+    // A field that isn't laid out yet measures nothing, and writing that back would pin the box shut with no
+    // later measurement to undo it — the one-row default stands instead until there is a real height to use.
+    if (el.scrollHeight > 0) {
+        el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
+    }
+};
+// Sizing on attach, not just on typing: the field is rendered by picking the row, and a draft restored after a
+// reload puts it on screen with paragraphs already in it. A tick later, because the ref lands while the card is
+// still being built and a detached textarea has no height to read.
 const setOtherInput = (index: number, el: Element | ComponentPublicInstance | null): void => {
-    otherInputs.value[index] = el instanceof HTMLInputElement ? el : undefined;
+    const field = el instanceof HTMLTextAreaElement ? el : undefined;
+    otherInputs.value[index] = field;
+    void nextTick(() => growOther(field));
 };
 
 // Load the draft when a pending card appears (mount, or the frame arriving mid-turn), and drop it the moment
@@ -329,6 +348,11 @@ const otherValue = (index: number): string => otherTexts.value[index] ?? ``;
 const setOther = (index: number, value: string): void => {
     otherTexts.value = { ...otherTexts.value, [index]: value };
 };
+const onOtherInput = (index: number, event: Event): void => {
+    const el = event.target as HTMLTextAreaElement;
+    setOther(index, el.value);
+    growOther(el);
+};
 
 // A picked Other row with nothing written in it is an unfinished answer, not an empty one — it holds Submit
 // rather than being quietly dropped, which would send the agent something other than what the card shows.
@@ -357,6 +381,17 @@ const submitAnswers = (): void => {
         answers[q.question] = picksFor(index);
     });
     void answerQuestion(props.message, answers);
+};
+
+/* Enter submits, Shift+Enter breaks the line — the chat composer's bargain, held to here so one keystroke does
+ * not mean two things depending on which box the caret is in. On mobile Enter is always a newline: a virtual
+ * keyboard has no Shift+Enter, and Submit is a button away. */
+const otherKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== `Enter` || event.isComposing || event.shiftKey || mobile.value) {
+        return;
+    }
+    event.preventDefault();
+    submitAnswers();
 };
 
 // A DECIDED question card is the record of the decision, so it keeps every option that was on the table and
@@ -884,16 +919,21 @@ const sentAt = computed(() => (props.message.sentAt === undefined ? undefined : 
                                 </button>
                             </div>
                             <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
-                                <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
-                                <input
+                                <!-- A TEXTAREA THAT GROWS, not a one-line input: the answers that go here are the
+                                     ones no option covered, which is exactly the case that runs to a paragraph —
+                                     and a field that scrolls its own start out of view while you write is a field
+                                     you cannot re-read before submitting. It opens one row tall, so a short answer
+                                     costs no more space than before. text-base below md: 16px is the iOS threshold
+                                     under which focusing zooms the page. -->
+                                <textarea
                                     :ref="(el) => setOtherInput(index, el)"
-                                    type="text"
+                                    rows="1"
                                     :value="otherValue(index)"
-                                    @input="setOther(index, ($event.target as HTMLInputElement).value)"
-                                    @keydown.enter="submitAnswers"
+                                    @input="onOtherInput(index, $event)"
+                                    @keydown="otherKeydown"
                                     placeholder="Type your answer…"
-                                    class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
-                                />
+                                    class="scrollbar-thin max-h-48 resize-none overflow-y-auto rounded-lg border border-line bg-card px-2.5 py-1.5 text-base leading-relaxed text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
+                                ></textarea>
                                 <!-- Reads as the instruction it is, not as an error: it is on screen from
                                      the moment the row is picked, which is before there is anything to get
                                      wrong. It is also the only thing that explains the disabled Submit. -->
