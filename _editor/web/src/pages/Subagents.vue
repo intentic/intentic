@@ -150,6 +150,11 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
     if (session.status === `pending`) {
         return { icon: `clock`, text: `Queued`, since: session.startedAt };
     }
+    // A blocked child says what it is waiting on — the delegate's own words (noteDelegationSignal put them in
+    // `summary`), because "Needs input" alone sends the user hunting for the question.
+    if (session.status === `blocked`) {
+        return { icon: `question-circle`, text: session.summary ?? `Needs input`, since: session.startedAt };
+    }
     return { icon: activityIcon(session.lastTool), text: session.lastTool ?? `Working…`, since: session.startedAt };
 };
 

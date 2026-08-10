@@ -27,7 +27,14 @@ interface SpoolFile {
     readonly source?: string;
     readonly action?: string;
     readonly delegationId?: string;
-    readonly payload?: { readonly session_id?: string; readonly last_assistant_message?: string } | null;
+    readonly payload?: {
+        readonly session_id?: string;
+        readonly last_assistant_message?: string;
+        // Tool events carry what the delegate is doing (codex normalizes to Claude's tool names); a
+        // PermissionRequest's pair is WHAT it is asking to do — the blocked reason a card can show.
+        readonly tool_name?: string;
+        readonly tool_input?: { readonly command?: string } | null;
+    } | null;
 }
 
 // Codex's hook verbs onto the roster's signal vocabulary. `session` still folds (it binds the thread);
@@ -48,11 +55,19 @@ const fold = (raw: string): void => {
     if (event === undefined) {
         return;
     }
+    const tool = typeof parsed.payload?.tool_name === "string" ? parsed.payload.tool_name : undefined;
+    // A blocked signal's summary is its REASON — the permission the delegate is stuck on, delegate's own words
+    // for the card ("waiting on permission for Bash: rm -rf build"). Everything else reports the payload's
+    // last_assistant_message (Stop), which is the delegate's report.
+    const command = typeof parsed.payload?.tool_input?.command === "string" ? `: ${parsed.payload.tool_input.command}` : "";
+    const summary =
+        event === "blocked" ? `waiting on permission for ${tool ?? "a tool"}${command}`.slice(0, 300) : parsed.payload?.last_assistant_message;
     noteDelegationSignal({
         delegationId: parsed.delegationId,
         event,
         ...(parsed.payload?.session_id !== undefined ? { thread: parsed.payload.session_id } : {}),
-        ...(parsed.payload?.last_assistant_message !== undefined ? { summary: parsed.payload.last_assistant_message } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(tool !== undefined ? { tool } : {}),
     });
 };
 

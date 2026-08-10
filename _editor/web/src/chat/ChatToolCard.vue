@@ -100,7 +100,7 @@ const watchBrowser = (session: string): void => void router.push(`/browsers/${se
  * indistinguishable from a hang. So while it runs the card says what the child is doing and what it has spent,
  * and once it stops it says what it concluded. */
 const subagent = computed(() => props.tool.subagent);
-const subagentLive = computed(() => subagent.value?.status === `running` || subagent.value?.status === `pending`);
+const subagentLive = computed(() => subagent.value?.status === `running` || subagent.value?.status === `pending` || subagent.value?.status === `blocked`);
 // What the row above the fold says, in the order it is read: the type it runs as, then what it was asked to do.
 const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
 // The quiet numbers line. Tokens are the CHILD's own spend, which is why they are worth saying next to a parent
@@ -164,6 +164,10 @@ const subagentFacts = computed<string[]>(() => {
             <span v-if="subagent?.background === true && subagentLive" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-subtle"
                 >background</span
             >
+            <!-- The delegate itself said it is stuck waiting on a permission or question (status `blocked`,
+                 straight from its own CLI's hooks). The one live state worth shouting on the card: the terminal
+                 button one slot over is where to go answer it. -->
+            <span v-if="subagent?.status === `blocked`" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-warning">needs input</span>
             <!-- The result phrase stays visible while collapsed — a folded card should still say what
                  happened. Pushed right so it reads as a trailing annotation, not part of the target. A call
                  that never reported back says so, which is what the clock in its place means. -->

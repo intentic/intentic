@@ -411,6 +411,27 @@ describe("delegation signals", () => {
         expect(() => noteDelegationSignal({ delegationId: "nobody", event: "blocked" })).not.toThrow();
     });
 
+    it("shows what the delegate is doing — a working signal's tool is the record's live line", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "working", tool: "Bash" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "running", lastTool: "Bash" }]);
+    });
+
+    it("a blocked signal carries its reason, and the delegate's later report replaces it", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked", summary: "waiting on permission for Bash: rm -rf build" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "blocked", summary: "waiting on permission for Bash: rm -rf build" }]);
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "Build directory rebuilt." });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", summary: "Build directory rebuilt." }]);
+    });
+
+    it("a failed exit keeps the delegate's reported words as the summary and takes the tail as the error", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "Looks good." });
+        settleDelegation("bash-1", { failed: true, output: "ERROR: session expired" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "failed", summary: "Looks good.", error: "ERROR: session expired" }]);
+    });
+
     it("bindDelegationThread pairs a new session with the youngest thread-less grok delegation, exactly once", () => {
         noteDelegation(turn(), { id: "grok-1", command: "opencode run --attach http://127.0.0.1:4096 'task'", background: true });
         bindDelegationThread("grok", "ses_new");

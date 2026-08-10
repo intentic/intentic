@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { turnRunOf } from "./turn-runs.js";
 
 /* THE AGENTS AN AGENT STARTS, AS THINGS THE DAEMON CAN NAME.
  *
@@ -647,8 +648,12 @@ export interface DelegationSignal {
     // The provider's own session id, to bind (on a start signal) or to look up (on everything after).
     readonly thread?: string;
     readonly event: "session" | "working" | "blocked" | "report" | "failed";
-    // The delegate's own last words (codex Stop's last_assistant_message) or an error's text.
+    // The delegate's own last words (codex Stop's last_assistant_message), an error's text — or, on `blocked`,
+    // WHAT it is waiting on ("waiting on permission for Bash: rm -rf build"), which is the difference between a
+    // card the user can act on and one that sends them hunting for the question.
     readonly summary?: string;
+    // What it is doing right now (a tool-use event's tool name) — the same live line SDK children get.
+    readonly tool?: string;
 }
 
 const findByThread = (thread: string): SubagentRecord | undefined => [...records.values()].find((record) => record.thread === thread);
@@ -679,44 +684,57 @@ export const noteDelegationSignal = (signal: DelegationSignal): void => {
     if (record === undefined) {
         return;
     }
+    const summary = signal.summary !== undefined && signal.summary !== "" ? signal.summary.slice(0, REPORT_TAIL) : undefined;
+    const frames: (AgentEvent | undefined)[] = [];
     if (signal.thread !== undefined && record.thread === undefined) {
-        patch(record.id, { thread: signal.thread });
+        frames.push(patch(record.id, { thread: signal.thread }));
     }
     const live = subagentRunning(record);
     switch (signal.event) {
         case "session":
-            return;
+            break;
         case "working":
             if (live) {
-                patch(record.id, { status: "running" });
+                frames.push(patch(record.id, { status: "running", ...(signal.tool !== undefined ? { lastTool: signal.tool } : {}) }));
             }
-            return;
+            break;
         case "blocked":
             if (live) {
-                patch(record.id, { status: "blocked" });
+                // The reason rides in `summary` — transient on purpose: the delegate's report (or the settle
+                // tail) replaces it the moment the wait is over, and `reported` stays unset so they may.
+                frames.push(patch(record.id, { status: "blocked", ...(summary !== undefined ? { summary } : {}) }));
             }
-            return;
+            break;
         case "report":
-            if (signal.summary !== undefined && signal.summary !== "") {
+            if (summary !== undefined) {
                 record.reported = true;
-                patch(record.id, { summary: signal.summary });
+                frames.push(patch(record.id, { summary }));
             }
             // The delegate's turn is over. That ends a BACKGROUNDED record here and now — the alternative is
             // waiting for the SDK's exit notification, minutes of "running" on a child that already reported.
             // A foreground one is settled by its own tool_result seconds later (settleDelegation), and a
             // blocked flicker between the two would only be noise.
             if (live && record.background === true) {
-                patch(record.id, { status: "completed" });
+                frames.push(patch(record.id, { status: "completed" }));
             }
-            return;
+            break;
         case "failed":
             if (live && record.background === true) {
-                patch(record.id, {
-                    status: "failed",
-                    ...(signal.summary !== undefined && signal.summary !== "" ? { error: signal.summary } : {}),
-                });
+                frames.push(patch(record.id, { status: "failed", ...(summary !== undefined ? { error: summary } : {}) }));
             }
-            return;
+            break;
+    }
+    /* The same update, into the spawning conversation's live frame log — the roster push above moves the
+     * Subagents area, but the in-chat card under the turn renders from streamed frames, and a signal is the
+     * one event with no stream of its own. No live run (a backgrounded delegate outliving its turn) is fine:
+     * the roster stays current, and the transcript's record is the settle frame it already gets. */
+    const run = turnRunOf(record.conversationId);
+    if (run !== undefined) {
+        for (const frame of frames) {
+            if (frame !== undefined) {
+                run.push(frame);
+            }
+        }
     }
 };
 

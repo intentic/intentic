@@ -158,3 +158,18 @@ test("a delegation gets its tool call id stamped into the pane environment; ordi
     const grep = "grep -r 'codex exec' src/";
     expect(await rewritten({ command: grep })).toBe(wrap(grep, demoted(grep), "run"));
 });
+
+test("an opencode delegation is stamped the same way", async () => {
+    const command = await rewritten({ command: "opencode run --attach http://x --title t 'summarize'", description: "Delegate to grok" });
+    expect(command).toContain("INTENTIC_DELEGATION_ID=tu-1 ");
+});
+
+// The stamp rides INSIDE the pane's own shell line, so it must survive the namespace hop: env assignments are
+// shell constructs, and one placed after nsenter would be exec'd as a program name — the stamp must come first.
+test("under an anchored isolation, the stamp precedes the nsenter hop", async () => {
+    const command = await rewritten(
+        { command: "codex exec 'fix'", description: "Delegate" },
+        bashTmuxHooks([], { anchor: { pid: 4242, cwd: WORKSPACE_ROOT }, plan: { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" } }),
+    );
+    expect(command).toMatch(/INTENTIC_DELEGATION_ID=tu-1 nsenter/);
+});
