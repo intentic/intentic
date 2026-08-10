@@ -31,34 +31,49 @@ import { useSandbox } from "../sandbox/useSandbox";
 
 const storageKey = (sandboxId: string): string => `intentic.commitMessage.${sandboxId}`;
 
-const read = (sandboxId: string | undefined): string => {
+/* What is kept for a sandbox: the box's text, and — when the box still holds exactly what a From click put
+ * there — that same text again as the fill's claim on it. Both or neither, in one record, because they are one
+ * fact about one box and storing them apart is what let them disagree across a reload (see `filled`). */
+interface StoredDraft {
+    readonly message: string;
+    readonly filled?: string;
+}
+
+const read = (sandboxId: string | undefined): StoredDraft => {
     if (sandboxId === undefined) {
-        return ``;
+        return { message: `` };
     }
     try {
-        return localStorage.getItem(storageKey(sandboxId)) ?? ``;
+        const held = localStorage.getItem(storageKey(sandboxId));
+        return held === null ? { message: `` } : (JSON.parse(held) as StoredDraft);
     } catch {
-        // Storage may be unavailable (private mode): the draft degrades to this page's lifetime, which is still
-        // the useful half of the feature.
-        return ``;
+        // Storage may be unavailable (private mode), or hold something this build cannot read: the draft degrades
+        // to this page's lifetime, which is still the useful half of the feature.
+        return { message: `` };
     }
 };
 
 const { activeSandboxId } = useSandbox();
 
+const stored = read(activeSandboxId.value);
+
 // What the user has typed, or filed in from a From chip, for this sandbox. Empty = nothing at all, which is
 // also what a successful commit leaves behind.
-const draft = ref(read(activeSandboxId.value));
+const draft = ref(stored.message);
 
 /* The exact text the last legend fill wrote, while the box still holds it verbatim. This is the whole of the
  * fill's claim on the box: it may replace or retract its OWN line and nothing else, so a user who has typed
  * (or edited a filled line by one character) can click through the legend's filters without their message
  * moving. Undefined = the box is the user's, whatever is in it.
  *
- * Deliberately NOT persisted alongside the draft: a filled line that survives a reload comes back as the
- * user's own, untouchable. That is the safe direction — a message restored from storage is one they left there
- * on purpose, and a legend click has no business retracting it a week later. */
-const filled = ref<string | undefined>(undefined);
+ * PERSISTED WITH THE DRAFT, and it has to be. The version this replaces deliberately dropped it on reload, so
+ * that a restored line came back as the user's own and untouchable — which sounds like the safe direction and
+ * is the opposite. Nobody typed that line: a click filed it. So the box came back holding a message the user
+ * never wrote, no chip could replace it, and the retraction could not take it away either — every From click
+ * from then on was silently refused, in a box that looked exactly like one waiting to be filled. Keeping the
+ * claim keeps the safety property that actually matters, which is not about time: the claim only ever matches
+ * text the fill itself wrote, so one keystroke over it makes the box the user's again, reload or no reload. */
+const filled = ref<string | undefined>(stored.filled);
 
 export const commitMessage = computed<string>({
     get: () => draft.value,
@@ -93,14 +108,19 @@ export const clearFilledMessage = (): void => {
 };
 
 // Switching sandboxes swaps the draft for that sandbox's own — which is also what re-persists it below, under
-// the id it was just loaded from. The fill's claim does not travel: it was made against another tree's legend.
+// the id it was just loaded from. The claim travels WITH it, because it is that tree's own record of its box;
+// what does not travel is one sandbox's claim onto another's message, and reading replaces both together.
 watch(activeSandboxId, (sandboxId) => {
-    filled.value = undefined;
-    draft.value = read(sandboxId);
+    const held = read(sandboxId);
+    filled.value = held.filled;
+    draft.value = held.message;
 });
 
-// Every write goes through here, including the clear a successful commit does, so no caller needs a setter.
-watch(draft, (message) => {
+// Every write goes through here, including the clear a successful commit does, so no caller needs a setter. Both
+// refs are watched, not just the text: a claim that ended without the text changing (retyping the filled line by
+// hand, which makes it the user's) is a change to what is stored, and watching one of the two is what let the
+// record come back describing a box that no longer existed.
+watch([draft, filled], ([message, claim]) => {
     const sandboxId = activeSandboxId.value;
     if (sandboxId === undefined) {
         return;
@@ -110,7 +130,8 @@ watch(draft, (message) => {
             localStorage.removeItem(storageKey(sandboxId));
             return;
         }
-        localStorage.setItem(storageKey(sandboxId), message);
+        const record: StoredDraft = { message, ...(claim === undefined ? {} : { filled: claim }) };
+        localStorage.setItem(storageKey(sandboxId), JSON.stringify(record));
     } catch {
         // Storage may be unavailable (private mode); the in-memory draft still holds for this page.
     }

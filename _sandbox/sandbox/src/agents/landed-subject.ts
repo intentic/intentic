@@ -2,6 +2,7 @@ import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
 import { cleanBreakingNote, cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
  * commit box.
@@ -105,6 +106,17 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         ...(note === `` ? {} : { note }),
         ...(breaking === `` ? {} : { breaking }),
     });
+    /* AND SAY SO, which is the difference between a sentence that is written and one that is read.
+     *
+     * Everything above happens SECONDS after the land — the model call is the whole delay — and the review panel
+     * refreshed the moment the turn ended, which is before this began. Nothing else was coming: the entry is on
+     * /history so no workspace path names it, and writing a sentence moves no ref. So the panel held a snapshot
+     * taken just before the message existed, and a "From" chip clicked in that window filed nothing into the
+     * commit box — for as long as it took some unrelated write to refresh the review by accident.
+     *
+     * Published rather than broadcast on the roster: the chip reads this through the review (agents/origins.ts),
+     * because a landing outlives the card that made it, so it is the review that has to be re-asked. */
+    publishRuntimeChange("landings");
 };
 
 // The fire-and-forget form every land site uses: a failure here is a log line, never the land's problem.

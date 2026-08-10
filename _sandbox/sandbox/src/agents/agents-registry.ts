@@ -217,9 +217,10 @@ export interface AgentsRegistry {
      * and no ladder — unlike a title, which is an identity several sources compete over, this is one sentence
      * about one diff, and the newest land is by definition the one describing the most of the claim.
      *
-     * No broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins, which
-     * reads these entries live on every scan, so the chip has it as soon as it is written. Leaves updatedAt
-     * alone for the same reason setTitle does — the land already stamped the activity this describes. */
+     * No roster broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins,
+     * which re-reads these entries on every scan — so what the panel needs is a REASON to scan, and the caller
+     * publishes one the moment this returns (agents/landed-subject.ts). Leaves updatedAt alone for the same
+     * reason setTitle does — the land already stamped the activity this describes. */
     readonly setLandedSubject: (id: string, draft: { subject: string; body?: string; note?: string; breaking?: string }) => Promise<void>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
@@ -665,6 +666,19 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // The land posture survives the rebuild too: "hold this agent's work" is a standing choice
                 // about the conversation, and the next turn is exactly when it matters.
                 ...(existing?.autoLand !== undefined ? { autoLand: existing.autoLand } : {}),
+                /* WHAT THE LANDED WORK IS CALLED SURVIVES THE REBUILD, because it describes a CLAIM on the main
+                 * tree and not the turn that made it. The claim is what `repos` above carries across, and it
+                 * outlives any number of follow-up turns — a commit is what retires it.
+                 *
+                 * Dropping these was silent and total: land, then send one more message, and the drafted commit
+                 * message and its release note were gone from the entry the "From" chip reads. A turn that lands
+                 * again redraws them, which is why this only ever bit the turns that landed NOTHING — a question
+                 * answered, a check that found nothing to change — and those are the turns most likely to be
+                 * followed by the commit that needed the sentence. */
+                ...(existing?.landedSubject !== undefined ? { landedSubject: existing.landedSubject } : {}),
+                ...(existing?.landedBody !== undefined ? { landedBody: existing.landedBody } : {}),
+                ...(existing?.landedNote !== undefined ? { landedNote: existing.landedNote } : {}),
+                ...(existing?.landedBreaking !== undefined ? { landedBreaking: existing.landedBreaking } : {}),
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
                 ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
                 ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),

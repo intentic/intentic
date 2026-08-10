@@ -95,7 +95,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
              * pushed once, to a stream that had already ended. These views carry no poll to catch up on their
              * own any more, so the reconnect is the catch-up. */
             for (const key of runtimeBoundQueryKeys()) {
-                void queryClient.invalidateQueries({ queryKey: [key] });
+                void queryClient.invalidateQueries({ queryKey: key });
             }
             return;
         }
@@ -122,7 +122,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
              * showing none of these pays the frame and no request, while the tab with the terminal panel open
              * refetches exactly the one list it draws. */
             for (const key of staleRuntimeQueryKeys(event.domains)) {
-                void queryClient.invalidateQueries({ queryKey: [key] });
+                void queryClient.invalidateQueries({ queryKey: key });
             }
             return;
         case `reposChanged`:
