@@ -6,9 +6,11 @@ import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+    bindDelegationThread,
     closeSubagents,
     listSubagentSessions,
     noteDelegation,
+    noteDelegationSignal,
     noteSubagentSpawn,
     noteSubagentTask,
     resetSubagents,
@@ -17,6 +19,7 @@ import {
     subagentCountsOf,
     subagentHooks,
     subagentSource,
+    waitForSubagent,
     type SubagentTaskMessage,
     type SubagentTurn,
 } from "./subagents.js";
@@ -353,5 +356,138 @@ describe("the roster", () => {
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "call-1"]);
         vi.advanceTimersByTime(2 * 60_000);
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1"]);
+    });
+});
+
+/* What the delegate ITSELF reports — the codex hook spool and the warm OpenCode server's events — folded onto
+ * the records the Bash stream opened. The suite drives the same entry points the transports call
+ * (delegation-signals.ts, grok/opencode.ts): nothing here fakes a roster. */
+describe("delegation signals", () => {
+    const spawn = (id = "bash-1", background = false): void => {
+        noteDelegation(turn(), {
+            id,
+            command: "codex exec --sandbox danger-full-access --dangerously-bypass-hook-trust 'do the thing'",
+            background,
+        });
+    };
+
+    it("binds the session id a start signal carries, so the transcript reader has its thread", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "session", thread: "019f-abc" });
+        expect(subagentSource("bash-1")).toMatchObject({ thread: "019f-abc" });
+    });
+
+    it("moves a live record to blocked and back to running", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "blocked" }]);
+        noteDelegationSignal({ delegationId: "bash-1", event: "working" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "running" }]);
+    });
+
+    it("a report completes a BACKGROUNDED record with the delegate's own last words, and the SDK's later digest does not overwrite them", () => {
+        spawn("bash-1", true);
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "Ported the module; tests pass." });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed", summary: "Ported the module; tests pass." }]);
+        // The background task's exit notification lands minutes later with a stdout digest — the report stands.
+        noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "bash-1", status: "completed", summary: "stdout digest" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", summary: "Ported the module; tests pass." }]);
+    });
+
+    it("a report leaves a FOREGROUND record running for its own tool_result, which keeps the reported summary", () => {
+        spawn();
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "All done." });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "running", summary: "All done." }]);
+        settleDelegation("bash-1", { failed: false, output: "…raw stdout tail…" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed", summary: "All done." }]);
+    });
+
+    it("signals never reopen a settled record, and unknown ids fall on the floor", () => {
+        spawn();
+        settleDelegation("bash-1", { failed: false, output: "done" });
+        noteDelegationSignal({ delegationId: "bash-1", event: "working" });
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "bash-1", status: "completed" }]);
+        expect(() => noteDelegationSignal({ delegationId: "nobody", event: "blocked" })).not.toThrow();
+    });
+
+    it("bindDelegationThread pairs a new session with the youngest thread-less grok delegation, exactly once", () => {
+        noteDelegation(turn(), { id: "grok-1", command: "opencode run --attach http://127.0.0.1:4096 'task'", background: true });
+        bindDelegationThread("grok", "ses_new");
+        expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_new" });
+        // A second created-event for the same session re-binds nothing, and a session with no candidate is dropped.
+        bindDelegationThread("grok", "ses_new");
+        expect(() => bindDelegationThread("grok", "ses_other")).not.toThrow();
+        expect(subagentSource("grok-1")).toMatchObject({ thread: "ses_new" });
+        // Later events reach the record through the thread it bound.
+        noteDelegationSignal({ thread: "ses_new", event: "blocked" });
+        expect(listSubagentSessions()).toMatchObject([{ id: "grok-1", status: "blocked" }]);
+    });
+});
+
+/* The wait the tool parks on (subagent-wait.ts). The discipline under test is herdr's: subscribe before the
+ * first look, so nothing lands in the gap; evaluate synchronously inside every transition, so a flicker still
+ * counts; a timeout is an answer, not an error. */
+describe("waitForSubagent", () => {
+    const spawn = (id: string, background = true): void => {
+        noteDelegation(turn(), {
+            id,
+            command: "codex exec --sandbox danger-full-access --dangerously-bypass-hook-trust 'do the thing'",
+            background,
+        });
+    };
+
+    it("resolves immediately when the target already satisfies the wait", async () => {
+        spawn("bash-1");
+        noteDelegationSignal({ delegationId: "bash-1", event: "report", summary: "done" });
+        const result = await waitForSubagent("conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
+        expect(result).toMatchObject({ outcome: "finished", matched: { id: "bash-1", status: "completed" } });
+    });
+
+    it("wakes when the child blocks", async () => {
+        spawn("bash-1");
+        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked", "finished"], timeoutMs: 5_000 });
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked" });
+        expect(await wait).toMatchObject({ outcome: "blocked", matched: { id: "bash-1", status: "blocked" } });
+    });
+
+    it("a blocked flicker still wakes the waiter — the listener runs inside the transition, not after it", async () => {
+        spawn("bash-1");
+        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 });
+        // Blocked and immediately un-blocked, with no await in between: a poll would have missed it.
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked" });
+        noteDelegationSignal({ delegationId: "bash-1", event: "working" });
+        expect(await wait).toMatchObject({ outcome: "blocked" });
+    });
+
+    it("with no target, the first of the conversation's children to move settles the wait — other conversations' don't", async () => {
+        spawn("bash-1");
+        noteDelegation(
+            { conversationId: "conv-2", cwd: WORKSPACE_ROOT, sessionId: "sess-2", subagentsDir: undefined },
+            { id: "bash-other", command: "codex exec 'elsewhere'", background: true },
+        );
+        const wait = waitForSubagent("conv-1", { until: ["blocked"], timeoutMs: 5_000 });
+        noteDelegationSignal({ delegationId: "bash-other", event: "blocked" });
+        noteDelegationSignal({ delegationId: "bash-1", event: "blocked" });
+        expect(await wait).toMatchObject({ outcome: "blocked", matched: { id: "bash-1" } });
+    });
+
+    it("a timeout answers with the target's current snapshot", async () => {
+        spawn("bash-1");
+        const result = await waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 20 });
+        expect(result).toMatchObject({ outcome: "timeout", matched: { id: "bash-1", status: "running" } });
+    });
+
+    it("the turn's abort settles the wait", async () => {
+        spawn("bash-1");
+        const controller = new AbortController();
+        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000, signal: controller.signal });
+        controller.abort();
+        expect(await wait).toMatchObject({ outcome: "aborted" });
+    });
+
+    it("a target the roster does not know answers unknown-target instead of hanging", async () => {
+        const result = await waitForSubagent("conv-1", { target: "never-was", until: ["finished"], timeoutMs: 5_000 });
+        expect(result).toMatchObject({ outcome: "unknown-target" });
     });
 });

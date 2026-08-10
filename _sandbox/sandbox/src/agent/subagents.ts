@@ -72,10 +72,14 @@ interface SubagentRecord {
     // only the child's meta file can pair to the tool call that spawned it. Cached here once resolved; see
     // subagentAgentId for when that happens and why it cannot happen sooner.
     agentId: string | undefined;
-    // A delegated thread/session id, but ONLY when the command named one (`codex exec resume <id>`,
-    // `opencode run --session <id>`). A fresh delegation prints its id and we do not parse stdout for it: the
-    // reader resolves it from the provider's own store by cwd and start time, which no output format can break.
+    /* A delegated thread/session id. Named by the command when it resumed one (`codex exec resume <id>`,
+     * `opencode run --session <id>`); a FRESH delegation's id arrives by signal instead — the codex hook's
+     * SessionStart carries it (delegation-signals.ts), and an opencode session created on the warm server is
+     * bound by bindDelegationThread. Still daemon-side only; stdout is never parsed for it. */
     thread: string | undefined;
+    // The delegate reported its own last words (a Stop signal's last_assistant_message) — better than any
+    // stdout tail, so the settle paths keep it rather than overwrite it (settleDelegation, task_notification).
+    reported: boolean | undefined;
 }
 
 const records = new Map<string, SubagentRecord>();
@@ -90,8 +94,20 @@ const sweep = (now: number): void => {
     }
 };
 
-const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "running", "paused"]);
+const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "running", "blocked", "paused"]);
 export const subagentRunning = (record: Pick<SubagentSession, "status">): boolean => LIVE.has(record.status);
+
+/* WHO IS WAITING ON THE ROSTER — notified synchronously on every open() and every effective patch(), which is
+ * what makes waitForSubagent race-free: a listener added BEFORE the current state is read cannot miss a
+ * transition, and a state a child only flickers through (blocked for the second an approval takes) still ran
+ * every listener while it held. The runtime-watch bus next door is deliberately NOT this seam: it rate-limits
+ * per domain, and a coalesced flicker is exactly the missed wake this set exists to prevent. */
+const waiters = new Set<() => void>();
+const notifyChanged = (): void => {
+    for (const listener of waiters) {
+        listener();
+    }
+};
 
 /* WHICH CHILDREN THE PARENT WALKED AWAY FROM — marked by the spawning tool call, because nothing else says so.
  *
@@ -229,6 +245,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         turn,
         agentId: undefined,
         thread: undefined,
+        reported: undefined,
         ...fields,
     };
     records.set(id, record);
@@ -236,6 +253,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
     // about it on its own clock — this is the same roster the AgentEvent stream carries, for the surfaces that
     // are not watching a conversation.
     publishRuntimeChange("subagents");
+    notifyChanged();
     return record;
 };
 
@@ -272,6 +290,7 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
     // daemon by a distance, which is exactly why the bus rate-limits per domain rather than asking each caller
     // to decide what is worth a frame — a no-op patch has already returned above, so what reaches here changed.
     publishRuntimeChange("subagents");
+    notifyChanged();
     const update: Extract<AgentEvent, { kind: "subagent_update" }> = { kind: "subagent_update", id };
     return {
         ...update,
@@ -386,7 +405,9 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
             ? undefined
             : patch(id, {
                   ...(message.status !== undefined && NOTIFIED[message.status] !== undefined ? { status: NOTIFIED[message.status] } : {}),
-                  ...(message.summary !== undefined ? { summary: message.summary } : {}),
+                  // Unless the delegate already reported its own last words (noteDelegationSignal) — the SDK's
+                  // digest of a backgrounded command's stdout must not overwrite the better summary.
+                  ...(message.summary !== undefined && records.get(id)?.reported !== true ? { summary: message.summary } : {}),
                   ...(message.usage?.total_tokens !== undefined ? { tokens: message.usage.total_tokens } : {}),
                   ...(message.usage?.tool_uses !== undefined ? { toolUses: message.usage.tool_uses } : {}),
               });
@@ -550,6 +571,10 @@ const DELEGATIONS: readonly { readonly kind: SubagentKind; readonly verb: RegExp
     { kind: "grok", verb: /(?:^|[\s;&|])opencode\s+run\b/u, resume: /--session[\s=]+(\S+)/u },
 ];
 
+// Whether a Bash command starts a delegation — the same test noteDelegation runs, exported for the tmux
+// rewrite, which stamps INTENTIC_DELEGATION_ID into exactly these commands' environment (agent-terminals.ts).
+export const isDelegationCommand = (command: string): boolean => DELEGATIONS.some((entry) => entry.verb.test(command));
+
 // A command's own words as the row's description: the delegated PROMPT is the interesting part, and it is the
 // last quoted argument. Falls back to the command itself, trimmed of the env/prefix noise.
 const promptOf = (command: string): string | undefined => {
@@ -598,10 +623,182 @@ export const settleDelegation = (id: string, outcome: { readonly failed: boolean
     const tail = outcome.output.trim().slice(-REPORT_TAIL).trim();
     return patch(id, {
         status: outcome.failed ? "failed" : "completed",
-        ...(tail !== "" ? { summary: tail } : {}),
+        // The delegate's own report (a Stop signal) beats the stdout tail; a failure's tail is kept regardless,
+        // because the error is usually in what was printed after the last assistant message.
+        ...(tail !== "" && record.reported !== true ? { summary: tail } : {}),
         ...(outcome.failed && tail !== "" ? { error: tail } : {}),
     });
 };
+
+/* ---- delegation signals: what the delegate itself says, folded into the same records ------------------------
+ *
+ * The Bash stream above can only see a delegation from OUTSIDE: the command opened it, the exit settles it, and
+ * everything in between is a spinner. These two entry points carry what the delegate's own runtime reports —
+ * the codex hook spool (delegation-signals.ts) and the warm OpenCode server's event stream (grok/opencode.ts) —
+ * which is where `blocked`, the real session id, and the child's own last words come from.
+ *
+ * Status moves are gated on the record still being LIVE: signals arrive on their own clock (a hook process, an
+ * SSE stream), and a `working` that lands after the settle must not reopen a finished child. */
+
+export interface DelegationSignal {
+    // The spawning Bash tool call's id, when the transport carries it (the codex hook inherits it from the pane
+    // environment). Absent for opencode events, which only know their session — hence `thread`.
+    readonly delegationId?: string;
+    // The provider's own session id, to bind (on a start signal) or to look up (on everything after).
+    readonly thread?: string;
+    readonly event: "session" | "working" | "blocked" | "report" | "failed";
+    // The delegate's own last words (codex Stop's last_assistant_message) or an error's text.
+    readonly summary?: string;
+}
+
+const findByThread = (thread: string): SubagentRecord | undefined => [...records.values()].find((record) => record.thread === thread);
+
+/* Bind a freshly created provider session to the delegation that started it, when nothing carried the pairing.
+ * The youngest live record of that kind still waiting for a thread is the one: delegations are rare (a human
+ * decision away), the bind window is the seconds between spawn and the provider's session-create, and a wrong
+ * guess self-corrects on the next signal that DOES carry both ids. Used by the opencode event stream, whose
+ * events name only their session. */
+export const bindDelegationThread = (kind: SubagentKind, thread: string): void => {
+    if (findByThread(thread) !== undefined) {
+        return;
+    }
+    const candidate = [...records.values()]
+        .filter((record) => record.kind === kind && record.thread === undefined && subagentRunning(record))
+        .toSorted((left, right) => right.startedAt - left.startedAt)[0];
+    if (candidate !== undefined) {
+        patch(candidate.id, { thread });
+    }
+};
+
+/** One signal from the delegate's own runtime, folded into its record. Unknown ids are dropped without a trace:
+ *  the spool hears every hook-carrying codex run and the event stream every warm-server session, and the ones
+ *  that are not delegations of this daemon are simply not its news. */
+export const noteDelegationSignal = (signal: DelegationSignal): void => {
+    const record =
+        signal.delegationId !== undefined ? records.get(signal.delegationId) : signal.thread !== undefined ? findByThread(signal.thread) : undefined;
+    if (record === undefined) {
+        return;
+    }
+    if (signal.thread !== undefined && record.thread === undefined) {
+        patch(record.id, { thread: signal.thread });
+    }
+    const live = subagentRunning(record);
+    switch (signal.event) {
+        case "session":
+            return;
+        case "working":
+            if (live) {
+                patch(record.id, { status: "running" });
+            }
+            return;
+        case "blocked":
+            if (live) {
+                patch(record.id, { status: "blocked" });
+            }
+            return;
+        case "report":
+            if (signal.summary !== undefined && signal.summary !== "") {
+                record.reported = true;
+                patch(record.id, { summary: signal.summary });
+            }
+            // The delegate's turn is over. That ends a BACKGROUNDED record here and now — the alternative is
+            // waiting for the SDK's exit notification, minutes of "running" on a child that already reported.
+            // A foreground one is settled by its own tool_result seconds later (settleDelegation), and a
+            // blocked flicker between the two would only be noise.
+            if (live && record.background === true) {
+                patch(record.id, { status: "completed" });
+            }
+            return;
+        case "failed":
+            if (live && record.background === true) {
+                patch(record.id, {
+                    status: "failed",
+                    ...(signal.summary !== undefined && signal.summary !== "" ? { error: signal.summary } : {}),
+                });
+            }
+            return;
+    }
+};
+
+/* ---- the wait: sleep until a child needs you --------------------------------------------------------------
+ *
+ * The primitive the wait tool (subagent-wait.ts) parks on. Race-free by construction: the listener is added
+ * BEFORE the first evaluation, so a transition landing in between wakes the re-check rather than falling into
+ * the gap — and because notifyChanged runs synchronously inside every patch, a state the child only passes
+ * through still gets its evaluation while it holds. */
+
+export type SubagentWaitUntil = "blocked" | "finished";
+
+export interface SubagentWaitOptions {
+    // A child's spawning tool-call id; absent ⇒ any child of the conversation.
+    readonly target?: string;
+    readonly until: readonly SubagentWaitUntil[];
+    readonly timeoutMs: number;
+    readonly signal?: AbortSignal;
+}
+
+export interface SubagentWaitOutcome {
+    readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target";
+    // The child that satisfied the wait — or, on a timeout, the target's current snapshot if it has one.
+    readonly matched?: SubagentSession;
+}
+
+const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[]): SubagentWaitUntil | undefined => {
+    if (until.includes("blocked") && record.status === "blocked") {
+        return "blocked";
+    }
+    if (until.includes("finished") && !subagentRunning(record)) {
+        return "finished";
+    }
+    return undefined;
+};
+
+export const waitForSubagent = (conversationId: string, options: SubagentWaitOptions): Promise<SubagentWaitOutcome> =>
+    new Promise((resolve) => {
+        const candidates = (): SubagentRecord[] =>
+            [...records.values()].filter(
+                (record) => record.conversationId === conversationId && (options.target === undefined || record.id === options.target),
+            );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const settle = (result: SubagentWaitOutcome): void => {
+            waiters.delete(evaluate);
+            options.signal?.removeEventListener("abort", onAbort);
+            if (timer !== undefined) {
+                clearTimeout(timer);
+            }
+            resolve(result);
+        };
+        const onAbort = (): void => settle({ outcome: "aborted" });
+        const evaluate = (): void => {
+            const found = candidates();
+            // A named target that is not on the roster: never started, or finished long enough ago that
+            // retention swept it — both answers the caller can act on immediately, neither worth a timeout.
+            if (options.target !== undefined && found.length === 0) {
+                settle({ outcome: "unknown-target" });
+                return;
+            }
+            for (const record of found) {
+                const matched = waitMatch(record, options.until);
+                if (matched !== undefined) {
+                    settle({ outcome: matched, matched: wire(record) });
+                    return;
+                }
+            }
+        };
+        if (options.signal?.aborted === true) {
+            resolve({ outcome: "aborted" });
+            return;
+        }
+        options.signal?.addEventListener("abort", onAbort, { once: true });
+        timer = setTimeout(() => {
+            const snapshot = options.target !== undefined ? records.get(options.target) : undefined;
+            settle({ outcome: "timeout", ...(snapshot !== undefined ? { matched: wire(snapshot) } : {}) });
+        }, options.timeoutMs);
+        timer.unref();
+        // Listener first, then the first look — the order the race-freedom comment above is about.
+        waiters.add(evaluate);
+        evaluate();
+    });
 
 /** Every child of this turn that is still marked live, settled as the turn ends. A subagent the SDK never
  *  reported a terminal status for (the turn was stopped, the CLI died under it) would otherwise sit "running"
@@ -624,4 +821,5 @@ export const resetSubagents = (): void => {
     records.clear();
     tasks.clear();
     backgrounded.clear();
+    waiters.clear();
 };

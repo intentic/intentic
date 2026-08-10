@@ -1,7 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
-import { createOpencodeClient, createOpencodeServer, type OpencodeClient } from "@opencode-ai/sdk";
+import { createOpencodeClient, createOpencodeServer, type Event as OpenCodeEvent, type OpencodeClient } from "@opencode-ai/sdk";
+import { bindDelegationThread, noteDelegationSignal } from "../agent/subagents.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
 /* The shared OpenCode runtime for the Grok provider: one warm `opencode serve` per container plus its client.
@@ -15,6 +16,9 @@ import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from
 export interface OpenCodeService {
     // Ensure the server is up and return its client (lazy: the first turn or auth call boots it).
     readonly client: () => Promise<OpencodeClient>;
+    // The warm server's base URL — what a delegated `opencode run --attach <url>` points at, so its session
+    // runs where the daemon's event stream can see it (the delegation note names it; agent/delegation.ts).
+    readonly url: () => Promise<string>;
     // Whether the given provider (e.g. "xai") is authenticated — read from OpenCode's persisted auth store on disk
     // (the ground truth a device sign-in writes), NOT provider.list().connected, which OpenCode computes once at
     // server-init and never refreshes after a runtime auth.set() on our long-lived server.
@@ -62,6 +66,90 @@ const BOOT_TIMEOUT_MS = 60_000;
 export const OPENCODE_BINARY_MISSING =
     "This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Grok here.";
 
+/* The title a delegated session announces itself under (the delegation note's command template carries
+ * `--title` with this prefix). It is what tells a delegation apart from the OTHER sessions on the same warm
+ * server — the Grok provider adapter's own turns — because `opencode run` forwards no environment to the
+ * server, so the id stamp that binds a codex delegation (agent-terminals.ts) has no road here. A session
+ * without the prefix is simply never bound, which fails toward the old blindness instead of toward binding a
+ * primary turn's session to somebody's child. */
+export const DELEGATION_SESSION_TITLE = "intentic-delegation";
+
+// A session-error's human sentence, out of whichever member of OpenCode's error union carried one.
+const errorText = (error: unknown): string | undefined => {
+    const data = (error as { data?: { message?: unknown } } | undefined)?.data;
+    return typeof data?.message === "string" && data.message !== "" ? data.message : undefined;
+};
+
+/* The warm server's news, folded into the subagent roster. Sessions bind by the title prefix above (created →
+ * bindDelegationThread pairs it with the youngest thread-less grok delegation); everything after that is a
+ * status move keyed by session id, and noteDelegationSignal drops ids that belong to no delegation — which is
+ * every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's end (report — a backgrounded
+ * record completes on it, a foreground one is settled by its own tool_result); a pending permission is the
+ * `blocked` a waiting parent is woken for, though the warm server's allow-all config makes it rare. */
+const foldSessionEvent = (event: OpenCodeEvent): void => {
+    switch (event.type) {
+        case "session.created": {
+            const info = event.properties.info;
+            if (info.parentID === undefined && info.title.startsWith(DELEGATION_SESSION_TITLE)) {
+                bindDelegationThread("grok", info.id);
+            }
+            return;
+        }
+        case "session.status": {
+            const { sessionID, status } = event.properties;
+            noteDelegationSignal({ thread: sessionID, event: status.type === "idle" ? "report" : "working" });
+            return;
+        }
+        case "session.idle":
+            noteDelegationSignal({ thread: event.properties.sessionID, event: "report" });
+            return;
+        case "session.error": {
+            const { sessionID, error } = event.properties;
+            if (sessionID !== undefined) {
+                const message = errorText(error);
+                noteDelegationSignal({ thread: sessionID, event: "failed", ...(message !== undefined ? { summary: message } : {}) });
+            }
+            return;
+        }
+        case "permission.updated":
+            noteDelegationSignal({ thread: event.properties.sessionID, event: "blocked" });
+            return;
+        case "permission.replied":
+            noteDelegationSignal({ thread: event.properties.sessionID, event: "working" });
+            return;
+        default:
+            return;
+    }
+};
+
+// How many times the event stream may die in a row before the watcher gives up. The service never restarts a
+// dead warm server either (`booting` is memoized for the daemon's life), so a stream that cannot come back is
+// the server being gone — retrying forever would only keep test processes and dying daemons alive.
+const STREAM_RETRIES = 3;
+const STREAM_RETRY_MS = 5_000;
+
+/* Watch the warm server's whole event stream for the daemon's life — detached, started once by the boot that
+ * created the server. Failures are counted, not logged loudly: losing this stream loses liveness (a delegation
+ * settles only by its exit), never correctness. */
+const watchSessionEvents = (client: OpencodeClient): void => {
+    void (async () => {
+        for (let failures = 0; failures < STREAM_RETRIES; failures += 1) {
+            try {
+                const sse = await client.event.subscribe();
+                for await (const event of sse.stream) {
+                    failures = 0;
+                    foldSessionEvent(event as OpenCodeEvent);
+                }
+            } catch {
+                // The stream ended or never opened — count it and try again below.
+            }
+            await new Promise((resolve) => {
+                setTimeout(resolve, STREAM_RETRY_MS).unref();
+            });
+        }
+    })();
+};
+
 export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
     let booting: Promise<OpencodeClient> | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
@@ -70,6 +158,8 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
     // disconnect.
     let modelsCache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
     const MODELS_TTL_MS = 60_000;
+    // Where the warm server listens — set by the boot that created it, so `url()` can answer after `ensure`.
+    let serverUrl: string | undefined;
     const opencodeDir = join(xdgDataHome, "opencode");
     const authPath = join(opencodeDir, "auth.json");
     // The last-known-good catalog, persisted next to auth.json so it survives daemon restarts.
@@ -104,7 +194,12 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
                 process.env["XDG_DATA_HOME"] = previous;
             }
         }
-        return createOpencodeClient({ baseUrl: server.url });
+        serverUrl = server.url;
+        const client = createOpencodeClient({ baseUrl: server.url });
+        // The delegation watcher rides the boot that made the server, so exactly one stream exists per server
+        // and nothing ever boots one just to listen.
+        watchSessionEvents(client);
+        return client;
     };
 
     // Single-flight: memoize the in-flight boot, not just the finished client. `opencode serve` takes seconds and
@@ -155,6 +250,14 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
 
     return {
         client: ensure,
+        url: async () => {
+            await ensure();
+            if (serverUrl === undefined) {
+                // Unreachable once ensure resolved — boot sets the url before it returns the client.
+                throw new Error("OpenCode server url unknown after boot");
+            }
+            return serverUrl;
+        },
         connected: async (providerID) => {
             // Read the persisted credential directly, NOT provider.list().connected: OpenCode computes that set
             // once at server-init and never refreshes it after a runtime auth.set(), so on our single long-lived

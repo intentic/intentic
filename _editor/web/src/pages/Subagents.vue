@@ -132,6 +132,7 @@ const HEADER_ACTION = `flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 t
 const STATUS: Record<SubagentSession["status"], { name: IconName; spin?: boolean; class: string; "aria-label": string }> = {
     pending: { name: `clock`, class: `text-xs text-subtle`, "aria-label": `Queued` },
     running: { name: `spinner`, spin: true, class: `text-xs text-link`, "aria-label": `Running` },
+    blocked: { name: `question-circle`, class: `text-xs text-warning`, "aria-label": `Needs input` },
     paused: { name: `clock`, class: `text-xs text-warning`, "aria-label": `Paused` },
     completed: { name: `check`, class: `text-xs text-success`, "aria-label": `Completed` },
     failed: { name: `times`, class: `text-xs text-danger`, "aria-label": `Failed` },

@@ -148,3 +148,13 @@ test("the Bash rewrite leaves the shared subtrees and any path that merely start
     expect(await rewrite("diff /mnt/intentic-main/x /work/x")).toContain("/mnt/intentic-main/x /wt/x");
     expect(await rewrite("ls ./workspace")).toContain("./workspace");
 });
+
+test("a delegation gets its tool call id stamped into the pane environment; ordinary commands do not", async () => {
+    // The stamp rides INSIDE the wrapped command (ahead of the demotion), so the delegate's own process tree —
+    // and therefore its hooks — inherits it wherever the pane runs (delegation-signals.ts reads it back).
+    const codex = "codex exec --sandbox danger-full-access 'fix the tests'";
+    expect(await rewritten({ command: codex })).toBe(wrap(codex, `INTENTIC_DELEGATION_ID=tu-1 ${demoted(codex)}`, "run"));
+    // Mentioning codex is not delegating to it.
+    const grep = "grep -r 'codex exec' src/";
+    expect(await rewritten({ command: grep })).toBe(wrap(grep, demoted(grep), "run"));
+});

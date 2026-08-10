@@ -22,10 +22,10 @@ const QUERY_KEY = sandboxKey(`subagents`);
 export const subagentsKey = QUERY_KEY;
 export const fetchSubagents = async (): Promise<SubagentSession[]> => SubagentsListSchema.parse(await sandboxJson(`/system/subagents`)).sessions;
 
-// Live is `pending | running | paused` — the daemon's own split (see subagentRunning there). Duplicated as one
-// exported predicate rather than re-derived per surface, so the rail's count and the area's grouping mean the
-// same thing by construction.
-const LIVE = new Set<SubagentSession["status"]>([`pending`, `running`, `paused`]);
+// Live is `pending | running | blocked | paused` — the daemon's own split (see subagentRunning there).
+// Duplicated as one exported predicate rather than re-derived per surface, so the rail's count and the area's
+// grouping mean the same thing by construction.
+const LIVE = new Set<SubagentSession["status"]>([`pending`, `running`, `blocked`, `paused`]);
 export const subagentLive = (session: SubagentSession): boolean => LIVE.has(session.status);
 
 export const useSubagentsQuery = (): {

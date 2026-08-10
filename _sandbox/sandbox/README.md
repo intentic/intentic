@@ -7,6 +7,14 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by a daemon session minted from verified Google identity (`/health` carved out for liveness).
 - Run one Claude Code, Codex app-server, OpenCode, ACP, or Pi turn over the workspace, normalizing each runtime's
   native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
+- Follow the agents a turn starts. Every child — an Agent-tool subagent, a delegated `codex exec` or `opencode
+  run` — is a record on one roster (src/agent/subagents.ts), and the delegates report their OWN state into it: a
+  daemon-authored codex hook drops event files into a signal spool (src/codex/codex-config.ts →
+  src/agent/delegation-signals.ts), and a delegated OpenCode session runs attached to the warm server whose
+  event stream the daemon already reads (src/grok/opencode.ts). That is what gives a child a real session id, a
+  `blocked` status, and its own last words as its report — and what the turn's `wait` tool parks on
+  (src/agent/subagent-wait.ts): sleep until a child, or another fleet agent, needs input or finishes, instead of
+  polling a terminal tail.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.

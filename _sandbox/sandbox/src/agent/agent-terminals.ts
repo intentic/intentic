@@ -7,6 +7,7 @@ import { redirectCommand } from "../agents/worktree-redirect.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { isDelegationCommand } from "./subagents.js";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
 // commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to — the
@@ -121,13 +122,24 @@ export const bashTmuxHooks = (
                         // its own, so rewriting after would scan text that can only produce false matches.
                         const command =
                             isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
+                        /* A delegation gets its spawning tool call's id stamped into the pane environment, so
+                         * the delegate's own hooks can say WHICH child they speak for: codex hands the stamp
+                         * back through the signal spool, and the roster folds status/session-id/report onto the
+                         * record this very id keys (subagents.ts, delegation-signals.ts). An env prefix rather
+                         * than a tmux `-e` flag because it must ride INSIDE the namespace hop, on the command's
+                         * own process tree — and only for commands whose id charset is the SDK's (defensive: the
+                         * value lands unquoted in the shell line every Bash command flows through). */
+                        const stamp =
+                            isDelegationCommand(command) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id)
+                                ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} `
+                                : "";
                         // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
                         // where the server and the pane logs are. The polite prefix goes with the command
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(command)}`
-                                : `${POLITE_PREFIX}bash -c ${shellQuote(command)}`;
+                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(command)}`
+                                : `${stamp}${POLITE_PREFIX}bash -c ${shellQuote(command)}`;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

@@ -14,14 +14,7 @@ import {
 import { accountsServer } from "../browser/accounts-tools.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
-import {
-    type TurnPersona,
-    personaCapabilities,
-    personaCliEnv,
-    personaDisallowedTools,
-    personaNote,
-    turnPersona,
-} from "../personas/personas.js";
+import { type TurnPersona, personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, turnPersona } from "../personas/personas.js";
 import { personaScopeOf } from "../personas/persona-scope.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
@@ -39,6 +32,7 @@ import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
+import { subagentWaitServer } from "./subagent-wait.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
@@ -355,12 +349,7 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
 // Pi: the reserved `pi` agent-kind capability, spawned and driven over Pi's own RPC protocol. Harness doesn't
 // apply (Pi is its own loop). Unlike the ACP floor it takes the steering queue (Pi's `steer` command is real
 // mid-turn injection) and the effort tier (set_thinking_level); it has no MCP seam, so no tools are passed.
-export const planPiTurn = async (
-    services: Services,
-    _input: AgentTurn,
-    context: TurnContext,
-    granted: readonly Capability[],
-): Promise<TurnPlan> => {
+export const planPiTurn = async (services: Services, _input: AgentTurn, context: TurnContext, granted: readonly Capability[]): Promise<TurnPlan> => {
     const capability = granted.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: "Pi is not installed — add the Pi Agent capability first." };
@@ -562,6 +551,14 @@ export const planHarnessTurn = async (
         ...browser.servers,
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
+        // The `wait` tool: park until a child (a delegated CLI, an Agent-tool subagent) or another fleet agent
+        // is blocked on input or finished (subagent-wait.ts). Always offered — a turn that spawns nothing
+        // simply never calls it — and settled by the turn's own signal when the user stops the turn under it.
+        subagents: subagentWaitServer({
+            conversationId: context.base.conversationId,
+            registry: services.agents,
+            signal: context.base.signal,
+        }),
     };
     const shellEnv = { ...context.cliEnv, ...delegation.env };
     // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
@@ -757,6 +754,12 @@ const delegationEnv = async (
     const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
     const codexHome = translatorReady || services.config.openaiApiKey !== "" ? services.codexHome : undefined;
     const grokConnected = await services.openCode.connected("xai");
+    /* The warm server's URL, which the note's `opencode run --attach` command points at so the delegated
+     * session runs where the daemon's event stream can see it (grok/opencode.ts). Resolving it boots the
+     * server when the boot warmup hasn't — the same cost the model lookup below already pays — and a boot
+     * that fails withholds the Grok offer entirely: a command template pointing at a server that isn't
+     * there is worse than no offer, and Grok turns are broken then anyway. */
+    const openCodeUrl = grokConnected ? await services.openCode.url().catch(() => undefined) : undefined;
     // Resolve the xAI model the note names from xAI's live catalog (default, else first), so it never hardcodes a
     // since-renamed id. Tolerate a transient xAI blip — a Claude turn must not fail on this lookup; the note then
     // omits the model and tells the agent to list xAI's models itself. Skipped in stable mode, where the note
@@ -770,7 +773,7 @@ const delegationEnv = async (
             : undefined;
     const note = delegationNote({
         ...(codexHome !== undefined ? { codexHome } : {}),
-        ...(grokConnected ? { openCodeXdg: services.authRoot } : {}),
+        ...(openCodeUrl !== undefined ? { openCodeUrl } : {}),
         ...(grokModel !== undefined ? { grokModel } : {}),
     });
     return {

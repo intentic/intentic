@@ -4922,10 +4922,13 @@ export const BrowserNameParamSchema = z.object({ name: z.string() });
 export const SubagentKindSchema = z.enum(["subagent", "codex", "grok"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 
-// running/pending are live; the rest are terminal. Deliberately the SDK's own task vocabulary
+// running/pending/blocked are live; the rest are terminal. Deliberately the SDK's own task vocabulary
 // (SDKTaskUpdatedMessage.patch.status) rather than AgentStatus: this is not a fleet card's lifecycle (no
-// draft/landed/conflict), and mapping the two would invent states neither side reports.
-export const SubagentStatusSchema = z.enum(["pending", "running", "completed", "failed", "killed", "paused"]);
+// draft/landed/conflict), and mapping the two would invent states neither side reports. `blocked` is the one
+// addition the SDK never says: it comes from a delegated CLI's own signals (a Codex PermissionRequest hook, an
+// OpenCode permission ask — agent/delegation-signals.ts), and it exists because "the child needs an answer" is
+// the one live state a parent or an operator acts on differently from "the child is working".
+export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 
 export const SubagentSessionSchema = z.object({
