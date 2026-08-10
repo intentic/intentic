@@ -151,24 +151,25 @@ Recording these so nobody re-researches them:
 | punkpeye/awesome-mcp-devtools | 475 | For MCP SDKs and testing utilities, not MCP-consuming apps |
 | av/awesome-llm-services | 250 | Self-hostable *inference* services |
 
-## Submitted — state as of 2026-08-10
+## Submitted — state re-verified 2026-08-10 21:51 UTC
 
 Twelve pull requests, one entry each, placed in the section and format the list itself specifies. All are
 single-file and additions-only, and each body discloses that the submitter maintains intentic. The State column
-is live status, not day-one status — check it before touching anything.
+is live status, not day-one status — re-poll it before touching anything, because two of these have already
+moved.
 
 | List | PR | Where it lands | State |
 | --- | --- | --- | --- |
 | Piebald-AI/awesome-gemini-cli | [#87](https://github.com/Piebald-AI/awesome-gemini-cli/pull/87) | Agent Orchestration & CLI Tools | **merged** |
 | debarshibasak/awesome-paas | [#69](https://github.com/debarshibasak/awesome-paas/pull/69) | Cloud IDE or Developer Workspaces | **merged** |
 | awesome-opencode | [#580](https://github.com/awesome-opencode/awesome-opencode/pull/580) | `data/projects/intentic.yaml` | open, CI awaiting maintainer approval |
-| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, **merge conflict** — needs a rebase |
+| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, **merge conflict** — needs a rebase; own CI green |
 | punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical | open, clean |
 | steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants | open, CI awaiting approval |
 | jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean — template check green |
-| AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` | open |
+| AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` | open, clean |
 | ai-for-developers/awesome-ai-coding-tools | [#603](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/603) | Coding Agents | open, clean |
-| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | open |
+| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | open, clean |
 | RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps | open, clean |
 | andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents — Desktop & Web, alphabetical | open, clean (added 2026-08-10) |
 
@@ -224,7 +225,12 @@ Codex list a legitimate target rather than a stretch.
 
 1. **Now** — rebase `ikaijua/Awesome-AITools` [#782](https://github.com/ikaijua/Awesome-AITools/pull/782); the
    AI Coding table moved under it and it currently cannot merge. Rebase with an ordinary commit, never a
-   branch delete (rule 1).
+   branch delete (rule 1). The row itself is correct — right table, neighbour format, stars badge, `Free` —
+   and the list's own checks (`link-check`, `auto-response`) are green, so the conflict is the only blocker.
+   Two things worth fixing in the same pass: the PR body is prose where that list asks for the seven-field
+   [recommendation template](https://github.com/ikaijua/Awesome-AITools/issues/233) (Tool Name & URL, Core
+   Features, Key Differentiators, Target Users, Getting Started, Pricing, Other), and the row's engine list
+   reads "Claude Code, Codex, OpenCode and Gemini CLI" without the native-versus-ACP distinction below.
 2. **2026-08-18** — awesome-claude-code, through the issue form, exactly to its style rules. This is the one
    worth writing the description for twice.
 3. **At 1k stars** — promote the steven2358 entry from Discoveries to the main list.
