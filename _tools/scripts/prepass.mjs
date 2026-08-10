@@ -516,7 +516,33 @@ const git = (...args) => {
     return result.status === 0 ? result.stdout : undefined;
 };
 const shrunk = (base, head, at, out) => {
-    if (typeof base !== "object" || base === null || Array.isArray(base) || typeof head !== "object" || head === null || Array.isArray(head)) {
+    /* Arrays are the schema's COLLECTIONS — `oneOf` alternatives, `enum` values, `required` names — and
+     * contract-lock.ts keeps them in the order zod declared them rather than sorting, so a position means
+     * nothing on its own. Compared as one blob they made growth look like a break: a union that gained a
+     * member, an enum that gained a value, a variant that gained an OPTIONAL field each came back as
+     * "CapabilitySchema.oneOf changed", which is the one thing this gate promised not to say. So every element
+     * the base offered must still be matched by SOME element of the head, and extras pass in silence exactly
+     * like a new property does. An element that merely changed reads as removed — the same verdict either way,
+     * and `git diff` on the lock line says which. */
+    if (Array.isArray(base) || Array.isArray(head)) {
+        if (!Array.isArray(base) || !Array.isArray(head)) {
+            out.push(at);
+            return;
+        }
+        for (const [index, item] of base.entries()) {
+            const itemAt = typeof item === "object" && item !== null ? `${at}[${index}]` : `${at} ${JSON.stringify(item)}`;
+            const offered = head.some((candidate) => {
+                const missing = [];
+                shrunk(item, candidate, itemAt, missing);
+                return missing.length === 0;
+            });
+            if (!offered) {
+                out.push(`${itemAt} (removed)`);
+            }
+        }
+        return;
+    }
+    if (typeof base !== "object" || base === null || typeof head !== "object" || head === null) {
         if (JSON.stringify(base) !== JSON.stringify(head)) {
             out.push(at);
         }
