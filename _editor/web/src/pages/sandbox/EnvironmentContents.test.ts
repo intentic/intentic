@@ -1,0 +1,200 @@
+// @vitest-environment jsdom
+//
+// THE SUBJECT IS SPACE, and space is the one thing a projection test cannot see. This tab drew every entry the
+// same way — an icon column that was the same grey box eighteen times, a name line, and a whole second line for
+// a sentence, on a row a thousand pixels wide — which made it two screens long and made the three entries
+// somebody actually decided on the quietest thing on it.
+//
+// So what is pinned here is the shape, not the inventory (contents.integration.test.ts has that): that the
+// staples are a strip you scan rather than thirteen rows you scroll, that a closed row costs one line, that the
+// filter reaches every group rather than the long one, and that the attribution says nothing three times.
+import type { EnvironmentItem } from "@intentic-app/api-contract";
+import { afterEach, expect, it, vi } from "vitest";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
+import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
+
+// The import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
+// useDevice reads window.matchMedia; environment.ts reads window.env). The brand CDN is stubbed to refuse, which
+// is also what an offline sandbox does — every mark then paints the tier underneath, and nothing here is waiting
+// on a network round trip.
+vi.hoisted(() => {
+    globalThis.matchMedia ??= ((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    })) as unknown as typeof globalThis.matchMedia;
+    globalThis.window.env ??= {
+        production: false,
+        api: { url: `http://localhost` },
+        auth: { googleClientId: `` },
+        analytics: { posthogKey: ``, posthogHost: `` },
+    };
+    globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
+});
+
+const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
+
+const staple = (name: string, bin: string, version: string, purpose: string): EnvironmentItem => ({
+    id: `base:${bin}`,
+    name,
+    origin: `base`,
+    state: `active`,
+    tools: [{ name: bin, version }],
+    purpose,
+});
+
+// One of each group, as an ordinary sandbox holds them: something an agent added with a rationale behind it,
+// something a capability dragged in, and the staples nobody chose.
+const GROUPS: ContentsGroup[] = [
+    {
+        origin: `custom`,
+        label: `Added for this workspace`,
+        items: [
+            {
+                id: `custom:ffmpeg`,
+                name: `ffmpeg`,
+                origin: `custom`,
+                state: `active`,
+                tools: [{ name: `ffmpeg`, version: `5.1.9` }],
+                purpose: `ffmpeg — encoding screen recordings.`,
+                detail: `The recordings the machine agents produce are raw frames until something encodes them.`,
+                commands: `RUN apt-get install -y ffmpeg`,
+            },
+        ],
+    },
+    {
+        origin: `capability`,
+        label: `From your capabilities`,
+        items: [
+            {
+                id: `capability:docker`,
+                name: `docker`,
+                origin: `capability`,
+                originLabel: `docker capability`,
+                state: `active`,
+                tools: [{ name: `docker`, version: `29.7.2` }],
+                purpose: `docker capability: this directive grants dockerd the privileges it needs.`,
+            },
+            {
+                id: `capability:tauri`,
+                name: `Rust tauri`,
+                origin: `capability`,
+                originLabel: `workspace extension`,
+                state: `active`,
+                tools: [{ name: `rustc`, version: `1.97.1` }],
+                purpose: `The desktop app is a Tauri shell.`,
+            },
+        ],
+    },
+    {
+        origin: `base`,
+        label: `Comes with every sandbox`,
+        items: [
+            staple(`Node.js`, `node`, `24.18.0`, `The runtime everything JavaScript in here runs on.`),
+            staple(`Python`, `python3`, `3.11.2`, `Scripting, plus anything reached for with pip.`),
+            staple(`ripgrep`, `rg`, `13.0.0`, `Fast text search across the workspace.`),
+        ],
+    },
+];
+
+let app: App | undefined;
+
+const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin.
+    app = createApp({ render: () => h(EnvironmentContents, { groups, awaiting: 0, loading: false }) });
+    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    return el;
+};
+
+// Every pill in the staples strip. The filter's own clear button is a `button` too, and names itself.
+const pills = (el: HTMLElement): HTMLButtonElement[] =>
+    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => button.ariaLabel !== `Clear filter`);
+
+// A pill's words, in order. Read per child because the mark, the name and the version are siblings with no text
+// between them — the gap is a layout gap, so the concatenated textContent runs "Node.js24.18.0".
+const wordsOf = (element: Element): string =>
+    [...element.children]
+        .map((child) => child.textContent?.trim() ?? ``)
+        .filter((text) => text !== ``)
+        .join(` `);
+
+const filterBy = async (el: HTMLElement, text: string): Promise<void> => {
+    const input = el.querySelector<HTMLInputElement>(`input[role="searchbox"]`);
+    input!.value = text;
+    input!.dispatchEvent(new Event(`input`));
+    await nextTick();
+};
+
+afterEach(() => {
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+});
+
+it(`draws the staples as a strip whose sentences are one click away`, async () => {
+    const el = mount();
+    // One pill per staple, name and version on it — the whole question this group is ever asked.
+    expect(pills(el).map(wordsOf)).toEqual([`Node.js 24.18.0`, `Python 3.11.2`, `ripgrep 13.0.0`]);
+    // And thirteen sentences nobody reads are not on screen costing thirteen lines.
+    expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
+
+    pills(el)[0]!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`The runtime everything JavaScript in here runs on.`);
+
+    // One at a time: the next pill replaces the sentence rather than pushing the strip apart.
+    pills(el)[1]!.click();
+    await nextTick();
+    expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
+    expect(el.textContent).toContain(`Scripting, plus anything reached for with pip.`);
+});
+
+it(`keeps a closed row to its one line, and opens the whole comment in place`, async () => {
+    const el = mount();
+    const row = el.querySelector<HTMLElement>(`.ui-row-select`);
+    // The sentence rides the name; the rationale and the install lines do not exist until asked for.
+    expect(el.textContent).toContain(`ffmpeg — encoding screen recordings.`);
+    expect(el.textContent).not.toContain(`raw frames until something encodes them`);
+
+    row!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`raw frames until something encodes them`);
+    expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
+});
+
+it(`filters across every group, and drops the ones that match nothing`, async () => {
+    const el = mount();
+    // A staple, found from the tab's one filter — the question does not know which group its answer is in.
+    await filterBy(el, `python`);
+    expect(el.textContent).toContain(`Comes with every sandbox`);
+    expect(el.textContent).not.toContain(`Added for this workspace`);
+    expect(pills(el)).toHaveLength(1);
+
+    // A workspace addition, from the same field.
+    await filterBy(el, `ffmpeg`);
+    expect(el.textContent).toContain(`Added for this workspace`);
+    expect(el.textContent).not.toContain(`Comes with every sandbox`);
+
+    // An empty bordered surface under a heading would read as "you have none of these", which is a lie about a
+    // group the query simply missed.
+    await filterBy(el, `haskell`);
+    expect(el.textContent).toContain(`Nothing here matches`);
+    expect(el.querySelectorAll(`.ui-row-select`)).toHaveLength(0);
+});
+
+it(`only names the source when it is not already saying the row's own name`, () => {
+    const el = mount();
+    // The trailing facts cluster, which is where a row states what pulled it in.
+    const facts = [...el.querySelectorAll(`.tabular-nums`)].map((meta) => meta.textContent?.trim() ?? ``).join(` `);
+    // "docker capability", on a row called docker, under a heading called From your capabilities.
+    expect(facts).not.toContain(`docker capability`);
+    // What nobody could have guessed from the row survives.
+    expect(facts).toContain(`workspace extension`);
+});
