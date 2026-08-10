@@ -50,9 +50,10 @@ import { fileLoopsStore, type LoopsStore } from "./loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type WorkflowsStore } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
-import { type CapabilitiesStore, fileCapabilitiesStore, withSecretVault } from "./capabilities/capabilities-store.js";
+import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
 import { contributionRegistry } from "./capabilities/contributions.js";
 import { fileSecretVault } from "./capabilities/secret-vault.js";
+import { secretValuesOf } from "./secrets/secret-values.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
@@ -293,6 +294,13 @@ export interface Services {
     // carry the daemon-provisioned free-trial endpoint when the platform serves one (trial/trial-endpoint.ts);
     // it is never written to the file.
     readonly capabilities: CapabilitiesStore;
+    // Moves any credential still sitting in the READABLE manifest into the vault, answering the ids it moved.
+    // A boot step (main.ts), and an invariant rather than a one-time conversion — the manifest is a file the
+    // agent may edit, so a real value can arrive in it at any time (capabilities/capabilities-store.ts).
+    readonly vaultManifestSecrets: () => Promise<readonly string[]>;
+    // Every credential value this sandbox stores — the capability vault plus the DevOps .env — which the agent's
+    // PostToolUse masking blanks out of EVERY tool result, not just the terminal's (agent/agent-redaction.ts).
+    readonly secretValues: () => Promise<readonly string[]>;
     // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
@@ -769,25 +777,18 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * RAW manifest rather than the vaulted store — enumerating extensions reads capability entries, so pointing
      * it at the decorator would have the decorator call itself. Enumeration only ever looks at an entry's
      * kind/id/path, never at a credential, so the un-rehydrated view is the whole truth it needs. */
-    const capabilities = withTrialEndpoint(
-        withSecretVault(
-            capabilityManifest,
-            secretVault,
-            () =>
-                contributionRegistry({
-                    workspace: { root: workspace.root },
-                    files: { read: readWorkspaceFile },
-                    capabilities: capabilityManifest,
-                    config: { extensionsDir: config.extensionsDir },
-                }),
-            (id, fields) =>
-                logger.warn(
-                    `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
-                ),
-        ),
-        config,
-        trial,
-    );
+    const secretFieldConnectors = () =>
+        contributionRegistry({
+            workspace: { root: workspace.root },
+            files: { read: readWorkspaceFile },
+            capabilities: capabilityManifest,
+            config: { extensionsDir: config.extensionsDir },
+        });
+    const onUnvaultable = (id: string, fields: readonly string[]): void =>
+        logger.warn(
+            `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
+        );
+    const capabilities = withTrialEndpoint(withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable), config, trial);
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}) — the rest are unaffected`),
     );
@@ -876,6 +877,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,
+        vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
+        secretValues: secretValuesOf(secretVault, () => workspace.repos["desired-state"]),
         trial,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
         personas,

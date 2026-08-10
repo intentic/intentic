@@ -157,3 +157,43 @@ export const withSecretVault = (
         },
     };
 };
+
+/* THE SPLIT AS AN INVARIANT RATHER THAN A WRITE-TIME HABIT — answers the ids it had to move.
+ *
+ * `upsert` above is the only thing that vaults, so the manifest holds the shape of a connection only for the
+ * entries written since it did. Every OTHER entry — one saved before the split existed, one the agent pasted a
+ * real token back into with its own file tools, one restored from an export — sits in .intentic/capabilities.json
+ * with the credential still in it, and nothing rewrites it because nothing re-saves a service that is working.
+ * The manifest is deliberately readable and deliberately editable, so "a credential is in there" is a state the
+ * system can re-enter at any time, not a leftover of one version. Hence a sweep that runs on every boot and
+ * says nothing when there is nothing to move, rather than a conversion that runs once.
+ *
+ * It moves values by re-upserting through the decorator, so there is one implementation of what gets vaulted
+ * and what stands in its place. Entries whose secret fields all read as the marker are left untouched — an
+ * already-correct manifest is never rewritten, which is what keeps this from churning the file (and its
+ * watchers) on every restart.
+ */
+export const vaultManifestSecrets = async (
+    inner: CapabilitiesStore,
+    vault: SecretVault,
+    connectors: () => Promise<Map<string, ResolvedContribution>>,
+    onUnvaultable?: (id: string, fields: readonly string[]) => void,
+): Promise<readonly string[]> => {
+    const resolved = await connectors();
+    const store = withSecretVault(inner, vault, async () => resolved, onUnvaultable);
+    const moved: string[] = [];
+    // The RAW manifest, deliberately: the decorated read rehydrates, which would show a vaulted entry exactly
+    // as it shows one that never left the file — the difference this has to see.
+    for (const entry of await inner.list()) {
+        const { values } = partitionSecretValues(entry, resolved);
+        if (Object.values(values).every((value) => value === VAULTED)) {
+            continue;
+        }
+        /* What READERS currently see, not what the file says. `hydrate` gives the vault priority over the
+         * manifest, so an entry carrying a value in both places is already being used from the vault — moving
+         * the file's copy in would quietly swap the credential a working service authenticates with. */
+        await store.upsert(hydrate(entry, await vault.get(entry.id)));
+        moved.push(entry.id);
+    }
+    return moved;
+};

@@ -728,6 +728,9 @@ export const planHarnessTurn = async (
             // filter's all-on default) and the holdout control fraction.
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
+            // Every stored credential, masked out of every tool result — unconditional, because unlike the
+            // cleaners this is not a saving that can be traded away (agent/agent-redaction.ts).
+            secretValues: services.secretValues,
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             /* The delegation ceilings, forwarded ONLY WHERE THE OWNER MOVED ONE. An untouched cap is left for the
              * harness to answer, which is not the same as sending the number the harness would have picked: the

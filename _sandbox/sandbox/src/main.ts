@@ -94,6 +94,7 @@ const BOOT_STEPS = [
     { key: "authorizedKeys", label: "Restoring desktop enrollments" },
     { key: "claudeState", label: "Linking conversation state" },
     { key: "sshHosts", label: "Linking ssh hosts" },
+    { key: "vaultSecrets", label: "Securing stored credentials" },
     { key: "rootRepo", label: "Preparing the workspace repo" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
     { key: "staleExports", label: "Sweeping interrupted exports" },
@@ -418,6 +419,21 @@ const main = async (): Promise<void> => {
         await linkSshHosts(config.historyRoot).catch((error: unknown) =>
             logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
         );
+    });
+
+    /* The capability manifest is meant to be readable and editable by the agent, so the credential VALUES are
+     * kept out of it and in a store off /work. Only a SAVE moves them, though, which leaves every service
+     * connected before the split — and any entry the agent pasted a real token back into — sitting in a file a
+     * plain Read hands to the model. Sweep them in before the gate opens, so no turn can read the file first.
+     * Best-effort: a manifest this daemon cannot rewrite is a warning, never a boot failure. */
+    await boot.step("vaultSecrets", async () => {
+        const moved = await services.vaultManifestSecrets().catch((error: unknown) => {
+            logger.warn({ err: error }, "capability credentials: could not be moved out of the manifest — they stay readable to the agent");
+            return [];
+        });
+        if (moved.length > 0) {
+            logger.info({ capabilities: moved }, "capability credentials moved out of the workspace manifest into the private store");
+        }
     });
 
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge

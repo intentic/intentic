@@ -44,6 +44,7 @@ import { depsNoticeHooks } from "./agent-deps.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
+import { redactionHooks } from "./agent-redaction.js";
 import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
@@ -218,6 +219,9 @@ export interface AgentRequest {
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
+    // Every credential value this sandbox stores, masked out of EVERY tool result before the model sees it —
+    // the Bash filter covers only the terminal lane (agent/agent-redaction.ts). Absent ⇒ no hook is wired.
+    readonly secretValues?: () => Promise<readonly string[]>;
     /* THE HARNESS'S OWN DELEGATION CEILINGS, each raised or lowered by the matching sandbox setting: how many
      * subagents may run at once, how many one conversation may spawn in total, and how deep they may nest.
      * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands — which turn-plan relies on,
@@ -1374,6 +1378,10 @@ const baseOptions = (
               })
             : {},
         tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
+        /* Every stored credential blanked out of every tool RESULT. The Bash filter masks the terminal lane and
+         * only that one, so which of Read/Grep/an MCP call fetched a secret decided whether the model saw it —
+         * this makes the answer the same for all of them (agent/agent-redaction.ts). */
+        request.secretValues !== undefined ? redactionHooks(request.secretValues) : {},
         installSteeringHooks(request.dependencyInstallAllowed === true),
         // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
         // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
