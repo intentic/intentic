@@ -64,9 +64,42 @@ if (-not $Repair -and (-not $Url -or -not $Token)) {
     Die 'need -Url and -Token to register a new runner, or -Repair to fix an existing one.'
 }
 
+# ── where the runner actually is ─────────────────────────────────────────────────────────────────────────────
+# $RunnerRoot's default is THIS SCRIPT'S convention, and the machine -Repair exists for — one somebody
+# registered the ordinary way, as a service — is exactly the machine that never followed it. The Windows runner
+# was configured at C:\runner, so the bare `-Repair` that `doctor` prints on finding session 0 died on "no
+# runner to repair" while the runner it meant ran beside it: the one failure a person has to fix by hand, and
+# the instruction for fixing it did not work on the machine it was printed about.
+#
+# So an unpassed -RunnerRoot is DISCOVERED from what is already installed — the service's own image path first,
+# since on the failing machine the service IS the thing being removed, then a listener already running, for a
+# root someone registered as a task under a different convention. Both name <root>\bin\<exe>, hence two parents.
+if (-not $PSBoundParameters.ContainsKey('RunnerRoot')) {
+    $image = (Get-CimInstance Win32_Service -Filter "Name LIKE 'actions.runner.%'" -ErrorAction SilentlyContinue |
+        Select-Object -First 1).PathName
+    if (-not $image) {
+        $image = (Get-CimInstance Win32_Process -Filter "Name='Runner.Listener.exe'" -ErrorAction SilentlyContinue |
+            Select-Object -First 1).ExecutablePath
+    }
+    # A service's image path is quoted when the path has spaces in it, and can carry arguments after the exe.
+    if ($image) { $image = $image.Trim() }
+    if ($image -and $image.StartsWith('"')) { $image = $image.Substring(1).Split('"')[0] }
+    if ($image) {
+        $found = Split-Path (Split-Path $image -Parent) -Parent
+        # Asserted rather than assumed: a directory with no run.cmd in it is not a runner root, and adopting one
+        # silently would point the repair at nothing while reporting that it had found the installation.
+        if ($found -and (Test-Path (Join-Path $found 'run.cmd'))) {
+            $RunnerRoot = $found
+            Step "found the runner at $RunnerRoot"
+        }
+    }
+}
+
 # ── the runner package ───────────────────────────────────────────────────────────────────────────────────────
 if (-not (Test-Path (Join-Path $RunnerRoot 'run.cmd'))) {
-    if ($Repair) { Die "no runner at $RunnerRoot to repair." }
+    if ($Repair) {
+        Die "no runner to repair: nothing at $RunnerRoot, and no service or listener on this machine pointed anywhere else. Pass -RunnerRoot if it is installed somewhere this could not see."
+    }
     Step "downloading the runner into $RunnerRoot..."
     New-Item -ItemType Directory -Force -Path $RunnerRoot | Out-Null
     if (-not $RunnerVersion) {

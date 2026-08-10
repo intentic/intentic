@@ -51,8 +51,15 @@ So it is a property of how the runner was REGISTERED, and registering is a scrip
 ```
 
 Run it on a machine somebody already registered as a service and it takes the service out and puts the logon
-task in — `-Repair` does that alone, no token needed. `doctor` asserts the result directly, and names that
+task in — `-Repair` does that alone, no token needed. It finds the runner wherever that person put it, by
+reading the service's own image path rather than assuming this script's default root, so the bare command
+below works on a machine nobody set up with this script. `doctor` asserts the result directly, and names that
 command when it fails, so this is also the answer to a runner that mysteriously stopped mapping windows.
+
+```powershell
+# From an ELEVATED PowerShell on the runner. Pass -RunnerRoot only if it is somewhere this cannot find.
+./_tools/scripts/setup-windows-runner.ps1 -Repair
+```
 
 After an unattended reboot the runner waits for someone to sign in. `-AutoLogon` removes that wait by storing a
 logon password in the registry in cleartext; it is off by default because that is a poor trade on a machine

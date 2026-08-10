@@ -87,18 +87,27 @@ test("--no-local-publish drops only the shortcut, so a port docker refused can't
  * Anything less and the daemon inside would have to guess whether missing hardware means "not rebuilt yet" or
  * "this machine cannot", which are opposite instructions to give a person. */
 test("host-probes names what to ask the host, and only for what the overlay asked", async () => {
-    const { stdout } = await runProbes(["--runtime", "# intentic:runtime --privileged --gpus=all"]);
-    expect(stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
-    // --privileged is all-or-nothing: there is nothing to ask, because a host that refuses it has broken the
-    // capability and the launch should fail rather than limp.
-    expect((await runProbes(["--runtime", "# intentic:runtime --privileged"])).stdout).toBe("");
+    // Two independent invocations, so they go out together — the same reason the test below takes its three that
+    // way. A tsx start is the only real cost this file has, so a test that spends two in sequence is asking for
+    // twice the budget its one-spawn siblings pass inside, against the same 30s. That is exactly what happened:
+    // every single-spawn test in this file survived a loaded runner at 13-17s and this one hit the wall at 30.1s.
+    const [asked, allOrNothing] = await Promise.all([
+        runProbes(["--runtime", "# intentic:runtime --privileged --gpus=all"]),
+        // --privileged is all-or-nothing: there is nothing to ask, because a host that refuses it has broken the
+        // capability and the launch should fail rather than limp.
+        runProbes(["--runtime", "# intentic:runtime --privileged"]),
+    ]);
+
+    expect(asked.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
+    expect(allOrNothing.stdout).toBe("");
 }, 30_000);
 
 test("--unsupported drops those directives and records why, leaving the rest of the run intact", async () => {
     const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
     // Three independent invocations, so they go out together. Nothing here depends on the one before it, and a
     // tsx start is the only real cost this file has: taken in sequence, this test paid it three times against
-    // the same 30s its one-spawn siblings get, which is why it — and only it — timed out on a loaded runner.
+    // the same 30s its one-spawn siblings get, which is why it timed out on a loaded runner. Every multi-spawn
+    // test here now goes out this way — the one above serialized two and hit the same wall five days later.
     const [honoured, unsupported, detached] = await Promise.all([
         runVerb(args, ""),
         // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
