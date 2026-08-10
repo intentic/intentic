@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Provision this PC as the Windows CI runner, and bring an existing one back to the shape the desktop tiers
   need. Companion to docs/ci-runner-windows.md, which explains why the shape is what it is.
@@ -13,6 +13,13 @@
 
   Idempotent, and a reconciler rather than an installer: run it on a machine somebody already registered as a
   service and it takes the service out and puts the logon task in.
+
+  SAVED WITH A UTF-8 BOM, AND IT HAS TO STAY. Windows PowerShell 5.1 — still what an elevated "PowerShell"
+  window is on a stock Windows 11, and so what somebody following the docs above will use — reads a BOM-less
+  file as ANSI, which turns each em dash in the strings below into a byte it takes for a closing quote. That is
+  not a display problem: it ends those strings early and the script dies as five parse errors having done
+  nothing. pwsh reads UTF-8 with or without the mark, which is exactly how a file that had never run under 5.1
+  passed every test it was given.
 
 .EXAMPLE
   # From an ELEVATED PowerShell. Token from Settings > Actions > Runners > New self-hosted runner (Windows x64).
