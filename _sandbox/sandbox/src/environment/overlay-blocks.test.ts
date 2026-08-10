@@ -77,18 +77,37 @@ test("a long sentence with no clause break is left whole rather than butchered",
     expect(purposeOf(long)).toBe(long);
 });
 
-test("the disclosure drops a summary the row already shows verbatim", () => {
-    expect(detailOf(`It does the thing. And here is why that was necessary.`, `It does the thing.`)).toBe(`And here is why that was necessary.`);
-});
-
-test("the disclosure keeps a sentence the row had to trim, since the trimmed part is why it was opened", () => {
+/* The disclosure is the prose WHOLE, not the prose minus the row's line. Slicing the line off only works while
+ * the two are cut at the same place, and they are not — the row's line drops a trailing parenthetical and cuts
+ * an over-long sentence back to its claim — so the remainder still opened with the sentence the row was showing
+ * and the view printed it twice. */
+test("the disclosure is the whole explanation, so the row's summary is never printed twice", () => {
     const prose = `ffmpeg — encoding screen recordings (Playwright records VP8/WebM). More detail follows.`;
     expect(detailOf(prose, `ffmpeg — encoding screen recordings.`)).toBe(prose);
+    expect(detailOf(`It does the thing. And here is why that was necessary.`, `It does the thing.`)).toBe(
+        `It does the thing. And here is why that was necessary.`,
+    );
 });
 
 test("nothing beyond the row's line means nothing to disclose", () => {
     expect(detailOf(`It does the thing.`, `It does the thing.`)).toBeUndefined();
     expect(detailOf(``, undefined)).toBeUndefined();
+});
+
+/* A capability fragment is written for the Dockerfile it lands in, where naming its own source is the only
+ * provenance there is and a runtime marker has nowhere else to live. In this view the row is already titled
+ * `docker`, already grouped under the capabilities and already attributed, so both come off. */
+test("prose drops the source the row already names, and the directives addressed to the rebuilder", () => {
+    const fragment = `# docker capability: this directive grants dockerd the privileges it needs
+# (translated to a --privileged run by the allowlisted rebuild executors).
+# intentic:runtime --privileged`;
+    expect(blockProse(fragment, `docker capability`)).toBe(
+        `This directive grants dockerd the privileges it needs (translated to a --privileged run by the allowlisted rebuild executors).`,
+    );
+    // Nothing is stripped on a hunch: the same words, with no label that matches them, are somebody's sentence.
+    expect(blockProse(`# WebKitGTK: the webview Tauri draws into on Linux.`, `rust capability`)).toBe(
+        `WebKitGTK: the webview Tauri draws into on Linux.`,
+    );
 });
 
 test("commands are everything below the explanation", () => {

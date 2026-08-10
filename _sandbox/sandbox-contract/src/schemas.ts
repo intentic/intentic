@@ -5227,8 +5227,10 @@ export const EnvironmentItemSchema = z.object({
     extras: z.number().optional(),
     // One standalone line, from the block's opening comment — the part everyone reads.
     purpose: z.string().optional(),
-    // The rest of that comment, as prose. Long (the rationale for a toolchain runs to paragraphs), so it lives
-    // behind a disclosure rather than on the row.
+    /* That comment in full, as prose, absent when the line above already is the whole of it. NOT the remainder
+     * after the line: `purpose` is a summary of this (a parenthetical dropped, an over-long sentence cut back to
+     * its claim), so the two overlap by design and it is the reader's view that picks one. Long — the rationale
+     * for a toolchain runs to paragraphs — so it lives behind a disclosure rather than on the row. */
     detail: z.string().optional(),
     // The block's own instruction lines, for the reader who wants to see exactly what runs.
     commands: z.string().optional(),

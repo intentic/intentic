@@ -28,8 +28,15 @@ import { environmentVisual } from "./environmentVisual";
  * THE EXPLANATION IS STILL NOT HOVER-ONLY. Hover was the obvious way to hang these rationales off a compact view
  * and it is the wrong one: it does not exist on a touch screen, it is awkward from the keyboard, and a
  * twenty-line box that vanishes when the pointer crosses a gap is not a place anybody reads. A click opens the
- * rest in place. Hover stays what it is good for: text that had to be cut, and the provenance of a version
+ * paragraph in place. Hover stays what it is good for: text that had to be cut, and the provenance of a version
  * number — a footnote read once, which used to cost three lines at the top of the tab.
+ *
+ * AND NOTHING IS SHOWN TWICE, WHICH TOOK BOTH SIDES. Every long entry here used to open on its own opening
+ * sentence twice — once as the row's trimmed line, once as the head of the paragraph below it — because the
+ * disclosure was built as "the prose minus the row's line" while the row's line is a SUMMARY of that prose
+ * rather than its first instalment. The daemon now sends the paragraph whole (see detailOf) and this view shows
+ * one of the two at a time; the same rule is why the row's tooltip is `.overflow` and why the strip's pills open
+ * one sentence at a time.
  */
 
 const { groups, awaiting, loading, error } = defineProps<{
@@ -39,14 +46,22 @@ const { groups, awaiting, loading, error } = defineProps<{
     error?: string;
 }>();
 
-// Which rows are open. Ids, not a flag per item, so the set survives a refetch replacing the objects.
+// Which rows are open, and which of those have been asked for the whole of their prose. Ids, not a flag per
+// item, so both sets survive a refetch replacing the objects.
 const open = ref(new Set<string>());
-const toggle = (id: string): void => {
-    const next = new Set(open.value);
+const full = ref(new Set<string>());
+const flipped = (ids: Set<string>, id: string): Set<string> => {
+    const next = new Set(ids);
     if (!next.delete(id)) {
         next.add(id);
     }
-    open.value = next;
+    return next;
+};
+const toggle = (id: string): void => {
+    open.value = flipped(open.value, id);
+};
+const toggleFull = (id: string): void => {
+    full.value = flipped(full.value, id);
 };
 
 /* ONE FILTER FOR THE WHOLE TAB, not one per group. "Is X installed?" does not know which group X is in — ffmpeg
@@ -110,10 +125,19 @@ const stateOf = (item: EnvironmentItem) => STATES[item.state];
 const attribution = (item: EnvironmentItem): string | undefined =>
     item.originLabel?.toLowerCase().startsWith(item.name.toLowerCase()) === false ? item.originLabel : undefined;
 
-// The whole comment the agent wrote, in the order it was written: the standalone opening line, then the rest.
-// Joined rather than stacked, because the row above shows the opening line CUT, and reading it whole is half of
-// why the disclosure is worth opening.
-const prose = (item: EnvironmentItem): string => [item.purpose, item.detail].filter((part) => part !== undefined).join(`\n\n`);
+/* WHAT AN OPENED ROW SHOWS: the comment the agent wrote, whole, from the top. Not the row's line and then the
+ * rest of it — the row's line is a SUMMARY of this paragraph (a trailing parenthetical dropped, an over-long
+ * sentence cut back to its claim), so stacking the two printed the opening twice, once cut and once in full,
+ * which is what the reader was seeing. */
+const explanation = (item: EnvironmentItem): string => item.detail ?? item.purpose ?? ``;
+
+/* AND IT LEADS WITH THE OPENING PARAGRAPH. A toolchain's rationale runs to bullets, CI history and the reason a
+ * package list is copied verbatim — all worth keeping, none of it worth landing at once on somebody who clicked
+ * a row to find out why Rust is in here. Cut at the paragraph break the agent wrote rather than at a line count,
+ * so "there is more" is a fact about the text instead of a guess about the width it renders at. */
+const paragraphs = (item: EnvironmentItem): string[] => explanation(item).split(`\n\n`);
+const opening = (item: EnvironmentItem): string => paragraphs(item)[0] ?? ``;
+const rest = (item: EnvironmentItem): string => paragraphs(item).slice(1).join(`\n\n`);
 // Anything the row had to leave out. The plumbing count is in here too, so a block that installs nothing but
 // libraries still has somewhere to say so.
 const expandable = (item: EnvironmentItem): boolean => item.detail !== undefined || item.commands !== undefined || item.extras !== undefined;
@@ -191,10 +215,12 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                             +{{ item.tools.length - CHIP_LIMIT }} more
                         </span>
                         <!-- And it steps aside once the row is open: the same sentence is the first line of the
-                             disclosure, in full, two lines below. Cut and whole at once reads as a repeat. -->
+                             disclosure, in full, two lines below. Cut and whole at once reads as a repeat.
+                             `.overflow` for the same reason one level down — a tooltip that quotes a line the
+                             reader can already see whole is the same repeat in a box. -->
                         <span
                             v-if="item.purpose !== undefined && !open.has(item.id)"
-                            v-tooltip.bottom="item.purpose"
+                            v-tooltip.bottom.overflow="item.purpose"
                             class="hidden min-w-0 truncate text-2xs font-normal text-muted sm:block"
                         >
                             {{ item.purpose }}
@@ -218,17 +244,34 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                 <!-- The slot itself is conditional, not its contents: a row that declares one always gets the
                      gap above it, and twelve pixels of nothing per closed row is what this view is fixing. -->
                 <template v-if="open.has(item.id)" #below>
-                    <div class="flex flex-col gap-3">
+                    <!-- The disclosure keeps its own clicks: the row header is what closes the row, so "Show
+                         more" and the code block's copy button must not travel up to it and collapse the thing
+                         the reader just asked to see. -->
+                    <div class="flex flex-col gap-3" @click.stop>
                         <!-- What the agent wrote, as prose. Its own paragraphs, its own bullet lists — it was
                              written to be read, and rendering it as code would undo that. -->
-                        <p class="whitespace-pre-line text-xs leading-relaxed text-muted">{{ prose(item) }}</p>
+                        <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
+                            {{ full.has(item.id) ? explanation(item) : opening(item) }}
+                        </p>
+                        <button
+                            v-if="rest(item) !== ``"
+                            type="button"
+                            :class="cmp.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                            @click="toggleFull(item.id)"
+                        >
+                            {{ full.has(item.id) ? `Show less` : `Show more` }}
+                            <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
+                        </button>
                         <!-- The plumbing count belongs here rather than on the row. It is the least useful fact
                              on a line that has to fit a name, its versions and a sentence — nobody runs these —
                              and it was the fact pushing the sentence off a card that shares its width. -->
                         <p v-if="item.extras !== undefined" class="text-2xs text-subtle">
                             Plus {{ item.extras }} libraries and headers these commands need, which nobody runs directly.
                         </p>
-                        <Code v-if="item.commands !== undefined" :code="item.commands" lang="docker" label="What this installs" />
+                        <!-- Clamped, with the block's own "Show all" underneath: a toolchain's install step is
+                             forty lines of apt packages and rustup flags, and unrolling all of it pushes the
+                             next row off the screen for a reader who wanted the gist. -->
+                        <Code v-if="item.commands !== undefined" :code="item.commands" lang="docker" label="What this installs" :clamp-lines="10" />
                     </div>
                 </template>
             </Row>

@@ -58,14 +58,40 @@ const commentText = (line: string): string | undefined => {
     return trimmed.startsWith("#") ? trimmed.replace(/^#+\s?/, "").trimEnd() : undefined;
 };
 
+// A comment addressed to the rebuild executors rather than to a reader (`# intentic:runtime --privileged`). It
+// is a comment only because a Dockerfile has nowhere else to put it, and reading it as prose ends a sentence
+// with "intentic:runtime --privileged".
+const isDirective = (text: string): boolean => text.startsWith("intentic:");
+
+/* THE FRAGMENT NAMING ITS OWN SOURCE, which earns its place in the file and not in this view. A capability
+ * writes "docker capability: this directive grants dockerd the privileges it needs", because in a composed
+ * Dockerfile nothing else says where a block came from — but the row is already titled `docker`, already
+ * grouped under "From your capabilities", and already attributed, so the prefix is the same word a fourth
+ * time. Anchored on the label the daemon knows, so prose that merely happens to start with a colon is left
+ * alone. */
+const withoutSource = (prose: string, source: string | undefined): string => {
+    if (source === undefined) {
+        return prose;
+    }
+    const prefix = /^(.{0,40}?):\s+/.exec(prose);
+    if (prefix?.[1]?.toLowerCase().startsWith(source.toLowerCase()) !== true) {
+        return prose;
+    }
+    const rest = prose.slice(prefix[0].length);
+    return rest.charAt(0).toUpperCase() + rest.slice(1);
+};
+
 // A bullet keeps its own line; prose is unwrapped. Fragments are hard-wrapped at ~120 columns, so joining
 // blindly would run a bulleted list into one unreadable sentence.
 const isBullet = (text: string): boolean => /^[•*-]\s/.test(text) || /^\s+/.test(text);
 
 /* THE BLOCK'S EXPLANATION, unwrapped into paragraphs. Only the comment lines ABOVE the first instruction count:
  * comments further down annotate individual commands ("same glibc rationale as…") and are notes to whoever
- * edits the recipe, not an explanation of what the thing is for. */
-export const blockProse = (body: string): string => {
+ * edits the recipe, not an explanation of what the thing is for.
+ *
+ * `source` is whatever the daemon already knows pulled the block in ("docker capability"), so an opening line
+ * that names it can come off — see withoutSource. */
+export const blockProse = (body: string, source?: string): string => {
     const paragraphs: string[] = [];
     let current: string[] = [];
     const flush = (): void => {
@@ -79,6 +105,9 @@ export const blockProse = (body: string): string => {
         if (text === undefined) {
             break;
         }
+        if (isDirective(text)) {
+            continue;
+        }
         if (text === "") {
             flush();
             continue;
@@ -91,7 +120,7 @@ export const blockProse = (body: string): string => {
         current[current.length - 1] = `${last} ${text}`;
     }
     flush();
-    return paragraphs.join("\n\n");
+    return withoutSource(paragraphs.join("\n\n"), source);
 };
 
 /* Abbreviations whose full stop does not end a sentence. Without these the one-line purpose truncates mid-clause
@@ -145,14 +174,19 @@ export const purposeOf = (prose: string): string | undefined => {
     return clause?.[1] === undefined ? line : `${clause[1]}.`;
 };
 
-/* WHAT THE DISCLOSURE ADDS to the line already on the row. When the row's purpose is the opening sentence
- * verbatim, repeating it as the first line of the expansion reads as a rendering fault, so it comes off and the
- * elaboration starts where the row left off. When the purpose was TRIMMED to get there — a parenthetical
- * dropped, a clause cut — the full sentence stays, because the part the row could not carry is exactly what
- * somebody opened the row to read. Nothing left over ⇒ nothing to disclose. */
+/* WHAT THE DISCLOSURE SHOWS: the whole explanation, once, from the top.
+ *
+ * It used to be the REMAINDER — the prose with the row's line sliced off the front — which only works while the
+ * two are cut from the same place. They are not: `purposeOf` drops a trailing parenthetical and cuts an
+ * over-long sentence back to its first clause, so the remainder still began with the sentence the row was
+ * showing, and the view (which stacks the row's line above the disclosure) printed the opening twice, once
+ * trimmed and once whole. Slicing was the wrong half of the problem to solve — the reader who opens a row wants
+ * the paragraph as it was written, and the row's line is a summary OF it rather than a first instalment of it.
+ * So the disclosure is now the prose verbatim, and the view stops stacking. Nothing more than the row already
+ * says ⇒ nothing to disclose. */
 export const detailOf = (prose: string, purpose: string | undefined): string | undefined => {
-    const rest = purpose !== undefined && prose.startsWith(purpose) ? prose.slice(purpose.length).trim() : prose.trim();
-    return rest === "" ? undefined : rest;
+    const whole = prose.trim();
+    return whole === "" || whole === purpose ? undefined : whole;
 };
 
 // Everything below the leading comment — the commands themselves, for the reader who wants to see exactly what

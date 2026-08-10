@@ -33,6 +33,13 @@ vi.hoisted(() => {
         analytics: { posthogKey: ``, posthogHost: `` },
     };
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
+    // The clamped install block watches its own width to know whether it has anything left to show; jsdom
+    // ships no ResizeObserver, and nothing measured is what this suite is about.
+    globalThis.ResizeObserver ??= class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    } as unknown as typeof globalThis.ResizeObserver;
 });
 
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
@@ -59,8 +66,13 @@ const GROUPS: ContentsGroup[] = [
                 origin: `custom`,
                 state: `active`,
                 tools: [{ name: `ffmpeg`, version: `5.1.9` }],
+                // The row's line is a TRIMMED version of the paragraph below it (the parenthetical dropped), which
+                // is the shape that used to print the opening sentence twice the moment a row was opened.
                 purpose: `ffmpeg — encoding screen recordings.`,
-                detail: `The recordings the machine agents produce are raw frames until something encodes them.`,
+                detail:
+                    `ffmpeg — encoding screen recordings (Playwright records VP8/WebM). The recordings the machine agents ` +
+                    `produce are raw frames until something encodes them.\n\nThe promo captures go out as MP4, which its ` +
+                    `bundled build cannot encode.`,
                 commands: `RUN apt-get install -y ffmpeg`,
             },
         ],
@@ -156,7 +168,7 @@ it(`draws the staples as a strip whose sentences are one click away`, async () =
     expect(el.textContent).toContain(`Scripting, plus anything reached for with pip.`);
 });
 
-it(`keeps a closed row to its one line, and opens the whole comment in place`, async () => {
+it(`keeps a closed row to its one line, and opens the comment in place`, async () => {
     const el = mount();
     const row = el.querySelector<HTMLElement>(`.ui-row-select`);
     // The sentence rides the name; the rationale and the install lines do not exist until asked for.
@@ -166,6 +178,35 @@ it(`keeps a closed row to its one line, and opens the whole comment in place`, a
     row!.click();
     await nextTick();
     expect(el.textContent).toContain(`raw frames until something encodes them`);
+    expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
+});
+
+/* THE REPEAT THIS TAB SHIPPED WITH. The row's line is a summary of the paragraph — a trailing parenthetical
+ * dropped, an over-long sentence cut back to its claim — so a disclosure that stacked "the row's line" above
+ * "the rest of the prose" opened every long entry on its own opening sentence twice, once cut and once whole.
+ * One of the two, never both. */
+it(`never shows the opening sentence twice`, async () => {
+    const el = mount();
+    el.querySelector<HTMLElement>(`.ui-row-select`)!.click();
+    await nextTick();
+    expect(el.textContent?.match(/encoding screen recordings/g)).toHaveLength(1);
+});
+
+/* AND IT DOES NOT LAND FIFTEEN LINES AT ONCE. A rationale runs to bullets and CI history; the reader who
+ * clicked a row wants the opening. Cut at the agent's own paragraph break, so the toggle only appears where
+ * there genuinely is more — and it does not collapse the row it lives inside. */
+it(`opens on the first paragraph and keeps the rest one click away`, async () => {
+    const el = mount();
+    const row = el.querySelector<HTMLElement>(`.ui-row-select`)!;
+    row.click();
+    await nextTick();
+    expect(el.textContent).not.toContain(`go out as MP4`);
+
+    const more = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show more`));
+    more!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`go out as MP4`);
+    // Still open: the row header closes the row, not anything the disclosure puts inside it.
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
 });
 
