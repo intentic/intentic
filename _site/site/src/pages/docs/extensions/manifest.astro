@@ -1,6 +1,39 @@
 ---
 import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsIndexTable, { type DocsIndexRow } from "../../../components/DocsIndexTable.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
+
+/* The field index. Nobody reads a manifest reference; they arrive knowing they need "the one that adds a tab"
+ * without knowing it is called `contributes.views`, and twelve prose sections cannot be searched by eye. The
+ * right-hand column is the part that does the work — it is what you scan when you do not know the field name.
+ *
+ * Anchors are asserted by DocsLayout against the headings actually rendered, so a renamed section fails the
+ * build rather than leaving a row that goes nowhere. */
+const fields: DocsIndexRow[] = [
+    { anchor: `top-level`, label: `Top level`, code: false, what: `Identity, the API range you build against, how you're listed.` },
+    { anchor: `permissions`, label: `permissions`, what: `The daemon routes each half may call — the allowlist a reviewer reads.` },
+    { anchor: `backend`, label: `server`, what: `The backend half: its own route namespace, and its reach into the daemon.` },
+    { anchor: `contributes-views`, label: `contributes.views`, what: `Surfaces in the sidebar, the rail and the workspace.` },
+    { anchor: `contributes-files`, label: `contributes.files`, what: `Files your extension owns, and who may read them.` },
+    { anchor: `contributes-viewers`, label: `contributes.viewers`, what: `Custom renderers for a file type the editor opens.` },
+    { anchor: `contributes-documents`, label: `contributes.documents`, what: `A document family that opens as a tab beside the code.` },
+    { anchor: `contributes-commands`, label: `contributes.commands`, what: `Actions in the command palette, and their keybindings.` },
+    { anchor: `contributes-settings`, label: `contributes.settings`, what: `Typed configuration, rendered as a settings form for you.` },
+    { anchor: `contributes-capabilities`, label: `contributes.capabilities`, what: `A connector: its catalog entry, credential fields and env.` },
+    {
+        anchor: `contributes-processes-and-contributes-listener`,
+        label: `contributes.processes`, // and .listener — the heading covers both; the row names the one people look up.
+        what: `Long-running processes, and the events that wake an agent.`,
+    },
+    { anchor: `contributes-agent-and-contributes-bin`, label: `contributes.agent`, what: `Agent plugins — skills, MCP servers — and CLIs on its PATH.` },
+    { anchor: `contributes-environment`, label: `contributes.environment`, what: `Packages and toolchains baked into the sandbox image.` },
+    {
+        anchor: `when-each-contribution-takes-effect`,
+        label: `When each takes effect`,
+        code: false,
+        what: `Which contributions are live on install, and which need a rebuild.`,
+    },
+];
 
 const permissions = `"permissions": {
     "sandbox": ["GET /panels", "POST /panels/*/start", "GET /memory/file"],
@@ -49,7 +82,13 @@ const processes = `"processes": [
     pageId="extensions/manifest"
     heading="Manifest reference"
     lead="Every field of intentic-extension.json. The manifest is both the approval dialog the owner reads and the gate the host enforces, so what's here is exactly what your extension can do."
+    requireAnchors={fields.map((field) => field.anchor)}
 >
+    <DocsIndexTable
+        caption="Every field group, and what it's for. If you know the shape you want but not its name, scan the right-hand column."
+        rows={fields}
+    />
+
     <h2>Top level</h2>
     <table>
         <thead>

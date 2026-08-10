@@ -1,0 +1,286 @@
+---
+/* The docs search dialog — mounted ONCE per page, at layout level.
+ *
+ * It sits outside the collapsible rail deliberately: showModal() on a dialog inside a `display: none` ancestor
+ * opens nothing, so a dialog living in the rail would work on a desktop and silently fail on a phone. The
+ * triggers are DocsSearchField.astro, and there are several; everything carrying `data-search-open` opens this.
+ *
+ * A DIALOG RATHER THAN RESULTS IN THE RAIL: a rail-width result list cannot show which section matched, and a
+ * whole results page loses the page you were reading. Both defeat the point, which is looking something up
+ * without leaving what you are doing.
+ *
+ * INDEX FETCHED ON FIRST USE, not on page load: it is the whole docs corpus, and a reader who never searches
+ * should not pay for it. Fetched once and kept for the session.
+ *
+ * RANKING is deliberately simple and explainable: a page-title hit beats a section-heading hit beats a body hit,
+ * every query term must appear somewhere in the entry, and a phrase match is boosted. That is enough for twenty
+ * pages, and it is auditable — nobody has to wonder why a result is where it is. Real relevance scoring would be
+ * a dependency and a tuning surface for a corpus this size.
+ */
+---
+
+<dialog
+    class="m-0 h-full max-h-none w-full max-w-none bg-transparent p-0 backdrop:bg-black/70 sm:mx-auto sm:mt-[10vh] sm:h-auto sm:max-w-xl"
+    data-search-dialog
+    aria-label="Search documentation"
+>
+    <div class="flex h-full flex-col overflow-hidden border-line bg-card sm:h-auto sm:rounded-xl sm:border sm:shadow-2xl">
+        <div class="flex items-center gap-3 border-b border-line px-4 py-3">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" class="shrink-0 text-subtle">
+                <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.5"></circle>
+                <path d="M13.5 13.5 17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+            </svg>
+            <input
+                type="search"
+                class="min-w-0 flex-1 bg-transparent text-base text-content outline-none placeholder:text-subtle [&::-webkit-search-cancel-button]:hidden"
+                placeholder="Search the documentation…"
+                autocomplete="off"
+                spellcheck="false"
+                data-search-input
+                aria-controls="docs-search-results"
+            />
+            <button
+                type="button"
+                class="shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-2xs text-subtle transition-colors hover:text-content"
+                data-search-close>esc</button
+            >
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain sm:max-h-[60vh]" id="docs-search-results" role="listbox" aria-label="Search results">
+            <p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page of the docs.</p>
+        </div>
+
+        <div class="hidden items-center gap-4 border-t border-line px-4 py-2 text-2xs text-subtle sm:flex">
+            <span><kbd class="font-mono">↑↓</kbd> navigate</span>
+            <span><kbd class="font-mono">↵</kbd> open</span>
+            <span><kbd class="font-mono">esc</kbd> close</span>
+        </div>
+    </div>
+</dialog>
+
+<script>
+    interface SearchBlock {
+        heading: string;
+        anchor: string;
+        text: string;
+    }
+    interface SearchEntry {
+        url: string;
+        title: string;
+        section: string;
+        blurb: string;
+        blocks: SearchBlock[];
+    }
+    interface Hit {
+        url: string;
+        title: string;
+        section: string;
+        heading: string;
+        snippet: string;
+        score: number;
+    }
+
+    const escapeHtml = (text: string): string =>
+        text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const dialog = document.querySelector<HTMLDialogElement>("[data-search-dialog]");
+    const input = document.querySelector<HTMLInputElement>("[data-search-input]");
+    const results = document.getElementById("docs-search-results");
+
+    if (dialog && input && results) {
+        let entries: SearchEntry[] | undefined;
+        let loading: Promise<void> | undefined;
+        let hits: Hit[] = [];
+        let cursor = 0;
+
+        const load = (): Promise<void> => {
+            loading ??= fetch("/docs/search.json")
+                .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+                .then((data: { entries: SearchEntry[] }) => {
+                    entries = data.entries;
+                })
+                .catch(() => {
+                    // Leave `entries` undefined; render() reports it rather than showing an empty result set,
+                    // which would read as "the docs do not mention this".
+                    entries = undefined;
+                    loading = undefined;
+                });
+            return loading;
+        };
+
+        /** The matched run, in context, with the match marked. */
+        const snippetFor = (text: string, terms: string[]): string => {
+            const haystack = text.toLowerCase();
+            const at = terms.map((term) => haystack.indexOf(term)).filter((index) => index >= 0);
+            const start = at.length > 0 ? Math.max(0, Math.min(...at) - 40) : 0;
+            const raw = text.slice(start, start + 190);
+            const clipped = `${start > 0 ? "…" : ""}${raw}${start + 190 < text.length ? "…" : ""}`;
+            let marked = escapeHtml(clipped);
+            for (const term of terms) {
+                // Escaped for the regex, and matched against the already-escaped string — terms are plain words
+                // from the query, so the two agree unless the term contains a character HTML escapes, in which
+                // case it simply does not highlight.
+                const pattern = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+                marked = marked.replace(pattern, "<mark>$1</mark>");
+            }
+            return marked;
+        };
+
+        const search = (query: string): Hit[] => {
+            const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 1);
+            if (terms.length === 0 || entries === undefined) return [];
+            const phrase = query.toLowerCase().trim();
+            const found: Hit[] = [];
+
+            for (const entry of entries) {
+                const titleText = `${entry.title} ${entry.section} ${entry.blurb}`.toLowerCase();
+                // Every term must appear on the page somewhere, or the result is noise.
+                const pageText = `${titleText} ${entry.blocks.map((block) => `${block.heading} ${block.text}`).join(" ")}`.toLowerCase();
+                if (!terms.every((term) => pageText.includes(term))) continue;
+
+                let best: Hit | undefined;
+                const consider = (candidate: Hit) => {
+                    if (best === undefined || candidate.score > best.score) best = candidate;
+                };
+
+                if (terms.some((term) => titleText.includes(term))) {
+                    consider({
+                        url: entry.url,
+                        title: entry.title,
+                        section: entry.section,
+                        heading: "",
+                        snippet: escapeHtml(entry.blurb),
+                        score: 100 + (entry.title.toLowerCase().includes(phrase) ? 50 : 0),
+                    });
+                }
+
+                for (const block of entry.blocks) {
+                    const heading = block.heading.toLowerCase();
+                    const body = block.text.toLowerCase();
+                    const inHeading = terms.filter((term) => heading.includes(term)).length;
+                    const inBody = terms.filter((term) => body.includes(term)).length;
+                    if (inHeading === 0 && inBody === 0) continue;
+                    consider({
+                        url: block.anchor ? `${entry.url}#${block.anchor}` : entry.url,
+                        title: entry.title,
+                        section: entry.section,
+                        heading: block.heading,
+                        snippet: snippetFor(block.text || block.heading, terms),
+                        score:
+                            inHeading * 30 +
+                            inBody * 6 +
+                            (heading.includes(phrase) ? 25 : 0) +
+                            (body.includes(phrase) ? 10 : 0),
+                    });
+                }
+
+                if (best) found.push(best);
+            }
+
+            return found.toSorted((a, b) => b.score - a.score).slice(0, 12);
+        };
+
+        const paintCursor = () => {
+            const rows = results.querySelectorAll<HTMLElement>("[data-hit]");
+            rows.forEach((row, index) => {
+                const active = index === cursor;
+                row.classList.toggle("bg-overlay", active);
+                row.setAttribute("aria-selected", String(active));
+                if (active) row.scrollIntoView({ block: "nearest" });
+            });
+        };
+
+        const render = (query: string) => {
+            if (query.trim().length < 2) {
+                hits = [];
+                results.innerHTML = `<p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page of the docs.</p>`;
+                return;
+            }
+            if (entries === undefined) {
+                results.innerHTML = `<p class="px-4 py-8 text-center text-sm text-subtle">Loading the index…</p>`;
+                return;
+            }
+            hits = search(query);
+            cursor = 0;
+            if (hits.length === 0) {
+                results.innerHTML = `<p class="px-4 py-8 text-center text-sm text-subtle">No page mentions <strong class="text-muted">${escapeHtml(query)}</strong>.</p>`;
+                return;
+            }
+            results.innerHTML = hits
+                .map(
+                    (hit, index) => `
+                        <a href="${hit.url}" data-hit="${index}" role="option" aria-selected="false"
+                           class="block border-b border-line px-4 py-3 no-underline last:border-b-0 hover:bg-overlay">
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-sm font-medium text-content">${escapeHtml(hit.title)}</span>
+                                ${hit.heading ? `<span class="text-subtle">›</span><span class="text-sm text-link">${escapeHtml(hit.heading)}</span>` : ``}
+                                <span class="ml-auto shrink-0 text-2xs uppercase tracking-wide text-subtle">${escapeHtml(hit.section)}</span>
+                            </div>
+                            <p class="mt-1 text-xs leading-relaxed text-muted">${hit.snippet}</p>
+                        </a>`,
+                )
+                .join("");
+            paintCursor();
+        };
+
+        const open = () => {
+            if (dialog.open) return;
+            dialog.showModal();
+            input.value = "";
+            render("");
+            input.focus();
+            void load().then(() => {
+                // The reader may have typed while the index was in flight.
+                if (dialog.open) render(input.value);
+            });
+        };
+
+        const close = () => {
+            if (dialog.open) dialog.close();
+        };
+
+        for (const trigger of document.querySelectorAll("[data-search-open]")) trigger.addEventListener("click", open);
+        for (const trigger of document.querySelectorAll("[data-search-close]")) trigger.addEventListener("click", close);
+
+        // Clicking the backdrop closes it: the dialog's own box stops the event, so anything reaching the
+        // dialog element itself was outside that box.
+        dialog.addEventListener("click", (event) => {
+            if (event.target === dialog) close();
+        });
+
+        input.addEventListener("input", () => render(input.value));
+
+        input.addEventListener("keydown", (event) => {
+            if (hits.length === 0) return;
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                cursor = (cursor + (event.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+                paintCursor();
+            } else if (event.key === "Enter") {
+                event.preventDefault();
+                const target = hits[cursor];
+                if (target) window.location.href = target.url;
+            }
+        });
+
+        /* Two shortcuts, and the hint on the field shows the one for this platform. "/" is the docs convention
+         * and costs no modifier; Cmd/Ctrl-K is what people arriving from an app expect. Neither fires while the
+         * reader is typing in a field, which is what makes a bare "/" safe to bind. */
+        const hint = document.querySelector<HTMLElement>("[data-search-hint]");
+        // userAgent rather than the deprecated navigator.platform. Getting this wrong shows the other key's
+        // label, and both shortcuts are bound regardless — so a miss costs a wrong hint, never a dead control.
+        if (hint && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)) hint.textContent = "⌘K";
+
+        document.addEventListener("keydown", (event) => {
+            const target = event.target as HTMLElement | null;
+            const typing = target?.matches("input, textarea, select, [contenteditable]") === true;
+            if ((event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                open();
+            } else if (event.key === "/" && !typing && !dialog.open) {
+                event.preventDefault();
+                open();
+            }
+        });
+    }
+</script>

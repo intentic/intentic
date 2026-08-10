@@ -1,0 +1,41 @@
+---
+/* A button that opens the docs search dialog. Rendered more than once per page — as a field at the top of the
+ * rail, and as a compact control in the narrow-screen row beside "Menu" — because the rail is collapsed on a
+ * phone and search must not be a thing you have to open a menu to find.
+ *
+ * The dialog itself is DocsSearch.astro, mounted once at layout level. It has to live outside the collapsible
+ * rail: showModal() on a dialog inside a `display: none` ancestor opens nothing. All triggers are found by the
+ * `data-search-open` attribute, so adding another one anywhere costs no wiring.
+ */
+
+interface Props {
+    /** "field" is the rail's full-width search box; "compact" is the icon-and-label button for narrow screens. */
+    variant?: "field" | "compact";
+}
+
+const { variant = "field" } = Astro.props;
+---
+
+<button
+    type="button"
+    data-search-open
+    aria-label="Search documentation"
+    class:list={[
+        "flex items-center gap-2 rounded-lg border border-line bg-card text-left text-sm text-subtle transition-colors hover:border-line-strong hover:text-muted",
+        variant === "field" ? "w-full px-3 py-2" : "px-3.5 py-2",
+    ]}
+>
+    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true" class="shrink-0">
+        <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.5"></circle>
+        <path d="M13.5 13.5 17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+    </svg>
+    {variant === "field" ? <span class="flex-1">Search docs</span> : <span>Search</span>}
+    {
+        variant === "field" && (
+            // Filled in by the dialog's script with the shortcut for this platform.
+            <kbd class="hidden shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-2xs text-subtle lg:block" data-search-hint>
+                /
+            </kbd>
+        )
+    }
+</button>

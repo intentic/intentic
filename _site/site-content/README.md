@@ -13,6 +13,9 @@ markup.
 
 - [src/site.ts](src/site.ts) — URLs, org name and tagline; the constants everything else composes from.
 - [src/landing.ts](src/landing.ts) — the front page's copy.
+- [src/docs.ts](src/docs.ts) — the docs tree: four shelves sorted by who is reading, their sub-groups and nested
+  pages. The sidebar, the top bar's Docs menu, the footer's docs column, the prev/next footer and every docs
+  page's metadata all derive from it, so they cannot disagree about the shape of the documentation.
 - [src/nav.ts](src/nav.ts) / [src/page-meta.ts](src/page-meta.ts) — navigation and per-page metadata.
 - [src/structured-data.ts](src/structured-data.ts) — the JSON-LD the site emits.
 

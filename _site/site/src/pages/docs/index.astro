@@ -2,13 +2,17 @@
 import { docsHref, docsSections } from "@intentic-dev/site-content/docs";
 import DocsLayout from "../../components/DocsLayout.astro";
 
-/* The overview's job is to route, not to summarise. Two questions bring people here — "what IS this?" and
- * "how do I get one?" — and the second used to be answered by a grid of ten cards that made Quickstart a
- * peer of Manifest reference. So the install decision is now stated as the four routes it actually is, with
- * links straight into the section of Quickstart that answers each, and the card grid drops to the sections
- * that are genuinely further reading (everything outside "Get started"). */
-
-const readingSections = docsSections.filter((section) => section.label !== `Get started`);
+/* The overview's job is to ROUTE, not to summarise.
+ *
+ * It used to end in thirteen cards — one per page in the tree, each captioned with that page's meta description.
+ * That was the longest thing on the page, it restated the sidebar sitting three inches to its left, and the
+ * captions were written for search results rather than for someone choosing. A reader scrolled a wall to learn
+ * what a glance at the rail already told them.
+ *
+ * What replaces it is the four shelves as four QUESTIONS, because a visitor arrives holding a question, not a
+ * shelf label. Each row names the shelf's first stop and the pages behind it, and nothing here is a card grid:
+ * the rail is the tree, and this page is the sentence that tells you which branch is yours.
+ */
 
 // The install decision, in the order a reader eliminates them: least typing first.
 const paths = [
@@ -37,6 +41,30 @@ const paths = [
         run: `Five docker commands`,
     },
 ];
+
+/* The question each shelf answers, in the reader's own words. Authored rather than reusing `audience`: the
+ * sidebar's line describes the shelf to someone already browsing it, and this one has to catch someone who has
+ * not started looking. Keyed by shelf label, and asserted below, so a renamed or added shelf fails the build
+ * rather than quietly rendering a shelf with no question. */
+const questions: Record<string, string> = {
+    Understand: `“What actually is this, and is it built the way I'd want?”`,
+    "Run a sandbox": `“I want one running on my hardware, kept up to date, shared with my team.”`,
+    "Drive agents": `“It's running. How do I get real work out of it?”`,
+    "Build on it": `“I want to extend it, or drive it from my own code.”`,
+};
+
+const missing = docsSections.filter((section) => questions[section.label] === undefined).map((section) => section.label);
+if (missing.length > 0) {
+    throw new Error(`docs/index.astro: no question written for shelf — ${missing.join(`, `)}`);
+}
+
+/** Every page on a shelf, flattened, so a row can list what is behind it without the reader guessing. */
+const contentsOf = (label: string): string[] => {
+    const section = docsSections.find((entry) => entry.label === label);
+    return (section?.groups ?? []).flatMap((group) =>
+        group.items.flatMap((page) => [page.title, ...(page.children ?? []).map((child) => child.title)]),
+    );
+};
 ---
 
 <DocsLayout
@@ -107,20 +135,30 @@ const paths = [
         <li><strong>Automations</strong>: schedules, webhooks, and event listeners that wake the agent while you're away.</li>
     </ul>
 
-    <h2>Once it's up</h2>
-    {
-        readingSections.map((section) => (
-            <div class="docs-embed mt-6">
-                <div class="eyebrow mb-3">{section.label}</div>
-                <div class="grid gap-4 sm:grid-cols-2">
-                    {section.items.map((page) => (
-                        <a href={docsHref(page.id)} class="card p-5 no-underline transition-colors hover:border-primary-600/40">
-                            <h3 class="text-sm font-medium text-content">{page.title}</h3>
-                            <p class="mt-2 text-sm leading-relaxed text-muted">{page.meta.description}</p>
-                        </a>
-                    ))}
-                </div>
-            </div>
-        ))
-    }
+    <h2>Find your way</h2>
+    <p>
+        The docs are four shelves, sorted by what you came here to do. The list on the left is all of it; this is which part is yours.
+    </p>
+    <div class="docs-embed mt-6 flex flex-col gap-3">
+        {
+            docsSections.map((section) => (
+                <a
+                    href={docsHref(section.entry)}
+                    class="group card block p-5 no-underline transition-colors hover:border-primary-600/40"
+                >
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">{section.label}</span>
+                        <span class="text-sm text-muted">{questions[section.label]}</span>
+                    </div>
+                    {/* The shelf's contents as a plain line rather than a nested card grid: it tells the reader
+                        what is behind the row, at a size that does not compete with the question above it. */}
+                    <p class="mt-2 text-xs leading-relaxed text-subtle">{contentsOf(section.label).join(` · `)}</p>
+                </a>
+            ))
+        }
+    </div>
+    <p class="mt-6">
+        Looking for one specific thing? Press <kbd>/</kbd> anywhere in the docs to search every page, or jump to the
+        <a href="/docs/sandbox-api/">HTTP API</a> and the <a href="/docs/extensions/manifest/">manifest reference</a> for the lookup tables.
+    </p>
 </DocsLayout>

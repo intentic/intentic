@@ -210,9 +210,14 @@
     .docs-body blockquote {
         max-width: 46rem;
     }
+    /* A rule above every h2 rather than more space: on pages with a dozen sections, whitespace alone stopped
+       reading as a boundary and the page became one undifferentiated column. The line is what makes a section
+       scannable from a scroll. */
     .docs-body h2 {
-        margin-top: 3rem;
+        margin-top: 3.5rem;
         margin-bottom: 1rem;
+        border-top: 1px solid var(--color-line);
+        padding-top: 1.75rem;
         font-size: 1.5rem;
         font-weight: 600;
         letter-spacing: -0.01em;
@@ -221,6 +226,8 @@
     }
     .docs-body > h2:first-child {
         margin-top: 0;
+        border-top: 0;
+        padding-top: 0;
     }
     .docs-body h3 {
         margin-top: 2rem;
@@ -229,6 +236,49 @@
         font-weight: 600;
         color: var(--color-content);
         scroll-margin-top: 6rem;
+    }
+
+    /* ── Section anchors ─────────────────────────────────────
+       One per prose heading, added at render time (lib/docs-headings.ts). Hidden until the heading is hovered or
+       the anchor itself is focused: a permanent "#" beside twelve headings is noise, but a section nobody can
+       link to is worse — which is what 142 of the site's 148 headings were. */
+    .docs-body :is(h2, h3) > .docs-anchor {
+        margin-left: 0.5rem;
+        font-size: 0.8em;
+        font-weight: 400;
+        color: var(--color-subtle);
+        text-decoration: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+    .docs-body :is(h2, h3):hover > .docs-anchor,
+    .docs-body .docs-anchor:focus-visible {
+        opacity: 1;
+    }
+    .docs-body .docs-anchor:hover {
+        color: var(--color-link);
+        text-decoration: none;
+    }
+    /* Confirmation that the link is on the clipboard. Rendered from the attribute the click handler sets, so
+       there is no second element to keep in sync. */
+    .docs-body .docs-anchor[data-copied]::after {
+        content: "Link copied";
+        margin-left: 0.5rem;
+        border-radius: var(--radius-sm);
+        background: var(--color-overlay);
+        padding: 0.15rem 0.4rem;
+        font-size: 0.7rem;
+        color: var(--color-muted);
+    }
+    .docs-body .docs-anchor[data-copied] {
+        opacity: 1;
+    }
+
+    /* Search-result highlighting inside the palette. */
+    mark {
+        background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
+        border-radius: 2px;
+        color: var(--color-content);
     }
     .docs-body p {
         margin-bottom: 1rem;
@@ -340,14 +390,30 @@
         opacity: 0;
     }
 
-    /* Opt component blocks (cards, diagrams, steppers) out of prose spacing/typography. */
+    /* Opt component blocks (cards, diagrams, steppers) out of prose spacing/typography — including the section
+       rule and anchor a prose h2 now carries, which on a card heading would draw a divider through the card. */
     .docs-embed :is(h1, h2, h3, h4, p, ul, ol, li) {
         margin: 0;
         max-width: none;
     }
+    .docs-embed :is(h2, h3) {
+        border-top: 0;
+        padding-top: 0;
+    }
     .docs-embed a {
         color: inherit;
         text-decoration: none;
+    }
+
+    /* Keyboard keys named in prose ("press /"). */
+    .docs-body kbd {
+        border: 1px solid var(--color-line-strong);
+        border-radius: var(--radius-xs);
+        background: var(--color-overlay);
+        padding: 0.05rem 0.35rem;
+        font-family: var(--font-mono);
+        font-size: 0.8em;
+        color: var(--color-content);
     }
 }
 

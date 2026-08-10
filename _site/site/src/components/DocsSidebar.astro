@@ -1,0 +1,85 @@
+---
+import { type DocsPage, docsHref, docsSections } from "@intentic-dev/site-content/docs";
+
+/* The docs rail: four shelves, each saying who it is for, with sub-group headings and indented sub-pages.
+ *
+ * WHAT IT REPLACES was sixteen rows of one flat list, ten of them under a single "Guides" label, with
+ * "Manifest reference" sitting at the same indent as "Extensions" so the tree's real shape was invisible. A
+ * reader could not tell from the rail which of two adjacent rows was a chapter and which was a page inside one.
+ *
+ * NOTHING COLLAPSES. Twenty rows across four labelled shelves fits a viewport, and a collapsing rail costs a
+ * click on every visit to see where you are — the thing a sidebar exists to tell you. The shelf you are on is
+ * marked instead, so orientation is free.
+ *
+ * NO AUDIENCE LINES HERE, though the shelves carry them. Rendered in the rail they cost about 180px — enough
+ * that on a 1000px-tall viewport the whole "Build on it" shelf fell below the rail's own scroll, which is the
+ * opposite of what this rewrite was for. They are a CHOOSING aid, so they belong where someone is choosing: the
+ * docs index states each as a question, and the top bar's Docs menu carries them under each row. Once you are
+ * inside the docs, the label plus the rows under it is the orientation you need.
+ */
+
+interface Props {
+    pageId: string;
+}
+
+const { pageId } = Astro.props;
+
+// Two MUTUALLY EXCLUSIVE class sets rather than a base plus an override. Tailwind resolves a conflict by
+// stylesheet order, not by the order classes appear on the element — and `border-transparent`/`text-muted`
+// are emitted after `border-primary-500`/`text-content`, so a base carrying them beat the active pair and
+// the current page rendered identically to every other row.
+const rowBase = "block border-l-2 py-1 text-sm transition-colors";
+const rowIdle = "border-transparent text-muted hover:border-line-strong hover:text-content";
+const rowActive = "border-primary-500 font-medium text-content";
+
+/** Child rows sit one step in from their parent, which is the whole point of having them. */
+const indent = (page: DocsPage): string => (page.id.includes("/") ? "pl-6" : "pl-3");
+
+const isActiveShelf = (pages: DocsPage[]): boolean => pages.some((page) => page.id === pageId);
+
+const flatten = (pages: DocsPage[]): DocsPage[] => pages.flatMap((page) => [page, ...(page.children ?? [])]);
+
+/* A group whose label repeats its own first row shows it twice — the Extensions group led with the Extensions
+ * page and the rail read "Extensions / Extensions / Build an extension". The label is there to separate a run
+ * from its neighbours, and a parent row with indented children already does that, so it is dropped in that case.
+ * "API reference" survives, because no page is called that. */
+const labelFor = (group: { label?: string; items: DocsPage[] }): string | undefined =>
+    group.label === group.items[0]?.title ? undefined : group.label;
+---
+
+<nav aria-label="Documentation">
+    <slot name="search" />
+    {
+        docsSections.map((section) => {
+            const pages = section.groups.flatMap((group) => flatten(group.items));
+            const active = isActiveShelf(pages);
+            return (
+                <div class="mt-6 first:mt-0">
+                    {/* The current shelf's label takes the accent: at a glance it answers "which part of the docs
+                        am I in", which no amount of row highlighting does. */}
+                    <div class:list={["eyebrow mb-2 pl-3", active && "text-primary-500"]}>{section.label}</div>
+                    {section.groups.map((group) => (
+                        <div class="mt-3 first:mt-0">
+                            {labelFor(group) && (
+                                <div class="mb-1 pl-3 text-2xs font-medium tracking-wide text-muted">{labelFor(group)}</div>
+                            )}
+                            <ul class="list-none space-y-0.5 p-0">
+                                {flatten(group.items).map((page) => (
+                                    <li>
+                                        <a
+                                            href={docsHref(page.id)}
+                                            class:list={[rowBase, indent(page), page.id === pageId ? rowActive : rowIdle]}
+                                            aria-current={page.id === pageId ? "page" : undefined}
+                                        >
+                                            {page.title}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            );
+        })
+    }
+</nav>

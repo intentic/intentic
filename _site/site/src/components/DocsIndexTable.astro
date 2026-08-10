@@ -1,0 +1,49 @@
+---
+/* The "at a glance" table at the top of a reference page: every section, one line on what it holds, linking down.
+ *
+ * WHY, WHEN THERE IS ALREADY A SECTION RAIL. The rail is titles only, and on a reference page a title is often
+ * the thing you are trying to look up rather than something you recognise — `contributes.viewers` tells you
+ * nothing if you do not already know what a viewer is. The description column is what turns the list into a
+ * lookup: you scan the right-hand side and click the left. It also survives where the rail cannot, on a phone.
+ *
+ * The anchors are AUTHORED here and CHECKED by the layout: pass the same ids as `requireAnchors` and a renamed
+ * heading fails the build instead of quietly leaving a dead row. See DocsLayout.
+ */
+
+export interface DocsIndexRow {
+    /** Heading id to link to — the slug of the heading's own text. */
+    anchor: string;
+    /** What the row shows in the first column; defaults to the anchor's own words being unnecessary. */
+    label: string;
+    /** One line: what this section answers. */
+    what: string;
+    /** Render the label as code — right for field and route names, wrong for prose headings. */
+    code?: boolean;
+}
+
+interface Props {
+    caption: string;
+    rows: DocsIndexRow[];
+}
+
+const { caption, rows } = Astro.props;
+---
+
+<p>{caption}</p>
+<table>
+    <thead>
+        <tr><th>Section</th><th>What it covers</th></tr>
+    </thead>
+    <tbody>
+        {
+            rows.map((row) => (
+                <tr>
+                    <td>
+                        <a href={`#${row.anchor}`}>{row.code === false ? row.label : <code>{row.label}</code>}</a>
+                    </td>
+                    <td set:html={row.what} />
+                </tr>
+            ))
+        }
+    </tbody>
+</table>
