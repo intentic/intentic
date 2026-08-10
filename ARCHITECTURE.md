@@ -717,8 +717,8 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 ### Personas
 
 A `browser` capability is ONE ACCOUNT; a **persona** is the card that says which of those accounts are the
-same someone (`.intentic/personas.json` — the one file under `.intentic` that is committed, because it holds
-no secret). A turn names one via `actsAs`, and `turnPersona()`
+same someone (`.intentic/personas.json` — part of the config slice under `.intentic` that is committed, because
+it holds no secret). A turn names one via `actsAs`, and `turnPersona()`
 ([personas.ts](_sandbox/sandbox/src/personas/personas.ts)) resolves it in one place: an attended turn naming
 none keeps every account, an **unattended** one naming none gets NONE, a named card gets exactly its accounts,
 and a named card that does not exist gets none — fail-closed, because falling back to "all" would turn a typo

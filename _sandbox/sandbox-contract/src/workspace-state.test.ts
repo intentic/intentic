@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
-import { isLockedWorkspacePath, staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
+import { isLockedWorkspacePath, staleQueryKeys, VERSIONED_STATE_PATHS, WORKSPACE_STATE_FILES } from "./workspace-state.js";
 
 // What the automations extension declares in its manifest, and what the memory extension WOULD declare if the
 // watcher reported its files. Literals rather than the real manifests: an extension package importing this one is
@@ -187,5 +187,64 @@ describe(`isLockedWorkspacePath`, () => {
     it(`reads a platform path the same as a posix one`, () => {
         expect(isLockedWorkspacePath(`.intentic\\auth\\codex`)).toBe(true);
         expect(isLockedWorkspacePath(`./.intentic/capabilities.json`)).toBe(true);
+    });
+});
+
+describe(`VERSIONED_STATE_PATHS`, () => {
+    /* THE ONE ASSERTION THAT MUST NEVER GO GREEN BY ACCIDENT.
+     *
+     * `versioned` carves an entry out of the root repo's wholesale `.intentic` exclusion, so marking one is the
+     * difference between a file the owner reviews and a file the next baseline commit publishes into `git log`
+     * forever. A credential marked by a hurried hand is not recoverable by unmarking it later — the commit is
+     * already written — which is why the refusal is mechanical here rather than a rule in a comment. */
+    it(`never tracks a credential or an identity binding`, () => {
+        const leaked = WORKSPACE_STATE_FILES.filter((file) => file.versioned && (file.portability === `secret` || file.portability === `identity`));
+        expect(leaked.map((file) => file.path)).toEqual([]);
+    });
+
+    /* Narrower than `carry` ON PURPOSE, and this is where that stays true. The two answer different questions —
+     * carry is "does it move to a new sandbox", versioned is "should a human review it changing" — so the
+     * ledgers and the bulk are `carry` and deliberately absent: the run ledger is rewritten several times per
+     * workflow step, the usage batch every few seconds a browser is open, and the transcripts run to hundreds of
+     * megabytes. Tracking any of them buries the owner's code review under machine noise. */
+    it(`leaves the ledgers and the bulk out even though they travel`, () => {
+        for (const path of [
+            `.intentic/workflow-runs.json`,
+            `.intentic/loops.json`,
+            `.intentic/thread-sessions.json`,
+            `.intentic/extension-usage.json`,
+            `.intentic/webchat-installs.json`,
+            `.intentic/sessions/claude/`,
+            `.intentic/artifacts/`,
+        ]) {
+            expect([path, VERSIONED_STATE_PATHS.includes(path)]).toEqual([path, false]);
+        }
+    });
+
+    /* Spelled out rather than derived, so ADDING a tracked entry is a visible edit to this list and not a silent
+     * consequence of editing the table above — the review the flag itself exists to force. */
+    it(`tracks exactly the configuration slice`, () => {
+        expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
+            `.intentic/automations.json`,
+            `.intentic/automations.seeded.json`,
+            `.intentic/capability-dismissals.json`,
+            `.intentic/environment.Dockerfile`,
+            `.intentic/environment.custom.Dockerfile`,
+            `.intentic/environment.d/`,
+            `.intentic/extension-enablement.json`,
+            `.intentic/personas.json`,
+            `.intentic/personas.seeded.json`,
+            `.intentic/settings.json`,
+            `.intentic/templates.json`,
+            `.intentic/workflows.json`,
+        ]);
+    });
+
+    /* The composed overlay is `derived` — recomposed on every boot from the custom file that IS tracked, against
+     * whatever base image this container happens to be on. Tracking it would put a rewritten-at-startup file in
+     * front of the owner as a change they made. */
+    it(`tracks the environment overlay's source but not its composed output`, () => {
+        expect(VERSIONED_STATE_PATHS).toContain(`.intentic/environment.custom.Dockerfile`);
+        expect(VERSIONED_STATE_PATHS).not.toContain(`.intentic/environment.approved.Dockerfile`);
     });
 });

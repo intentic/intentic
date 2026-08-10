@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
+import {
+    type FileDiff,
+    type Snapshot,
+    type SnapshotChange,
+    SnapshotTriggerSchema,
+    type SnapshotTrigger,
+    VERSIONED_STATE_PATHS,
+} from "@intentic/sandbox-contract";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
@@ -88,18 +95,25 @@ const COMMON_EXCLUDES = [
 // /work, so the list is DERIVED from the live repo set, not static.
 export const rootExcludes = (repoIds: readonly string[]): string[] => [
     ...repoIds.map((id) => `/${id}/`),
-    /* .intentic is daemon-internal manifests + credentials and stays out of version control — with ONE carve-out
+    /* .intentic is daemon-internal manifests + credentials and stays out of version control — with carve-outs
      * beneath it. The pattern is the directory's CONTENTS (`/*`) rather than the directory itself, which is the
-     * only spelling that leaves room for the negation on the next line: git does not descend into an excluded
+     * only spelling that leaves room for the negations on the next line: git does not descend into an excluded
      * DIRECTORY, so `/.intentic/` followed by a `!` rule re-includes nothing. Excluding the children by glob
      * keeps every one of them ignored — including any file added under here later, which is what makes the
-     * carve-out safe to leave standing — while the parent stays walkable.
+     * carve-outs safe to leave standing — while the parent stays walkable.
      *
-     * personas.json is the exception because it is the only thing in here that is neither a manifest of this
-     * sandbox's machinery nor a secret: it is the owner's named personas, and it belongs in review and in
-     * `git log` alongside the workspace's instructions (personas/personas-store.ts says why at length). */
+     * WHICH children come back is the contract's answer, not this file's (workspace-state.ts `versioned`): the
+     * owner's CONFIGURATION — settings, personas, automations, workflow designs, the environment overlay, which
+     * extensions are on. Those decide how this sandbox behaves, so a change to one belongs in review and in
+     * `git log` beside the workspace's instructions rather than happening silently mid-session.
+     *
+     * Deriving them is what keeps this safe as the state table grows. An ignore-pattern list maintained HERE
+     * would track anything added later by default, so next month's credential store would be committed on its
+     * first write; an allowlist the contract owns inverts that — a new entry is ignored until someone marks it,
+     * and the guard test refuses the mark on anything classed secret or identity. A DIRECTORY entry keeps its
+     * trailing slash through the mapping, which is what lets git descend into it (environment.d/). */
     "/.intentic/*",
-    "!/.intentic/personas.json",
+    ...VERSIONED_STATE_PATHS.map((path) => `!/${path}`),
     `/${REFERENCE_DIR}/`,
     ...COMMON_EXCLUDES,
 ];

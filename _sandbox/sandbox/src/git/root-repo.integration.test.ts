@@ -54,32 +54,52 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect(await bothSides(work)).toEqual([]);
 });
 
-/* THE ONE HOLE IN THE .intentic WALL, checked against real git rather than reasoned about.
+/* THE HOLES IN THE .intentic WALL, checked against real git rather than reasoned about.
  *
- * Persona cards are committed on purpose — a persona should be addable in a pull request and visible in `git log`
- * — while everything beside them in that directory is manifests and credentials that must never be. The rule is
- * a single character of git syntax: the exclude names the directory's CONTENTS (`/.intentic/*`) rather than the
- * directory, because git does not descend into an excluded directory and a `!` negation under one re-includes
- * nothing at all. Get that wrong in the safe direction and personas silently never commit; get it wrong in the
- * other and the next baseline commits the owner's provider tokens. Neither failure announces itself, so the
- * assertion is on git's own answer. */
-test("the baseline commits a persona card and still refuses every credential beside it", async () => {
+ * The owner's CONFIGURATION is committed on purpose — a persona or an automation should be addable in a pull
+ * request and visible in `git log` — while the credentials, ledgers and transcripts beside it must never be. The
+ * rule turns on a single character of git syntax: the exclude names the directory's CONTENTS (`/.intentic/*`)
+ * rather than the directory, because git does not descend into an excluded directory and a `!` negation under
+ * one re-includes nothing at all. Get that wrong in the safe direction and settings silently never commit; get
+ * it wrong in the other and the next baseline commits the owner's provider tokens. Neither failure announces
+ * itself, so the assertion is on git's own answer.
+ *
+ * The directory carve-out (environment.d/) is here for the same reason: re-including a DIRECTORY is what lets
+ * git walk into it, and it is the one negation whose trailing slash has to survive the mapping in history.ts. */
+test("the baseline commits the config slice and still refuses every credential and ledger beside it", async () => {
     const { work, historyRoot } = await tempBase();
     await mkdir(join(work, `${STATE_DIR}`, "browser", "reddit-work"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "claude"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "auth", "claude"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "environment.d"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "sessions", "claude"), { recursive: true });
+    // Configuration — every one of these decides how the sandbox behaves, and each is `versioned` in the contract.
     await writeFile(join(work, `${STATE_DIR}`, "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "settings.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "automations.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "environment.custom.Dockerfile"), "RUN echo hi\n");
+    await writeFile(join(work, `${STATE_DIR}`, "environment.d", "rust.Dockerfile"), "RUN rustup\n");
+    // Credentials and identity — never tracked, whatever else changes.
     await writeFile(join(work, `${STATE_DIR}`, "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
     await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
-    await writeFile(join(work, `${STATE_DIR}`, "settings.json"), "{}\n");
-    await writeFile(join(work, `${STATE_DIR}`, "claude", "token.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "auth", "claude", "token.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "browser", "reddit-work", "Cookies"), "secret\n");
+    // Ledgers and bulk — `carry`, holding no secret, and still out: they are machine noise in a human's review.
+    await writeFile(join(work, `${STATE_DIR}`, "workflow-runs.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "loops.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "sessions", "claude", "turn.jsonl"), "{}\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // Exactly one path out of that directory, and it is the card.
-    expect(await sh(work, "ls-files")).toBe(".intentic/personas.json");
-    // Nothing left over: the credentials are IGNORED, not merely uncommitted-and-pending.
+    // Exactly the config slice out of that directory — the directory carve-out included, nothing else.
+    expect((await sh(work, "ls-files")).split("\n")).toEqual([
+        ".intentic/automations.json",
+        ".intentic/environment.custom.Dockerfile",
+        ".intentic/environment.d/rust.Dockerfile",
+        ".intentic/personas.json",
+        ".intentic/settings.json",
+    ]);
+    // Nothing left over: the credentials and ledgers are IGNORED, not merely uncommitted-and-pending.
     expect(await bothSides(work)).toEqual([]);
 });
 

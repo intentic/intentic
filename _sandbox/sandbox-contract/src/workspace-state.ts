@@ -50,6 +50,26 @@ export interface WorkspaceStateFile extends StateFile {
     readonly invalidates: readonly string[];
     // Why this file has no invalidations, for the entries that declare none. Absent when it has some.
     readonly why?: string;
+    /* Whether this entry is TRACKED by the root repo — the third thing an entry declares, and the one an owner
+     * sees most directly: a tracked entry gets a diff in the Changes review and a line in `git log`, so a change
+     * to how this sandbox behaves can be read, reverted, and attributed.
+     *
+     * ABSENT IS THE ANSWER FOR ALMOST EVERYTHING, and deliberately so. The root repo excludes `.intentic`
+     * wholesale and this flag is the only thing that carves an entry back out, so a store added later is
+     * untracked until someone says otherwise — the same default-deny the `portability` classes are built on, for
+     * the same reason. An ignore-pattern list would invert it: a credential store added next month would be
+     * committed on its first write, and nothing would have had to change for that to happen.
+     *
+     * Only CONFIGURATION belongs here — the small, slow-moving files that decide how this sandbox behaves. Two
+     * kinds of entry are excluded on purpose even though they are `carry` and hold no secret:
+     *   - LEDGERS (workflow runs, loop iterations, thread bookkeeping, permission-usage batches), which are
+     *     rewritten on a timer or several times per step. Tracking them buries the owner's code review under
+     *     machine noise — one of them is written every few seconds while a browser has the app open.
+     *   - BULK (session transcripts, artifacts), which are hundreds of megabytes of constantly-rewritten
+     *     content. They travel in a bundle; they do not belong in a diff.
+     * `versioned` is therefore NARROWER than `carry`, and the two answer different questions: carry is "does it
+     * move to a new sandbox", this is "should a human review it changing". */
+    readonly versioned?: true;
 }
 
 /* Declared `as const` so the paths survive as literal types (see WorkspaceStatePath below), then published under
@@ -72,7 +92,7 @@ const STATE_FILES = [
      * it travels because a decision about what this workspace does NOT need is as much the owner's as the
      * connections themselves — an export that dropped it would greet them on the target with the same
      * suggestions they had already dismissed. Holds no credential: it is a card name and a file path. */
-    { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry" },
+    { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry", versioned: true },
 
     /* The named personas this sandbox shows the outside world — which connected accounts each one speaks for,
      * how it sounds, whether it may publish (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
@@ -82,15 +102,18 @@ const STATE_FILES = [
      * It is `carry`, and that is the whole design rather than an oversight — a card is a NAME and a list of ids,
      * never a credential, so it travels to a new sandbox in full while the logins it refers to stay behind. What
      * arrives is a workspace that already knows it has a work-reddit and a studio-x, both visibly unconnected,
-     * each waiting for one sign-in. This is also the ONE file under .intentic that the root repo tracks (see
-     * personas/personas-store.ts for the exclude carve-out and why it is safe here and nowhere else). */
-    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry" },
+     * each waiting for one sign-in. It was also the FIRST file under .intentic the root repo tracked, and the
+     * argument it was carved out on — a card is configuration, holds no secret, and belongs in review — is the
+     * one `versioned` now generalises to the rest of the config slice (personas/personas-store.ts argues it at
+     * length, and its reasoning is why the flag exists rather than a second hand-kept list). */
+    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
 
     {
         path: ".intentic/personas.seeded.json",
         invalidates: [],
         why: "Which stock personas this workspace has been offered (default-personas.ts); nothing renders it — it exists so deleting a seeded card is final.",
         portability: "carry",
+        versioned: true,
     },
 
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
@@ -103,9 +126,9 @@ const STATE_FILES = [
      *     not be on (see composeEnvironment's baseImageOf);
      *   - the proposal and the per-tool drafts under environment.d/ are the agent's pending requests, which the
      *     owner has not answered yet; they travel so the question survives the move. */
-    { path: ".intentic/environment.custom.Dockerfile", invalidates: ["environment"], portability: "carry" },
-    { path: ".intentic/environment.Dockerfile", invalidates: ["environment"], portability: "carry" },
-    { path: ".intentic/environment.d/", invalidates: ["environment"], portability: "carry" },
+    { path: ".intentic/environment.custom.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
+    { path: ".intentic/environment.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
+    { path: ".intentic/environment.d/", invalidates: ["environment"], portability: "carry", versioned: true },
     {
         path: ".intentic/environment.approved.Dockerfile",
         invalidates: ["environment"],
@@ -113,7 +136,7 @@ const STATE_FILES = [
         note: "The target composes its own overlay on first boot; rebuild it there to install the tools it names.",
     },
 
-    { path: ".intentic/settings.json", invalidates: ["settings", "manifests"], portability: "carry" },
+    { path: ".intentic/settings.json", invalidates: ["settings", "manifests"], portability: "carry", versioned: true },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
     // that machine never did.
@@ -135,6 +158,7 @@ const STATE_FILES = [
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
         portability: "carry",
+        versioned: true,
     },
     {
         path: ".intentic/approvals/",
@@ -147,6 +171,7 @@ const STATE_FILES = [
         invalidates: [],
         why: "Which default automations this workspace has been offered (default-automations.ts); nothing renders it — it exists so deleting a seeded automation is final.",
         portability: "carry",
+        versioned: true,
     },
     /* The workflow designs and their run ledger became CORE keys the day runs got cards on the fleet board and
      * a mode of the chat panel (web's useWorkflowRuns): those surfaces exist whether or not the workflows
@@ -155,7 +180,7 @@ const STATE_FILES = [
      * run surfaces have: the scheduler writes the ledger several times per step and nothing polls for it.
      * The runs file invalidates `workflows` too, because GET /workflows embeds each design's runs
      * (WorkflowSummary) — a settled step changes that answer as surely as an edited design does. */
-    { path: ".intentic/workflows.json", invalidates: ["workflows"], portability: "carry" },
+    { path: ".intentic/workflows.json", invalidates: ["workflows"], portability: "carry", versioned: true },
     { path: ".intentic/workflow-runs.json", invalidates: ["workflows", "workflow-runs"], portability: "carry" },
     {
         path: ".intentic/loops.json",
@@ -201,6 +226,7 @@ const STATE_FILES = [
         path: ".intentic/extension-enablement.json",
         invalidates: ["extensions"],
         portability: "carry",
+        versioned: true,
     },
     /* Workspace extensions: one directory per extension, consumed straight from the workspace — no clone, no
      * install moment. Written like drafts, by the agent's own file tools (which is the point: an agent authors
@@ -301,7 +327,13 @@ const STATE_FILES = [
         why: "The workspace identity, read from the /events hello frame rather than as a file.",
         portability: "identity",
     },
-    { path: ".intentic/templates.json", invalidates: [], why: "Scaffold templates, read when the scaffold dialog opens.", portability: "carry" },
+    {
+        path: ".intentic/templates.json",
+        invalidates: [],
+        why: "Scaffold templates, read when the scaffold dialog opens.",
+        portability: "carry",
+        versioned: true,
+    },
     /* Classed `derived` for size rather than for safety, and it is the one entry where that costs the owner
      * something real: the profiles ARE logged-in sessions. They are also gigabytes of a store Chromium rewrites
      * constantly and versions against its own build, so carrying them ships bulk that the target's Chromium may
@@ -324,6 +356,15 @@ const STATE_FILES = [
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
+
+/* The entries the root repo tracks, workspace-root-relative and in declaration order — what history.ts turns
+ * into the negations that carve them back out of the wholesale `.intentic` exclusion.
+ *
+ * Derived rather than written down beside the exclude rule, for the reason this whole file exists: the git rule
+ * lives in the daemon and the classification lives here, and a second hand-kept copy of "which config is
+ * reviewable" is a copy that goes stale the first time someone adds a store. Marking an entry `versioned` is now
+ * the entire change — the exclude list follows on the next boot, in both places it is written. */
+export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 
 /* Old directory names are never read or migrated, but persistent workspaces can retain them until an owner
  * removes them manually. Keep that finite set in one quarantine record so access, export, and search cannot
