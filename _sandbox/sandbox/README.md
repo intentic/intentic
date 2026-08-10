@@ -73,9 +73,19 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
   here.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/browser/session-store.ts](src/browser/session-store.ts) — whose browser an account lives in. An
+  IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
+  accounts born from it share that browser — which is what makes a site's "Continue with Google" one click —
+  while a hand-connected account keeps its own. The owner signs the email provider in themselves in a live
+  window (`browser-profile.ts`); the agent connects accounts through
+  [src/browser/accounts-tools.ts](src/browser/accounts-tools.ts) — stored credentials are typed for it, never
+  shown to it; a linked mailbox answers "the newest code from this site" and nothing more
+  (`email-codes.ts`); opening a NEW account is gated on the identity card's own switch
+  ([src/capabilities/open-account.ts](src/capabilities/open-account.ts)); and anything only a person can clear
+  parks on a help request the owner answers over the live view.
 - [src/personas/personas.ts](src/personas/personas.ts) — who a turn is and what it may do, resolved in one
   function whose header carries the reasoning for why accounts default to nothing and powers default to
-  everything. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the
+  everything. Identities count as accounts there — an unattended wake that names no persona loses them first. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the
   "change the sandbox" switch as a PreToolUse hook — a refusal, honestly weaker than the container, and the
   card's own UI says so where it is set. [src/personas/default-personas.ts](src/personas/default-personas.ts)
   seeds Visitor, Maintainer and Publisher once each.

@@ -92,6 +92,35 @@ test("remove deletes the skill dir; status returns to inactive", async () => {
     expect(await browserHandler.status(ctx, "reddit", reddit.config)).toEqual({ state: "inactive" });
 });
 
+/* AN IDENTITY-BORN ACCOUNT'S SKILL NAMES THE IDENTITY'S BROWSER — the account lives in the shared profile, so a
+ * skill that still said "your own browser tools" would send the agent to a server that does not exist. The
+ * SSO-first playbook and the identity's email ride the same seam, and a dangling reference is caught at
+ * add-time rather than surfacing as browser tools over an empty profile. */
+test("an identity-born account renders the identity-flavored note, and its removal keeps the shared profile", async () => {
+    const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
+    const { ctx, root } = tempCtx();
+    (ctx as { capabilities: unknown }).capabilities = { list: async () => [main], get: async (id: string) => (id === "main" ? main : undefined) };
+    const born: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit", identity: "main" } };
+
+    await drain(browserHandler.apply(ctx, "reddit", born.config));
+    const skill = await readWorkspaceFile(skillPath(root));
+    // The browser tools carry the IDENTITY's prefix, and the playbook leads with the SSO door.
+    expect(skill).toContain("mcp__main__browser_");
+    expect(skill).toContain("studio@gmail.com");
+    expect(skill).toContain("SSO FIRST");
+
+    // Removing the account takes its own marker and skill; the identity's profile marker survives.
+    await markConnected(root, "main");
+    await markConnected(root, "reddit");
+    await browserHandler.remove!(ctx, "reddit", born.config);
+    expect(hasSession(root, "reddit")).toBe(false);
+    expect(hasSession(root, "main")).toBe(true);
+
+    // A card naming an identity nobody added fails on the form, not turns later.
+    const dangling: Capability = { id: "x", kind: "browser", config: { platform: "x", identity: "ghost" } };
+    await expect(drain(browserHandler.apply(ctx, "x", dangling.config))).rejects.toThrow(/no identity "ghost"/);
+});
+
 /* EVERY BROWSER CARD CAN SAY WHERE IT OPENS — pinned, or asked for. A site card pins both pages; the generic
  * session card pins neither and declares the fields that supply them. What no card may be is silent about both,
  * because that is a card whose login window opens on nothing — and the failure would land on the user, in the

@@ -26,7 +26,9 @@ what a form looks like is a product decision, not a protocol. The enums it keys 
   form: servers register themselves via the connect-host command, and Cloudflare goes through its own step.
 - Some kinds get **core fields** appended to every card's form (`CORE_FIELDS`), because the fact they capture does
   not vary by card: the connected-computer permission switches, and the browser cards' optional username/password —
-  the stored credentials the daemon types into a site when the agent connects the account itself. A card declaring
+  the stored credentials the daemon types into a site when the agent connects the account itself — plus `identity`,
+  which files the account into an identity's shared browser (the web narrows it to a picker over the identities
+  that exist, and hides it when none do). A card declaring
   one of those keys keeps its own version.
 - **A card's `description` is one line — 60 characters or fewer.** The grid puts three or four tiles across what
   is left of the page after the index column, and a row is as tall as its tallest tile, so a sentence with a

@@ -86,6 +86,29 @@ const { contributionOf, enabled: enabledExtensions, extensions, settled: extensi
 // Status card drives, so a tunnel dialled from either place reads identically in both.
 const { links: vpnLinks } = useVpn();
 
+/* The browser cards' core `identity` field, narrowed to what this sandbox can actually answer: a picker over
+ * the identities that exist, or nothing at all when none do. The catalog declares the field without options
+ * because the manifest cannot know instance state; a free-text id here would only mint dangling references the
+ * daemon then rejects. "Standalone" is the empty value — buildInput drops empty answers, so the config carries
+ * no `identity` key rather than an empty one. */
+const withIdentityPicker = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry => {
+    if (entry.kind !== `browser`) {
+        return entry;
+    }
+    const identities = capabilities.value.filter((instance) => instance.kind === `identity`).map((instance) => instance.id);
+    return {
+        ...entry,
+        fields:
+            identities.length === 0
+                ? entry.fields.filter((field) => field.key !== `identity`)
+                : entry.fields.map((field) =>
+                      field.key === `identity`
+                          ? { ...field, options: [{ value: ``, label: `Standalone` }, ...identities.map((id) => ({ value: id, label: id }))] }
+                          : field,
+                  ),
+    };
+};
+
 // The full card list: cards derived from the ENABLED extensions' contributions (first declaration of a
 // kind+id wins — the daemon contributionRegistry's precedent) + the static core cards. Enabled, not installed:
 // a switched-off extension stays listed so its switch is reachable, but the daemon wires none of its
@@ -102,7 +125,7 @@ const allCards = computed<CapabilityCatalogEntry[]>(() => {
             }
         }
     }
-    return [...derived, ...CAPABILITY_CATALOG];
+    return [...derived, ...CAPABILITY_CATALOG].map(withIdentityPicker);
 });
 
 const route = useRoute();
@@ -385,9 +408,11 @@ const kindIcon = (kind: string): IconName =>
                 ? `th-large`
                 : kind === `browser`
                   ? `globe`
-                  : kind === `agent`
-                    ? `sparkles`
-                    : `bolt`;
+                  : kind === `identity`
+                    ? `user`
+                    : kind === `agent`
+                      ? `sparkles`
+                      : `bolt`;
 // The glyph tier <BrandMark> falls to when a card has no simple-icons logo (or the slug fails to load): the
 // card's explicit `icon`, else the generic per-kind fallback. A card is never left to the initials tier — its
 // KIND is always known, and "some connector" drawn as a bolt beats it drawn as two letters.
@@ -692,7 +717,8 @@ const vpnFacts = (id: string): string | undefined => {
 // What identifies a connection to the person who made it, in the order they would say it. `provider`/`platform`
 // are deliberately absent — they are the card, which the row already names, so printing them would spend the
 // line on "github · github". Secrets never reach here: the daemon strips them from the config it echoes back.
-const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `org`, `guild`, `database`, `user`, `path`] as const;
+// `email` is an identity row's one fact; `identity` is the born-from note on an account row filed under one.
+const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`] as const;
 
 // Two facts at most. A row is a line, and the third fact is the one that pushes the state badge off the end of it.
 const connectionFacts = (instance: CapabilitySummary): string =>
@@ -716,7 +742,7 @@ const CONNECTION_STATES: Readonly<Record<CapabilityState, { label: string; tone:
 // Two kinds know something truer about themselves than their status field does, and both are the difference
 // between "you have something to do" and "it is simply asleep" — which is exactly what this column is for.
 const connectionState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): { label: string; tone: StatusVariant; rank: number } => {
-    if (entry.kind === `browser` && awaitingLogin(instance)) {
+    if ((entry.kind === `browser` || entry.kind === `identity`) && awaitingLogin(instance)) {
         return { label: `needs sign-in`, tone: `warning`, rank: 1 };
     }
     if (entry.kind === `host` && instance.status.state === `active`) {
@@ -1196,7 +1222,9 @@ const submit = async (): Promise<void> => {
             // when it relabels itself Reconnect.
             if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
                 openConnect(added);
-            } else if (entry.kind === `browser` && awaitingLogin(added)) {
+            } else if ((entry.kind === `browser` || entry.kind === `identity`) && awaitingLogin(added)) {
+                // An identity's sign-in is the ONE login the owner does by hand — open the window right away,
+                // exactly like a fresh account's.
                 openBrowser(added.id, added.id);
             }
             return;
@@ -1424,7 +1452,10 @@ const submitLabel = computed(() =>
                                                  instance: the card may hold several accounts of the site, and the window opens
                                                  one of them. -->
                                             <Button
-                                                v-if="selected.kind === 'browser' && instance.status.state === 'active'"
+                                                v-if="
+                                                    (selected.kind === 'browser' || selected.kind === 'identity') &&
+                                                    instance.status.state === 'active'
+                                                "
                                                 label="Open browser"
                                                 size="small"
                                                 :text="true"
@@ -1433,9 +1464,10 @@ const submitLabel = computed(() =>
                                                 <template #icon><Icon name="globe" /></template>
                                             </Button>
                                             <!-- A browser capability connects via a live login window, not a form — offer it here
-                                                 (also the way to re-log-in once a session expires). -->
+                                                 (also the way to re-log-in once a session expires). An identity's window is the
+                                                 same thing pointed at its email provider — the one login that stays human. -->
                                             <Button
-                                                v-if="selected.kind === 'browser'"
+                                                v-if="selected.kind === 'browser' || selected.kind === 'identity'"
                                                 :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
                                                 size="small"
                                                 :text="true"

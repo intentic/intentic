@@ -186,6 +186,21 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         }
         return effects;
     },
+    identity: (input) => {
+        const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
+        /* The standing consequence of an identity is its BROWSER — one profile the accounts born from it share,
+         * signed into the email's own provider. Named by the address's domain (gmail.com), which is the site the
+         * profile actually holds a session for; the email's local part is the user's own name and stays off the
+         * disclosure row. */
+        const email = filled(input.config["email"]) ? String(input.config["email"]) : "";
+        const domain = email.includes("@") ? email.slice(email.indexOf("@") + 1) : "";
+        effects.push({ kind: "profile", platform: domain === "" ? "email" : domain });
+        // The identity's stored email password — typed by the daemon on the agent's behalf, never shown to it.
+        if (filled(input.config["password"]) || input.config["hasPassword"] === true) {
+            effects.push({ kind: "secret", exposure: "disk" });
+        }
+        return effects;
+    },
     host: (input) => {
         // Reads are the floor (a machine you cannot read is not connected to anything); the rest are the
         // card's toggles. Unset ⇒ the schema's defaults, which is what the form posts before it is touched.

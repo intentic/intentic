@@ -549,6 +549,60 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
+    /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the setup question asked once instead of twelve times.
+     * The identity owns a browser; you sign its email provider in yourself, once, in the live window (Google
+     * blocks automated logins — that one step staying human is what makes everything after it work), and the
+     * platform accounts opened through it share that browser, which is what turns "Continue with Google" into
+     * one click. The open-accounts switch is the consent that matters, so it is a field here with the warning
+     * on its face — off by default, per identity, never global. */
+    {
+        id: "identity",
+        name: "Identity",
+        kind: "identity",
+        category: "communication",
+        icon: "user",
+        description: "One email the sandbox is online — accounts grow from it.",
+        fields: [
+            { key: "email", label: "Email address", placeholder: "you@gmail.com" },
+            {
+                key: "password",
+                label: "Email password",
+                secret: true,
+                optional: true,
+                hint: "Only so the agent can have it re-typed into the provider's own login — most people leave this empty and sign in themselves.",
+            },
+            {
+                key: "mailbox",
+                label: "Code mailbox",
+                optional: true,
+                placeholder: "the IMAP connection's name",
+                hint: "A connected IMAP entry for this address. The agent then asks for “the newest code from this site” and gets exactly that — never the inbox.",
+            },
+            {
+                key: "loginUrl",
+                label: "Sign-in page",
+                optional: true,
+                placeholder: "https://accounts.google.com/",
+                hint: "Guessed from the address when empty.",
+            },
+            {
+                key: "openAccounts",
+                label: "May open accounts on its own",
+                boolean: true,
+                default: "off",
+                hint: "Lets the agent create new platform accounts through this identity when a task needs one. Automated signup is against many platforms' terms — leave off unless that is a call you have made.",
+            },
+        ],
+        hint: "The agent signs into (and opens) platform accounts through this identity's browser — you do one login, it does the rest, and calls you in for anything only a person can clear.",
+        guide: {
+            steps: [
+                "Name it and give it the email address it IS — a dedicated address beats your personal one.",
+                "After adding, open `Log in` and sign into the email provider yourself in the live window.",
+                "Optionally connect `IMAP` for the same address and name it under `Code mailbox`, so the agent can fetch verification codes itself.",
+                "Add platform accounts under this identity (or turn on `May open accounts` and let the agent open them as work needs them).",
+            ],
+        },
+    },
     /* ONE CARD FOR EVERY MODEL API, wherever it runs. An Ollama on this machine, a vLLM on the GPU box, a
      * LiteLLM gateway and OpenRouter are the same thing — a URL that serves models — and the only axis that
      * actually changes anything is which wire the server speaks. Splitting it into "local" and "remote" cards
@@ -601,6 +655,17 @@ const isCapabilityCategory = (category: string): category is CapabilityCategory 
 const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
     { key: "username", label: "Username / email", optional: true },
     { key: "password", label: "Password", secret: true, optional: true },
+    /* Which identity this account is born from — core for the same reason the credentials are: whose browser an
+     * account lives in is a fact about the sandbox, not about any site, and it is what makes "Continue with
+     * Google" one click (the identity's session is right there in the shared profile). Declared without
+     * `options`; the web narrows it to a picker over the identities that actually exist and hides it when none
+     * do, so the manifest stays ignorant of instance state. */
+    {
+        key: "identity",
+        label: "Belongs to identity",
+        optional: true,
+        hint: "The identity whose browser this account lives in — shares its email session, so “Continue with” its provider is one click.",
+    },
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 

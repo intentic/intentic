@@ -94,6 +94,12 @@ const close = (name: string): void => void closeBrowser(name);
  * either way ("typed the password, don't touch remember-me"). */
 const helpNote = ref(``);
 watch(selected, () => (helpNote.value = ``));
+
+/* THE QUEUE OF ASKS. One browser's request renders as the banner over its own stage — but the agent can be
+ * stuck in several browsers at once (two identities mid-signup, each on its own captcha), and the pills' warning
+ * dots are too quiet to say so. So every OTHER browser waiting for hands lists here, message and all, one click
+ * from its stage. The selected browser's own ask stays out of it: that one is the banner right below. */
+const queuedHelp = computed(() => sessions.value.filter((session) => session.help !== undefined && session.name !== selected.value));
 const resolveHelp = async (helped: boolean): Promise<void> => {
     const help = current.value?.help;
     if (help === undefined) {
@@ -186,6 +192,23 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                     @click="close(current.name)"
                 >
                     Close
+                </button>
+            </div>
+
+            <!-- Other browsers waiting for hands — the queue. Each row is one parked ask, one click from the
+                 stage it is parked over; the selected browser's own ask is the banner below, not a row here. -->
+            <div v-if="queuedHelp.length > 0" class="flex shrink-0 flex-col border-b border-line">
+                <button
+                    v-for="session in queuedHelp"
+                    :key="session.name"
+                    type="button"
+                    class="flex items-center gap-2 border-b border-line/50 bg-warning/5 px-3 py-1.5 text-left text-xs transition-colors last:border-b-0 hover:bg-warning/10"
+                    @click="selectSession(session.name)"
+                >
+                    <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
+                    <span class="shrink-0 font-medium text-content">{{ session.label }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ session.help?.message }}</span>
+                    <span class="shrink-0 text-link">Help →</span>
                 </button>
             </div>
 

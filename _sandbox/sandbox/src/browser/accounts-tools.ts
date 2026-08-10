@@ -1,23 +1,33 @@
 import { randomInt } from "node:crypto";
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, BrowserConfig, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { createRequest, resolveRequest } from "../agent/agent-requests.js";
+import type { OpenAccountInput } from "../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "./browser-sessions.js";
-import { markConnected } from "./session-store.js";
+import { fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
+import { markConnected, profileOwner } from "./session-store.js";
 
-/* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself — sign in, sign up, and call for the
- * owner when a step needs a person — instead of every login being the owner's own hands in the guided window.
+/* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself — sign in, sign up, open a NEW
+ * account through an identity, and call for the owner when a step needs a person — instead of every login being
+ * the owner's own hands in the guided window.
  *
  * The design rule throughout is the manifest's TOTP rule, applied to passwords: a stored credential must never
  * enter the model's context. So there is no "read the password" tool. The daemon TYPES it — into the focused
  * field of the account's live page, over the same CDP attach the /browsers view watches through — and when the
  * agent signs UP, the daemon GENERATES the password and stores it on the capability, so even a credential the
- * agent caused to exist is one it never saw. What the model handles is one bit: "typed" or an error.
+ * agent caused to exist is one it never saw. The mailbox gets the same treatment: `fetch_email_code` answers
+ * with the one code or link a site just sent, never with an inbox. What the model handles is the narrow answer.
+ *
+ * AN `account` IS A BROWSER ENTRY OR AN IDENTITY — one address space, because the identity is account-shaped
+ * everywhere it matters here: it has a stored credential to type (its email, its provider password), a live
+ * browser to be helped in, and a connected marker of its own. Every tool resolves the entry's PROFILE OWNER
+ * (session-store.ts) to find the live page, which is how three accounts born of one identity share one browser
+ * without any tool having to know.
  *
  * Scoped to the accounts THIS TURN may act through (the identity filter turn-plan already applies to the
- * browser servers): a tool addressed to any other account errors rather than reaching a profile the turn's
- * face was never allowed to wear. */
+ * browser servers), with one deliberate widening: an account BORN of a granted identity is in scope with it —
+ * including one this very turn just opened, which the grant list captured at turn start cannot have named. */
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const fail = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
@@ -30,8 +40,8 @@ const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGIT = "23456789";
 const SYMBOL = "!@#$%^*-_+=";
 const ALL = LOWER + UPPER + DIGIT + SYMBOL;
+const pick = (set: string): string => set[randomInt(set.length)] ?? "";
 export const generatePassword = (): string => {
-    const pick = (set: string): string => set[randomInt(set.length)] ?? "";
     const chars = [pick(LOWER), pick(UPPER), pick(DIGIT), pick(SYMBOL), ...Array.from({ length: 16 }, () => pick(ALL))];
     for (let i = chars.length - 1; i > 0; i--) {
         const j = randomInt(i + 1);
@@ -40,33 +50,78 @@ export const generatePassword = (): string => {
     return chars.join("");
 };
 
-// What the daemon needs from the composition — narrowed to the two store calls so tests can hand in a map.
+// What the daemon needs from the composition — narrowed so tests can hand in fakes. `openAccount` and
+// `fetchCode` are closures rather than imports for the same reason `capabilities` is a two-method slice: the
+// real ones reach Services and the network, and the seam is what keeps these tools testable.
 export interface AccountsDeps {
     readonly capabilities: {
         readonly get: (id: string) => Promise<Capability | undefined>;
         readonly upsert: (capability: Capability) => Promise<void>;
     };
     readonly root: string;
-    // The browser capability ids this turn's identity speaks for — the same filter the browser servers got.
+    // The browser-shaped capability ids this turn's persona speaks for — accounts and identities alike, the
+    // same filter the browser servers got.
     readonly accounts: readonly string[];
     readonly conversationId?: string | undefined;
     // An unattended turn gets no request_help: it would park on a person who is not there. The other tools
     // stay — an automation may finish an email-code login with nobody watching.
     readonly attended: boolean;
+    // File a new browser account under an identity (capabilities/open-account.ts — the switch gate lives there).
+    readonly openAccount: (input: OpenAccountInput) => Promise<string>;
+    // Read the newest code/link a site sent to a mailbox (email-codes.ts).
+    readonly fetchCode: (mailbox: Mailbox, site: string, now: Date) => ReturnType<typeof fetchEmailCode>;
 }
 
-// Resolved per call rather than captured at server build: the owner can add the password mid-turn (the agent
-// asked for it in chat, the owner put it on the card) and the very next type_credential should see it.
-const browserAccount = async (deps: AccountsDeps, id: string): Promise<Capability | undefined> => {
-    if (!deps.accounts.includes(id)) {
+/* Resolved per call rather than captured at server build: the owner can add a password mid-turn (the agent
+ * asked for it in chat, the owner put it on the card) and the very next type_credential should see it — and an
+ * account opened mid-turn by open_account must be addressable by the calls right after it. */
+const turnEntry = async (deps: AccountsDeps, id: string): Promise<Capability | undefined> => {
+    const capability = await deps.capabilities.get(id);
+    if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
         return undefined;
     }
-    const capability = await deps.capabilities.get(id);
-    return capability?.kind === "browser" ? capability : undefined;
+    if (deps.accounts.includes(id)) {
+        return capability;
+    }
+    // Born of a granted identity ⇒ in scope with it: the entry lives in a browser this turn already holds.
+    const identity = capability.kind === "browser" ? (capability.config as BrowserConfig).identity : undefined;
+    return identity !== undefined && deps.accounts.includes(identity) ? capability : undefined;
 };
 
 const NO_ACCOUNT = (id: string): string =>
-    `no browser account "${id}" this turn can act through — the account is the capability's id (the skill that taught you its browser tools names it)`;
+    `no account "${id}" this turn can act through — the account is a browser entry's (or identity's) capability id; the skill that taught you its tools names it`;
+
+// The identity an entry answers mail through: itself, or the one it was born from. Undefined for a standalone
+// account — which is the "no identity" arm of fetch_email_code's error.
+const identityBehind = async (deps: AccountsDeps, capability: Capability): Promise<Capability | undefined> => {
+    if (capability.kind === "identity") {
+        return capability;
+    }
+    const id = (capability.config as BrowserConfig).identity;
+    if (id === undefined) {
+        return undefined;
+    }
+    const identity = await deps.capabilities.get(id);
+    return identity?.kind === "identity" ? identity : undefined;
+};
+
+// The stored value type_credential types. An identity's username IS its email; an identity-born account with
+// no username of its own falls back to its identity's email — the address its signup forms were fed.
+const credentialValue = async (deps: AccountsDeps, capability: Capability, field: "username" | "password"): Promise<string | undefined> => {
+    if (capability.kind === "identity") {
+        const config = capability.config as IdentityConfig;
+        return field === "username" ? config.email : config.password;
+    }
+    const config = capability.config as BrowserConfig;
+    if (field === "password") {
+        return config.password;
+    }
+    if (config.username !== undefined && config.username !== "") {
+        return config.username;
+    }
+    const identity = await identityBehind(deps, capability);
+    return identity === undefined ? undefined : (identity.config as IdentityConfig).email;
+};
 
 // The focused element, if it can take typed text. Checked before typing a credential so a mis-click sends the
 // password into an error message here rather than into a search box on the wrong part of the page.
@@ -93,17 +148,17 @@ export const accountsServer =
             tools: [
                 tool(
                     "type_credential",
-                    "Type a browser account's STORED username or password into the focused field of that account's live browser page. You never see the value — click the field with the account's browser_click first, then call this. The result confirms the typed username (you may need it, e.g. to find its inbox); a password is never echoed.",
+                    "Type an account's STORED username or password into the focused field of its live browser page. You never see the value — click the field with the browser tools first, then call this. An identity's username is its email; an identity-born account with no username of its own types its identity's email. The result confirms the typed username (you may need it, e.g. to find its inbox); a password is never echoed.",
                     {
-                        account: z.string().describe("The browser account (capability id) whose credential to type"),
+                        account: z.string().describe("The account (capability id) whose credential to type"),
                         field: z.enum(["username", "password"]).describe("Which stored value to type"),
                     },
                     async ({ account, field }) => {
-                        const capability = await browserAccount(deps, account);
+                        const capability = await turnEntry(deps, account);
                         if (capability === undefined) {
                             return fail(NO_ACCOUNT(account));
                         }
-                        const value = (capability.config as BrowserConfig)[field];
+                        const value = await credentialValue(deps, capability, field);
                         if (value === undefined || value === "") {
                             return fail(
                                 field === "password"
@@ -111,9 +166,9 @@ export const accountsServer =
                                     : `no username is stored for "${account}" — ask the owner, or read it off the site if it is visible`,
                             );
                         }
-                        const page = browserAccountPage(account);
+                        const page = browserAccountPage(profileOwner(capability));
                         if (page === undefined) {
-                            return fail(`"${account}" has no live browser page — open the site with that account's browser tools first`);
+                            return fail(`"${account}" has no live browser page — open the site with its browser tools first`);
                         }
                         if (!(await focusedEditable(page))) {
                             return fail("no text field is focused on the page — browser_click the field first, then call this again");
@@ -132,29 +187,109 @@ export const accountsServer =
                         replace: z.boolean().optional().describe("Replace an already-stored password (e.g. the site rejected it)"),
                     },
                     async ({ account, replace }) => {
-                        const capability = await browserAccount(deps, account);
+                        const capability = await turnEntry(deps, account);
                         if (capability === undefined) {
                             return fail(NO_ACCOUNT(account));
                         }
+                        if (capability.kind === "identity") {
+                            // The identity's provider login is the one this product keeps in the owner's hands,
+                            // so its password is theirs to set on the card — never minted by a turn.
+                            return fail(`"${account}" is an identity — its email password is the owner's to set on the identity's card`);
+                        }
                         const config = capability.config as BrowserConfig;
                         if (config.password !== undefined && config.password !== "" && replace !== true) {
-                            return fail(`"${account}" already stores a password — type it with type_credential, or pass replace: true if the site refused it`);
+                            return fail(
+                                `"${account}" already stores a password — type it with type_credential, or pass replace: true if the site refused it`,
+                            );
                         }
                         await deps.capabilities.upsert({ ...capability, config: { ...config, password: generatePassword() } } as Capability);
-                        return ok(`generated and stored a strong password for "${account}" — focus the site's password field and call type_credential to enter it`);
+                        return ok(
+                            `generated and stored a strong password for "${account}" — focus the site's password field and call type_credential to enter it`,
+                        );
                     },
                 ),
                 tool(
                     "mark_connected",
-                    "Mark a browser account as connected, AFTER you verified the sign-in landed (you are on the site signed in as the account — not on a login page). This is what flips the capability from pending to active, so future turns get its browser already authenticated.",
-                    { account: z.string().describe("The browser account (capability id) that is now signed in") },
+                    "Mark an account as connected, AFTER you verified the sign-in landed (you are on the site signed in as the account — not on a login page). For an identity: after its email provider shows you signed in. This is what flips the capability from pending to active, so future turns get its browser already authenticated.",
+                    { account: z.string().describe("The account (capability id) that is now signed in") },
                     async ({ account }) => {
-                        const capability = await browserAccount(deps, account);
+                        const capability = await turnEntry(deps, account);
                         if (capability === undefined) {
                             return fail(NO_ACCOUNT(account));
                         }
                         await markConnected(deps.root, account);
                         return ok(`"${account}" is marked connected — its browser opens signed in from now on`);
+                    },
+                ),
+                tool(
+                    "fetch_email_code",
+                    "The newest verification code or confirmation link a site emailed to this account's identity — and nothing else; you never see the inbox. Reads the mailbox linked on the identity's card, looks at the last half hour, and answers with the sender, subject, codes and links of the newest mail from the site you are signing into. Open confirmation links in the identity's own browser.",
+                    { account: z.string().describe("The account (capability id) whose identity's mailbox to ask") },
+                    async ({ account }) => {
+                        const capability = await turnEntry(deps, account);
+                        if (capability === undefined) {
+                            return fail(NO_ACCOUNT(account));
+                        }
+                        const identity = await identityBehind(deps, capability);
+                        if (identity === undefined) {
+                            return fail(
+                                `"${account}" has no identity behind it — there is no linked mailbox to ask. If an email inbox is connected (the IMAP skill), search it yourself`,
+                            );
+                        }
+                        const mailboxId = (identity.config as IdentityConfig).mailbox;
+                        const mailbox = mailboxId === undefined || mailboxId === "" ? undefined : mailboxOf(await deps.capabilities.get(mailboxId));
+                        if (mailbox === undefined) {
+                            return fail(
+                                `the identity "${identity.id}" links no readable mailbox — open its webmail in its own browser (mcp__${identity.id}__browser_*) and read the one mail there`,
+                            );
+                        }
+                        // The site is wherever this account's browser is stuck right now — the page asking for
+                        // the code — falling back to the platform slug for a call made before any navigation.
+                        const page = browserAccountPage(profileOwner(capability));
+                        const site =
+                            page !== undefined
+                                ? new URL(page.url()).host
+                                : capability.kind === "browser"
+                                  ? (capability.config as BrowserConfig).platform
+                                  : ((identity.config as IdentityConfig).email.split("@")[1] ?? "");
+                        try {
+                            const match = await deps.fetchCode(mailbox, site, new Date());
+                            if (match === undefined) {
+                                return fail(
+                                    `no mail from ${siteToken(site)} in the last half hour — wait a moment and try again, or re-request the code on the page`,
+                                );
+                            }
+                            const codes = match.codes.length === 0 ? "" : `\ncodes: ${match.codes.slice(0, 5).join(", ")}`;
+                            const links = match.links.length === 0 ? "" : `\nlinks:\n${match.links.slice(0, 3).join("\n")}`;
+                            return ok(`newest mail from ${siteToken(site)} — "${match.subject}" (${match.from})${codes}${links}`);
+                        } catch (error) {
+                            const message = error instanceof Error ? error.message : String(error);
+                            return fail(`could not read the mailbox: ${message} — check the mailbox entry on the identity's card`);
+                        }
+                    },
+                ),
+                tool(
+                    "open_account",
+                    "Open a NEW platform account through an identity: files a browser account under it (they share the identity's browser), so you can then perform the signup there — prefer the site's \"Continue with\" the identity's provider; fall back to email signup with fetch_email_code for the confirmation. Refused unless the identity's owner turned on \"may open accounts\". Tell the owner what you opened and why.",
+                    {
+                        account: z.string().describe('An id for the new account (e.g. "reddit-main") — becomes the capability id'),
+                        platform: z.string().describe('The platform card to open it on (e.g. "reddit", "x", "website")'),
+                        identity: z.string().describe("The identity (capability id) to open it through"),
+                    },
+                    async ({ account, platform, identity }) => {
+                        // The identity must be one this turn speaks for — the same scope every other tool checks.
+                        const holder = await turnEntry(deps, identity);
+                        if (holder === undefined || holder.kind !== "identity") {
+                            return fail(`no identity "${identity}" this turn can act through — name the identity whose skill you are holding`);
+                        }
+                        try {
+                            const report = await deps.openAccount({ id: account, platform, identity });
+                            return ok(
+                                `${report}\nNow perform the sign-up in the identity's browser (mcp__${identity}__browser_*), SSO first; call mark_connected("${account}") once you verifiably are the account.`,
+                            );
+                        } catch (error) {
+                            return fail(error instanceof Error ? error.message : String(error));
+                        }
                     },
                 ),
                 ...(deps.attended
@@ -163,11 +298,12 @@ export const accountsServer =
                               "request_help",
                               "Ask the owner to step into this account's live browser and clear something only a person can (a captcha, a password you don't hold, a phone check). Your browser stays open; the owner sees your message on the Browsers view, takes control, fixes that step, and hands back — this call waits for them and returns how it ended. Say precisely what you need done.",
                               {
-                                  account: z.string().describe("The browser account (capability id) whose page needs the owner"),
+                                  account: z.string().describe("The account (capability id) whose page needs the owner"),
                                   message: z.string().min(1).describe("What you need the owner to do, in one or two sentences"),
                               },
                               async ({ account, message }) => {
-                                  if ((await browserAccount(deps, account)) === undefined) {
+                                  const capability = await turnEntry(deps, account);
+                                  if (capability === undefined) {
                                       return fail(NO_ACCOUNT(account));
                                   }
                                   const { id, wait } = createRequest(
@@ -175,7 +311,7 @@ export const accountsServer =
                                       { kind: "browser_help", requestId: "", helped: false, note: "the turn ended before anyone could help" },
                                       deps.conversationId,
                                   );
-                                  const session = raiseBrowserHelp(account, { requestId: id, message, requestedAt: Date.now() });
+                                  const session = raiseBrowserHelp(profileOwner(capability), { requestId: id, message, requestedAt: Date.now() });
                                   if (session === undefined) {
                                       // Settle the just-parked waiter so nothing holds its id, then say why.
                                       resolveRequest({ kind: "browser_help", requestId: id, helped: false });

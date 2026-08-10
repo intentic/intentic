@@ -8,6 +8,7 @@ import { dockerHandler } from "./handlers/docker.js";
 import { endpointHandler } from "./handlers/endpoint.js";
 import { extensionHandler } from "./handlers/extension.js";
 import { hostHandler } from "./handlers/host.js";
+import { identityHandler } from "./handlers/identity.js";
 import { integrationHandler } from "./handlers/integration.js";
 import { mcpHandler } from "./handlers/mcp.js";
 import { monorepoHandler } from "./handlers/monorepo.js";
@@ -30,6 +31,7 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     vpn: vpnHandler,
     docker: dockerHandler,
     browser: browserHandler,
+    identity: identityHandler,
     host: hostHandler,
     agent: agentHandler,
     endpoint: endpointHandler,

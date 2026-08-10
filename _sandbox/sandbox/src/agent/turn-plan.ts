@@ -12,6 +12,8 @@ import {
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { accountsServer } from "../browser/accounts-tools.js";
+import { fetchEmailCode } from "../browser/email-codes.js";
+import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { type TurnPersona, personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, turnPersona } from "../personas/personas.js";
@@ -551,8 +553,12 @@ export const planHarnessTurn = async (
      * (the bench). Nothing that starts a real session takes it: planTurn always resolves a card first. */
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     // The accounts this turn speaks for — one list feeding both the browser servers and the accounts tools'
-    // scope, so a tool can never reach an account whose browser this turn was refused.
-    const browserAccountIds = granted.filter((capability) => capability.kind === "browser").map((capability) => capability.id);
+    // scope, so a tool can never reach an account whose browser this turn was refused. Identities are
+    // account-shaped here: the accounts tools address them by id too (typing the identity's email, fetching a
+    // code from its mailbox, marking its provider login).
+    const browserAccountIds = granted
+        .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
+        .map((capability) => capability.id);
     const [extensionAgentDirs, browser, delegation] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
         // Each browser capability (account) grants the @playwright/mcp browser tools, bound to that account's
@@ -707,6 +713,11 @@ export const planHarnessTurn = async (
                           accounts: browserAccountIds,
                           ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
                           attended: input.unattended !== true,
+                          // The two verbs that reach past the narrow deps — filing a new account under an
+                          // identity, and reading one code off its linked mailbox — injected as closures so
+                          // the tools stay testable without Services or a network.
+                          openAccount: (request) => openBrowserAccount(services, request),
+                          fetchCode: fetchEmailCode,
                       }),
                   }
                 : {}),

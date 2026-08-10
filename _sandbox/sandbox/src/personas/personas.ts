@@ -84,7 +84,10 @@ const NONE_POWERS: PersonaPowers = { files: "none", shell: false, web: false, br
  * the header, and would have silently disarmed every automation already running the day this shipped. */
 const EVERYTHING = (): boolean => true;
 const NOTHING = (): boolean => false;
-const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => capability.kind !== "browser";
+// Identities count as accounts here: an identity's browser holds its email session and every account born from
+// it, which is MORE credential than any single account — so the rule that takes accounts away from an
+// unattended wake takes identities with them.
+const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => capability.kind !== "browser" && capability.kind !== "identity";
 
 /* Which capability kinds each shelf answers for. A kind that is absent from this table is not something the
  * card has an opinion about — the runtimes an `agent` capability provides, the workspace's own devops and
@@ -94,6 +97,13 @@ const allowsCapability = (capability: Capability, card: Persona, powers: Persona
     switch (capability.kind) {
         // The signed-in browsers: the card's own `capabilities` list, and the field that predates the shelves.
         case "browser":
+            return card.capabilities.includes(capability.id);
+        /* An identity, by the same rule: the card names what it speaks through, and the identity's own tools
+         * (its webmail, opening accounts) are a grant of their own. Naming an identity-born ACCOUNT without its
+         * identity still works — the account brings its shared browser up by itself (browser-tools.ts groups by
+         * profile owner) — so a card granting `reddit-work` grants that account's hands, and only a card
+         * granting the identity grants the someone. */
+        case "identity":
             return card.capabilities.includes(capability.id);
         // The connectors (GitHub, Discord, a database…) — their credentials reach the shell, so an id that is
         // not granted keeps its environment variables out of the turn entirely.

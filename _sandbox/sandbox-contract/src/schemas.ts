@@ -2780,6 +2780,7 @@ export const CapabilityKindSchema = z.enum([
     "vpn",
     "docker",
     "browser",
+    "identity",
     "host",
     "agent",
     "endpoint",
@@ -3025,9 +3026,51 @@ export const DockerConfigSchema = z.object({
 // pins its URLs and declares no fields; the generic one declares fields and pins nothing — one kind, because
 // nothing downstream of the URLs differs. Which other keys are legal is the CARD's business, checked against its
 // declared fields at add-time (validateContributionConfig), not this schema's.
+//
+// `identity` names the identity capability this account was born from (or was filed under): the account then
+// lives INSIDE that identity's browser — one profile, one set of cookies — which is what makes "Continue with
+// Google" one click instead of a second Google login the platform would block. Absent ⇒ the account keeps its
+// own private profile, exactly as every hand-connected account always has.
 export const BrowserConfigSchema = z
-    .object({ platform: z.string().min(1), username: z.string().optional(), password: z.string().optional() })
+    .object({
+        platform: z.string().min(1),
+        username: z.string().optional(),
+        password: z.string().optional(),
+        identity: z.string().optional(),
+    })
     .catchall(z.string());
+/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the container platform accounts are born from, and the answer
+ * to "who is this sandbox on the internet" being twelve separate logins today.
+ *
+ * WHAT IT OWNS IS A BROWSER. An identity is one persisted Chromium profile the way a person's own browser is
+ * one: Google signed in once (by the OWNER's hand, in the guided window — automated Google logins are exactly
+ * what Google blocks), and every account born from it sharing those cookies, so a platform's "Continue with
+ * Google" is a click rather than an email round-trip. Browser accounts join it by naming it in their `identity`
+ * field; accounts that name no identity keep their own private profile, which is how work and personal stay two
+ * containers — two identities, not one profile with a flag.
+ *
+ * WHY A CAPABILITY AND NOT A PERSONA: this card holds SECRETS (an email password the daemon types but never
+ * shows) and a live profile's identity, and the personas file is committed to git precisely because it holds
+ * neither (personas-store.ts). A persona is how a session BEHAVES; an identity is who the browser IS SIGNED IN
+ * as. A persona may point at accounts that live inside an identity, and neither card needs to know the other
+ * exists.
+ *
+ * `email` is the identity itself — what signup forms get typed into their username box, and how the guided
+ * login knows where to start (gmail.com ⇒ accounts.google.com; `loginUrl` overrides for any other provider).
+ * `password` is the entry's SECRET, the browser-config precedent: typed by the daemon, never readable.
+ * `mailbox` names a connected mail capability (imap, google) the narrow code tool reads — the agent asks for
+ * "the latest code from this site" and gets six digits, not an inbox.
+ * `openAccounts` is THE consent switch, off by default and a select rather than a boolean (the host-scope
+ * precedent — form values arrive as strings): automated signup is against most platforms' terms, so minting
+ * accounts unattended is an explicit, per-identity, informed choice — never a silent global default. */
+export const IdentityConfigSchema = z.object({
+    email: z.string().min(3),
+    password: z.string().optional(),
+    mailbox: z.string().optional(),
+    loginUrl: z.url().optional(),
+    openAccounts: z.enum(["on", "off"]).default("off"),
+});
+export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
 /* A connected COMPUTER of the user's own — the inverse of `ssh`, which reaches a server the sandbox can dial.
  * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
@@ -3158,6 +3201,9 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // silent de-privilege more destructive than useful.
     z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
+    // One email identity the sandbox acts as online — the browser-owning container accounts are born from
+    // (IdentityConfigSchema). Browser entries join it via their `identity` field.
+    z.object({ id: entryId, kind: z.literal("identity"), config: IdentityConfigSchema }),
     z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
     // A model API (EndpointConfigSchema). The id becomes `endpoint/<id>` in the chat picker — the `agent` kind's

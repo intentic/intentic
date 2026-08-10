@@ -370,9 +370,13 @@ const summarize = (record: BrowserSessionRecord): BrowserSession => {
     // asymmetry as the page list above, and for the same reason.
     const activeId = running ? record.activePageId : record.lastPageId;
     const active = activeId === undefined ? undefined : record.pages.get(activeId);
+    // A logged-in browser is SOMEONE'S — the server key is the profile owner (an identity, or a standalone
+    // account), and leading with it is what tells two identities' browsers apart when both are open on the same
+    // site. The credential-free `web` browser is nobody's and keeps the page-first label.
+    const page = active?.title ?? hostOf(active?.url);
     const session: BrowserSession = {
         name: record.name,
-        label: active?.title ?? hostOf(active?.url) ?? record.server,
+        label: record.server === "web" ? (page ?? record.server) : page === undefined ? record.server : `${record.server} · ${page}`,
         server: record.server,
         running,
         activityAt: record.activityAt,

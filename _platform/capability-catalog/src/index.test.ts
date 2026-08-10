@@ -77,6 +77,9 @@ describe("contributionCard", () => {
             "docker",
             "endpoint",
             "extension",
+            // Static like endpoint, and for the same reason: an identity has no site, so there is nothing an
+            // extension could vary — the email IS the card.
+            "identity",
             "integration",
             "mcp",
             "monorepo",
@@ -117,7 +120,8 @@ describe("contributionCard", () => {
             skill: "skills/website/SKILL.md",
         };
         const card = contributionCard(generic);
-        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose", "username", "password"]);
+        // …plus `identity` — whose browser the account lives in is core the way the credentials are.
+        expect(card.fields.map((field) => field.key)).toEqual(["platform", "homeUrl", "loginUrl", "purpose", "username", "password", "identity"]);
         expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
         // The credentials are optional and the password is a secret — a card that stored it in the clear, or
         // demanded it from someone who signs in by hand, would be wrong in two different ways.
@@ -140,7 +144,7 @@ describe("contributionCard", () => {
             skill: "skills/customsite/SKILL.md",
         };
         const keys = contributionCard(declaring).fields.map((field) => field.key);
-        expect(keys).toEqual(["platform", "username", "password"]);
+        expect(keys).toEqual(["platform", "username", "password", "identity"]);
         expect(contributionCard(declaring).fields.find((field) => field.key === "username")?.label).toBe("Login handle");
     });
 

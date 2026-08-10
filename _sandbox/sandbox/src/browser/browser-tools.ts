@@ -8,7 +8,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
-import { isProfileOpen, passkeyPath, sessionDir } from "./session-store.js";
+import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
 // The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
@@ -247,10 +247,12 @@ export interface BrowserTurnTools {
 // window holds it (Chromium locks the --user-data-dir). A capability may take the `web` id, in which case its
 // persisted profile deliberately wins.
 //
-// One server PER ACCOUNT, keyed by the capability's id — which is also the profile's key, so two accounts of one
-// site (reddit-work, reddit-personal) are two servers over two separate profiles and both are drivable in the
-// same turn. Keyed by platform they would have been two prefixes over one user-data-dir, which Chromium locks:
-// whichever launched first would work and the other would fail on its first call.
+// One server PER PROFILE OWNER, keyed by profileOwner's answer — the identity when an account was born from
+// one, the entry itself otherwise. Two standalone accounts of one site (reddit-work, reddit-personal) are two
+// servers over two separate profiles, both drivable in the same turn; an identity and every account born from
+// it are ONE server over the shared profile, because they are one browser and Chromium locks the
+// --user-data-dir. The dedup is also what lets a turn granted only `reddit-work` (not its identity) still act:
+// the account brings its shared browser up by itself, keyed by the identity's id.
 //
 // `anonymous` is the credential-free browser — the persona shelf of the same name, and the reason this is a
 // parameter rather than the unconditional server it used to be. It is asked separately from the accounts above
@@ -270,25 +272,30 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         ports["web"] = webPort;
         servers["web"] = isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort));
     }
-    const accounts = capabilities.filter((capability) => capability.kind === "browser" && !isProfileOpen(capability.id));
-    if (accounts.length === 0) {
+    const owners = new Set(
+        capabilities
+            .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
+            .map((capability) => profileOwner(capability))
+            .filter((owner) => !isProfileOpen(owner)),
+    );
+    if (owners.size === 0) {
         return { servers, ports, passkeys };
     }
     // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
     // must not start a virtual display just to have a browser available.
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
-    for (const capability of accounts) {
+    for (const owner of owners) {
         const port = await freePort();
-        ports[capability.id] = port;
-        passkeys[capability.id] = passkeyPath(root, capability.id);
-        servers[capability.id] = browserServerSpec(
+        ports[owner] = port;
+        passkeys[owner] = passkeyPath(root, owner);
+        servers[owner] = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
-            sessionDir(root, capability.id),
+            sessionDir(root, owner),
             stealthPath,
             display,
-            await writeBrowserConfig(capability.id, port),
+            await writeBrowserConfig(owner, port),
         );
     }
     return { servers, ports, passkeys };

@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { BrowserConfig } from "@intentic/sandbox-contract";
-import { BROWSER_TOOLS_NOTE } from "../../browser/browser-skill.js";
-import { clearSession, hasSession } from "../../browser/session-store.js";
+import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
+import { browserToolsNote } from "../../browser/browser-skill.js";
+import { clearMarker, clearSession, hasSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
@@ -30,7 +30,8 @@ const skillPath = (root: string, id: string): string => join(root, ".claude", "s
 // the "rebuild pending" state between "add" and "rebuild" (on a core image the pack rides the overlay). Both
 // halves checked because the pack installs them as one unit and a half-present browser is unusable: Chromium
 // without Xvfb can only run headless (fingerprinted and blocked), Xvfb without Chromium has nothing to display.
-const browserPackInstalled = (): boolean => {
+// Exported for the identity handler, whose browser is this same machinery.
+export const browserPackInstalled = (): boolean => {
     if (!existsSync("/usr/bin/Xvfb")) {
         return false;
     }
@@ -69,10 +70,18 @@ export const browserHandler: CapabilityHandler = {
     },
     fragment: () => packFragment("browser"),
     apply: async function* (ctx, id, config) {
-        const { platform } = config as BrowserConfig;
+        const { platform, identity } = config as BrowserConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("browser", platform));
         if (contribution === undefined) {
             throw new Error(`no browser platform "${platform}" — install the extension that declares it`);
+        }
+        /* WHOSE BROWSER THIS ACCOUNT LIVES IN, resolved at add-time for the same reason the URLs are: a card
+         * naming an identity that isn't there would otherwise surface later as browser tools over an empty
+         * profile nobody signed in. The identity's email is baked into the skill so the agent knows which
+         * address the signup forms get — a fact the platform pack cannot know. */
+        const born = identity === undefined ? undefined : await ctx.capabilities.get(identity);
+        if (identity !== undefined && born?.kind !== "identity") {
+            throw new Error(`no identity "${identity}" — add the identity first, or leave the field empty for a standalone account`);
         }
         /* WHERE THIS ACCOUNT'S BROWSER OPENS, settled HERE rather than when the login window is opened. A card
          * pins it or the form answers it, and "neither" is a real possibility for the generic session — so it is
@@ -86,14 +95,20 @@ export const browserHandler: CapabilityHandler = {
         if (site === undefined) {
             throw new Error(`"${urls.homeUrl}" is not a web address — include https:// and the site's host`);
         }
-        const skill = await contributedSkill(contribution, id, BROWSER_TOOLS_NOTE, config as Record<string, string>);
+        const note = browserToolsNote(
+            born === undefined ? undefined : { id: born.id, email: (born.config as IdentityConfig).email },
+        );
+        const skill = await contributedSkill(contribution, id, note, config as Record<string, string>);
         if (skill === undefined) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
         }
         await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
         yield {
             kind: "log",
-            message: `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — or ask the agent to sign in (or sign up) for you. Once connected, the agent acts as you there.`,
+            message:
+                born === undefined
+                    ? `Connected "${id}" on ${site}. Rebuild the sandbox if prompted, then open "Log in" to sign in — or ask the agent to sign in (or sign up) for you. Once connected, the agent acts as you there.`
+                    : `Filed "${id}" on ${site} under the identity "${born.id}" — it shares that identity's browser. Ask the agent to sign in (or sign up) through it, or open "Log in" to do it yourself.`,
         };
     },
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
@@ -111,8 +126,15 @@ export const browserHandler: CapabilityHandler = {
         }
         return { state: "active" };
     },
-    remove: async (ctx, id) => {
+    // A standalone account's removal takes its whole profile with it; an identity-born account's takes only its
+    // own marker and skill — the shared browser (and every sibling signed in beside it) belongs to the identity
+    // and outlives any one account.
+    remove: async (ctx, id, config) => {
         await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", id));
-        await clearSession(ctx.workspace.root, id);
+        if ((config as BrowserConfig).identity === undefined) {
+            await clearSession(ctx.workspace.root, id);
+        } else {
+            await clearMarker(ctx.workspace.root, id);
+        }
     },
 };

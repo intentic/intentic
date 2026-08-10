@@ -66,6 +66,20 @@ test("a persona with an empty card allows nothing, which is not the same as nami
     expect(persona.allows(browser("reddit-work"))).toBe(false);
 });
 
+/* An identity is MORE credential than any single account — its browser holds the email session and every
+ * account born from it — so it rides the account rules exactly: named on the card to be granted, and the first
+ * thing an unattended unpinned wake loses. A blanket pass-through here (the default arm) would hand a nightly
+ * job the strongest browser in the sandbox by omission. */
+test("identities count as accounts: card-named when pinned, gone entirely when an unpinned wake fires", () => {
+    const identity: Capability = { id: "main", kind: "identity", config: { email: "me@gmail.com", openAccounts: "off" } };
+    const cast = [card("outward", ["main", "reddit-work"])];
+    expect(turnPersona({ personas: cast, actsAs: "outward", unattended: true }).allows(identity)).toBe(true);
+    // A card that names only accounts born from it does NOT get the identity itself.
+    expect(turnPersona({ personas: [card("narrow", ["reddit-work"])], actsAs: "narrow", unattended: false }).allows(identity)).toBe(false);
+    expect(turnPersona({ personas: cast, actsAs: undefined, unattended: true }).allows(identity)).toBe(false);
+    expect(turnPersona({ personas: cast, actsAs: undefined, unattended: false }).allows(identity)).toBe(true);
+});
+
 // ── Powers: permissive by default, and the one case where that flips ────────────────────────────────────────
 
 /* The decision this whole layer rests on, stated as a test because it is the one an owner would notice being
