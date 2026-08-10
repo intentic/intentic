@@ -77,28 +77,28 @@ because an early submission is auto-closed and repeated attempts risk an interac
 **awesome-selfhosted (311k stars — the biggest self-hosting audience on GitHub).** The submission is a PR
 adding one YAML file to `awesome-selfhosted-data`, not an edit to the README. Requirements: actively
 maintained, working install instructions, and **first released more than 4 months ago** → earliest
-**2026-12-05**. Prepared entry:
+**2026-12-05**. Entry, exactly as written and filed once already, ready to repost as `software/intentic.yml`:
 
 ```yaml
-name: "intentic"
-website_url: "https://intentic.dev"
-source_code_url: "https://github.com/intentic/intentic"
-description: "Workstation for AI coding agents. Each agent runs in its own container and git worktree on your own hardware, driven from any browser, with every change reviewed as a diff before it lands."
+name: intentic
+website_url: https://intentic.dev
+source_code_url: https://github.com/intentic/intentic
+description: Workspace for running coding agents on hardware you own. Each agent gets a persistent container sandbox and a git worktree of its own, reached from any browser, and keeps working after you close the tab.
 licenses:
   - MIT
 platforms:
-  - Nodejs
   - Docker
+  - Nodejs
 tags:
   - Software Development - IDE & Tools
-  - Automation
-demo_url: "https://intentic.dev/demo/"
+depends_3rdparty: true
+demo_url: https://intentic.dev/demo/
 ```
 
-One reviewer question to have an answer ready for: `depends_3rdparty`. The default setup pairs a sandbox with
-the hosted platform, which looks like a third-party dependency — the honest answer is that the platform is MIT
-and self-hostable too, so the flag is `false`, and the entry should be able to point at install docs that show it.
-Being listed here also propagates for free to the `awesome-selfhosted.net` site and the
+`depends_3rdparty: true` is the settled answer, and it is deliberate: sign-in and sandbox discovery go through
+the hosted identity tier at intentic.dev, even though chat, terminals, files and diffs are browser-to-your-own-
+machine over your own tunnel. Claiming `false` invites a reviewer to find the hosted step and distrust the rest
+of the entry. Being listed here also propagates for free to the `awesome-selfhosted.net` site and the
 [Correia-jpv mirror](https://github.com/Correia-jpv/fucking-awesome-selfhosted), which re-publishes the list.
 
 **kyrolabs/awesome-ade.** Brand new list (3 stars) but the *only* one whose taxonomy is exactly ours — it has
@@ -151,29 +151,55 @@ Recording these so nobody re-researches them:
 | punkpeye/awesome-mcp-devtools | 475 | For MCP SDKs and testing utilities, not MCP-consuming apps |
 | av/awesome-llm-services | 250 | Self-hostable *inference* services |
 
-## Submitted (2026-08-07)
+## Submitted — state as of 2026-08-10
 
-Eleven pull requests, one entry each, placed in the section and format the list itself specifies. All are
-single-file, additions-only, and passing whatever CI the list runs. Each body discloses that the submitter
-maintains intentic.
+Twelve pull requests, one entry each, placed in the section and format the list itself specifies. All are
+single-file and additions-only, and each body discloses that the submitter maintains intentic. The State column
+is live status, not day-one status — check it before touching anything.
 
-| List | PR | Where it lands |
-| --- | --- | --- |
-| awesome-opencode | [#580](https://github.com/awesome-opencode/awesome-opencode/pull/580) | `data/projects/intentic.yaml` |
-| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table |
-| punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical |
-| steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants |
-| jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration |
-| AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` |
-| ai-for-developers/awesome-ai-coding-tools | [#603](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/603) | Coding Agents |
-| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars |
-| debarshibasak/awesome-paas | [#69](https://github.com/debarshibasak/awesome-paas/pull/69) | Cloud IDE or Developer Workspaces |
-| Piebald-AI/awesome-gemini-cli | [#87](https://github.com/Piebald-AI/awesome-gemini-cli/pull/87) | Agent Orchestration & CLI Tools |
-| RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps |
+| List | PR | Where it lands | State |
+| --- | --- | --- | --- |
+| Piebald-AI/awesome-gemini-cli | [#87](https://github.com/Piebald-AI/awesome-gemini-cli/pull/87) | Agent Orchestration & CLI Tools | **merged** |
+| debarshibasak/awesome-paas | [#69](https://github.com/debarshibasak/awesome-paas/pull/69) | Cloud IDE or Developer Workspaces | **merged** |
+| awesome-opencode | [#580](https://github.com/awesome-opencode/awesome-opencode/pull/580) | `data/projects/intentic.yaml` | open, CI awaiting maintainer approval |
+| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, **merge conflict** — needs a rebase |
+| punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical | open, clean |
+| steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants | open, CI awaiting approval |
+| jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean — template check green |
+| AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` | open |
+| ai-for-developers/awesome-ai-coding-tools | [#603](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/603) | Coding Agents | open, clean |
+| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | open |
+| RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps | open, clean |
+| andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents — Desktop & Web, alphabetical | open, clean (added 2026-08-10) |
 
-Two corrections the submissions forced, worth keeping straight in all copy: intentic's **native** providers
-are Claude Code, Codex, Grok, Kimi Code and Google (Antigravity); **OpenCode, Gemini CLI and any other ACP
-agent** arrive as installable capabilities through the ACP bridge. And the Codex path really is the Codex CLI
+## The 2026-08-10 incident, and the four rules that come out of it
+
+A second round of work on 2026-08-10 re-pushed the jamesmurdza branch and opened a duplicate PR
+([#958](https://github.com/jamesmurdza/awesome-ai-devtools/pull/958)) whose body was free prose instead of the
+repo's template. That repo runs a bot (`PR Template Check`, on `pull_request_target: [opened, edited]`) that
+**auto-closes and labels `invalid-template`** any PR whose body is missing `## Description`, `## Checklist`, all
+four checklist lines verbatim, or a single `- [x]`. #958 was closed 16 seconds after it opened, and because the
+duplicate shared a head commit with #945, its red check landed on #945 too. Fixed by editing #945's body back
+to the template — the `edited` trigger reran the bot, it passed, and the newer success supersedes the failure on
+that commit. #945 is `mergeable_state: clean` and unlabelled again.
+
+1. **Never force-push or delete a branch that has an open submission on it.** It closes the PR and loses its
+   place in a queue that is hundreds of PRs deep. Amend the entry with an ordinary commit, or leave it alone.
+2. **Never open a second PR from a branch that already has one.** Edit the existing PR instead — the API
+   accepts a title and body change and, on these bots, that is what re-triggers the check.
+3. **Paste the target repo's PR template verbatim, every time.** Two lists enforce it with a bot. Before
+   submitting, run the repo's own check script against the intended body locally; the failure mode is a closed
+   PR, not a retryable red build.
+4. **When a gate is missed, withdraw rather than argue.** `awesome-selfhosted-data`
+   [#2883](https://github.com/awesome-selfhosted/awesome-selfhosted-data/pull/2883) was opened the same day
+   against the 4-month release rule and self-withdrawn with an apology the same minute — the right move, and it
+   keeps the December resubmission welcome.
+
+## Two facts to keep straight in all copy
+
+The submissions forced both. intentic's **native** providers are Claude Code, Codex, Grok, Kimi Code and
+Google (Antigravity); **OpenCode, Gemini CLI and any other ACP agent** arrive as installable capabilities
+through the ACP bridge. And the Codex path really is the Codex CLI
 (`codex app-server` for native turns, with `codex exec` available for delegation), which is what makes the
 Codex list a legitimate target rather than a stretch.
 
@@ -186,7 +212,9 @@ Codex list a legitimate target rather than a stretch.
 - **e2b-dev/awesome-ai-agents** — submissions go through a Google Form, not a PR.
 - **awesome-claude-code** — opens 2026-08-18, web issue form only.
 - **kyrolabs/awesome-ade** — ~50 stars.
-- **awesome-selfhosted** — 2026-12-05, YAML above.
+- **awesome-selfhosted** — 2026-12-05, YAML above. Filed early on 2026-08-10 and withdrawn the same minute
+  ([#2883](https://github.com/awesome-selfhosted/awesome-selfhosted-data/pull/2883)), so the file is written and
+  the December repost is a two-minute job.
 - **altstackHQ/altstack-data** — wants evidence of real-world usage.
 - **The Tier 3 sandbox micro-lists** — read on inspection as lists of *sandboxing libraries and cloud sandbox
   providers* (E2B, Daytona, microVM runtimes), not workspaces that use one. Submitting there would be a
@@ -194,11 +222,14 @@ Codex list a legitimate target rather than a stretch.
 
 ## Remaining order
 
-1. **2026-08-18** — awesome-claude-code, through the issue form, exactly to its style rules. This is the one
+1. **Now** — rebase `ikaijua/Awesome-AITools` [#782](https://github.com/ikaijua/Awesome-AITools/pull/782); the
+   AI Coding table moved under it and it currently cannot merge. Rebase with an ordinary commit, never a
+   branch delete (rule 1).
+2. **2026-08-18** — awesome-claude-code, through the issue form, exactly to its style rules. This is the one
    worth writing the description for twice.
-2. **At 1k stars** — promote the steven2358 entry from Discoveries to the main list.
-3. **At 50 stars** — kyrolabs/awesome-ade.
-4. **2026-12-05** — awesome-selfhosted, with the YAML above.
+3. **At 1k stars** — promote the steven2358 entry from Discoveries to the main list.
+4. **At 50 stars** — kyrolabs/awesome-ade.
+5. **2026-12-05** — awesome-selfhosted, with the YAML above.
 
 The canonical one-line description for standard awesome format, reused everywhere so the wording compounds:
 
