@@ -579,9 +579,19 @@ views + a fragment), so the model unifies the noun and differentiates behaviour 
 VSCode makes with "everything is an extension", disclosed per item instead of classified up front. The
 machinery is uniform:
 
-- **One manifest** — `/work/.intentic/capabilities.json` is the source of truth for what's active
-  ([capabilities-store.ts](_sandbox/sandbox/src/capabilities/capabilities-store.ts)); secrets live in it and
-  are denylisted from agent reads, and list responses echo them only as `hasToken`/`hasSecret` booleans.
+- **One manifest, and the credentials are not in it** —
+  `/work/.intentic/capabilities.json` is the source of truth for what's active
+  ([capabilities-store.ts](_sandbox/sandbox/src/capabilities/capabilities-store.ts)), but every secret FIELD is
+  stored under the provider-credential root off `/work`
+  ([secret-vault.ts](_sandbox/sandbox/src/capabilities/secret-vault.ts)) and the manifest carries a marker in
+  its place. The manifest was denylisted from the daemon's file ROUTES, which was never a bound on the agent —
+  it holds a shell and the file is deliberately readable and editable, so the credentials in it were one
+  ordinary `Read` away from a model's context, the TOTP seed and the browser password included. Reads through
+  the store rehydrate, so every consumer still receives a whole `Capability`; list responses echo secrets only
+  as `hasToken`/`hasSecret` booleans, and which fields those are is derived from `echo` rather than declared
+  twice ([secret-fields.ts](_sandbox/sandbox/src/capabilities/secret-fields.ts)). This is exposure removed, not
+  a wall: daemon and agent are both root in one container, so the split closes the leak that does not require
+  going looking, and the sandbox boundary remains the one that does.
 - **One lifecycle** — `add` (streams its apply progress live), `remove`, `status`, `setSecret`
   ([capabilities.contract.ts](_sandbox/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
   by [capabilities.routes.ts](_sandbox/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
@@ -651,7 +661,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | Effect | Mechanics |
 | --- | --- |
 | `skill` | Writes `.claude/skills/<name>/SKILL.md`, auto-loaded by the agent next turn — per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
-| `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file or a denylisted manifest field (ssh key/password, WireGuard conf, git token). |
+| `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file, or a field in the off-workspace secret vault the manifest points at with a marker (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
 | `runtime` | Privileged directives riding a core fragment — the ONLY source of container privileges (the base run is unprivileged): `vpn` → `NET_ADMIN` + `/dev/net/tun`, `docker` → `--privileged`. |

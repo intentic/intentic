@@ -5,7 +5,7 @@
 // filter never breaks.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes. Always stripped (pure noise).
@@ -311,7 +311,101 @@ const SECRET_PATTERNS = [
     [/\b(Bearer\s+)(?=[\w.-]*\d)[\w.-]{8,}/gi, "$1***"],
     [/\b(https?:\/\/[^:@\s/]+:)[^@\s]+@/gi, "$1***@"],
 ];
-const redactLine = (line) => SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), line);
+/* THE VALUES THIS SANDBOX ACTUALLY HOLDS — the half of redaction that does not have to guess.
+ *
+ * Everything above infers a credential from the NAME beside it, and that inference has a floor it cannot get
+ * past: it only masks what somebody thought to call a token. Measured against the field names the capability
+ * union itself declares secret, five of six shapes went straight through — `presharedKey`, an agent's `env`
+ * block, a wireguard `config`, and any name a third-party connector invents (`pat`, `seed`). The name list can
+ * always be extended and will always be behind.
+ *
+ * The daemon does not have to infer anything: it composes these values into the agent's environment every turn,
+ * so it knows them exactly. Masking by value is therefore complete for everything stored, in any shape, under
+ * any name, and it needs no upkeep when a connector adds a field. The name patterns STAY as the backstop, for
+ * the credentials this sandbox does not store — one the agent minted mid-turn, one echoed by a remote command.
+ *
+ * Read straight off disk rather than passed in: the two files below are readable by anything running in this
+ * container (daemon and agent are both root), so routing them through an env var or argv would add a copy in
+ * /proc without adding a boundary. Cached per (path, mtime) — this runs once per Bash command.
+ *
+ * A MULTI-LINE value (an ssh private key, a WireGuard conf) can never match a line-at-a-time replace, so each
+ * of its lines is registered as its own target. Short fragments are dropped: a PEM's `-----BEGIN` header is
+ * not the secret, and masking an 8-character line would blank ordinary output. */
+const SECRET_VALUE_MIN = 12;
+const secretValueCache = new Map();
+
+const readIfChanged = (path) => {
+    try {
+        const { mtimeMs, size } = statSync(path);
+        const stamp = `${mtimeMs}:${size}`;
+        const cached = secretValueCache.get(path);
+        if (cached?.stamp === stamp) {
+            return cached.values;
+        }
+        const values = harvest(readFileSync(path, "utf8"), path);
+        secretValueCache.set(path, { stamp, values });
+        return values;
+    } catch {
+        // Absent, unreadable, or malformed: the name patterns still run. Never a reason to fail a command.
+        return [];
+    }
+};
+
+// Every string worth masking out of one of the two files. The vault is {id: {field: value}}; the .env is
+// KEY=value lines. Both are read for VALUES only — a key name is not a secret and masking it would blank prose.
+const harvest = (text, path) => {
+    const out = [];
+    if (path.endsWith(".json")) {
+        for (const entry of Object.values(JSON.parse(text))) {
+            if (entry !== null && typeof entry === "object") {
+                out.push(...Object.values(entry).filter((value) => typeof value === "string"));
+            }
+        }
+    } else {
+        for (const line of text.split("\n")) {
+            const match = /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.*)$/.exec(line);
+            if (match !== null) {
+                out.push((match[1] ?? "").trim().replace(/^(["'])([\s\S]*)\1$/, "$2"));
+            }
+        }
+    }
+    // Longest first, so a value that contains another is masked whole rather than leaving its tail behind.
+    return [...new Set(out.flatMap((value) => value.split("\n")).map((value) => value.trim()))]
+        .filter((value) => value.length >= SECRET_VALUE_MIN)
+        .toSorted((a, b) => b.length - a.length);
+};
+
+/* Where the two stores live, from the same environment the daemon set for this turn. AGENT_AUTH_DIR is the
+ * provider-credential root (off /work); unset — a dev daemon — puts it under .intentic/auth, which is where
+ * composition.ts falls back to as well. */
+export const secretValues = (env = process.env) => {
+    const authRoot =
+        env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/auth");
+    return [
+        ...readIfChanged(join(authRoot, "capability-secrets.json")),
+        ...readIfChanged(join(env.WORKSPACE_ROOT ?? "/work", "desired-state", ".env")),
+    ].toSorted((a, b) => b.length - a.length);
+};
+
+/* The same masking over a whole body, for the two paths that emit output WITHOUT running the pipeline: the
+ * measurement holdout and the fail-open catch. Neither is a reason to hand over a credential — a control group
+ * is still a tool result the model reads, and a filter that threw is the moment least worth trusting. Idempotent,
+ * so running it after the pipeline has already masked a line costs a scan and changes nothing. */
+export const redactText = (text, values = []) =>
+    text
+        .split("\n")
+        .map((line) => redactLine(line, values))
+        .join("\n");
+
+const redactLine = (line, values = []) => {
+    let masked = line;
+    for (const value of values) {
+        if (masked.includes(value)) {
+            masked = masked.split(value).join("***");
+        }
+    }
+    return SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), masked);
+};
 
 // Parse the spec into the enabled set. Same grammar as iq's parseFeatures — allow-list if any token lacks "-"
 // ("git,pnpm" = only those), else default-minus ("-git" = all except). Empty/undefined = all on. UNLIKE iq's
@@ -436,7 +530,7 @@ const capOutput = (lines, command) => {
 // not against the raw capture), which is what makes the stages sum exactly to the total saving and lets them be
 // drawn as one stacked bar. The flip side, and the reason the UI must not label these "what turning this off
 // would save": a cleaner that runs before the cap is credited with lines the cap would have taken anyway.
-export const cleanLines = (lines, { command, exitCode, enabled }) => {
+export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) => {
     const stages = [];
     let out = lines;
     let bytes = bodyBytes(lines);
@@ -479,7 +573,10 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
     }
     // Redaction runs last on both paths so a leaked secret is masked even inside an error dump.
     if (enabled.has("redact")) {
-        ran("redact", out.map(redactLine));
+        ran(
+            "redact",
+            out.map((line) => redactLine(line, values)),
+        );
     }
     return { lines: out, stages };
 };

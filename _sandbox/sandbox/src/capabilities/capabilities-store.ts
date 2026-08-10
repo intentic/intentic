@@ -1,9 +1,14 @@
 import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract";
 import { jsonFile } from "../store/json-file.js";
+import type { ResolvedContribution } from "./contributions.js";
+import { partitionSecretValues } from "./secret-fields.js";
+import type { SecretVault } from "./secret-vault.js";
 
 // The sandbox-owned manifest of active capabilities (<workspace>/.intentic/capabilities.json). Source of truth
-// for what's active; mcp entries also feed the agent's MCP servers. On the secret denylist (an mcp token lives
-// in its config) so the agent can't read it via the file routes.
+// for what's active; mcp entries also feed the agent's MCP servers. Off the daemon's file ROUTES (the
+// control-plane denylist), which is a bound on the browser and never was one on the agent — it holds a shell,
+// and this file is meant to be readable and editable by it. So the credential VALUES are not in here at all:
+// withSecretVault below keeps them off /work and leaves a marker, and reads rehydrate.
 //
 // Entries are validated ONE AT A TIME, and an entry that fails validation is skipped rather than failing the
 // read. Parsing the file as `z.array(CapabilitySchema)` made a single bad entry return an EMPTY manifest — so
@@ -83,6 +88,71 @@ export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, rea
                 // Unchanged by reference when nothing matched, so a remove of an absent id writes nothing.
                 return removed ? next : entries;
             });
+            return removed;
+        },
+    };
+};
+
+/* What stands in the manifest where a credential used to be. Deliberately not an empty string and not a
+ * dropped key: the entry still has to satisfy CapabilitySchema (a connector's required field, an ssh key), and
+ * a reader that somehow bypasses the rehydration below must fail LOUDLY — a service refusing this string is a
+ * clear auth error, where an empty value reads as "not configured yet" and a missing key as a shape change. */
+export const VAULTED = "__intentic_vaulted__";
+
+/* THE SPLIT: credential values live in the vault, the manifest keeps the shape of the connection.
+ *
+ * A decorator rather than a change to the file store, because the two concerns are genuinely separate — the
+ * store's job is one JSON file read/written whole with per-entry validation, and this one's is which of an
+ * entry's fields may be in that file at all. It also composes the way the trial endpoint already does.
+ *
+ * Reads REHYDRATE, so every existing caller — env composition, the connection route, type_credential, the OTP
+ * minter — keeps receiving a whole Capability and none of them had to learn about the vault. The split is a
+ * fact about the bytes on disk, which is exactly where the exposure was.
+ *
+ * Writes go to the VAULT FIRST. The other order loses a credential outright when the second write fails (the
+ * manifest would hold markers with nothing behind them); this order's failure mode is an orphaned vault row for
+ * an entry that never landed, which the next upsert of that id overwrites and nothing reads meanwhile.
+ */
+const hydrate = (capability: Capability, values: Record<string, string>): Capability =>
+    Object.keys(values).length === 0 ? capability : ({ ...capability, config: { ...capability.config, ...values } } as Capability);
+
+export const withSecretVault = (
+    inner: CapabilitiesStore,
+    vault: SecretVault,
+    connectors: () => Promise<Map<string, ResolvedContribution>>,
+    onUnvaultable?: (id: string, fields: readonly string[]) => void,
+): CapabilitiesStore => {
+    return {
+        list: async () => {
+            const [entries, resolved] = await Promise.all([inner.list(), vault.all()]);
+            return entries.map((entry) => hydrate(entry, resolved[entry.id] ?? {}));
+        },
+        get: async (id) => {
+            const entry = await inner.get(id);
+            return entry === undefined ? undefined : hydrate(entry, await vault.get(id));
+        },
+        upsert: async (capability) => {
+            const { values, unvaultable } = partitionSecretValues(capability, await connectors());
+            if (unvaultable.length > 0) {
+                onUnvaultable?.(capability.id, unvaultable);
+            }
+            /* A caller that read from somewhere WITHOUT rehydration and wrote back would otherwise vault the
+             * marker over the real value — a silent credential loss, and the one way this decorator could
+             * destroy data. The stored value wins whenever the incoming one is the marker. */
+            const stored = await vault.get(capability.id);
+            const merged = Object.fromEntries(
+                Object.entries(values).map(([key, value]) => [key, value === VAULTED ? (stored[key] ?? value) : value]),
+            );
+            await vault.set(capability.id, merged);
+            const config = { ...(capability.config as Record<string, unknown>) };
+            for (const key of Object.keys(merged)) {
+                config[key] = VAULTED;
+            }
+            await inner.upsert({ ...capability, config } as Capability);
+        },
+        remove: async (id) => {
+            const removed = await inner.remove(id);
+            await vault.remove(id);
             return removed;
         },
     };

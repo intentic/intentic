@@ -50,7 +50,9 @@ import { fileLoopsStore, type LoopsStore } from "./loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type WorkflowsStore } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
-import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
+import { type CapabilitiesStore, fileCapabilitiesStore, withSecretVault } from "./capabilities/capabilities-store.js";
+import { contributionRegistry } from "./capabilities/contributions.js";
+import { fileSecretVault } from "./capabilities/secret-vault.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
@@ -757,9 +759,31 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * therefore sees the trial as an ordinary endpoint and needs no knowledge of it, while the file on disk
      * stays exactly what the user put there. Availability is the platform's answer, probed on boot below. */
     const trial = createTrialService(config);
+    const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
+        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+    );
+    /* The credential values, off /work (secret-vault.ts). Sited beside the AI-provider logins under
+     * AGENT_AUTH_DIR, which is already outside the file routes, the tree walk and the search index. */
+    const secretVault = fileSecretVault(join(authRoot, "capability-secrets.json"));
+    /* The connector registry this needs to know which of an entry's fields are credentials, resolved against the
+     * RAW manifest rather than the vaulted store — enumerating extensions reads capability entries, so pointing
+     * it at the decorator would have the decorator call itself. Enumeration only ever looks at an entry's
+     * kind/id/path, never at a credential, so the un-rehydrated view is the whole truth it needs. */
     const capabilities = withTrialEndpoint(
-        fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
-            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+        withSecretVault(
+            capabilityManifest,
+            secretVault,
+            () =>
+                contributionRegistry({
+                    workspace: { root: workspace.root },
+                    files: { read: readWorkspaceFile },
+                    capabilities: capabilityManifest,
+                    config: { extensionsDir: config.extensionsDir },
+                }),
+            (id, fields) =>
+                logger.warn(
+                    `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
+                ),
         ),
         config,
         trial,

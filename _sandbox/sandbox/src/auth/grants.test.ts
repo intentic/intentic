@@ -30,6 +30,36 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await agent.authorize("intruder", "GET", "/capabilities/npm/otp")).toBe("unauthorized");
 });
 
+/* The panel grant is broad on purpose — a panel is an app somebody else wrote — with exactly one route carved
+ * out of it. `/capabilities/<id>/connection` returns a capability's config SECRETS INCLUDED and gates only on
+ * "no signed-in identity", which the panel token satisfies as surely as the extension token it was written
+ * for. Since that token is injected into every panel and connector process in the container, leaving it in
+ * reach made a browser account's password and a TOTP seed readable by anything that can read /proc — the two
+ * credentials the product states the model is never given. Pinned so re-widening has to be deliberate. */
+test("the panel grant reaches the daemon broadly but never the capability connection read", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { scopeOf: async () => undefined } as unknown as ControlTokens,
+        verifySync: async () => false,
+        verifyExtension: () => undefined,
+    });
+    const panel = grants.find((grant) => grant.header === "x-intentic-panel");
+    if (panel === undefined) {
+        throw new Error("no panel grant in the table");
+    }
+    // What a panel and a connector gateway actually do, still allowed.
+    expect(await panel.authorize("panel", "GET", "/listeners/discord/state")).toBe("ok");
+    expect(await panel.authorize("panel", "POST", "/listeners/discord/dispatch")).toBe("ok");
+    expect(await panel.authorize("panel", "GET", "/capabilities")).toBe("ok");
+    expect(await panel.authorize("panel", "GET", "/capabilities/reddit/status")).toBe("ok");
+    // The one door that was never meant for it.
+    expect(await panel.authorize("panel", "GET", "/capabilities/reddit/connection")).toBe("out-of-scope");
+    expect(await panel.authorize("panel", "GET", "/capabilities/npm/connection")).toBe("out-of-scope");
+    // A wrong secret on an in-scope route is 401, never a fall-through to the bearer check behind it.
+    expect(await panel.authorize("intruder", "GET", "/capabilities")).toBe("unauthorized");
+});
+
 // The extension grant is the backend half's whole reach into the daemon: resolve the minted token to its
 // manifest-declared permissions.daemon, then the same glob check the UI half's gate runs. Pinned like the
 // agent grant above — an extension backend must never inherit the panel token's everything.

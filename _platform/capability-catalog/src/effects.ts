@@ -23,7 +23,8 @@ export type CapabilityEffect =
     // cli/browser (per-instance skills), the fixed shared skill for ssh/vpn; absent while the instance is unnamed.
     | { readonly kind: "skill"; readonly name?: string | undefined }
     // Stores a credential in the sandbox. "agent-env": injected into the agent's environment each turn, never
-    // written to a file (cli). "disk": a 0600 file or a denylisted manifest field (ssh key, vpn conf, git token).
+    // written to a file (cli). "disk": a 0600 file, or a field in the off-workspace secret vault the manifest
+    // points at with a marker (ssh key, vpn conf, git token).
     | { readonly kind: "secret"; readonly exposure: "agent-env" | "disk" }
     // Git-clones a repo into .intentic/plugins|extensions/<id>. `url` absent until the form field is filled.
     | { readonly kind: "clone"; readonly url?: string | undefined }

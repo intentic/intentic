@@ -34,12 +34,23 @@ export const cliHandler: CapabilityHandler = {
     /* Echo the non-secret fields (url etc.) for display; the rotatable secret becomes hasSecret. EVERY declared
      * secret is withheld, not just that one — a two-token connector (Slack: an app-level token to open the socket,
      * a bot token for the Web API) must not ship its second credential to the browser by not being the one
-     * /secrets happens to rotate. The web renders the card's label/logo from the connector manifest, not this. */
+     * /secrets happens to rotate. The web renders the card's label/logo from the connector manifest, not this.
+     *
+     * WHICH FIELDS ARE SECRET IS THE CONNECTOR'S DATA, so an unresolvable connector means this daemon does not
+     * KNOW — and "don't know" has to read as "withhold", not as "nothing is secret". An extension switched off,
+     * uninstalled, or whose manifest stopped parsing all resolve to `spec === undefined`, and the empty
+     * secret-key set that used to fall out of it echoed every stored credential onto the /capabilities list
+     * (maintainer-tier, so a live token reached a collaborator's browser) — a leak that depended on unrelated
+     * extension state rather than on anything about the credential. `provider` is the one field the CORE owns
+     * (contributionDiscriminator pins it), so it is the only thing safe to echo without the card. */
     echo: (config, connectors) => {
         const cli = config as CliConfig;
         const spec = connectors.get(contributionKey("cli", cli.provider))?.spec;
-        const secretKeys = spec === undefined ? new Set<string>() : contributionSecretFields(spec);
-        const rotatable = spec === undefined ? undefined : contributionSecretField(spec);
+        if (spec === undefined) {
+            return { provider: cli.provider, hasSecret: false };
+        }
+        const secretKeys = contributionSecretFields(spec);
+        const rotatable = contributionSecretField(spec);
         const echo: Record<string, string | number | boolean> = {};
         for (const [key, value] of Object.entries(cli)) {
             if (!secretKeys.has(key)) {

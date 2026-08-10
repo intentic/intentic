@@ -177,6 +177,19 @@ test("echoConfig never leaks the secret — the token becomes hasSecret", async 
     expect(echoConfig(gitlab, connectors)).toEqual({ provider: "gitlab", url: "https://gitlab.com", hasSecret: true });
 });
 
+/* WHICH FIELDS ARE SECRET IS THE CONNECTOR'S DATA, so an unresolvable connector means the daemon does not
+ * know — and "don't know" has to withhold. An extension switched off, uninstalled, or whose manifest stopped
+ * parsing all resolve the same way, and the empty secret-key set that used to fall out of that echoed every
+ * stored credential onto the /capabilities list, which maintainers can read. The leak depended on unrelated
+ * extension state rather than on anything about the credential, which is what made it easy to miss. */
+test("echoConfig withholds everything but the discriminator when the connector cannot be resolved", async () => {
+    const noConnectors = new Map();
+    const gitlab: Capability = { id: "gitlab", kind: "cli", config: { provider: "gitlab", token: "gl-secret-value", url: "https://gitlab.com" } };
+    const echoed = echoConfig(gitlab, noConnectors);
+    expect(echoed).toEqual({ provider: "gitlab", hasSecret: false });
+    expect(JSON.stringify(echoed)).not.toContain("gl-secret-value");
+});
+
 // ---- git access (github/gitlab clone/pull/push in the terminal) ----
 // The account-key REST calls are the injectable seam; keygen + git-config run for real against a temp HOME.
 // Through directExec, NOT the terminal runner: where tmux-run exists (running this suite inside a sandbox) the

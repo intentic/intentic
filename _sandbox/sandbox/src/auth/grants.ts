@@ -54,11 +54,23 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
 const agentReach = (method: string, path: string): boolean =>
     path === "/vpn" || path.startsWith("/vpn/") || (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path));
 
-// The one WIDE grant, listed with an explicit always-true reach rather than left out of the table so that
-// "this one is unscoped" reads as a line somebody chose. A panel's backend is server-side code running inside
-// this container that legitimately acts as the app; its token is injected into panel processes as
-// INTENTIC_PANEL_TOKEN and never reaches a browser.
-const panelReach = (): boolean => true;
+/* The WIDE grant — a panel's backend is server-side code running inside this container that legitimately acts
+ * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one
+ * may call would be guessing at somebody else's app. It stays broad on purpose.
+ *
+ * ONE CARVE-OUT, and it is the route that hands back stored credentials. `/capabilities/<id>/connection`
+ * serves EXTENSION BACKENDS — its whole gate is "no signed-in identity", because the extension token is the
+ * only grant that must also declare the route. A panel token also carries no identity, so it satisfied that
+ * gate by accident and could read any connected account's config, secrets included: the browser password and
+ * the TOTP seed that accounts-tools.ts and the manifest's TOTP rule promise never to hand over. And unlike the
+ * extension token, this one is injected into every panel and connector process in the container, where
+ * anything that can read /proc can lift it.
+ *
+ * Written as a denied route rather than an allowlist because that is what the grant IS — everything, except
+ * the one door that was never meant for it. An allowlist here would be a fiction the next panel breaks.
+ */
+const CONNECTION_READ = /^\/capabilities\/[^/]+\/connection$/;
+const panelReach = (_method: string, path: string): boolean => !CONNECTION_READ.test(path);
 
 /* The desktop-sync agent's two routes, and it is worth saying why there are two rather than one.
  *

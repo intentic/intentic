@@ -26,6 +26,8 @@ import {
     matchedCleaners,
     openCacheStore,
     parseCleaners,
+    redactText,
+    secretValues,
     sessionKeyFromLog,
 } from "./cleaners.mjs";
 
@@ -42,7 +44,7 @@ const RETRIEVAL_MIN_DROPPED = 20;
  *   footer — the retrieval pointer, which ADDS bytes (a negative saving). It is the price of the trimming
  *            being reversible, and it belongs on the same ledger as what it bought.
  */
-export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled = new Set(CLEANERS), cacheStore = undefined) => {
+export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled = new Set(CLEANERS), cacheStore = undefined, values = []) => {
     let lines = raw.replaceAll(ANSI, "").split("\n").map(collapseCr);
     // The trailing \n of the last output line is not an extra line.
     if (lines.at(-1) === "") {
@@ -50,7 +52,7 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
     }
     const rawCount = lines.length;
     const stages = [{ id: "ansi", saved: raw.length - bodyBytes(lines) }];
-    const cleaned = cleanLines(lines, { command, exitCode, enabled });
+    const cleaned = cleanLines(lines, { command, exitCode, enabled, values });
     lines = cleaned.lines;
     stages.push(...cleaned.stages);
     let body = lines.join("\n");
@@ -116,6 +118,15 @@ const main = async () => {
     // Per-mechanism attribution for the stat line; empty on the held-out and fail-open paths, where nothing
     // was cleaned and there is nothing to attribute.
     let stages = [];
+    /* Loaded before the pipeline and OUTSIDE it, because the last line of this function masks with them
+     * whatever happened above — a held-out command, a filter that threw. Own try: an unreadable vault is a
+     * reason to fall back on the name patterns, never a reason to fail a Bash command. */
+    let values = [];
+    try {
+        values = secretValues();
+    } catch {
+        values = [];
+    }
     try {
         const enabled = parseCleaners(process.env["INTENTIC_OUTPUT_CLEANERS"]);
         const terminalsDir = process.env["INTENTIC_TERMINAL_LOGS_DIR"];
@@ -133,7 +144,7 @@ const main = async () => {
             }
         }
         if (!heldOut) {
-            const filtered = filterOutput(raw, command, exitCode, durationS, logPath, enabled, cacheStore);
+            const filtered = filterOutput(raw, command, exitCode, durationS, logPath, enabled, cacheStore, values);
             out = filtered.out;
             stages = filtered.stages;
         }
@@ -159,6 +170,15 @@ const main = async () => {
         }
     } catch {
         out = raw;
+    }
+    /* THE FLOOR, outside every branch above. The holdout emits `raw` by design and the catch emits it on
+     * failure, and both of those used to hand a credential straight to the model — the one cleaner whose
+     * absence is not a measurement artifact or a degraded result but a leak. Guarded and idempotent: if this
+     * throws too, the command still answers. */
+    try {
+        out = redactText(out, values);
+    } catch {
+        // Keep `out` as it stands — a tool result must always come back.
     }
     process.stdout.write(out);
 };
