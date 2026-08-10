@@ -93,22 +93,41 @@ export const driftedRoutes = computed<string[]>(() => {
 // `daemonBehind`: a daemon can be level on every route name and still shape one of them differently.
 export const daemonDrifted = computed(() => driftedRoutes.value.length > 0);
 
-// The two audiences differ only in what they can do about it: a developer rebuilds the image they just changed,
-// a user updates the sandbox someone else released.
-const imageRemedy = (): string =>
+/* What to DO about a gap. The two audiences differ only in what they CAN do: a developer reloads the sandbox
+ * they just changed, a user updates the one someone else released.
+ *
+ * The dev remedy is a RELOAD, not an image rebuild, and the difference is not a preference. In dev the running
+ * container does not execute the daemon baked into the image at all — dev-sandbox.sh bind-mounts the compiled
+ * output straight from the working tree, so a fresh image is not what makes the daemon current; restarting the
+ * process that read it at boot is. `pnpm build:sandbox` does clear it, by recreating the container along the
+ * way, which spends minutes on what dev-reload.sh does in seconds. */
+const daemonOlderRemedy = (): string =>
     import.meta.env.DEV
-        ? `Your dev image predates it — run 'pnpm build:sandbox && sh _sandbox/sandbox/scripts/dev-sandbox.sh'.`
+        ? `This sandbox is running older code than this app — reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Update the sandbox to a newer image to use this feature.`;
 
-// The reason a request to `path` failed, when the cause is that this daemon predates the route. Undefined when
-// the path is not a contract route, or is one the daemon advertises — in which case the 404 is a real 404 and
-// must be reported verbatim rather than blamed on the image.
+/* The same question when NOBODY KNOWS WHICH SIDE IS OLD — see driftedRoutes: a fingerprint that disagrees says
+ * the two builds differ, never which of them moved. A page left open since before the change is every bit as
+ * likely to be the stale one as the daemon, and telling someone to rebuild a sandbox that is already current is
+ * how a warning earns its reputation for lying. So this offers both, cheapest first. */
+const eitherSideOlderRemedy = (): string =>
+    import.meta.env.DEV
+        ? `One of the two is running older code — reload this page, or the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        : `Reload this page, or update the sandbox to a newer image.`;
+
+/* The reason a request to `path` failed, when the cause is that this daemon predates the route. Undefined when
+ * the path is not a contract route, or is one the daemon advertises — in which case the 404 is a real 404 and
+ * must be reported verbatim rather than blamed on the sandbox's build.
+ *
+ * This one CAN name the older side, which is why it gets the directional remedy: a missing route is a name this
+ * app has and the daemon does not, and a daemon NEWER than the app simply advertises extra names nobody asks
+ * about. So a gap in this direction is positive evidence that the daemon is the one behind. */
 export const staleDaemonReason = (method: string, path: string): string | undefined => {
     const name = sandboxRouteName(method, path);
     if (name === undefined || supportsRoute(name)) {
         return undefined;
     }
-    return `This sandbox's daemon doesn't provide '${name}'. ${imageRemedy()}`;
+    return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
 };
 
 /* The reason a request that REACHED its route still didn't work — the daemon has it, under a different shape.
@@ -122,5 +141,5 @@ export const driftedRouteReason = (method: string, path: string): string | undef
     if (name === undefined || !driftedRoutes.value.includes(name)) {
         return undefined;
     }
-    return `This sandbox's daemon has '${name}' but exchanges different fields for it than this app expects. ${imageRemedy()}`;
+    return `This sandbox's daemon has '${name}' but exchanges different fields for it than this app expects. ${eitherSideOlderRemedy()}`;
 };

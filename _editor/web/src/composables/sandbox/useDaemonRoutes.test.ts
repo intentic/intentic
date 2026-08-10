@@ -144,6 +144,14 @@ describe(`driftedRouteReason`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         expect(driftedRouteReason(`GET`, `/health`)).toBeUndefined();
     });
+
+    it(`offers reloading the page too, because drift never says which side moved`, () => {
+        /* Two builds disagreeing about a payload is symmetric evidence: a page open since before the change is
+         * as likely to be the stale one as the daemon. Sending someone to reload a sandbox that was already
+         * current is the failure this wording exists to avoid. */
+        setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+        expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/reload this page/i);
+    });
 });
 
 describe(`staleDaemonReason`, () => {
@@ -166,5 +174,15 @@ describe(`staleDaemonReason`, () => {
 
     it(`stays silent while the daemon's surface is unknown`, () => {
         expect(staleDaemonReason(`GET`, `/vpn`)).toBeUndefined();
+    });
+
+    it(`names the daemon as the older side, which a missing route proves`, () => {
+        // Unlike drift, this direction is known: a daemon NEWER than the app advertises extra names nobody asks
+        // about, so a name the app has and the daemon lacks can only mean the daemon predates it. No hedging,
+        // and no suggestion to reload a page that is not the problem.
+        setDaemonRoutes(withoutVpn);
+        const reason = staleDaemonReason(`GET`, `/vpn`);
+        expect(reason).toMatch(/sandbox/i);
+        expect(reason).not.toMatch(/reload this page/i);
     });
 });
