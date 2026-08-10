@@ -157,6 +157,11 @@ misconfigured".
 - **Assertions read window titles**, through `@intentic/desktop` — this repo's own answer to driving a Windows
   desktop from Node, and the exact counterpart of the `xdotool` the Linux tier leans on. The app has no test
   hook and should not grow one: the window appearing IS the behaviour a user is promised.
+- **Answering the confirmation is itself checked.** Windows only lets a process move the keyboard under
+  conditions a CI harness does not meet by default, and it refuses quietly — so a Return meant for the app's
+  dialog can land on whatever else is open on that desktop. `focusWindow` is the step that can tell, and its
+  refusal is reported as its own failure. Without that, every assertion after it waits out its deadline and the
+  log blames the setup screen for a keystroke that was never delivered.
 - **A failure never stops the run.** One tier reports every assertion it could make, because the second failure
   is usually what explains the first — "no window" plus "the process exited" is a crash, "no window" alone is a
   hang.

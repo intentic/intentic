@@ -47,6 +47,15 @@ process; process lookup adds the app name, and the remaining P/Invokes supply bo
 `Get-Process.MainWindowHandle` is intentionally not used because it collapses a workspace and its dialog into
 one row.
 
+**Taking focus on Windows needs more than `SetForegroundWindow`.** Windows refuses that call from a process
+that is not already in the foreground, and refuses it *quietly* — it flashes the taskbar button and leaves the
+keyboard where it was, so the next `type` or `key` goes to whatever the person at that desk had open. A backend
+running from a fresh `powershell.exe` misses every qualifying condition at once, and a machine whose
+foreground-lock timeout has been raised (gaming and anti-focus-stealing utilities do this) closes the last of
+them for good. So `focusWindow` briefly attaches its input queue to the foreground window's thread and the
+target's, which is what earns the right, and then *checks* — it raises a `DesktopError` rather than returning
+to a caller that is about to type into the wrong window.
+
 **Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
 not let one client enumerate another's windows, the same protection that stops it synthesising input. The
 wlroots family (sway, Hyprland) answers `swaymsg -t get_tree` to anyone who can reach the socket, so those are
@@ -68,7 +77,8 @@ coupling this package exists to remove.
 ## Key files
 
 - [src/index.ts](src/index.ts) — the public surface.
-- [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts) — the two platform backends.
+- [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts) — pointer, keys and text, per platform.
+- [src/apps-linux.ts](src/apps-linux.ts) / [src/apps-windows.ts](src/apps-windows.ts) — windows, focus, launching and the clipboard, per platform.
 - [src/screen.ts](src/screen.ts) — capturing the screen.
 - [src/keys.ts](src/keys.ts) — chord and key-name parsing, shared by both platforms.
 - [src/run.ts](src/run.ts) — how commands are invoked without a native module.

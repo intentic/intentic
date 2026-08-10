@@ -74,6 +74,16 @@ const describeWindows = async (): Promise<string> => {
     return titles.length === 0 ? `(no windows)` : titles.map((title) => `- ${title}`).join(`\n`);
 };
 
+/* Recorded only when it went wrong, because "a key was pressed" is not a promise made to anyone — every line
+ * in this tier is something a user would see. What it prevents is the failure that reads as somebody else's:
+ * a Return that never reached the dialog leaves the assertions below waiting out their deadlines, and their
+ * wording ("the setup screen", "one window, not two") points at the app for a machine's refusal. */
+const answer = (harness: Harness, refusal: string | undefined): void => {
+    if (refusal !== undefined) {
+        harness.fail(`the confirmation could not be answered`, refusal);
+    }
+};
+
 export const runInstallTier = async (harness: Harness, options: InstallTierOptions): Promise<void> => {
     if (!existsSync(options.installer)) {
         harness.fail(`the installer is not at ${options.installer}`);
@@ -176,7 +186,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
                 appWindowTitled(app, CONFIRM_TITLE),
             )
         ) {
-            await answerConfirm(app, CONFIRM_TITLE);
+            answer(harness, await answerConfirm(app, CONFIRM_TITLE));
             if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());
             }
@@ -219,7 +229,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
                 appWindowTitled(app, CONFIRM_TITLE),
             )
         ) {
-            await answerConfirm(app, CONFIRM_TITLE);
+            answer(harness, await answerConfirm(app, CONFIRM_TITLE));
             if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());
             }

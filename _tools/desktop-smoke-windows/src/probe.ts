@@ -149,15 +149,25 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
  * button" is what the platform promises.
  *
  * Scoped to the app's own windows for the reason above, and here it is not merely a wrong answer: a Return
- * aimed by title alone can land in whatever the person at this desk happens to have open. */
-export const answerConfirm = async (app: string, titleFragment: string): Promise<boolean> => {
+ * aimed by title alone can land in whatever the person at this desk happens to have open.
+ *
+ * IT ANSWERS WITH WHY, NOT WITH FALSE. A keystroke that was never delivered is invisible from here on: the
+ * assertions after it wait out their deadlines on a screen that was never going to come, and the log blames
+ * the setup screen for a Return that landed on somebody's browser. `focusWindow` is the one step that CAN
+ * tell, so its refusal is carried out to the tier verbatim rather than collapsed into a boolean — the
+ * difference between "this machine would not give the dialog the keyboard" and thirty seconds of silence. */
+export const answerConfirm = async (app: string, titleFragment: string): Promise<string | undefined> => {
     const found = (await appWindows(app)).find((window) => window.title.includes(titleFragment));
     if (found === undefined) {
-        return false;
+        return `no window of ${app}'s is showing "${titleFragment}" any more`;
     }
-    await screen.focusWindow(found.id);
+    try {
+        await screen.focusWindow(found.id);
+    } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+    }
     await screen.key(`Return`);
-    return true;
+    return undefined;
 };
 
 /** Fire a link at the OS the way a browser does — `Start-Process`, resolved through the registered handler. */
