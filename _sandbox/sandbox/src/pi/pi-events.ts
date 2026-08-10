@@ -19,6 +19,9 @@ export interface PiEventMapper {
     readonly map: (event: Record<string, unknown>) => AgentEvent[];
     // The turn's summed usage frame, once — undefined when no assistant message reported any.
     readonly usage: () => AgentEvent | undefined;
+    // What the turn held back, read at settle — the plan text of a `holdText` mapper, and whether an error
+    // frame went out. Accumulated here rather than into a caller's object, exactly as `usage` is.
+    readonly capture: () => PiTurnCapture;
 }
 
 const str = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
@@ -59,11 +62,14 @@ const piEditDiffs = (name: string, args: unknown, cwd: string): ToolCallContent[
     return undefined;
 };
 
-export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEventMapper => {
+// `holdText` ⇒ plan phase: the assistant's text is accumulated into the capture instead of streamed, because
+// that text IS the plan.
+export const createPiEventMapper = (cwd: string, holdText = false): PiEventMapper => {
     // toolCallId → its (display) name and args from tool_execution_start, read back when the result lands.
     const calls = new Map<string, { name: string; args: unknown }>();
     const totals = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
     let sawUsage = false;
+    const capture: PiTurnCapture = {};
 
     const map = (event: Record<string, unknown>): AgentEvent[] => {
         switch (event["type"]) {
@@ -75,7 +81,7 @@ export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEve
                         if (text === "") {
                             return [];
                         }
-                        if (capture !== undefined) {
+                        if (holdText) {
                             capture.planText = (capture.planText ?? "") + text;
                             return [];
                         }
@@ -84,7 +90,7 @@ export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEve
                     case "text_end":
                         // The prose block is finished — the client retires its bubble here (see the contract's
                         // text_end note). Meaningless while a plan phase is holding text back.
-                        return capture === undefined ? [{ kind: "text_end" }] : [];
+                        return holdText ? [] : [{ kind: "text_end" }];
                     case "thinking_delta": {
                         const text = str(delta["delta"]) ?? "";
                         return text === "" ? [] : [{ kind: "thinking", text }];
@@ -109,9 +115,7 @@ export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEve
                     totals.costUsd += num((usage["cost"] as Record<string, unknown> | undefined)?.["total"]);
                 }
                 if (message["stopReason"] === "error") {
-                    if (capture !== undefined) {
-                        capture.errored = true;
-                    }
+                    capture.errored = true;
                     return [{ kind: "error", message: str(message["errorMessage"]) ?? "The model call failed." }];
                 }
                 return [];
@@ -185,9 +189,7 @@ export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEve
                 if (event["success"] === true) {
                     return [];
                 }
-                if (capture !== undefined) {
-                    capture.errored = true;
-                }
+                capture.errored = true;
                 return [{ kind: "error", message: str(event["finalError"]) ?? "The provider kept failing and Pi gave up retrying." }];
             }
             case "compaction_end": {
@@ -215,5 +217,6 @@ export const createPiEventMapper = (cwd: string, capture?: PiTurnCapture): PiEve
     return {
         map,
         usage: () => (sawUsage ? { kind: "usage", ...totals } : undefined),
+        capture: () => capture,
     };
 };

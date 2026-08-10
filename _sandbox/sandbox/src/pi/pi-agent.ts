@@ -5,7 +5,7 @@ import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { withTimeout } from "../acp/acp-connection.js";
-import { createPiEventMapper, type PiTurnCapture } from "./pi-events.js";
+import { createPiEventMapper } from "./pi-events.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
 /* The Pi provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent/runAcpAgent —
@@ -86,6 +86,13 @@ const answerExtensionUi = (proc: PiProcess, event: PiEvent): void => {
     }
 };
 
+// How one prompt turn ended: whether anything failed, and — on a `holdText` turn — the text it held back
+// instead of streaming, which is the plan the user is about to be asked to approve.
+interface PiTurnOutcome {
+    readonly errored: boolean;
+    readonly planText?: string;
+}
+
 // One prompt turn on the warm process: send the prompt, stream mapped events until agent_settled (or a
 // watchdog fires, or the process dies). Does NOT emit the terminal `done` — the caller does once the whole
 // turn (incl. plan phases) settles.
@@ -95,9 +102,18 @@ async function* runPiTurn(
     request: AgentRequest,
     prompt: Record<string, unknown>,
     timeouts: PiTimeouts,
-    capture?: PiTurnCapture,
-): AsyncGenerator<AgentEvent, { errored: boolean }> {
-    const mapper = createPiEventMapper(request.cwd, capture);
+    holdText = false,
+): AsyncGenerator<AgentEvent, PiTurnOutcome> {
+    const mapper = createPiEventMapper(request.cwd, holdText);
+    // However this turn ends, the verdict folds in what the mapper held back: text the plan phase accumulated,
+    // and an error frame that already went out (which is a failure even when the turn itself settled cleanly).
+    const settled = (errored: boolean): PiTurnOutcome => {
+        const captured = mapper.capture();
+        return {
+            errored: errored || captured.errored === true,
+            ...(captured.planText !== undefined ? { planText: captured.planText } : {}),
+        };
+    };
 
     let abortSent = false;
     const sendAbort = (): void => {
@@ -112,7 +128,7 @@ async function* runPiTurn(
         const accepted = await withTimeout(proc.request(prompt), SETUP_TIMEOUT_MS).catch(() => ({ success: false, error: "no response" }));
         if (!accepted.success) {
             yield { kind: "error", message: errorText(`Pi rejected the prompt: ${accepted.error ?? "unknown error"}`, proc.stderrTail()) };
-            return { errored: true };
+            return settled(true);
         }
 
         const turnDeadline = Date.now() + timeouts.maxTurnMs;
@@ -130,7 +146,7 @@ async function* runPiTurn(
                     if (usage !== undefined) {
                         yield usage;
                     }
-                    return { errored: false };
+                    return settled(false);
                 }
                 yield* mapper.map(event);
                 continue;
@@ -138,10 +154,10 @@ async function* runPiTurn(
             if (state.exited) {
                 if (request.signal.aborted) {
                     // The user stopped the turn and the process went down with it — that is the stop working.
-                    return { errored: true };
+                    return settled(true);
                 }
                 yield { kind: "error", message: errorText(`Pi exited mid-turn (code ${state.exitCode ?? "?"})`, proc.stderrTail()) };
-                return { errored: true };
+                return settled(true);
             }
             // An abort narrows the wait to a grace window: Pi usually settles the run, but a wedged provider
             // call may never, and the user has already asked for their turn back.
@@ -150,14 +166,14 @@ async function* runPiTurn(
             if (waitMs <= 0) {
                 if (request.signal.aborted) {
                     proc.kill();
-                    return { errored: true };
+                    return settled(true);
                 }
                 // Watchdog: Pi went silent (or ran forever). The kill is what guarantees the turn ends; the
                 // session file survives it, so the next send resumes the conversation.
                 sendAbort();
                 proc.kill();
                 yield { kind: "error", message: "Pi timed out — no activity from the agent. It was stopped; send again to retry." };
-                return { errored: true };
+                return settled(true);
             }
             let timer: ReturnType<typeof setTimeout> | undefined;
             await Promise.race([
@@ -286,12 +302,11 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
                 // Plan flow is text-only prompts; attachment paths ride the note (images too — the planning
                 // phase reads, it doesn't look at screenshots; keeping phases uniform beats cleverness).
                 const planPhase: PlanPhase = async function* (phasePrompt) {
-                    const capture: PiTurnCapture = {};
-                    const outcome = yield* runPiTurn(proc, state, request, { type: "prompt", message: phasePrompt }, timeouts, capture);
+                    const outcome = yield* runPiTurn(proc, state, request, { type: "prompt", message: phasePrompt }, timeouts, true);
                     return {
                         sessionId: typeof sessionFile === "string" ? sessionFile : undefined,
-                        planText: capture.planText,
-                        errored: outcome.errored || capture.errored === true,
+                        planText: outcome.planText,
+                        errored: outcome.errored,
                     };
                 };
                 const executePhase: ExecutePhase = async function* () {

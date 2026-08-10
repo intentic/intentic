@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
-import { createPiEventMapper, type PiTurnCapture } from "./pi-events.js";
+import { createPiEventMapper } from "./pi-events.js";
 
 /* The Pi event → AgentEvent mapping, exercised as the pure table it is — one Pi RPC event in, its frames
  * out. The adapter's loop (pi-agent.test.ts) trusts these shapes, so drift between Pi's wire vocabulary and
@@ -25,14 +25,13 @@ test("assistant text streams as deltas with a text_end boundary; thinking rides 
     expect(mapper.map({ type: "message_update", assistantMessageEvent: { type: "toolcall_delta", delta: '{"co' } })).toEqual([]);
 });
 
-test("a plan capture holds text back instead of streaming it", () => {
-    const capture: PiTurnCapture = {};
-    const mapper = createPiEventMapper(CWD, capture);
+test("a plan mapper holds text back instead of streaming it", () => {
+    const mapper = createPiEventMapper(CWD, true);
 
     expect(mapper.map({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "1. Do the" } })).toEqual([]);
     expect(mapper.map({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: " thing" } })).toEqual([]);
     expect(mapper.map({ type: "message_update", assistantMessageEvent: { type: "text_end" } })).toEqual([]);
-    expect(capture.planText).toBe("1. Do the thing");
+    expect(mapper.capture().planText).toBe("1. Do the thing");
 });
 
 test("a tool call maps start → streamed output → completion, deriving the edit diff from its args", () => {
@@ -125,8 +124,7 @@ test("a failing tool reports failed with its error text; a call first seen at it
 });
 
 test("assistant usage sums across messages into one frame; an error stop surfaces as an error", () => {
-    const capture: PiTurnCapture = {};
-    const mapper = createPiEventMapper(CWD, capture);
+    const mapper = createPiEventMapper(CWD);
 
     expect(
         mapper.map({
@@ -154,7 +152,7 @@ test("assistant usage sums across messages into one frame; an error stop surface
     expect(mapper.map({ type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "overloaded" } })).toEqual([
         { kind: "error", message: "overloaded" },
     ]);
-    expect(capture.errored).toBe(true);
+    expect(mapper.capture().errored).toBe(true);
 });
 
 test("a mapper that saw no usage emits no usage frame", () => {

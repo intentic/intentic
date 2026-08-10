@@ -149,20 +149,21 @@ interface ImageArtifactContext {
     readonly codexHome: string;
 }
 
-// Normalize one Codex turn's provider event stream onto AgentEvents. `capture` set ⇒ plan phase: agent messages
-// are held back one-deep — intermediate narration still streams (flushed when the next message arrives), and
-// whatever remains held at stream end is the plan text.
+// Normalize one Codex turn's provider event stream onto AgentEvents, RETURNING what the turn captured — the
+// plan phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary
+// turn discards it. `holdMessages` is the plan phase's one behavioural difference: agent messages are held back
+// one-deep — intermediate narration still streams (flushed when the next message arrives), and whatever remains
+// held at stream end is the plan text.
 async function* streamTurn(
     events: AsyncIterable<CodexEvent>,
     cwd: string,
     imageArtifacts: ImageArtifactContext,
-    capture?: TurnCapture,
-): AsyncGenerator<AgentEvent> {
+    holdMessages = false,
+): AsyncGenerator<AgentEvent, TurnCapture> {
+    const capture: TurnCapture = {};
     for await (const event of events) {
         if (event.type === "thread.started") {
-            if (capture !== undefined) {
-                capture.threadId = event.thread_id;
-            }
+            capture.threadId = event.thread_id;
             yield { kind: "session", sessionId: event.thread_id };
         } else if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
             const item = event.item;
@@ -173,7 +174,7 @@ async function* streamTurn(
                 // Only `item.completed` reaches here, so each delta below is a WHOLE message block — its
                 // text_end follows immediately, which retires the client's prose bubble so the tool calls this
                 // message introduced render under it instead of being hoisted above the turn's whole narration.
-                if (capture === undefined) {
+                if (!holdMessages) {
                     yield { kind: "delta", text: item.text };
                     yield { kind: "text_end" };
                 } else {
@@ -291,9 +292,7 @@ async function* streamTurn(
             }
         } else if (event.type === "turn.failed") {
             yield { kind: "error", message: event.error.message };
-            if (capture !== undefined) {
-                capture.errored = true;
-            }
+            capture.errored = true;
         } else if (event.type === "error") {
             const notice = codexNotice(event.message);
             if (notice !== undefined) {
@@ -301,12 +300,11 @@ async function* streamTurn(
                 continue;
             }
             yield { kind: "error", message: event.message };
-            if (capture !== undefined) {
-                capture.errored = true;
-            }
+            capture.errored = true;
         }
         // turn.started has no UI mapping — dropped, like the Claude path's unmapped SDK messages.
     }
+    return capture;
 }
 
 // Codex's preamble adds the read-only truth of its planning phase to the shared skeleton's wording.
@@ -330,8 +328,7 @@ async function* runCodexPlanTurn(
     // context already holds them.
     let images = firstTurnImages;
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
-        const capture: TurnCapture = {};
-        yield* streamTurn(
+        const capture = yield* streamTurn(
             runner({
                 prompt,
                 ...(images.length > 0 ? { images } : {}),
@@ -342,7 +339,7 @@ async function* runCodexPlanTurn(
             }),
             request.cwd,
             imageArtifacts,
-            capture,
+            true,
         );
         images = [];
         return { sessionId: capture.threadId, planText: capture.heldMessage, errored: capture.errored === true };

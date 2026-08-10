@@ -195,10 +195,19 @@ interface TurnCapture {
     errored?: boolean;
 }
 
-// Normalize one Grok turn's OpenCode Event stream onto AgentEvents. `capture` set ⇒ plan phase: text is
-// accumulated (not streamed) so the whole plan surfaces as one `plan` frame. Ends on session.idle; does NOT
-// emit the terminal `done` (the caller does once the whole turn settles).
-async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: TurnCapture): AsyncGenerator<AgentEvent> {
+// Normalize one Grok turn's OpenCode Event stream onto AgentEvents, RETURNING what the turn captured — the plan
+// phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary turn
+// discards it. `holdText` is the plan phase's one behavioural difference: text is accumulated rather than
+// streamed, so the whole plan surfaces as one `plan` frame. `resumedSessionId` seeds the capture, because a
+// resumed session emits no session.created and the execute phase still needs a session to continue.
+// Ends on session.idle; does NOT emit the terminal `done` (the caller does once the whole turn settles).
+async function* streamTurn(
+    events: AsyncIterable<Event>,
+    cwd: string,
+    holdText = false,
+    resumedSessionId?: string,
+): AsyncGenerator<AgentEvent, TurnCapture> {
+    const capture: TurnCapture = resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {};
     // Per-part emitted text length, so each message.part.updated yields only the new suffix (works whether the
     // server sends incremental deltas or full snapshots).
     const emitted = new Map<string, number>();
@@ -217,9 +226,7 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
 
     for await (const event of events) {
         if (event.type === "session.created") {
-            if (capture !== undefined) {
-                capture.sessionId = event.properties.info.id;
-            }
+            capture.sessionId = event.properties.info.id;
             yield { kind: "session", sessionId: event.properties.info.id };
         } else if (event.type === "message.part.updated") {
             const part = event.properties.part;
@@ -230,7 +237,7 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
                 if (part.text.length > prev) {
                     const slice = part.text.slice(prev);
                     emitted.set(part.id, part.text.length);
-                    if (capture !== undefined) {
+                    if (holdText) {
                         capture.planText = (capture.planText ?? "") + slice;
                     } else {
                         yield { kind: "delta", text: slice };
@@ -322,12 +329,10 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
             yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
-            if (capture !== undefined) {
-                capture.errored = true;
-            }
+            capture.errored = true;
             // Terminal: OpenCode does not reliably emit session.idle after an error, so ending here (rather than
             // waiting for an idle that never comes) is what lets runGrokAgent reach its `done`.
-            return;
+            return capture;
         } else if (event.type === "session.idle") {
             if (usage.size > 0) {
                 const total = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
@@ -340,9 +345,10 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
                 }
                 yield { kind: "usage", ...total };
             }
-            return;
+            return capture;
         }
     }
+    return capture;
 }
 
 // Always-plan flow over the shared skeleton: a read-only planning turn on the `plan` agent whose assistant
@@ -352,8 +358,7 @@ async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: 
 // runtime's capability row, which is what the composer says out loud.
 async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): AsyncGenerator<AgentEvent> {
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
-        const capture: TurnCapture = sessionId !== undefined ? { sessionId } : {};
-        yield* streamTurn(
+        const capture = yield* streamTurn(
             runner({
                 prompt,
                 ...(sessionId !== undefined ? { sessionId } : {}),
@@ -363,7 +368,8 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
                 signal: request.signal,
             }),
             request.cwd,
-            capture,
+            true,
+            sessionId,
         );
         return { sessionId: capture.sessionId, planText: capture.planText, errored: capture.errored === true };
     };

@@ -808,7 +808,7 @@ export class Conversation {
             // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
             // on this window is just one renderer of the run.
             const { run } = (await response.json()) as { run: string };
-            await followRun(this.conversationId, { run, after: 0 }, { ...this.sink, ensureTurn: () => turn }, controller);
+            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: () => turn }, controller);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             if (!(err instanceof DOMException && err.name === `AbortError`)) {
@@ -1094,7 +1094,7 @@ export class Conversation {
             return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
         try {
-            return await followRun(this.conversationId, { run: undefined, after: 0 }, { ...this.sink, ensureTurn }, controller);
+            return await followRun(this.conversationId, undefined, { ...this.sink, ensureTurn }, controller);
         } finally {
             this.probe = undefined;
             if (engaged) {

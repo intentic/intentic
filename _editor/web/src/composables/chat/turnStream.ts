@@ -46,10 +46,16 @@ export interface RunRenderer {
  * ensureTurn produced a context). */
 export const followRun = async (
     conversationId: string,
-    cursor: { run: string | undefined; after: number },
+    // The run to attach to, when the caller already knows it (the send path just started it). Undefined asks
+    // the daemon for whatever is running for this conversation — the reattach path.
+    initialRun: string | undefined,
     renderer: RunRenderer,
     controller: AbortController,
 ): Promise<boolean> => {
+    // The resume cursor, held here because nothing outside this loop reads it: `run` latches the run being
+    // rendered, `after` the last seq delivered, and every re-attach picks up from the pair.
+    let run = initialRun;
+    let after = 0;
     let attached = false;
     let retryMs = 500;
     let turn: TurnContext | undefined;
@@ -87,8 +93,8 @@ export const followRun = async (
                 signal: controller.signal,
                 body: JSON.stringify({
                     conversationId,
-                    ...(cursor.run !== undefined ? { run: cursor.run } : {}),
-                    after: cursor.after,
+                    ...(run !== undefined ? { run } : {}),
+                    after,
                 }),
             });
         } catch {
@@ -109,7 +115,7 @@ export const followRun = async (
             return attached;
         }
         retryMs = 500;
-        const beforeAfter = cursor.after;
+        const beforeAfter = after;
         try {
             for await (const frame of sseFrames(response.body)) {
                 const parsed = sseData(frame) as AttachFrame | undefined;
@@ -120,17 +126,17 @@ export const followRun = async (
                     // A head naming a different run than the cursor's means a newer turn started while
                     // this tab was disconnected — that turn belongs at a different transcript position
                     // (after ITS user message), so this stream settles rather than misrendering it here.
-                    if (cursor.run !== undefined && parsed.run !== cursor.run) {
+                    if (run !== undefined && parsed.run !== run) {
                         return attached;
                     }
-                    cursor.run = parsed.run;
+                    run = parsed.run;
                     turn ??= renderer.ensureTurn(parsed);
                     if (turn === undefined) {
                         return false;
                     }
                     attached = true;
                 } else if (parsed.kind === `frame`) {
-                    cursor.after = parsed.seq;
+                    after = parsed.seq;
                     if (turn !== undefined) {
                         renderer.frame(parsed.event, turn);
                     }
@@ -150,7 +156,7 @@ export const followRun = async (
         // already hold, or one whose stream never terminates — so an immediate re-attach would spin. Back off,
         // and after a few empty rounds give up: what we hold is complete, and a live turn would have advanced
         // the cursor (resetting this). Real progress OR a fresh `end` keep the reconnect loop responsive.
-        if (cursor.after === beforeAfter) {
+        if (after === beforeAfter) {
             idleRounds += 1;
             if (idleRounds >= 3) {
                 return attached;
