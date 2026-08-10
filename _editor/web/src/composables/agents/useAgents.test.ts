@@ -320,6 +320,55 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`refused`]);
     });
 
+    /* A SENT TURN THE DAEMON HAS NOT FILED YET is `starting`, and the card says what this browser knows about it.
+     *
+     * It used to report the wire's own `running` and carry the four identity fields alone, so the board drew a
+     * title under a spinner and nothing else — no model, no elapsed, no reason — for as long as the wait lasted.
+     * That wait is normally a blink and is not always one: turn admission queues behind dependency maintenance,
+     * so a message sent during a repair can sit there for minutes looking exactly like a broken card. */
+    it("cards a sent turn the fleet has not registered as starting, with the settings and elapsed it knows", () => {
+        const conversation = new Conversation(`sent`);
+        conversation.model.value = `claude-opus-5`;
+        conversation.streaming.value = true;
+        conversation.turnStartedAt.value = 4_000;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(
+            useAgents().lanes.value.active.map((card) => ({ id: card.id, status: card.status, model: card.model, startedAt: card.startedAt })),
+        ).toEqual([{ id: `sent`, status: `starting`, model: `claude-opus-5`, startedAt: 4_000 }]);
+    });
+
+    // ...and why it is sitting there, when the daemon has said so. The chat carries the same sentence as a
+    // notice; the board is the surface that had no way to say it at all.
+    it("says on the card what a queued turn is waiting for", () => {
+        const conversation = new Conversation(`sent`);
+        conversation.streaming.value = true;
+        conversation.waitingFor.value = `dependencies`;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.active.map((card) => card.waitingFor)).toEqual([`dependencies`]);
+    });
+
+    /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD — the reported bug, in one case.
+     *
+     * `open` latches the tab as registered for a card the fleet DOES know, which is right for every registry card
+     * and was being applied to this one too, because `running` was indistinguishable from the daemon's own
+     * running. The drafts half then skipped the conversation for being registered and the registry had no entry
+     * to render instead, so the agent vanished from every lane on the very click meant to open it — and only a
+     * reload brought it back. */
+    it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {
+        const conversation = new Conversation(`sent`);
+        conversation.streaming.value = true;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        const card = useAgents().lanes.value.active[0]!;
+
+        useAgents().open(card);
+
+        expect(conversation.registered.value).toBe(false);
+        expect(conversation.isolated.value).toBe(true);
+        expect(activeIds()).toEqual([`sent`]);
+    });
+
     it("stops carding a conversation once the roster registers it — one card, from the registry", () => {
         const conversation = new Conversation(`a1`);
         useChat().conversations.value = [...useChat().conversations.value, conversation];

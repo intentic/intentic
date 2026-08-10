@@ -1,6 +1,17 @@
 import type { AgentStatus } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { type AgentStanding, agentStatusMeta, type ClientAgentStatus, laneOf, unfinishedMark } from "./agentStatus";
+import {
+    type AgentStanding,
+    agentStatusMeta,
+    awaitingUser,
+    blocked,
+    type ClientAgentStatus,
+    laneOf,
+    turnInFlight,
+    unfinishedMark,
+    unregistered,
+    waitingLine,
+} from "./agentStatus";
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
 // store — useAgents pulls useChat pulls the router, and none of that is needed to place an agent.
@@ -28,6 +39,12 @@ describe("laneOf", () => {
     it("routes running turns and fresh drafts to active", () => {
         expect(laneOf({ status: `running`, attention: none })).toBe(`active`);
         expect(laneOf({ status: `draft`, attention: none })).toBe(`active`);
+    });
+
+    // A sent turn the daemon has not filed yet is work in flight and belongs beside the rest of it — the only
+    // thing that separates it from `running` is whose account of it the card is drawing.
+    it("routes a sent-but-unfiled turn to active", () => {
+        expect(laneOf({ status: `starting`, attention: none })).toBe(`active`);
     });
 
     /* THE TWO CLIENT-ONLY STANDINGS ARE NOT ONE. A draft is the tab you are about to type into; a REFUSED send
@@ -76,6 +93,57 @@ describe("agentStatusMeta", () => {
         expect(agentStatusMeta(`resuming`)).toMatchObject({ label: `Resuming…`, icon: `spinner`, spin: true });
         expect(agentStatusMeta(`stopping`)).toMatchObject({ label: `Stopping…` });
     });
+
+    // And a sent turn apart from a filed one. Same spinner and same hue — it IS work in flight — because the
+    // difference the word carries is about the RECORD, not about how busy the agent is.
+    it("names a sent turn the daemon has not filed yet", () => {
+        expect(agentStatusMeta(`starting`)).toMatchObject({ label: `Starting…`, icon: `spinner`, spin: true });
+    });
+});
+
+/* WHICH CARDS HAVE NO REGISTRY ENTRY BEHIND THEM — the one gate every fleet verb is refused through (archive,
+ * review, land, drop, prefetch) and, on the way in, the one that decides whether opening a card may latch its tab
+ * as a registered conversation. `starting` had to join it: while a sent-but-unfiled turn wore the wire's
+ * `running`, the click that opened such a card latched it and the card left the board with no entry to replace
+ * it. Asserted against the full status list rather than one case, so a state added later has to answer here. */
+describe("unregistered", () => {
+    it("names every client-only standing and nothing the daemon assigns", () => {
+        expect(([`draft`, `starting`, `failed`, `resumed`] as ClientAgentStatus[]).map(unregistered)).toEqual([true, true, true, true]);
+        expect(
+            (
+                [
+                    `idle`,
+                    `running`,
+                    `awaiting`,
+                    `ready`,
+                    `landed`,
+                    `conflict`,
+                    `error`,
+                    `interrupted`,
+                    `stopping`,
+                    `stopped`,
+                    `resuming`,
+                ] as AgentStatus[]
+            ).map(unregistered),
+        ).not.toContain(true);
+    });
+
+    // The elapsed on a starting card runs from the send, so the live readouts have to treat it as a live turn —
+    // while the hands-off guards keep refusing it one question earlier, on `unregistered` above.
+    it("counts a sent turn as in flight, so its card ticks like the work it is", () => {
+        expect(turnInFlight({ status: `starting`, attention: none })).toBe(true);
+        expect(blocked({ status: `starting`, attention: none })).toBe(false);
+        expect(awaitingUser({ status: `starting`, attention: none })).toBe(false);
+    });
+});
+
+// Why a sent turn has not started, in the words the chat's own notice uses — the two surfaces describe one wait.
+describe("waitingLine", () => {
+    it("names the dependency wait, and degrades an unknown reason to itself", () => {
+        expect(waitingLine(`dependencies`)).toBe(`Waiting for dependency setup`);
+        expect(waitingLine(`something new`)).toBe(`Waiting for something new`);
+        expect(waitingLine(undefined)).toBeUndefined();
+    });
 });
 
 /* The Changes legend's mark. The ONE property worth asserting is that it never disagrees with the board about
@@ -96,6 +164,7 @@ describe("unfinishedMark", () => {
         `stopped`,
         `resuming`,
         `draft`,
+        `starting`,
         `failed`,
     ];
     const FLAGS: readonly AgentStanding[`attention`][] = [

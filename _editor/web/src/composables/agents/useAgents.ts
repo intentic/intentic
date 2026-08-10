@@ -233,6 +233,12 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     // so it is false for every agent this window isn't holding — including one being written to on another
     // device, whose composer this browser has no account of.
     readonly unsent: boolean;
+    // What a SENT turn is queued behind, when the daemon has said (Conversation.waitingFor) — dependency
+    // maintenance holds every turn out while it rewrites the tree and runs its checks. Only ever set on a
+    // `starting` card: a registered agent's own status says where it stands, and this is the one thing such a
+    // card can say instead of showing a spinner over nothing. Written like the AgentSummary fields beside it in
+    // `fleet`, which is why it is not readonly.
+    waitingFor?: string;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
@@ -273,7 +279,11 @@ export const windowFinished = <T>(
 };
 
 /* WHERE A CARD WITH NO REGISTRY ENTRY STANDS. Three answers, and the order of the tests is the whole of it:
- *   · streaming — a draft racing its first turn (begin → roster frame) already reads as running;
+ *   · streaming — a turn has gone but the daemon has not filed it yet, which is `starting`. NOT the wire's
+ *     `running`, which this used to answer and which claims the registry's account of an agent the registry has
+ *     never heard of: every guard that asks "does the daemon know this card" then said yes, so clicking one
+ *     latched the tab as registered and the card left the board with nothing to replace it (see the standing's
+ *     own note in agentStatus.ts);
  *   · an error — the refusal that kept it off the roster in the first place (the daemon turned the request
  *     away, so no entry was ever made): not a draft waiting to be typed into but a card for work that never
  *     started, which is what `failed` says;
@@ -281,9 +291,9 @@ export const windowFinished = <T>(
  *     newly made. `resumed`, and the reason that standing exists: it used to answer `draft` here, which put a
  *     three-week-old chat at the head of the Active lane dressed as work about to begin.
  * Everything left is what "draft" was always meant to mean — an empty tab the user is about to type into. */
-const clientStatus = (conversation: Conversation): ClientAgentStatus | "running" => {
+const clientStatus = (conversation: Conversation): ClientAgentStatus => {
     if (conversation.streaming.value) {
-        return `running`;
+        return `starting`;
     }
     if (conversation.error.value !== null) {
         return `failed`;
@@ -330,6 +340,45 @@ const fleet = computed<FleetAgent[]>(() => {
             // chat the user just opened from that very list went on being offered underneath its own card.
             if (conversation.session.value !== undefined) {
                 draft.sessionId = conversation.session.value.id;
+            }
+            /* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET — which is the whole of what a
+             * `starting` card can honestly say, and it is not nothing.
+             *
+             * The card used to be built from the four fields above alone, so a sent turn appeared as a title
+             * under a spinner and nothing else: no model, no elapsed, no reason. That is a fair drawing of a
+             * DRAFT (there is nothing to say about a tab nobody has typed in) and a bad one of work in flight,
+             * because every fact it was missing was sitting on the conversation the card is made of. The
+             * settings are the ones the send actually went out under, the elapsed runs from the moment of the
+             * send rather than from whenever the entry appears, and the usage is this tab's own running total —
+             * each of them replaced by the registry's version the moment it lands.
+             *
+             * Only for `starting`: on a draft they would describe a turn that has not happened, and on a
+             * `resumed` card the composer's current picks are not an account of the conversation's past. */
+            if (draft.status === `starting`) {
+                draft.model = conversation.model.value;
+                draft.effort = conversation.effort.value;
+                draft.thinking = conversation.thinking.value;
+                draft.fast = conversation.fast.value;
+                if (conversation.turnStartedAt.value !== undefined) {
+                    draft.startedAt = conversation.turnStartedAt.value;
+                }
+                // Zero is "nothing counted yet", not a measurement — and a stat row of zeroes is the kind of
+                // readout people learn to distrust. The first `usage` frame of the turn fills them in.
+                if (conversation.inputTokens.value > 0) {
+                    draft.inputTokens = conversation.inputTokens.value;
+                    draft.outputTokens = conversation.outputTokens.value;
+                }
+                if (conversation.costUsd.value > 0) {
+                    draft.costUsd = conversation.costUsd.value;
+                }
+                /* WHY IT IS SITTING THERE, when the daemon has told us. Turn admission queues behind dependency
+                 * maintenance, so a message sent while the workspace is being repaired waits — minutes, if the
+                 * repair is waiting on a long turn of its own to finish first. The chat says so in a notice; the
+                 * board could not, and a spinner with no elapsed and no reason is exactly the card the user
+                 * cannot tell apart from a broken one. */
+                if (conversation.waitingFor.value !== undefined) {
+                    draft.waitingFor = conversation.waitingFor.value;
+                }
             }
             return draft;
         });
@@ -510,9 +559,7 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     // Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
     grouped.active.sort(
         (a, b) =>
-            Number(b.status === `draft`) - Number(a.status === `draft`) ||
-            (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) ||
-            byId(a, b),
+            Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
     /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
@@ -934,8 +981,14 @@ const open = (
         provider: agent.provider,
         harness: agent.harness,
         ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
-        // A draft or refused card is client-only — the fleet has NOT registered its conversation, and claiming
-        // so here would erase the card under the click and pin the empty tab open past the focus-leave sweep.
+        /* A client-only card — a draft, a refused send, a turn the daemon has not filed yet — is NOT a
+         * registered conversation, and claiming so here would erase the card under the click and pin the empty
+         * tab open past the focus-leave sweep.
+         *
+         * The erasure is not hypothetical: while a sent-but-unfiled turn reported the wire's `running`, this
+         * read it as registered and latched the tab, and the card left the board on the very click meant to open
+         * it — the drafts half skips a registered conversation and the registry has no entry to draw instead, so
+         * the agent was on no lane at all until a reload re-derived it. See `starting` in agentStatus.ts. */
         registered: !unregistered(agent.status),
         ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
         ...(agent.title !== undefined ? { title: agent.title } : {}),

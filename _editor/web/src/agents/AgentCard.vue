@@ -24,6 +24,7 @@ import {
     turnInFlight,
     unreadBadge,
     unregistered,
+    waitingLine,
 } from "../composables/agents/agentStatus";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
@@ -100,17 +101,29 @@ const activityText = computed(() => activityLine(props.agent));
 // stay), so it has to be reachable by touch and by keyboard, which a drag to a zone that only exists mid-drag
 // never was.
 const archivable = computed(() => canArchive(props.agent));
-/* THE EXIT FOR A CARD THAT IS NOT AN AGENT — a draft, and a send the daemon refused (`unregistered`). Every
- * other way off this board addresses an id through the daemon, which has never heard of this one: archive,
- * discard, land and every drop are therefore refused, and what that left behind was a card the user could do
- * NOTHING with except rename it. A broken send would leave one in the Active lane, above the agents actually
- * working, for the life of the sandbox — it survives a reload, because the tab it belongs to does.
+/* THE EXIT FOR A CARD THAT IS NOT AN AGENT — a draft, a send the daemon refused, a turn it has not filed yet
+ * (`unregistered`). Every other way off this board addresses an id through the daemon, which has never heard of
+ * this one: archive, discard, land and every drop are therefore refused, and what that left behind was a card
+ * the user could do NOTHING with except rename it. A broken send would leave one in the Active lane, above the
+ * agents actually working, for the life of the sandbox — it survives a reload, because the tab it belongs to does.
  *
  * So the exit it does have — closing the tab — is offered where the card is, instead of only on the chat rail
  * the board never mentions. It takes the archive glyph's slot because the two can never both apply, and asks
  * for no confirmation for the same reason no close in the rail does: with no branch, no worktree and no
  * daemon-side transcript, there is nothing here to lose but the words, and those are in the composer. */
 const closable = computed(() => unregistered(props.agent.status));
+/* ...and what closing it COSTS, which is the one thing that differs across those standings. A `starting` card's
+ * turn is already running daemon-side — the close only stops this window rendering it, and the agent takes its
+ * own card the moment the daemon files it — so the draft's reassurance ("this never started") would be a lie
+ * about work in flight, and the sentence has to say which of the two the reader is looking at. */
+const closeHint = computed(() =>
+    props.agent.status === `starting`
+        ? `Close — the turn keeps running, and its own card appears once the sandbox has filed it`
+        : `Close — this never started, so there is no branch or transcript to keep`,
+);
+// Why a sent turn is sitting there, when the daemon has said (agentStatus.waitingLine). Only a `starting` card
+// can carry one; everything registered says where it stands through its status instead.
+const waiting = computed(() => waitingLine(props.agent.waitingFor));
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
@@ -365,7 +378,7 @@ const grab = (event: PointerEvent): void => {
                     v-if="closable"
                     type="button"
                     aria-label="Close agent"
-                    v-tooltip.top="'Close — this never started, so there is no branch or transcript to keep'"
+                    v-tooltip.top="closeHint"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`close`)"
                 >
@@ -514,6 +527,16 @@ const grab = (event: PointerEvent): void => {
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
                 <Icon name="repeat" class="shrink-0 text-2xs" :class="loopLine?.spin ? 'animate-spin' : ''" />
                 <span class="truncate">{{ loopLine?.text }}</span>
+            </p>
+
+            <!-- WHY A SENT TURN IS SITTING THERE. It takes the activity line's slot because it is the same kind
+                 of fact one step earlier — what this card is doing right now — and the two can never both apply:
+                 a turn that is queued has produced no activity to report, and one that is running is no longer
+                 queued. Muted rather than link-blue: nothing is happening yet, and the card should not spend the
+                 colour it uses for live work on a wait. What ENDS it is the turn's own first frame. -->
+            <p v-if="waiting !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs text-muted" :class="dense ? 'min-w-32 flex-1' : ''">
+                <Icon name="clock" class="shrink-0 text-2xs" />
+                <span class="truncate">{{ waiting }}</span>
             </p>
 
             <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a

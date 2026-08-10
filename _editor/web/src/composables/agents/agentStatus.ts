@@ -19,10 +19,11 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * lets the panel, the rail and the tests all reach the same answer without any of them dragging in the app
  * shell (useAgents pulls useChat pulls the router). */
 
-/* THE THREE STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the shapes
- * that difference comes in. `draft` is one that has not been sent yet; `failed` is one whose send was REFUSED,
- * so it never became an agent and never will until the user sends again; `resumed` is a past conversation
- * reopened from History, whose agent entry is long gone (or never existed — a plain chat).
+/* THE FOUR STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the shapes
+ * that difference comes in. `draft` is one that has not been sent yet; `starting` is one whose turn has GONE
+ * but which the daemon has not filed as an agent yet; `failed` is one whose send was REFUSED, so it never
+ * became an agent and never will until the user sends again; `resumed` is a past conversation reopened from
+ * History, whose agent entry is long gone (or never existed — a plain chat).
  *
  * They are told apart because they belong in different lanes and offer different things. A draft is the tab you
  * are about to type into and reads as Active; a refused one is a dead end that needs the user, and reading it
@@ -30,12 +31,21 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * actually working, with no action on them at all. A RESUMED one is the same mistake in its oldest form: a
  * conversation from three weeks ago, with a full transcript behind it, was arriving as a "Draft" at the head of
  * the Active lane — the board announcing the user's own history as brand-new work. It is finished, because it
- * is: nothing is running and nothing is owed. What all three share — no registry entry, so nothing to archive,
+ * is: nothing is running and nothing is owed. What all four share — no registry entry, so nothing to archive,
  * review, land or drop — is `unregistered` below.
  *
+ * `starting` IS THE ONE THAT USED TO LIE. A sent turn was reported as the wire's own `running`, which reads as
+ * "the registry says this agent is working" — so every guard that asks "does the daemon know this card" was
+ * answered yes about a card it has never heard of. Clicking one therefore latched the tab as registered and the
+ * card vanished off the board with no entry to replace it; nothing could archive it and nothing could close it,
+ * and only a reload brought it back. The gap it covers is normally a blink (send → the daemon's first roster
+ * frame) and is not always one: turn admission queues behind dependency maintenance, so a turn sent while the
+ * workspace is being repaired can wait minutes to be filed. That wait is exactly when the board has to be
+ * honest about what it does and does not know.
+ *
  * None may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
- * three are by definition the cards it has never heard of. */
-export type ClientAgentStatus = "draft" | "failed" | "resumed";
+ * four are by definition the cards it has never heard of. */
+export type ClientAgentStatus = "draft" | "starting" | "failed" | "resumed";
 
 // Enough of an agent to place one. Every predicate below takes this and nothing more, so a caller holding a
 // FleetAgent, a roster AgentSummary or a test literal can all ask the same question.
@@ -51,7 +61,8 @@ export interface AgentStanding {
 // Takes the status alone, like agentStatusMeta and unlike the lane predicates: it is a question about which
 // half of the world the card came from, and the callers that need it most (the tab `open` builds, the detail
 // page's `registered`) hold a status without an attention block to pair it with.
-export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean => status === `draft` || status === `failed` || status === `resumed`;
+export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =>
+    status === `draft` || status === `starting` || status === `failed` || status === `resumed`;
 
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
     // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
@@ -70,6 +81,12 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     // it from every state below is that this agent does not exist: it is a card for work that never started.
     if (status === `failed`) {
         return { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` };
+    }
+    // The turn has gone and the daemon has not filed it yet. The running spinner and the running blue, because
+    // that is what it is — work in flight — and the word is the whole of the difference: this card is drawn from
+    // what THIS BROWSER knows, so nothing on it can be the registry's account of the agent yet.
+    if (status === `starting`) {
+        return { icon: `spinner`, spin: true, label: `Starting…`, class: `text-link` };
     }
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
@@ -131,11 +148,16 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
  * daemon's own bookkeeping being repaired, so a card that stopped reading as work-in-progress halfway through
  * is the flicker again, only slower.
  *
+ * `starting` belongs here for the readouts alone, and it costs the guards nothing: a turn that has gone IS in
+ * flight — its elapsed should tick from the moment of the send rather than from whenever the daemon gets round
+ * to filing it — while every hands-off guard already refuses it one question earlier, because a card with no
+ * registry entry has nothing for those verbs to address (`unregistered`).
+ *
  * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED — the guards that read
  * this either want it excluded (a parked turn is exactly what awaitingUser answers for) or answer it in their
  * own terms. */
 export const turnInFlight = (agent: AgentStanding): boolean =>
-    agent.status === `running` || agent.status === `stopping` || agent.status === `resuming`;
+    agent.status === `running` || agent.status === `starting` || agent.status === `stopping` || agent.status === `resuming`;
 
 // "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
@@ -393,6 +415,16 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
  * hides); the caller formats it, because this module owns no clock and no time words. */
 export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
     !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
+
+/* WHY A SENT TURN HAS NOT STARTED — the card's line for FleetAgent.waitingFor (the daemon's `waiting` frame,
+ * held on the conversation because a queued turn has no registry entry to carry it).
+ *
+ * The words are the chat notice's own, shortened to a line: the two surfaces are describing the same wait, and a
+ * board that called it something else would read as a different problem. An unknown reason degrades to its own
+ * name rather than disappearing — a wait nobody can name is still the answer to "why is this card doing
+ * nothing", which is the question the blank spinner could not answer at all. */
+export const waitingLine = (waitingFor: string | undefined): string | undefined =>
+    waitingFor === undefined ? undefined : waitingFor === `dependencies` ? `Waiting for dependency setup` : `Waiting for ${waitingFor}`;
 
 /* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
  * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
