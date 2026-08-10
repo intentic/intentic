@@ -252,6 +252,17 @@ export const docsSections: DocsSection[] = [
                     datePublished: "2026-07-31",
                 },
             },
+            {
+                id: "extensions/economics",
+                title: "The creator pool",
+                blurb: "Premium listings, the revenue split, and the public ledger",
+                meta: {
+                    title: "The creator pool · intentic docs",
+                    description:
+                        "How premium extensions earn: the membership, the published split, the active-day unit, the anti-gaming rule, and the transparency ledger anyone can read.",
+                    datePublished: "2026-08-10",
+                },
+            },
         ],
     },
     {

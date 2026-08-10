@@ -972,6 +972,11 @@ const pickForticlient = (connection: ForticlientConnection): void => {
     touched.clear();
 };
 
+/* The picked row's tier, remembered beside the form rather than in it: tier is the registry's fact about the
+ * listing, not a field anyone types, so it rides the install config only while the URL still is the picked
+ * row's (hand-editing the URL is installing something else, whose tier this browser does not know). */
+const pickedPremiumUrl = ref<string | null>(null);
+
 const pickEntry = (entry: RegistryEntry): void => {
     if (entry.install === undefined || blockedReason(entry) !== undefined) {
         return;
@@ -983,6 +988,7 @@ const pickEntry = (entry: RegistryEntry): void => {
     values[`path`] = entry.install.path ?? ``;
     // Code hosted inside a private registry repo needs the same token to clone.
     values[`token`] = entry.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
+    pickedPremiumUrl.value = entry.tier === `premium` ? entry.install.url : null;
 };
 
 const clearForm = (): void => {
@@ -995,6 +1001,7 @@ const clearForm = (): void => {
     marketUrl.value = ``;
     marketToken.value = ``;
     market.value = null;
+    pickedPremiumUrl.value = null;
     forticlientFile.value = ``;
     forticlientConnections.value = [];
     touched.clear();
@@ -1164,6 +1171,10 @@ const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
         if (value.length > 0) {
             config[field.key] = value;
         }
+    }
+    // The picked registry row's tier (see pickedPremiumUrl) — what the daemon's premium gate reads.
+    if (entry.kind === `extension` && pickedPremiumUrl.value !== null && pickedPremiumUrl.value === (values[`url`] ?? ``).trim()) {
+        config[`tier`] = `premium`;
     }
     return { id: name.value.trim(), kind: entry.kind, config };
 };
@@ -1671,6 +1682,14 @@ const submitLabel = computed(() =>
                                              "listed" too would dress the honest default up as a review. -->
                                             <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
                                             <span class="font-medium text-content">{{ entry.name }}</span>
+                                            <!-- The price, before the click: a premium row needs a membership to install,
+                                             and its retained use is what pays its creator from the pool. -->
+                                            <span
+                                                v-if="entry.tier === 'premium'"
+                                                class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
+                                                v-tooltip.top="`Premium — needs an intentic membership; its use pays its creator from the pool`"
+                                                >Premium</span
+                                            >
                                             <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
                                             <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned
                                              commit and found (or didn't) a thing that loads. Silent when there are no

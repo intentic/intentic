@@ -8,6 +8,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 - Mint the per-user connection token + serve the setup one-liner. The workspace gate is enforced in the browser, which probes the daemon's `/health` directly — the platform never decides liveness.
 - Store the sandbox's public `daemonUrl` the **browser** derives (`sandbox-<sha256(token)[:12]>.<zone>`) and writes (`setup.bind`), and serve it back (`setup.binding`) so the browser knows where to reach it. Persist nothing else about the sandbox.
 - Serve the **free trial** ([src/trial/](src/trial/)): an OpenAI-compatible model API on intentic's own free-tier keys, so a user can chat before connecting any AI account. Metered per signed-in account per UTC day (`TrialUsage`), authenticated by the sandbox's connect token. **Off by default** — no `TRIAL_KEYS`, no trial.
+- Run the **creator pool** ([src/pool/](src/pool/)): the paid membership (Stripe checkout/portal/webhook — Stripe stays the money's source of truth, `Membership` is the local mirror), the use-day ledger daemons report premium-extension use into (`ExtensionUseDay`, idempotent by unique key), and the **public transparency read** that states member count, the split, and every premium extension's share. **Off by default** — no `POOL_STRIPE_SECRET_KEY` + `POOL_STRIPE_PRICE_ID`, no pool.
 - The setup wizard's **cloud lane** ([src/sandbox/cloud/](src/sandbox/cloud/)): create ONE VM in the **user's own** cloud account (Hetzner / DigitalOcean / Oracle Always-Free) whose first boot runs the sandbox's setup code. The pasted provider credential is request-scoped like the Cloudflare zone listing — spent on the provider's catalog + create calls, never persisted — so the platform keeps no way back into the machine; only display metadata (`Sandbox.cloud`) survives.
 
 ## Routes (see [src/app.ts](src/app.ts))
@@ -15,6 +16,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 - `/api/auth/**` — Better Auth (Google OAuth, session).
 - `${API_BASE_PATH}/*` — the oRPC OpenAPI handler ([src/router.ts](src/router.ts): `me`, `setup.connect`, `setup.zones`, `setup.bind`, `setup.binding`). `bind` stores the browser-derived `daemonUrl`; `binding` reads it back.
 - `/trial/*` — the free trial's model API (`/trial/status`, `/trial/v1/models`, `/trial/v1/chat/completions`), authenticated by the sandbox connect token. 404s entirely when `TRIAL_KEYS` is unset.
+- `/pool/*` — the creator pool's non-browser routes: the daemon's ledger report + premium probe (connect-token), Stripe's webhook (signature), and the public `GET /pool/transparency`. The browser half (membership state, checkout, portal) rides the oRPC contract. 404s entirely when the pool is unconfigured.
 - `/health` — DB connectivity.
 
 ## Key files
@@ -28,6 +30,6 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 ## Conventions & gotchas
 
 - The platform is **off the command path except for the free trial** — there is no relay, no socket to the sandbox, and no sandbox-originated calls other than the daemon's announce and its trial probe. The browser calls the sandbox daemon directly (authenticated by the user's Google ID token); the platform only holds the stored URL. Trial turns are the one thing that passes through, they are labelled as such in every surface that offers them ([`TRIAL_NOTICE`](../../_sandbox/sandbox-contract/src/agent-catalog.ts)), and connecting any account takes the user off that path for good.
-- **Two documented secret exceptions**, both intentic's own credentials and both optional: `INTENTIC_CLOUDFLARE_API_TOKEN` (provisioning sandbox tunnels for users who bring no Cloudflare) and `TRIAL_KEYS` (the free-trial pool). Everything else — Claude/git tokens, SSH keys, the user's Cloudflare — lives in the sandbox.
+- **Three documented secret exceptions**, all intentic's own credentials and all optional: `INTENTIC_CLOUDFLARE_API_TOKEN` (provisioning sandbox tunnels for users who bring no Cloudflare), `TRIAL_KEYS` (the free-trial pool), and `POOL_STRIPE_SECRET_KEY`/`POOL_STRIPE_WEBHOOK_SECRET` (the creator pool's Stripe account). Everything else — Claude/git tokens, SSH keys, the user's Cloudflare — lives in the sandbox.
 - `setup.connect` returns only the connection token + the connect-script URLs. The sandbox's public URL is **derived deterministically** from that token + the chosen zone (`sandbox-<sha256(token)[:12]>.<zone>`, matching the CLI's tunnel hostname) and written by the browser via `setup.bind` — the sandbox never calls the platform.
 - Config is nested + SCREAMING_SNAKE-derived by `@puristic/env`; secrets are plaintext in the DB for now. No platform test harness — verify with `pnpm build` + `pnpm lint`.

@@ -36,9 +36,17 @@ describe(`resolveRegistry`, () => {
         expect(resolveRegistry(file, undefined, REGISTRY)).toHaveLength(3);
     });
 
-    it(`defaults an unstated trust to listed and an unstated kind to plugin`, () => {
+    it(`defaults an unstated trust to listed, an unstated kind to plugin, and an unstated tier to free`, () => {
         const entries = resolveRegistry(RegistryFileSchema.parse({ name: `x`, plugins: [{ name: `a`, source: `./a` }] }), undefined, REGISTRY);
-        expect(entries[0]).toMatchObject({ trust: `listed`, kind: `plugin` });
+        expect(entries[0]).toMatchObject({ trust: `listed`, kind: `plugin`, tier: `free` });
+    });
+
+    it(`carries a premium tier through the resolve`, () => {
+        const premium = RegistryFileSchema.parse({
+            name: `x`,
+            plugins: [{ name: `acme.research`, kind: `extension`, tier: `premium`, source: { source: `github`, repo: `acme/research`, sha: SHA } }],
+        });
+        expect(resolveRegistry(premium, undefined, REGISTRY)[0]?.tier).toBe(`premium`);
     });
 
     // Blocked rows must survive the resolve — deleting them is what hides a warning from the people who
@@ -66,7 +74,7 @@ describe(`resolveRegistry`, () => {
 });
 
 describe(`compareEntries`, () => {
-    const entry = (over: Partial<RegistryEntry>): RegistryEntry => ({ name: `x`, kind: `extension`, trust: `listed`, ...over });
+    const entry = (over: Partial<RegistryEntry>): RegistryEntry => ({ name: `x`, kind: `extension`, trust: `listed`, tier: `free`, ...over });
 
     it(`puts verified first even when it has fewer stars`, () => {
         const sorted = [entry({ name: `popular`, stars: 900 }), entry({ name: `checked`, trust: `verified`, stars: 1 })].toSorted(compareEntries);

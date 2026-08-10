@@ -100,6 +100,30 @@ const configSchema = z.object({
             dailyMessages: z.coerce.number().int().nonnegative().default(12),
         })
         .prefault({}),
+    /* THE CREATOR POOL — the optional paid membership whose revenue premium-extension creators share.
+     *
+     * `stripeSecretKey` + `stripePriceId` are the switch, exactly like trial.keys: both empty (the default,
+     * and the right one for a self-hosted platform) and the pool does not exist — /pool routes 404, the web
+     * app offers no membership, premium extensions cannot be enabled anywhere that points at this platform.
+     * Stripe stays the money's source of truth; the platform mirrors just enough (pool/pool-membership.ts)
+     * to answer "is this user premium" without a Stripe round-trip on hot paths. */
+    pool: z
+        .object({
+            // The Stripe secret key (sk_… / rk_…). POOL_STRIPE_SECRET_KEY.
+            stripeSecretKey: z.string().default(``).meta({ secret: true }),
+            // The signing secret of the /pool/webhook endpoint (whsec_…) — without it subscription events
+            // are refused, so a pool that takes money must set it. POOL_STRIPE_WEBHOOK_SECRET.
+            stripeWebhookSecret: z.string().default(``).meta({ secret: true }),
+            // The recurring Price the checkout sells (price_…). POOL_STRIPE_PRICE_ID.
+            stripePriceId: z.string().default(``),
+            // The membership's monthly price in USD as the transparency page states it — display + pool math
+            // only; what Stripe actually charges is the Price above. POOL_PRICE_USD.
+            priceUsd: z.coerce.number().nonnegative().default(20),
+            // The fraction of membership revenue that forms the creator pool. The published number the whole
+            // model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
+            creatorShare: z.coerce.number().min(0).max(1).default(0.7),
+        })
+        .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`
     // into a new VM's first-boot script (sandbox/cloud/user-data.ts), the same URL the setup wizard's
     // copy-paste command uses. A self-hosted platform points this at its own site. SCRIPT_ORIGIN.

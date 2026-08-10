@@ -16,6 +16,7 @@ import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
+import { poolHttpRoutes } from "./pool/pool.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
@@ -416,6 +417,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * TRIAL_KEYS is set, which is the default and the only sane setting for a self-hosted platform: with no keys
      * every route under here 404s and the daemon provisions no trial endpoint. */
     app.route(`/trial`, trialRoutes({ config, prisma }));
+
+    /* The creator pool's non-browser routes — the daemon's ledger report + premium probe, Stripe's webhook,
+     * and the public transparency read (see pool/pool.routes.ts). Off unless POOL_STRIPE_SECRET_KEY +
+     * POOL_STRIPE_PRICE_ID are set, the trial's pattern: unset, everything under here 404s and no surface
+     * anywhere offers a membership. */
+    app.route(`/pool`, poolHttpRoutes({ config, prisma }));
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {

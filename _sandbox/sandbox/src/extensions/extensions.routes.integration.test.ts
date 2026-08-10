@@ -15,7 +15,7 @@ import { listenerProvidersOf } from "./installed-extensions.js";
 
 import { workspacePaths } from "../workspace/workspace.js";
 
-import { clientFor, errorCode, services } from "../route-testing.js";
+import { clientFor, errorCode, memoryCapabilitiesStore, services } from "../route-testing.js";
 
 /* The extensions routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -47,6 +47,25 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
     // And back on, from the same list the tab renders.
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: true });
     expect((await listed())["intentic.discord"]).toBe(true);
+});
+
+test("re-enabling a premium extension re-checks the membership and refuses without one", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-premium-")));
+    // The baked discord extension wearing a premium capability entry — what a git-installed premium extension
+    // looks like to the enable route. The harness config has no platform, so the fresh probe answers no,
+    // which is the fail-closed path: no reachable platform, no premium enable.
+    const svc = services({
+        workspace,
+        capabilities: memoryCapabilitiesStore([
+            { id: "intentic.discord", kind: "extension", config: { url: "https://github.com/acme/x.git", ref: "a".repeat(40), tier: "premium" } },
+        ]),
+    });
+    const client = clientFor(createApp(svc));
+
+    await client.extensions.setEnabled({ id: "intentic.discord", enabled: false });
+    expect(await errorCode(client.extensions.setEnabled({ id: "intentic.discord", enabled: true }))).toBe("FORBIDDEN");
+    // Switching OFF is never gated — a lapsed member can always stop things.
+    await client.extensions.setEnabled({ id: "intentic.discord", enabled: false });
 });
 
 test("a workspace extension lists like any other and serves its bundle by content hash", async () => {

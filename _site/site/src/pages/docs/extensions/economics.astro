@@ -1,0 +1,84 @@
+---
+import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../../components/DocsLayout.astro";
+
+const entry = `{
+    "name": "acme.reddit-research",
+    "kind": "extension",
+    "tier": "premium",
+    "description": "Deep subreddit research: audiences, timing, and what actually gets traction.",
+    "version": "1.2.0",
+    "source": { "source": "github", "repo": "acme/reddit-research", "sha": "9f2c1ab…" }
+}`;
+---
+
+<DocsLayout
+    pageId="extensions/economics"
+    heading="The creator pool"
+    lead="One membership funds the extensions people actually use. The split is published, the unit is defined, and the ledger is public — this page is the whole deal, stated once."
+>
+    <h2>The deal</h2>
+    <p>
+        A user buys one <strong>intentic membership</strong> ($20/month). It unlocks every <code>premium</code> extension for them,
+        everywhere they work. <strong>70% of membership revenue forms the creator pool</strong>, and each month the pool is divided among
+        premium extensions in proportion to how much members actually used them. The remaining 30% runs the platform.
+    </p>
+    <p>
+        There is no per-extension billing, no checkout between a user and each tool they try, and no cut taken from anything you sell
+        outside the pool. A creator lists once and earns from use; a member pays once and stops thinking about it.
+    </p>
+
+    <h2>The unit: an active day</h2>
+    <p>
+        The pool pays on <strong>member active-days</strong>: one member's sandbox actually used your extension on one calendar day (UTC).
+        Used means user-driven work — the extension's UI doing real work in front of its owner, or its backend answering its UI. Not
+        installs, not opens of the store page, not background timers.
+    </p>
+    <p>Why this unit, and not the obvious alternatives:</p>
+    <ul>
+        <li><strong>Not installs</strong> — installs are a one-click number that can be farmed and forgotten. Retained use can't be faked without delivering something someone returns to.</li>
+        <li><strong>Not minutes or tokens</strong> — those pay slow, bloated tools more for being slow and bloated.</li>
+        <li><strong>Not ratings</strong> — a day someone came back is a rating that costs the rater nothing to be honest about.</li>
+    </ul>
+    <p>
+        A day bit is also deliberately the <em>least</em> a revenue share can run on, which is the privacy design: what leaves a member's
+        sandbox is extension id + date, nothing else — no routes, no counts, no content. Free extensions and private installs report
+        nothing at all, not even their names.
+    </p>
+
+    <h2>The anti-gaming rule, in writing</h2>
+    <p>
+        Engagement farming — nagging, self-firing activity, anything engineered to mint day bits rather than do work someone asked for —
+        is <strong>delisting grounds</strong>. The registry's review can remove a listing from the pool, and the reason is stated on the
+        row like every other trust decision. YouTube took a decade to write this down; we are writing it down on day one.
+    </p>
+
+    <h2>The ledger is public</h2>
+    <p>
+        The platform serves <code>GET /pool/transparency</code> to anyone, no login: member count, gross revenue, the split, the pool, and
+        every premium extension's active-days, share, and slice — this month and the two before it. The share percentages are exact,
+        computed from the same ledger the payouts will settle on. Member counts for past months are today's snapshot (the platform keeps
+        no status history), and the page you are reading says so rather than dressing an estimate up as an audit.
+    </p>
+
+    <h2>What exists today, honestly</h2>
+    <ul>
+        <li><strong>Working now:</strong> premium listings, the membership, the premium gate, use-day metering, the pool math, and the public ledger.</li>
+        <li><strong>Not yet:</strong> payout rails. The ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating.</li>
+    </ul>
+    <p>
+        The split (70%) is configuration the platform publishes on the ledger itself, so this page and the endpoint cannot quietly
+        disagree. If the number ever changes, it changes loudly, prospectively, and on that page first.
+    </p>
+
+    <h2>Opting in</h2>
+    <p>
+        One field on your registry entry. Everything else on <a href="/docs/extensions/publish/">Publish &amp; marketplace</a> — the
+        sha-pinned pointer, the manifest gate, the trust states — applies to premium listings unchanged.
+    </p>
+    <DocsCodeBlock code={entry} lang="json" title=".claude-plugin/marketplace.json — one entry" />
+    <p>
+        Premium is honored on the <a href="/extensions/">official registry</a>, because that is the registry the platform's pool reads.
+        A private registry can mark rows premium for its own purposes, but the public pool neither sees nor pays them.
+    </p>
+</DocsLayout>

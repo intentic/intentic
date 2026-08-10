@@ -25,7 +25,17 @@ export const extensionHandler: CapabilityHandler = {
         };
     },
     apply: async function* (ctx, id, config) {
-        const { url, ref, path, token } = config as ExtensionConfig;
+        const { url, ref, path, token, tier } = config as ExtensionConfig;
+        /* The premium gate, asked fresh at the moment that needs it. Fail-closed with the probe's own reason
+         * — "no membership" and "platform unreachable" are different sentences, and the card shows whichever
+         * is true. The tier marker itself is self-declared (the schema says why), so this is a product
+         * surface, not DRM: the honest install path carries the registry row's tier, and the gate holds it. */
+        if (tier === "premium") {
+            const membership = await ctx.premium();
+            if (!membership.premium) {
+                throw new Error(`this is a premium extension and ${membership.detail ?? "the membership could not be confirmed"} — join from Settings, then add it again`);
+            }
+        }
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {
             yield { kind: "terminal", session };

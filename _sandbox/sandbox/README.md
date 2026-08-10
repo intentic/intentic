@@ -52,6 +52,11 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
+- Hold up the daemon's end of the creator pool: gate installing/enabling a `tier: "premium"` extension on the
+  owner's membership (asked of the platform fresh at the gate, src/platform/pool-status.ts), record a per-day
+  "was used" bit for premium extensions only (src/extensions/extension-active-use.ts — id + UTC day is ALL that
+  is recorded or reported, and free/private extensions report nothing, not even their names), and re-send the
+  idempotent 7-day tail to the platform's ledger every few hours (src/platform/pool-report.ts).
 
 ## Key files
 

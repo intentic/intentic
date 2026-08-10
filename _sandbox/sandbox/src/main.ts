@@ -22,6 +22,7 @@ import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator, translatorWanted } from "./agent/translator.js";
 import { onPath } from "./platform/on-path.js";
+import { createPoolReporter } from "./platform/pool-report.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
@@ -358,6 +359,13 @@ const main = async (): Promise<void> => {
     // back, and it must not queue behind the very sweeps it would be reporting through.
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
         services.announcer.start();
+    }
+
+    // The creator-pool report (platform/pool-report.ts): a few idempotent rows every few hours, so it needs
+    // only a platform to talk to and a token to speak as — a headless run just never reports.
+    const poolReporter = createPoolReporter(config, services.workspace.root, logger);
+    if (config.platform.url !== "" && config.connectToken !== "") {
+        poolReporter.start();
     }
 
     /* Ask the platform whether this sandbox gets a free trial, and how much of today's allowance is left. The
@@ -918,6 +926,7 @@ const main = async (): Promise<void> => {
         versionCheck.stop();
         releaseNotesCheck.stop();
         services.announcer.stop();
+        poolReporter.stop();
         localCertRenewal.stop();
         services.history.stop();
         // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own

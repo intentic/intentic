@@ -319,6 +319,21 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+// The caller's creator-pool membership, as the settings card renders it. `enabled: false` (a platform with
+// no pool configured) means the card does not exist; everything else describes the caller: `member` is the
+// premium answer, `status` is Stripe's word for the state (shown only when it isn't "active" — past_due is
+// worth a sentence), `renewsAt` is display. Price and share ride along so the card and the transparency page
+// can never disagree with the platform about the number on the button.
+export const MembershipStateSchema = z.object({
+    enabled: z.boolean(),
+    member: z.boolean(),
+    status: z.string().optional(),
+    renewsAt: z.iso.datetime().optional(),
+    priceUsd: z.number(),
+    creatorShare: z.number(),
+});
+export type MembershipState = z.infer<typeof MembershipStateSchema>;
+
 // Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale) — this caps
 // what the API will persist (~110 kB decoded; a 128px webp/jpeg is ~5-10 kB) so no multi-megabyte string
 // lands in a row. Enforced by sandbox.update's input and the auth user.update hook.

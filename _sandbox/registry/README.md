@@ -44,6 +44,15 @@ A blocked entry stays in the file. Deleting the row hides it from people browsin
 already installed it nothing, which is backwards — they are the ones at risk. Absent on a third-party registry
 resolves to `listed`, because a registry that doesn't use the field hasn't asserted anything.
 
+## Tier, and what premium buys into
+
+`tier` is the listing's price: `free` (the default, and the whole story for most rows) or `premium` — the
+listing opts into the **creator pool**. A premium row needs an intentic membership to install and enable, both
+surfaces badge it before the click, and its retained active use is what earns its publisher a share of
+membership revenue. The economics live in
+[The creator pool](https://intentic.dev/docs/extensions/economics/); only the official registry's premium
+markers are read by the platform's pool, so the field on a private registry asserts nothing.
+
 ## The mark
 
 A row carries the two display tiers the manifest declares — `logo` (a simple-icons slug) and `icon` (a glyph

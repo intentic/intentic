@@ -6,6 +6,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
+import { premiumStatus } from "../platform/pool-status.js";
 import type { OrpcContext } from "../context.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
@@ -171,6 +172,11 @@ export const createExtensionsRoutes = (services: Services) => {
                 input.used,
                 new Date().toISOString(),
             );
+            // A non-empty batch is the UI saying this extension did real work in front of the user — the
+            // creator pool's day bit rides the report that already exists rather than a new wire.
+            if (Object.values(input.used).some((calls) => calls > 0)) {
+                services.extensionUse.note(input.id);
+            }
             return { ok: true } as const;
         }),
         readiness: i.readiness.handler(async ({ input }) => {
@@ -183,6 +189,20 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
             const extension = await find(input.id);
+            /* The premium gate's second door: an installed premium extension that was later disabled (or
+             * whose owner's membership lapsed) re-checks at the flip, the same fresh probe the install made.
+             * Baked and workspace extensions have no capability entry and no tier — never gated. */
+            if (input.enabled) {
+                const capability = await services.capabilities.get(input.id);
+                if (capability?.kind === "extension" && capability.config.tier === "premium") {
+                    const membership = await premiumStatus(services.config);
+                    if (!membership.premium) {
+                        throw new ORPCError("FORBIDDEN", {
+                            message: `this is a premium extension and ${membership.detail ?? "the membership could not be confirmed"}`,
+                        });
+                    }
+                }
+            }
             await writeExtensionEnablement(root, extensionIdOf(extension.manifest), input.enabled);
             /* The half of a flip that lands NOW: declared processes. Everything else the switch reaches is
              * rebuilt on its own cadence and needs nothing here — the agent's plugin dirs and PATH are composed

@@ -15,10 +15,14 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     const now = new Date();
     // A handoff normally lives seconds — the redeem deletes it — so this only ever catches the ones nobody
     // picked up. They hold a Google ID token, which is exactly why an unclaimed one must not sit for a day.
+    // The creator pool's use-day ledger keeps 13 months: a full year of transparency history plus the month
+    // in progress, then the rows go — they are pseudonymous but per-user, so storage limitation applies.
+    const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS).toISOString().slice(0, 10);
     const [sessions, verifications, handoffs] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
+        prisma.extensionUseDay.deleteMany({ where: { day: { lt: ledgerCutoff } } }),
     ]);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },

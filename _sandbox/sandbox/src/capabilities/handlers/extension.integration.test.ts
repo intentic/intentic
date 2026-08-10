@@ -23,7 +23,7 @@ const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]
 
 // A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.integration.test.ts pattern).
 // `stopped` records ctx.panels.stop calls for the remove test.
-const tempCtx = (): { ctx: CapabilityCtx; root: string; stopped: string[] } => {
+const tempCtx = (premium = false): { ctx: CapabilityCtx; root: string; stopped: string[] } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));
     const stopped: string[] = [];
     const ctx = {
@@ -32,6 +32,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string; stopped: string[] } => {
         git: { head: gitHead },
         terminalRun: createTerminalRunner(),
         panels: { stop: (key: string) => stopped.push(key) },
+        premium: async () => (premium ? { premium: true } : { premium: false, detail: "this account has no active intentic membership" }),
     } as unknown as CapabilityCtx;
     return { ctx, root, stopped };
 };
@@ -78,6 +79,22 @@ test("apply installs a valid extension; status carries the pinned sha", async ()
 
     expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "active", detail: await gitHead(extensionDir(root, "demo")) });
+});
+
+test("a premium install without a membership is refused before anything is cloned, with the reason", async () => {
+    const { ctx, root } = tempCtx(false);
+    const remote = await fixtureRepo(MANIFEST, true);
+    await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }))).rejects.toThrow(
+        /premium extension.*no active intentic membership/,
+    );
+    expect(await readdir(extensionsRoot(root)).catch(() => [])).toEqual([]);
+});
+
+test("a premium install with a membership proceeds like any other", async () => {
+    const { ctx, root } = tempCtx(true);
+    const remote = await fixtureRepo(MANIFEST, true);
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }));
+    expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
 });
 
 test("a checkout without a manifest is rejected before it goes live, leaving no debris", async () => {

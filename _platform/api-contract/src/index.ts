@@ -10,6 +10,7 @@ import {
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
+    MembershipStateSchema,
     SandboxSummarySchema,
     SetupCodeSchema,
     SetupCodeTargetSchema,
@@ -136,6 +137,17 @@ export const desktopContract = {
         .output(z.object({ ott: z.string(), idToken: z.string() })),
 };
 
+// The creator-pool membership, browser side: where the settings card reads its state and where its two
+// buttons go. `checkout` and `portal` both answer a Stripe-hosted URL for the browser to navigate to — the
+// platform hosts no payment UI of its own. Both refuse (NOT_FOUND) on a platform whose pool is off; the
+// daemon-facing and public pool routes (ledger report, premium probe, webhook, transparency) are plain HTTP
+// under /pool, not part of this contract, because no browser session could authenticate them.
+export const poolContract = {
+    membership: oc.route({ method: "GET", path: "/pool/membership" }).output(MembershipStateSchema),
+    checkout: oc.route({ method: "POST", path: "/pool/checkout" }).output(z.object({ url: z.url() })),
+    portal: oc.route({ method: "POST", path: "/pool/portal" }).output(z.object({ url: z.url() })),
+};
+
 // Aggregated contract router — consumed by the oRPC client (ContractRouterClient<typeof apiContract>)
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
@@ -143,4 +155,5 @@ export const apiContract = {
     sandbox: sandboxContract,
     invite: inviteContract,
     desktop: desktopContract,
+    pool: poolContract,
 };

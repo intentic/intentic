@@ -29,6 +29,8 @@ model User {
     accounts         Account[]
     sandboxes        Sandbox[]
     trialUsage       TrialUsage[]
+    membership       Membership?
+    extensionUseDays ExtensionUseDay[]
 
     @@map("user")
 }
@@ -223,6 +225,54 @@ model DesktopHandoff {
 // authorized list is pushed by the OWNER's browser at invite time (the server can't reach the daemon), so an
 // accepted invitee has daemon access immediately. inviteToken/inviteExpiresAt gate the accept link (resend mints
 // fresh ones); an unaccepted invite that expires is inert — the invitee never received a connect token.
+// ---------------------------------------------------------------------------
+// The creator pool. Two tables, and deliberately no more: the membership a user
+// bought (mirrored from Stripe by webhook — Stripe stays the source of truth for
+// money, this row is the platform's fast local answer to "is this user premium"),
+// and the use-day ledger the pool's revenue share is computed from. The pool's
+// numbers are PUBLIC by design (GET /pool/transparency), so neither table may
+// ever hold more than ids, statuses and days.
+// ---------------------------------------------------------------------------
+
+// One row per user who ever completed a membership checkout. `status` is Stripe's subscription status
+// verbatim ("active", "past_due", "canceled", …) — a bare string, not an enum, so Stripe growing a status is
+// a webhook update, not a migration. Premium = active/trialing (pool/pool-membership.ts owns that rule).
+model Membership {
+    id                   String   @id @default(cuid())
+    userId               String   @unique
+    user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    stripeCustomerId     String   @unique
+    stripeSubscriptionId String   @unique
+    status               String
+    // When the paid period runs out (Stripe's current_period_end) — display only ("renews on …"); the
+    // premium answer keys off `status`, which the webhook keeps current through every renewal and lapse.
+    currentPeriodEnd     DateTime
+    createdAt            DateTime @default(now())
+    updatedAt            DateTime @updatedAt
+
+    @@map("membership")
+}
+
+// One row = "this user's sandbox used this premium extension on this UTC day" — the unit the pool pays on,
+// reported by the daemon (POST /pool/report) and idempotent by the unique key, so a daemon re-sending its
+// 7-day tail every few hours costs nothing. Day as a plain YYYY-MM-DD string, the trial_usage precedent:
+// the share is computed per calendar month, so the string's prefix IS the group key. Swept by retention.ts
+// after the transparency window; cascades with the user (GDPR).
+model ExtensionUseDay {
+    id          String   @id @default(cuid())
+    userId      String
+    user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    extensionId String
+    day         String
+    createdAt   DateTime @default(now())
+
+    @@unique([userId, extensionId, day])
+    // The transparency aggregate and the retention sweep both scan by day; the unique above leads with
+    // userId and can't serve them.
+    @@index([day])
+    @@map("extension_use_day")
+}
+
 model SandboxMember {
     id              String    @id @default(cuid())
     sandboxId       String

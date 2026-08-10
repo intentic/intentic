@@ -42,6 +42,14 @@ export const REGISTRY_TOPIC = "intentic-extension";
 export const RegistryTrustSchema = z.enum(["verified", "listed", "blocked"]);
 export type RegistryTrust = z.infer<typeof RegistryTrustSchema>;
 
+/* WHAT A LISTING COSTS. `free` is the default and the whole story for most rows. `premium` opts the listing
+ * into the creator pool: installing and enabling it requires an intentic membership, its retained active use
+ * is what earns its publisher a share of the pool, and both surfaces badge it so the price is visible before
+ * the click. On a third-party registry the field still parses but means nothing — the pool only pays listings
+ * on the official registry, because that is the one whose entries the platform reads. */
+export const RegistryTierSchema = z.enum(["free", "premium"]);
+export type RegistryTier = z.infer<typeof RegistryTierSchema>;
+
 const RegistryFileEntrySchema = z.object({
     name: z.string(),
     description: z.string().optional(),
@@ -52,6 +60,7 @@ const RegistryFileEntrySchema = z.object({
     // Why it is blocked, or what was checked to verify it — shown verbatim wherever the badge is, because a
     // trust state with no stated reason is an opinion the reader can't weigh.
     trustReason: z.string().optional(),
+    tier: RegistryTierSchema.optional(),
     category: z.string().optional(),
     /* The mark the row is drawn with, copied off the extension's manifest by the scanner exactly like the
      * description and the version — the same two tiers the manifest declares (a simple-icons slug, then a name
@@ -121,6 +130,7 @@ export const RegistryEntrySchema = z.object({
     kind: z.enum(["plugin", "extension"]),
     trust: RegistryTrustSchema,
     trustReason: z.string().optional(),
+    tier: RegistryTierSchema,
     category: z.string().optional(),
     // The mark, as the gallery and the app's browse list draw it — see the curated file's fields above.
     logo: z.string().optional(),
@@ -146,6 +156,8 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             name: plugin.name,
             kind: plugin.kind ?? "plugin",
             trust: plugin.trust ?? "listed",
+            // Absent ⇒ free, so a registry that has never heard of the pool keeps meaning what it always did.
+            tier: plugin.tier ?? "free",
             ...(plugin.description !== undefined ? { description: plugin.description } : {}),
             ...(plugin.version !== undefined ? { version: plugin.version } : {}),
             ...(plugin.trustReason !== undefined ? { trustReason: plugin.trustReason } : {}),

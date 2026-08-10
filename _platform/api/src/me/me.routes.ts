@@ -12,7 +12,7 @@ export const meRoutes = {
     // setup payloads are secrets, not personal data.
     export: os.me.export.handler(async ({ context }) => {
         const user = requireUser(context);
-        const [sessions, accounts, sandboxes, memberships, invitesSent] = await Promise.all([
+        const [sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, extensionUseDays] = await Promise.all([
             context.prisma.session.findMany({
                 where: { userId: user.id },
                 select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
@@ -30,7 +30,16 @@ export const meRoutes = {
                 where: { sandbox: { ownerId: user.id } },
                 select: { sandboxId: true, email: true, createdAt: true },
             }),
+            // The creator pool's rows about this account: the membership mirror and the use-day ledger.
+            context.prisma.membership.findUnique({
+                where: { userId: user.id },
+                select: { status: true, currentPeriodEnd: true, createdAt: true },
+            }),
+            context.prisma.extensionUseDay.findMany({
+                where: { userId: user.id },
+                select: { extensionId: true, day: true },
+            }),
         ]);
-        return { user, sessions, accounts, sandboxes, memberships, invitesSent };
+        return { user, sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, extensionUseDays };
     }),
 };

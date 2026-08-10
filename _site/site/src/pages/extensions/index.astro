@@ -113,11 +113,11 @@ const buildingBlocks = [
 const delivery = ["Build", "List", "Verify", "Discover", "Install"];
 
 const ring = { cx: 150, cy: 150, r: 96 };
-const ringStr = (deg, rr = ring.r) => {
+const ringStr = (deg: number, rr = ring.r) => {
     const a = (deg * Math.PI) / 180;
     return `${(ring.cx + rr * Math.cos(a)).toFixed(1)} ${(ring.cy + rr * Math.sin(a)).toFixed(1)}`;
 };
-const ringXY = (deg, rr = ring.r) => {
+const ringXY = (deg: number, rr = ring.r) => {
     const a = (deg * Math.PI) / 180;
     return [Number((ring.cx + rr * Math.cos(a)).toFixed(1)), Number((ring.cy + rr * Math.sin(a)).toFixed(1))];
 };
@@ -256,6 +256,14 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                                         </span>
                                         <div class="flex min-w-0 flex-1 items-baseline gap-2">
                                             <h3 class="min-w-0 truncate font-mono text-sm font-medium text-content">{entry.name}</h3>
+                                            {entry.tier === "premium" && (
+                                                <span
+                                                    class="shrink-0 rounded-sm bg-overlay/40 px-1 text-2xs font-medium text-primary-400"
+                                                    title="Needs an intentic membership; its use pays its creator from the pool"
+                                                >
+                                                    Premium
+                                                </span>
+                                            )}
                                             {entry.version && <span class="shrink-0 text-2xs text-subtle">{entry.version}</span>}
                                             {entry.stars !== undefined && <span class="ml-auto shrink-0 text-2xs text-subtle">★ {entry.stars}</span>}
                                         </div>

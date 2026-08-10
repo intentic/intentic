@@ -2905,6 +2905,13 @@ export const ExtensionConfigSchema = z.object({
         .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
         .optional(),
     token: z.string().min(1).optional(),
+    /* The registry row's tier, copied onto the install by the browse pre-fill. `premium` is what the daemon's
+     * two pool duties key off: enabling needs the owner's membership, and the extension's active days are
+     * reported to the platform's creator pool (extensions/extension-active-use.ts) — an absent tier means
+     * free, reports nothing, and asks for nothing. Self-declared rather than verified against the registry
+     * (the daemon is the owner's own machine; the pool pays creators from what members actually use, so a
+     * stripped marker cheats nobody but the person stripping it out of their own membership's worth). */
+    tier: z.enum(["free", "premium"]).optional(),
 });
 // A remote machine the AGENT can reach over SSH. One capability = one machine; the id is its ssh-config Host
 // alias, so the agent runs `ssh <id> "…"`. The handler writes a per-machine config block + a 0600 key/password
