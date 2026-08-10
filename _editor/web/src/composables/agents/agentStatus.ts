@@ -39,9 +39,8 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * answered yes about a card it has never heard of. Clicking one therefore latched the tab as registered and the
  * card vanished off the board with no entry to replace it; nothing could archive it and nothing could close it,
  * and only a reload brought it back. The gap it covers is normally a blink (send → the daemon's first roster
- * frame) and is not always one: turn admission queues behind dependency maintenance, so a turn sent while the
- * workspace is being repaired can wait minutes to be filed. That wait is exactly when the board has to be
- * honest about what it does and does not know.
+ * frame) and is not always one — a daemon under load takes longer to file the turn than the click takes to draw.
+ * However long it lasts, it is exactly when the board has to be honest about what it does and does not know.
  *
  * None may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
  * four are by definition the cards it has never heard of. */
