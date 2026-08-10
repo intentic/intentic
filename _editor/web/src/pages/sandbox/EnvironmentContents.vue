@@ -76,10 +76,12 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
 <template>
     <div class="flex flex-col gap-5">
-        <!-- Said once, above everything, because it is the sentence that makes the rest trustworthy: these
-             versions are what the tools report, not what the recipe asked for. -->
+        <!-- Said once, above everything, because it is the sentence that makes the rest trustworthy — and it says
+             HOW, not just that it is true. "Read from the tools" is vague enough to be read as something clever
+             going on; running each command's own version flag is a claim anybody can check by hand. -->
         <p v-if="groups.length > 0" class="text-2xs text-subtle">
-            Versions are read from the tools themselves, so this is what the sandbox has right now — not what the recipe asks for.
+            Each version below comes from running that command's own <span class="font-mono">--version</span> here, just now — so this is what the
+            sandbox has, not what the recipe asked for.
             <template v-if="awaiting > 0">
                 {{ awaiting === 1 ? `One entry is` : `${awaiting} entries are` }} waiting for your approval and not installed yet.
             </template>
@@ -158,7 +160,9 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
         <!-- Three different sentences, and telling them apart matters: still asking, could not ask, and asked and
              there is genuinely nothing. The middle one is why the failure is not silently drawn as the last. -->
-        <div v-if="loading" :class="cmp.emptyState(`py-8`)"><Icon name="spinner" class="mr-1.5 animate-spin" />Asking the sandbox what it has…</div>
+        <!-- "Asking the sandbox what it has" read as though something were being reasoned out. Nothing is: this is
+             a list of version commands being run. Saying so is both truer and less alarming. -->
+        <div v-if="loading" :class="cmp.emptyState(`py-8`)"><Icon name="spinner" class="mr-1.5 animate-spin" />Checking installed versions…</div>
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
         <div v-else-if="groups.length === 0" :class="cmp.emptyState(`py-8`)">
             Nothing added on top of the stock image yet — and nothing in it answered, which usually means the sandbox is still starting.

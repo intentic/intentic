@@ -58,7 +58,15 @@ const VIEWS = [
 ] as const;
 
 // Probing every tool for its version costs process spawns, so it only runs while the contents view is open.
-const { groups, awaiting, loading, error: contentsError, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+// Gated on the SELECTION rather than on what ends up drawn: asking is how the card finds out whether this daemon
+// can answer at all, so a fallback derived from the answer must not also decide whether to ask.
+const { groups, awaiting, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+
+/* WHAT IS ACTUALLY DRAWN, as opposed to what is selected. A sandbox whose daemon predates the contents route
+ * cannot answer for it, so the card stops offering it: the pill row disappears and the recipe — which every
+ * daemon that has an overlay at all can show — takes over. The alternative was leaving a tab that greets its
+ * only visitor with a 404, which is how a missing feature comes to read as a broken one. */
+const shown = computed(() => (unsupported.value ? `recipe` : view.value));
 
 // One refresh for both reads — and it forces a re-probe, so "it says missing but I just installed it" is a click
 // rather than a restart.
@@ -90,7 +98,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-                <Segmented v-model="view" :options="VIEWS" />
+                <Segmented v-if="!unsupported" v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
                 <StatusBadge v-else variant="warning" label="Awaiting review" dot />
@@ -102,7 +110,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
         <!-- What the sandbox has, in plain language. Leads in every state — including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
-        <EnvironmentContents v-if="view === `contents`" :groups="groups" :awaiting="awaiting" :loading="loading" :error="contentsError" />
+        <EnvironmentContents v-if="shown === `contents`" :groups="groups" :awaiting="awaiting" :loading="loading" :error="contentsError" />
 
         <!-- A proposal awaiting the owner's decision: the diff against the approved custom section (capability
              fragments are daemon-owned and not up for review here). -->
@@ -125,6 +133,14 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
         <!-- The active overlay the running container was built from. -->
         <Code v-else-if="applied" :code="applied.content" lang="docker" label="Active overlay" />
+
+        <!-- Said once, quietly, and only to somebody whose sandbox could show more than it is showing: the reason
+             there is no contents list is the sandbox's age, not a fault. It names an UPDATE rather than a rebuild
+             deliberately — an environment rebuild builds on top of the image this sandbox already runs, so it is
+             the one action that would NOT bring this, and sending someone to it would waste a whole rebuild. -->
+        <p v-if="unsupported" class="text-2xs text-subtle">
+            This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.
+        </p>
 
         <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
         <template v-if="proposal">
