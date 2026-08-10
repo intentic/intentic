@@ -249,7 +249,7 @@ export const startConversationTurn = async (
     return startTurnRun((input, signal) => wake(services, input, signal), turn, {
         journal: services.turnJournal,
         before: transcriptOpen,
-        transcript: (events) => recordTurnTranscript(services, turn, events),
+        transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
         attempts,
         observer: {
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),

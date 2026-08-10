@@ -4,10 +4,26 @@ import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
 import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
+// When the turn started — what its user row is stamped with (RestoredMessage.sentAt).
+const SENT_AT = 1_767_225_600_000;
+
 describe("restoredTurn", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
         const prompt = "fix the build\n\nThe user attached these files — read them with the Read tool as needed:\n- /work/shot.png";
-        expect(restoredTurn({ prompt }, [], "/work")[0]).toEqual({ role: "user", text: "fix the build", attachments: ["shot.png"] });
+        expect(restoredTurn({ prompt }, [], "/work", SENT_AT)[0]).toEqual({
+            role: "user",
+            text: "fix the build",
+            sentAt: SENT_AT,
+            attachments: ["shot.png"],
+        });
+    });
+
+    /* WHEN IT WAS SENT, not when its answer finished — the chat draws this on the bubble, and a stamp taken as
+     * the turn settles would date a twenty-minute answer's question to twenty minutes after it was asked. Only
+     * the user's row carries one: nothing in the frame log says when a given assistant block was written. */
+    it("stamps the user's row with the turn's start and leaves the answer unstamped", () => {
+        const events: AgentEvent[] = [{ kind: "delta", text: "on it" }];
+        expect(restoredTurn({ prompt: "go" }, events, "/work", SENT_AT).map((message) => message.sentAt)).toEqual([SENT_AT, undefined]);
     });
 
     /* The handoff envelope is one of those injections. The conversation it carries is THIS record's own earlier
@@ -19,7 +35,7 @@ describe("restoredTurn", () => {
             { role: "user", text: "first" },
             { role: "assistant", text: "sure" },
         ]);
-        expect(restoredTurn({ prompt }, [], "/work")).toEqual([{ role: "user", text: "second" }]);
+        expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([{ role: "user", text: "second", sentAt: SENT_AT }]);
     });
 
     /* The live bubble boundary, matched to turnReducer's: `text_end` retires the block that WROTE something, so
@@ -35,7 +51,7 @@ describe("restoredTurn", () => {
             { kind: "text_end" },
             { kind: "delta", text: "and here's why" },
         ];
-        expect(restoredTurn({ prompt: "look" }, events, "/work").slice(1)).toEqual([
+        expect(restoredTurn({ prompt: "look" }, events, "/work", SENT_AT).slice(1)).toEqual([
             { role: "assistant", text: "I'll look" },
             { role: "assistant", text: "found it", tools: [{ id: "t1", name: "Read", category: "read", status: "in_progress" }] },
             { role: "assistant", text: "and here's why" },
@@ -50,7 +66,7 @@ describe("restoredTurn", () => {
             { kind: "text_end" },
             { kind: "delta", text: "that's the file" },
         ];
-        expect(restoredTurn({ prompt: "look" }, events, "/work").slice(1)).toEqual([
+        expect(restoredTurn({ prompt: "look" }, events, "/work", SENT_AT).slice(1)).toEqual([
             { role: "assistant", text: "that's the file", tools: [{ id: "t1", name: "Read", category: "read", status: "completed" }] },
         ]);
     });
@@ -62,7 +78,7 @@ describe("restoredTurn", () => {
             { kind: "delta", text: "meanwhile" },
             { kind: "tool_call_update", id: "t1", status: "failed", content: [{ type: "text", text: "1 failed" }] },
         ];
-        const [card] = restoredTurn({ prompt: "test" }, events, WORKSPACE_ROOT).flatMap((message) => message.tools ?? []);
+        const [card] = restoredTurn({ prompt: "test" }, events, WORKSPACE_ROOT, SENT_AT).flatMap((message) => message.tools ?? []);
         expect(card).toEqual({
             id: "t1",
             name: "Bash",
@@ -77,7 +93,7 @@ describe("restoredTurn", () => {
     // never reported would be the one thing a restored transcript must not invent.
     it("leaves an unanswered call in progress", () => {
         const events: AgentEvent[] = [{ kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" }];
-        expect(restoredTurn({ prompt: "run" }, events, "/work").at(-1)?.tools?.[0]?.status).toBe("in_progress");
+        expect(restoredTurn({ prompt: "run" }, events, "/work", SENT_AT).at(-1)?.tools?.[0]?.status).toBe("in_progress");
     });
 
     /* A DELEGATION SURVIVES THE RELOAD. Its calls and its thinking nest under the Agent card that spawned them,
@@ -93,7 +109,7 @@ describe("restoredTurn", () => {
             { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "in_progress", parentToolUseId: "task-1" },
             { kind: "tool_call_update", id: "t2", status: "completed" },
         ];
-        expect(restoredTurn({ prompt: "delegate" }, events, "/work").at(-1)?.tools).toEqual([
+        expect(restoredTurn({ prompt: "delegate" }, events, "/work", SENT_AT).at(-1)?.tools).toEqual([
             {
                 id: "task-1",
                 name: "Agent",
@@ -112,7 +128,7 @@ describe("restoredTurn", () => {
             { kind: "delta", text: "delegating" },
             { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "completed", parentToolUseId: "task-1" },
         ];
-        expect(restoredTurn({ prompt: "delegate" }, events, "/work").slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
+        expect(restoredTurn({ prompt: "delegate" }, events, "/work", SENT_AT).slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
     });
 
     // One subagent's own side of the same log — what the Subagents area renders while it runs. Read at the
@@ -136,14 +152,14 @@ describe("restoredTurn", () => {
             { kind: "thinking", text: "maybe" },
             { kind: "delta", text: "yes" },
         ];
-        expect(restoredTurn({ prompt: "think" }, events, "/work").at(-1)).toEqual({ role: "assistant", text: "yes", thinking: "hm, maybe" });
+        expect(restoredTurn({ prompt: "think" }, events, "/work", SENT_AT).at(-1)).toEqual({ role: "assistant", text: "yes", thinking: "hm, maybe" });
     });
 
     // Frames that are not transcript — usage, todos, the interactive cards, the settle — carry no bubble of
     // their own, so a turn that only emitted those restores as the prompt alone rather than an empty reply.
     it("yields nothing but the prompt for a turn that said nothing", () => {
         const events: AgentEvent[] = [{ kind: "init", model: "claude-opus-4" }, { kind: "usage", costUsd: 0.1 }, { kind: "done" }];
-        expect(restoredTurn({ prompt: "hi" }, events, "/work")).toEqual([{ role: "user", text: "hi" }]);
+        expect(restoredTurn({ prompt: "hi" }, events, "/work", SENT_AT)).toEqual([{ role: "user", text: "hi", sentAt: SENT_AT }]);
     });
 
     /* A REFUSED TURN SAYS SO WHEN IT IS REOPENED. The provider's answer to this one is an error frame and no
@@ -152,8 +168,8 @@ describe("restoredTurn", () => {
     it("keeps what went wrong, as the notice line the turn ended on", () => {
         const refusal = "Your organization has disabled Claude subscription access for Claude Code";
         const events: AgentEvent[] = [{ kind: "delta", text: "I'll take a look" }, { kind: "error", message: refusal }, { kind: "done" }];
-        expect(restoredTurn({ prompt: "hi" }, events, "/work")).toEqual([
-            { role: "user", text: "hi" },
+        expect(restoredTurn({ prompt: "hi" }, events, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "hi", sentAt: SENT_AT },
             { role: "assistant", text: "I'll take a look" },
             { role: "notice", text: refusal },
         ]);

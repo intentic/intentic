@@ -178,6 +178,16 @@ export const RestoredMessageSchema = z.object({
      * the live client draws for the codes it does not turn red (ChatRole's `notice`). */
     role: z.enum(["user", "assistant", "notice"]),
     text: z.string(),
+    /* WHEN THIS TURN WAS SENT, in epoch milliseconds (user rows only) — what the chat shows on the bubble it
+     * belongs to. The turn's START, not the moment the record was written: a turn that ran for twenty minutes
+     * was still sent when the user pressed send, and a stamp taken at settlement would say the conversation
+     * happened at the times its answers finished.
+     *
+     * Only the user's row carries one, because it is the only row whose moment the daemon actually knows. A
+     * turn's frames arrive with no clock of their own, so an assistant bubble could only ever be stamped with
+     * the whole turn's start or end — a number that says nothing about when that particular block was written.
+     * Rows recorded before this existed simply have none, and the chat draws nothing for them. */
+    sentAt: z.number().optional(),
     // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
     // the stored prompt's attachment note — so a reopened tab redraws chips, not the injected protocol text.
     attachments: z.array(z.string()).optional(),

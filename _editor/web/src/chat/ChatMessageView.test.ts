@@ -330,3 +330,27 @@ describe(`ChatMessageView added-notes row`, () => {
         expect(mount({ id: 5, role: `user`, text: `fix the bug` }).textContent).not.toContain(`Sent with your message`);
     });
 });
+
+/* WHEN THE MESSAGE WAS SENT, on the bubble it belongs to. Hover-only and out of flow, because the hour a turn
+ * was sent at is worth nothing to someone reading the answer and everything to someone scrolling back for
+ * "what did I ask on Tuesday" — so it costs the transcript no height and the reader no attention. */
+describe(`ChatMessageView sent time`, () => {
+    // 2026-08-10T14:32 UTC. Formatted in the runner's zone, so the assertion is on the DAY, which every zone
+    // this could run in agrees on for a mid-afternoon instant.
+    const sentAt = Date.UTC(2026, 7, 10, 14, 32);
+
+    it(`shows the day and minute a message was sent, revealed by hovering it`, () => {
+        const label = mount({ id: 6, role: `user`, text: `fix the bug`, sentAt }).querySelector(`.group-hover\\:opacity-100`);
+
+        expect(label?.textContent).toContain(`Aug 10, 2026`);
+        // Out of flow and hidden until the pointer arrives — the two halves of costing the transcript nothing.
+        expect(label?.className).toContain(`absolute`);
+        expect(label?.className).toContain(`opacity-0`);
+    });
+
+    // Nothing is invented for a row with no stamp: a message recorded before the daemon wrote them down draws
+    // no label at all rather than a plausible-looking time.
+    it(`draws nothing for a message with no stamp`, () => {
+        expect(mount({ id: 7, role: `user`, text: `fix the bug` }).querySelector(`.group-hover\\:opacity-100`)).toBeNull();
+    });
+});

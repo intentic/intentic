@@ -267,9 +267,18 @@ export class TranscriptClock {
         this.state.value = next(this.state.value);
     }
 
+    /* A user bubble is stamped with the moment it lands (ChatMessage.sentAt) — which for every bubble this tab
+     * appends IS when it was sent, because the append is what sending does. A caller that knows better says so
+     * and is left alone: the reattach path takes the RUNNING turn's start, and a bubble reappearing after a
+     * reload was not sent at the moment the reload finished.
+     *
+     * Here rather than at the four call sites that append one, and deliberately not in the reducer: `rebuild`
+     * and `adopt` pour whole transcripts through that (a replayed record, a fork's inherited turns), and a
+     * clock in there would re-stamp every restored message with the moment the tab happened to open it. */
     append(message: Omit<ChatMessage, "id">): number {
         const id = this.state.value.nextId;
-        this.state.value = appendMessage(this.state.value, message);
+        const stamped = message.role === `user` && message.sentAt === undefined ? { ...message, sentAt: Date.now() } : message;
+        this.state.value = appendMessage(this.state.value, stamped);
         return id;
     }
 

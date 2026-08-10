@@ -343,6 +343,9 @@ export const fireAutomation = async (
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
         const events: AgentEvent[] = [];
+        // When this wake's turn began — the stamp its recorded message carries, taken here rather than at the
+        // append below, which on a long turn runs many minutes later (see RestoredMessage.sentAt).
+        const startedAt = Date.now();
         // Opened before the provider runs, like every other conversation turn. A first fire has nothing to adopt;
         // a RE-fire reuses its interrupted run's id, so its record is already open and this is a no-op.
         await openTurnTranscript(services, turn);
@@ -363,7 +366,7 @@ export const fireAutomation = async (
             failure = error instanceof Error ? error.message : "automation turn failed";
             services.logger.warn({ err: error, automation: automation.id, conversationId }, "automation turn failed");
         } finally {
-            await recordTurnTranscript(services, turn, events);
+            await recordTurnTranscript(services, turn, events, startedAt);
         }
         /* Tell the sink the turn is not going to answer, BEFORE the finally closes it. The daemon has always
          * known this — it is on the run record below and in the activity feed — and used to keep it: a wake

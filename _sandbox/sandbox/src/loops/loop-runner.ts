@@ -88,7 +88,7 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
     const opened = openTurnTranscript(services, turn);
     const run = startTurnRun((input, signal) => fn(services, input, signal), turn, {
         before: opened,
-        transcript: (events) => recordTurnTranscript(services, turn, events),
+        transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
     });
     if (run === undefined) {
         // Another turn is already live on this conversation — a hand-sent message, or a previous iteration

@@ -26,6 +26,10 @@ export const restoredTurn = (
     turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined },
     events: readonly AgentEvent[],
     root: string,
+    // When the turn started — the moment its user row is stamped with (RestoredMessage.sentAt). Handed in
+    // rather than read off a clock here: this runs as the turn SETTLES, which on a long answer is many minutes
+    // after the message it is writing down was sent.
+    sentAt: number,
 ): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
     // The same unwrapping readWorkspaceSession does, for the same reason: the daemon's own injections (an
@@ -48,7 +52,7 @@ export const restoredTurn = (
      * budget-capped, truncated — copy of the conversation every time a provider or account was switched. */
     const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
     if (text.length > 0 || attachments.length > 0) {
-        out.push({ role: "user", text, ...(attachments.length > 0 ? { attachments } : {}), ...(notes.length > 0 ? { notes } : {}) });
+        out.push({ role: "user", text, sentAt, ...(attachments.length > 0 ? { attachments } : {}), ...(notes.length > 0 ? { notes } : {}) });
     }
 
     out.push(...foldFrames(events, undefined));
@@ -268,8 +272,10 @@ export const recordTurnTranscript = async (
     services: Pick<Services, "transcripts" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     events: readonly AgentEvent[],
+    // When the turn started, for the user row's stamp — every caller runs a turn and therefore knows it.
+    sentAt: number,
 ): Promise<void> => {
     await services.transcripts
-        .append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root))
+        .append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root, sentAt))
         .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed"));
 };

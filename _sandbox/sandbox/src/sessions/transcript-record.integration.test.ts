@@ -164,9 +164,9 @@ describe("every provider records a readable transcript", () => {
         const record = fileTranscriptRecord(await dir());
         const id = `${provider}-${harness}`;
         await record.open(id, nothing);
-        await record.append(id, restoredTurn(turn, events, WORKSPACE_ROOT));
+        await record.append(id, restoredTurn(turn, events, WORKSPACE_ROOT, 1_767_225_600_000));
         const restored = await record.read(id);
-        expect(restored[0]).toEqual({ role: "user", text: "do the thing" });
+        expect(restored[0]).toEqual({ role: "user", text: "do the thing", sentAt: 1_767_225_600_000 });
         expect(restored.map((message) => message.text)).toContain("on it");
         expect(restored.flatMap((message) => message.tools ?? [])).toEqual([
             { id: "t1", name: "Bash", category: "execute", status: "completed", target: "pnpm test", content: [{ type: "text", text: "1 passed" }] },

@@ -154,6 +154,14 @@ export interface ChatMessage {
     readonly id: number;
     readonly role: ChatRole;
     readonly text: string;
+    /* WHEN THIS MESSAGE WAS SENT, in epoch milliseconds (user bubbles only) — what the bubble shows on hover.
+     *
+     * Stamped as the bubble is appended for a turn this tab sent, and read off the daemon's record
+     * (RestoredMessage.sentAt) for one it reopens, so the same message reads the same hour or a week later. Only
+     * the user's own rows carry one: the daemon knows when a turn was sent and nothing anywhere knows when a
+     * given assistant block was written, and a bubble stamped with a time it has no claim to is worse than one
+     * that says nothing. Absent on rows recorded before this existed — the bubble simply shows nothing. */
+    readonly sentAt?: number;
     /* A one-press follow-up a notice line can carry (notices only): the landed notice's "keep future work on the
      * branch" offer, the outage notice's "stop resuming these by itself", and the terminal a dependency install
      * the daemon just started is running in. A KIND, not a callback — the transcript is rebuilt from replayed

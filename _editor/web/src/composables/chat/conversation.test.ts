@@ -2120,3 +2120,59 @@ describe(`the transcript's clock`, () => {
         expect(conversation.error.value).toContain(`running a turn`);
     });
 });
+
+/* WHEN EACH MESSAGE WAS SENT (ChatMessage.sentAt) — the stamp the bubble shows on hover. Three sources, and the
+ * point of the group is that they agree: a turn sent here, a turn already running when this tab arrived, and a
+ * turn read back out of the daemon's record all say the hour the user actually pressed send. */
+describe(`Conversation sent time`, () => {
+    it(`stamps a message the user sends here with the moment it was sent`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
+
+        const before = Date.now();
+        await conversation.send(`Hi there`, settings);
+
+        const sentAt = conversation.messages.value[0]?.sentAt;
+        expect(sentAt).toBeGreaterThanOrEqual(before);
+        expect(sentAt).toBeLessThanOrEqual(Date.now());
+        // Only the user's row. Nothing in the stream says when a given block of the answer was written, and a
+        // bubble stamped with a time it has no claim to is worse than one that says nothing.
+        expect(conversation.messages.value[1]?.sentAt).toBeUndefined();
+    });
+
+    // A turn that has been running since before this tab attached — a reload, a second window. Its bubble is
+    // drawn now and was sent then, so it takes the RUN's start rather than the moment its reader turned up.
+    it(`takes the running turn's own start for a bubble drawn on reattach`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                body: new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(sseFrame(head({ prompt: `refactor the parser`, startedAt: 1234, seq: 1 })));
+                        controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `On it.` } }));
+                        controller.enqueue(sseFrame({ kind: `end` }));
+                        controller.close();
+                    },
+                }),
+            } as Response),
+        );
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `refactor the parser`, sentAt: 1234 });
+    });
+
+    // Reopened tomorrow, the same message keeps the hour it was typed at — the daemon wrote it down beside the
+    // words (RestoredMessage.sentAt), and a redraw from the record must not re-date the conversation.
+    it(`keeps the daemon's stamp when a stored transcript is restored`, () => {
+        const conversation = new Conversation(`c1`);
+
+        conversation.restoreMessages([
+            { role: `user`, text: `start the migration`, sentAt: 1_767_225_600_000 },
+            { role: `assistant`, text: `Done with step one.` },
+        ]);
+
+        expect(conversation.messages.value.map((message) => message.sentAt)).toEqual([1_767_225_600_000, undefined]);
+    });
+});

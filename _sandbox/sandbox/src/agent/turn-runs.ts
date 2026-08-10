@@ -143,7 +143,9 @@ export interface RunOptions {
     // Where the SETTLED turn is written down — the conversation's durable transcript, the copy every provider
     // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the raw
     // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
-    readonly transcript?: (events: readonly AgentEvent[]) => Promise<void>;
+    // `startedAt` rides along because this pump is the only thing that knows it by the time the turn settles,
+    // and the record stamps the user's message with when it was SENT rather than when its answer finished.
+    readonly transcript?: (events: readonly AgentEvent[], startedAt: number) => Promise<void>;
     // Side-channel preparation that must precede the provider (the transcript record's legacy adoption). A
     // caller passes a guarded promise: its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
@@ -287,7 +289,7 @@ export function startTurnRun(
              * finished. The cost is one turn missing from a conversation's history. */
             if (transcript !== undefined) {
                 try {
-                    void transcript(run.events).catch(() => undefined);
+                    void transcript(run.events, run.startedAt).catch(() => undefined);
                 } catch {
                     // Nothing to do and nowhere to report it — the turn is the thing that matters.
                 }

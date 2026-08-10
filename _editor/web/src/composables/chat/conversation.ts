@@ -626,6 +626,9 @@ export class Conversation {
             messages.map((message, index) => ({
                 role: message.role,
                 text: message.text,
+                // When the turn was sent, as the daemon wrote it down — so a bubble reopened tomorrow shows the
+                // hour it was actually typed rather than nothing at all.
+                ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
                 /* The rewind anchor. The array position IS the daemon's index here — this is the record read
                  * back verbatim, one bubble per stored row — which is the one moment the two numberings are
                  * guaranteed to agree, and why the index is captured now rather than recomputed later from a
@@ -1062,7 +1065,11 @@ export class Conversation {
              * belongs to this run — see reuseUserBubble. */
             const prompt = withoutResumeNote(head.prompt);
             const userMessageId =
-                this.transcript.reuseUserBubble(prompt, prompt === head.prompt) ?? this.transcript.append({ role: `user`, text: prompt });
+                this.transcript.reuseUserBubble(prompt, prompt === head.prompt) ??
+                // The RUN's start, not this moment: the bubble is being drawn for a turn that has been going
+                // since before this tab attached to it (a reload, a second window), and stamping it now would
+                // date the question to whenever its reader turned up.
+                this.transcript.append({ role: `user`, text: prompt, sentAt: head.startedAt });
             this.transcript.openBubble();
             return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };

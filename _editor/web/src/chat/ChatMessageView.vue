@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type IconName, useDevice } from "@intentic/ui";
+import { formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
@@ -567,6 +568,13 @@ const attachmentThumbs = computed(() =>
 const attachmentsAside = computed(
     () => props.message.text.length > 0 && attachmentThumbs.value.length === 1 && attachmentThumbs.value[0]?.previewUrl !== undefined,
 );
+
+/* WHEN THE MESSAGE WAS SENT, as the day and minute it was sent on: "Aug 10, 2026, 14:32" (the kit's default
+ * "when" label). Absolute rather than "3h ago" — the question a transcript raises is which sitting a turn
+ * belongs to, which a relative age answers only for the last hour and then has to keep re-rendering to stay
+ * true. Undefined on every row that has no stamp of its own (see ChatMessage.sentAt), and the label is not
+ * drawn at all rather than saying so. */
+const sentAt = computed(() => (props.message.sentAt === undefined ? undefined : formatDateTime(props.message.sentAt)));
 </script>
 
 <template>
@@ -608,7 +616,7 @@ const attachmentsAside = computed(
                 {{ message.text }}
             </div>
         </template>
-        <div v-else-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5">
+        <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Stacked: a row of attachments above the prompt. The arrangement for a narrow panel, for edit
                  mode (a thumbnail beside the textarea would come out of the width of the narrowest thing in
                  the panel), and for every attachment set that can't go beside the bubble — see
@@ -668,6 +676,19 @@ const attachmentsAside = computed(
                     </button>
                 </div>
             </div>
+            <!-- WHEN IT WAS SENT, under the bubble's right edge and only while the pointer is on the message.
+                 A transcript is read for what was said, so the hour it was said at is worth exactly the room it
+                 takes when nobody is asking — which is none: the label is absolute, so it costs the row no
+                 height, and it lands in the padding the prompt row already carries below itself (0.5rem, plus
+                 the 0.25rem between turns) rather than pushing the answer down. `leading-none` is what keeps it
+                 inside that budget — the meta tier's own line box is 1rem and would overhang the reply.
+                 Not a control: it takes no pointer, so hovering the bubble to open a clamped prompt still
+                 reaches the bubble underneath it. -->
+            <span
+                v-if="sentAt"
+                class="pointer-events-none absolute top-full right-0 mt-px text-2xs leading-none whitespace-nowrap text-subtle opacity-0 transition-opacity group-hover:opacity-100"
+                >{{ sentAt }}</span
+            >
         </div>
         <!-- A mid-turn preamble is a notice with nothing to say on its own line: its whole content is the notes
              row below, and drawing the empty line too would put a bare info glyph above it. -->
