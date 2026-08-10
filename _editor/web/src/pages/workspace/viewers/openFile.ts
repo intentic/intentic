@@ -1,3 +1,4 @@
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES, resolveFile } from "../fileType";
@@ -27,7 +28,7 @@ export type OpenFile =
     | { readonly kind: "code" | "markdown" | "big-text"; readonly lang: string | undefined }
     // An extension viewer claimed this extension; `viewer.fetch` decides text / blob / streaming URL.
     | { readonly kind: "viewer"; readonly viewer: RegisteredViewer }
-    | { readonly kind: "empty" | "binary" | "too-large" };
+    | { readonly kind: "empty" | "binary" | "too-large" | "locked" };
 
 /* Can this file reach the viewer that claimed it? Only a `blob` viewer can be defeated by size: it is served
  * by /workspace/raw, which holds the whole answer in memory and 413s past MAX_RAW_BYTES, so a 40 MB .docx is
@@ -49,6 +50,14 @@ const extensionOf = (path: string): string => {
 // Resolve how to open `path` given its byte size (undefined when unknown — the tree cap, or stat failed; we
 // then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
 export const resolveOpenFile = (path: string, size: number | undefined): OpenFile => {
+    /* The daemon keeps a handful of files to itself — the capability manifest's sign-ins, the owner record, the
+     * agents' provider homes (isLockedWorkspacePath). Answered FIRST, and from the path alone, because it is the
+     * one resolution that must not depend on anything arriving: the read is refused, so a viewer that had to try
+     * it first would open a tab and then close it in the reader's face — which is exactly what this state
+     * replaces. A restored tab resolves the same way before the tree has loaded. */
+    if (isLockedWorkspacePath(path)) {
+        return { kind: `locked` };
+    }
     const viewer = viewerForExtension(extensionOf(path));
     if (viewer !== undefined) {
         // An empty file has nothing for a viewer to render, whatever the viewer is — checked before the viewer

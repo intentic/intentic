@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import type { Ref } from "vue";
 import { computed, ref } from "vue";
 import { rankPaths } from "./fuzzyPaths";
@@ -25,12 +26,16 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     // matching the daemon's filtered sweep), plus whether the tree is INCOMPLETE anywhere — i.e. holds a dir the
     // breadth-first walk never listed (no `children`; it lazy-loads on expand). The client can't answer from the
     // tree alone then, so the query falls back to the daemon's sweep.
+    //
+    // The sandbox's own locked entries are skipped WHOLE — not offered as something to open, and not counted as
+    // a gap either. They are the one kind of dir the walk deliberately never descends, so reading their absent
+    // children as "the tree is incomplete" would send every keystroke to the server sweep forever.
     const clientTree = computed<{ paths: readonly string[]; cut: boolean }>(() => {
         const paths: string[] = [];
         let cut = false;
         const walk = (nodes: readonly WorkspaceTreeEntry[]): void => {
             for (const node of nodes) {
-                if (node.ignored === true) {
+                if (node.ignored === true || isLockedWorkspacePath(node.path)) {
                     continue;
                 }
                 if (node.type === `file`) {

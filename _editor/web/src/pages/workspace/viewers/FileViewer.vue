@@ -16,6 +16,7 @@ import { scopeQuery, workspaceAgent } from "../../../composables/workspace/works
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
+import FileLocked from "./FileLocked.vue";
 import FileUnsupported from "./FileUnsupported.vue";
 import { highlightLangFor, TEXT_EDIT_MAX_BYTES } from "../fileType";
 import type { LineJump } from "../workspaceTabs";
@@ -297,7 +298,9 @@ watch(
             }, fail);
             return;
         }
-        // binary / too-large / empty: nothing to fetch.
+        // binary / too-large / empty / locked: nothing to fetch. The last of them is the only one that is a
+        // REFUSAL rather than an inability, and it costs no request to honour — which is the point: a read the
+        // daemon would decline is never issued, so the tab settles on its explanation instead of closing itself.
     },
     { immediate: true },
 );
@@ -506,6 +509,9 @@ const onEditorSave = (value: string): void =>
                 <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
+                <!-- The sandbox keeps this one to itself. Nothing was fetched to find that out (resolveOpenFile
+                     answers from the path), so the tab opens straight onto the explanation. -->
+                <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
                 <!-- Everything left: a known binary, and the one shape that should be unreachable — a viewer
                      that resolved but produced no component. Both are files whose bytes we can only hand over. -->
                 <FileUnsupported v-else mode="binary" @download="download" />

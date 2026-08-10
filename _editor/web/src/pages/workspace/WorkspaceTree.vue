@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
@@ -141,6 +142,20 @@ watch(
 
 const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
+
+/* THE ROWS THE SANDBOX KEEPS TO ITSELF — its capability sign-ins, the owner record, the agents' provider homes
+ * (isLockedWorkspacePath owns the list). They are listed, because they exist and hiding them would read as
+ * files having gone missing, but every op below refuses them the way the daemon does: no rename, no delete, no
+ * cut, no copy, no drag, no drop into them, and no expanding a locked folder — the walk doesn't list what is
+ * inside one. A click still opens a tab, which is the whole point: FileLocked says what the file holds and
+ * where to manage it, instead of the old flash of a tab that closed itself.
+ *
+ * Drawn from the PATH rather than a flag on the entry, so a row and its restored tab agree without waiting on
+ * the tree, and a folder's children inherit it for free. */
+const locked = (path: string): boolean => isLockedWorkspacePath(path);
+// Paths from a selection that the file ops may actually touch — a Ctrl+A then Delete must not send the daemon
+// a delete for a file it will refuse, and then report that refusal as "couldn't delete that".
+const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path));
 
 // Children to render under a dir: the inline `children` from the eager walk when it descended there, otherwise
 // the lazily-fetched ones (keyed by path). A dir with NO `children` was never listed — ignored, or below the
@@ -290,7 +305,12 @@ const leadRowAt = (): { row: Row; index: number } | undefined => {
 const { explorerStyle } = useExplorerStyle();
 const treatEntry = (name: string, type: "file" | "dir", isExpanded: boolean, ignored: boolean | undefined) =>
     explorerTreatment(explorerStyle.value, name, type, isExpanded, ignored);
-const treat = (row: Row) => treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored);
+// A locked row wears the padlock in place of its own glyph: what kind of file it is stops being the useful
+// fact about it the moment it is the one thing you cannot open.
+const treat = (row: Row): ReturnType<typeof treatEntry> => {
+    const treatment = treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored);
+    return locked(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
+};
 
 // Expansion is the whole gesture: a dir the walk never listed (ignored, or below its entry budget) fetches its
 // children off this set, in useWorkspaceTree — so a folder restored open on reload loads exactly like one the
@@ -306,6 +326,11 @@ const toggleExpand = (path: string): void => {
 };
 
 const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean): void => {
+    // A locked folder opens its explanation like a locked file: there is nothing inside it to expand into.
+    if (locked(entry.path)) {
+        emit(`openFile`, entry.path);
+        return;
+    }
     if (entry.type === `dir`) {
         toggleExpand(entry.path);
         // Keyboard activation (Enter) also reveals a managed dir's operator tab; a plain click just expands.
@@ -361,7 +386,7 @@ const toggleAt = (path: string): void => {
     anchor.value = path;
     lead.value = path;
 };
-const clipPaths = (): string[] => (selection.value.size > 0 ? [...selection.value] : lead.value !== null ? [lead.value] : []);
+const clipPaths = (): string[] => unlockedOnly(selection.value.size > 0 ? [...selection.value] : lead.value !== null ? [lead.value] : []);
 
 // A row's own affordances, or none when the parent supplied no source (the mobile listing, a test).
 const actionsFor = (path: string): readonly RowAction[] => rowActions?.(path) ?? [];
@@ -411,6 +436,9 @@ const onChevronClick = (event: MouseEvent, row: Row): void => {
 
 // ---- rename (inline) ----
 const beginRename = (path: string): void => {
+    if (locked(path)) {
+        return;
+    }
     renamingPath.value = path;
     renameDraft.value = basename(path);
 };
@@ -494,10 +522,11 @@ const cancelCreate = (): void => {
     creating.value = undefined;
 };
 const doDeleteSelection = (): void => {
-    if (selection.value.size === 0) {
+    const paths = unlockedOnly([...selection.value]);
+    if (paths.length === 0) {
         return;
     }
-    confirmPaths.value = [...selection.value];
+    confirmPaths.value = paths;
 };
 const deleteHeader = computed<string>(() => {
     const paths = confirmPaths.value;
@@ -740,7 +769,12 @@ const onRowDragStart = (event: DragEvent, row: Row): void => {
     }
     const path = row.entry.path;
     // Grabbing a selected row drags the whole selection; grabbing an unselected row drags (and selects) just it.
-    const paths = selection.value.has(path) ? [...selection.value] : [path];
+    // Locked rows never travel — dragging one out of the state folder is a move the daemon refuses.
+    const paths = unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
+    if (paths.length === 0) {
+        event.preventDefault();
+        return;
+    }
     if (!selection.value.has(path)) {
         selection.value = new Set(paths);
         anchor.value = path;
@@ -760,7 +794,7 @@ const onRowDragOver = (event: DragEvent, row: Row): void => {
     }
     // preventDefault even on an invalid target so the drop lands here (a no-op) instead of bubbling to the root.
     event.preventDefault();
-    const invalid = isInvalidMoveTarget(row.entry.path);
+    const invalid = locked(row.entry.path) || isInvalidMoveTarget(row.entry.path);
     if (event.dataTransfer !== null) {
         event.dataTransfer.dropEffect = invalid ? `none` : dragPaths.value.length > 0 ? `move` : `copy`;
     }
@@ -777,6 +811,12 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     }
     event.preventDefault();
     event.stopPropagation();
+    // Swallowed here rather than left to bubble: a drop the sandbox would refuse must not fall through to the
+    // explorer root and land the files somewhere the user never aimed at.
+    if (locked(row.entry.path)) {
+        dragOverPath.value = undefined;
+        return;
+    }
     const dir = row.entry.path;
     dragOverPath.value = undefined;
     const dataTransfer = event.dataTransfer;
@@ -793,8 +833,14 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
 // ---- context menu (acts on the whole selection when the right-clicked row is part of it) ----
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuEntry.value;
+    /* A locked row has no menu worth showing — every item on it is something the sandbox refuses — so it gets
+     * the one line that explains the padlock instead. Said here as well as on the row because the menu is where
+     * a user goes when a row won't do what they expect, and an empty menu would answer them with nothing. */
+    if (target !== undefined && locked(target.path)) {
+        return [{ label: `Kept private by the sandbox`, icon: `lock`, disabled: true }];
+    }
     const multi = target !== undefined && selection.value.size > 1 && selection.value.has(target.path);
-    const count = selection.value.size;
+    const count = unlockedOnly([...selection.value]).length;
     const dir = target === undefined ? `` : target.type === `dir` ? target.path : parentDir(target.path);
     const items: MenuItem[] = [
         { label: `New File`, icon: `file`, command: () => beginCreate(dir, `file`) },
@@ -905,9 +951,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     type="button"
                     role="treeitem"
                     :aria-selected="selection.has(row.entry.path)"
-                    :aria-expanded="row.entry.type === 'dir' || row.nest ? row.isExpanded : undefined"
+                    :aria-expanded="(row.entry.type === 'dir' || row.nest) && !locked(row.entry.path) ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
-                    :draggable="renamingPath !== row.entry.path"
+                    :draggable="renamingPath !== row.entry.path && !locked(row.entry.path)"
                     class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                     :class="{
                         'ui-row-select-on': selection.has(row.entry.path),
@@ -924,16 +970,23 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     @dragleave="onRowDragLeave(row)"
                     @drop="onRowDrop($event, row)"
                 >
+                    <!-- No chevron on a locked folder: there is nothing behind it to expand into (the walk stops
+                         there), so offering the gesture would only be a promise the row can't keep. -->
                     <Icon
-                        v-if="row.entry.type === 'dir' || row.nest"
+                        v-if="(row.entry.type === 'dir' || row.nest) && !locked(row.entry.path)"
                         class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
                         :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
                         @click="onChevronClick($event, row)"
                     />
                     <span v-else class="w-[0.7rem] shrink-0"></span>
                     <!-- Icon size/colour come from the active explorer setup (minimal/colorful/vivid). The fixed-width
-                         slot keeps every glyph in one column so filenames align; ignored rows always dim. -->
-                    <span class="flex shrink-0 items-center justify-center" :class="treat(row).slotClass">
+                         slot keeps every glyph in one column so filenames align; ignored rows always dim. A locked
+                         row shows a padlock here (treat) and says so on hover — the tab it opens says the rest. -->
+                    <span
+                        class="flex shrink-0 items-center justify-center"
+                        :class="treat(row).slotClass"
+                        v-tooltip.right="locked(row.entry.path) ? 'Kept private by the sandbox' : undefined"
+                    >
                         <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
                     </span>
                     <input
@@ -947,9 +1000,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @blur="commitRename"
                         @vue:mounted="focusRename"
                     />
-                    <span v-else class="min-w-0 flex-1 truncate" :class="row.entry.ignored ? 'text-subtle' : 'text-content/90'">{{
-                        row.entry.name
-                    }}</span>
+                    <span
+                        v-else
+                        class="min-w-0 flex-1 truncate"
+                        :class="row.entry.ignored || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
+                        >{{ row.entry.name }}</span
+                    >
                     <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
                          tree row, which is neither where anyone reads documentation nor anywhere a touch device

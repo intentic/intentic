@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import { describe, expect, it } from "vitest";
-import { staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
+import { isLockedWorkspacePath, staleQueryKeys, WORKSPACE_STATE_FILES } from "./workspace-state.js";
 
 // What the automations extension declares in its manifest, and what the memory extension WOULD declare if the
 // watcher reported its files. Literals rather than the real manifests: an extension package importing this one is
@@ -152,5 +152,40 @@ describe(`WORKSPACE_STATE_FILES`, () => {
                 ).toBe(false);
             }
         }
+    });
+});
+
+/* The rule the daemon enforces and the explorer draws. Both sides read it from here, which is the point: the
+ * padlock on a row and the refusal behind it can no longer disagree. */
+describe(`isLockedWorkspacePath`, () => {
+    it(`covers the root state dir's credential entries, and their subtrees whole`, () => {
+        expect(isLockedWorkspacePath(`.intentic/capabilities.json`)).toBe(true);
+        expect(isLockedWorkspacePath(`.intentic/owner.json`)).toBe(true);
+        // A whole lifecycle root, so a provider added under it is covered without a second edit.
+        expect(isLockedWorkspacePath(`.intentic/auth`)).toBe(true);
+        expect(isLockedWorkspacePath(`.intentic/auth/codex/auth.json`)).toBe(true);
+        expect(isLockedWorkspacePath(`.intentic/browser/Default/Cookies`)).toBe(true);
+    });
+
+    it(`leaves the state dir's ordinary manifests alone`, () => {
+        // The dir itself is browsable, and most of what is in it is a file a person may legitimately read.
+        expect(isLockedWorkspacePath(`.intentic`)).toBe(false);
+        expect(isLockedWorkspacePath(`.intentic/settings.json`)).toBe(false);
+        expect(isLockedWorkspacePath(`.intentic/drafts/post-1.json`)).toBe(false);
+    });
+
+    it(`locks the ROOT's own .git and nobody else's`, () => {
+        // The root's is the pointer to the shadow history repo, kept where the agent cannot rewrite it; a
+        // repo's own .git is ordinary content that stays browsable.
+        expect(isLockedWorkspacePath(`.git`)).toBe(true);
+        expect(isLockedWorkspacePath(`.git/config`)).toBe(true);
+        expect(isLockedWorkspacePath(`myrepo/.git/config`)).toBe(false);
+        // …and a repo's own nested state dir is its project's, not the daemon's.
+        expect(isLockedWorkspacePath(`myrepo/.intentic/capabilities.json`)).toBe(false);
+    });
+
+    it(`reads a platform path the same as a posix one`, () => {
+        expect(isLockedWorkspacePath(`.intentic\\auth\\codex`)).toBe(true);
+        expect(isLockedWorkspacePath(`./.intentic/capabilities.json`)).toBe(true);
     });
 });

@@ -5,8 +5,7 @@ import { dirname, extname, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { STATE_DIR } from "@intentic/constants";
-import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 
 // Resolve a repo-relative path to an absolute one, guarding against escaping the repo dir: the daemon serves
 // file reads/writes for the workspace repos, so a `../` or absolute path must not reach outside them. Returns
@@ -21,54 +20,33 @@ export const resolveWithin = (dir: string, relPath: string): string | undefined 
     return target;
 };
 
-// The daemon's own credential, authorization, and private runtime state, all of it directly under the
-// WORKSPACE ROOT's .intentic/.
+// Whether an absolute path lands in the daemon's control plane — its credential, authorization and private
+// runtime state, all of it directly under the WORKSPACE ROOT's .intentic/. Which entries those are is declared
+// once in the contract package (isLockedWorkspacePath), because the explorer draws the same rule as a padlock;
+// this function is the half that enforces it, and it is the only half that touches the disk.
+//
 // owner.json and members.json ARE the answer to "who may drive this sandbox" — re-read from disk on every
 // request — capabilities.json carries the capability manifest's secrets, ci.json the CI webhook secret, and
 // auth/ holds every agent-provider runtime home (AGENT_AUTH_DIR moves that tree out of /work entirely, and then
 // none of it is reachable to begin with). sessions/ holds provider-native conversation state, and browser/ holds
 // logged-in Chromium profiles. Protecting whole lifecycle roots keeps a new provider or session artifact from
-// becoming readable merely because this lower-level guard was not updated with its leaf name.
+// becoming readable merely because that list was not updated with its leaf name. Retired provider roots stay
+// denied even though no producer reads them: an abandoned credential must not become downloadable merely
+// because its active path moved.
 //
-// Retired provider roots remain denied even though no producer reads them. This is quarantine, not migration or
-// compatibility: an abandoned credential must not become downloadable merely because its active path moved.
-const CONTROL_PLANE_ENTRIES = new Set([
-    "owner.json",
-    "members.json",
-    "capabilities.json",
-    "ci.json",
-    "claude.json",
-    "auth",
-    "sessions",
-    "browser",
-    ...RETIRED_WORKSPACE_STATE_DIRS.secret,
-]);
-
-// Whether an absolute path lands in that control plane. Every one of those files has a purpose-built, owner-gated
-// route, so the GENERIC file API must not tunnel around them: a member — someone the owner invited to
-// collaborate — could otherwise upload their own owner.json and take the sandbox, or read the owner's provider
-// token straight back out of the raw route. Denied for everyone, the owner included: no flow needs to reach a
-// token through the file API, and a rule with no role in it cannot be got wrong at a call site.
+// Every one of those files has a purpose-built, owner-gated route, so the GENERIC file API must not tunnel
+// around them: a member — someone the owner invited to collaborate — could otherwise upload their own owner.json
+// and take the sandbox, or read the owner's provider token straight back out of the raw route. Denied for
+// everyone, the owner included: no flow needs to reach a token through the file API, and a rule with no role in
+// it cannot be got wrong at a call site.
 //
-// Scoped deliberately tight. Only the ROOT .intentic is the control plane — a repo's own nested .intentic is
-// ordinary workspace content — and only these entries within it, because the root's other subtrees are real
-// features the browser drives through this same API (chat attachments under artifacts/, a directory's own UI
-// under ui/). A new provider belongs beneath auth/, and native conversation state beneath sessions/, where this
-// guard covers them automatically.
-//
-// The ROOT's own .git joins them, subtree included. It is the --separate-git-dir pointer to /history/gits/root —
-// the handle to the shadow history repo, which lives off /work precisely so the agent can't tamper with it (see
-// git/root-repo.ts). It is also a FILE where a client that drops a repo's CONTENTS at the root tries to write a
-// directory: without this floor, writeWorkspaceFileStream's mkdir throws ENOTDIR/EEXIST per entry and the upload
-// route 500s the whole drop instead of skipping the handful of paths that were never writable to begin with.
-// A NESTED repo's .git is ordinary content — a dropped repo keeps its own and stays connected to its remote.
-export const isControlPlanePath = (root: string, absPath: string): boolean => {
-    const segments = relative(resolve(root), absPath).split(sep);
-    if (segments[0] === ".git") {
-        return true;
-    }
-    return segments.length >= 2 && segments[0] === STATE_DIR && CONTROL_PLANE_ENTRIES.has(segments[1] ?? "");
-};
+// The ROOT's own .git is covered too, subtree included. It is the --separate-git-dir pointer to
+// /history/gits/root — the handle to the shadow history repo, which lives off /work precisely so the agent can't
+// tamper with it (see git/root-repo.ts). It is also a FILE where a client that drops a repo's CONTENTS at the
+// root tries to write a directory: without this floor, writeWorkspaceFileStream's mkdir throws ENOTDIR/EEXIST
+// per entry and the upload route 500s the whole drop instead of skipping the handful of paths that were never
+// writable to begin with.
+export const isControlPlanePath = (root: string, absPath: string): boolean => isLockedWorkspacePath(relative(resolve(root), absPath));
 
 /* Read a workspace file's text WHOLE; undefined when it does not exist. For the daemon's own readers, which
  * have already bounded what they ask for: a diff side (512 KiB cap, changes.ts), an untracked file's commit

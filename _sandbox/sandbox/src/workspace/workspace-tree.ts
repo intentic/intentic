@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { WorkspaceChildren, WorkspaceTree, WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, type WorkspaceChildren, type WorkspaceTree, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
 import { resolveWithin } from "./workspace-files.js";
 
@@ -87,9 +87,13 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                 if (isDir) {
                     const entry: Draft = { name: dirent.name, path, type: "dir", ...(ignored ? { ignored: true } : {}) };
                     children.push(entry);
-                    // Ignored dirs are never descended; the rest queue for the next level and stay unlisted
-                    // (no `children`) if the budget runs out first — either way the client lazy-loads them.
-                    if (!ignored) {
+                    // Ignored dirs are never descended; neither are the daemon's own (auth/, sessions/, browser/,
+                    // the root .git — isLockedWorkspacePath), whose every file the file API refuses anyway: the
+                    // explorer draws them as one locked row, so listing what is inside would spend the walk's
+                    // budget — thousands of entries, in the browser-profile case — on rows nobody can open. The
+                    // rest queue for the next level and stay unlisted (no `children`) if the budget runs out
+                    // first — either way the client lazy-loads them.
+                    if (!ignored && !isLockedWorkspacePath(path)) {
                         next.push({ abs, rel: path, parentScope: scope, owner: entry });
                     }
                     continue;
@@ -131,6 +135,12 @@ export const listWorkspaceChildren = async (root: string, relPath: string, optio
     const base = resolve(root);
     const dir = resolveWithin(base, relPath);
     if (dir === undefined) {
+        return { entries: [], hidden: 0 };
+    }
+    // The eager walk stops at a locked dir and the explorer never offers to expand one, so an ask for its
+    // contents is either a stale client or a probe. Empty, like the walk's own answer — the file API refuses
+    // every path inside it regardless, so a listing would only be an index of what cannot be opened.
+    if (isLockedWorkspacePath(relPath)) {
         return { entries: [], hidden: 0 };
     }
     const dirents = await readdir(dir, { withFileTypes: true }).catch(() => undefined);

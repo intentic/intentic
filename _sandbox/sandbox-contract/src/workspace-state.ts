@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { FileContribution } from "@intentic/extension-manifest";
 import type { StateFile } from "./state-portability.js";
 
@@ -333,6 +334,47 @@ export const RETIRED_WORKSPACE_STATE_DIRS = {
     derived: ["iq", "extensions-runtime"],
     artifacts: ["attachments", "acceptance", "loops"],
 } as const;
+
+/* THE DAEMON'S OWN CONTROL PLANE — the entries directly under the workspace root's `.intentic/` that the file
+ * API refuses to read, write, move or delete for anyone, the owner included (workspace/workspace-files.ts holds
+ * the enforcement and the full reasoning for each name).
+ *
+ * The list lives HERE, in the package both sides import, because the browser has to draw the same rule the
+ * daemon enforces. It didn't, and the gap was a small piece of theatre: the explorer listed `capabilities.json`
+ * like any other file, opening it flashed a tab, the read came back with nothing there, and the tab closed
+ * itself — a refusal acted out as a glitch. A file the app will not open should say so before it is clicked,
+ * which takes a rule the explorer can consult, not a status code it can only react to.
+ *
+ * Naming these to the browser gives nothing away that the tree did not already publish — it listed them, sizes
+ * and all. What stays behind the guard is the only thing that ever mattered: the bytes. */
+const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
+    "owner.json",
+    "members.json",
+    "capabilities.json",
+    "ci.json",
+    "claude.json",
+    "auth",
+    "sessions",
+    "browser",
+    ...RETIRED_WORKSPACE_STATE_DIRS.secret,
+]);
+
+/* Whether a workspace-root-relative path lands in that control plane — and so is shown locked rather than
+ * opened. Scoped deliberately tight, matching the guard: only the ROOT `.intentic` counts (a repo's own nested
+ * one is ordinary content) and only these entries within it, subtrees included, so a new provider dropped under
+ * `auth/` is covered without a second edit.
+ *
+ * The ROOT's own `.git` joins them. It is the pointer to the shadow history repo kept off the workspace so the
+ * agent cannot rewrite its own past; a NESTED repo's `.git` is ordinary content and stays browsable.
+ *
+ * Accepts either slash so a caller holding a platform path doesn't have to normalize first. */
+export const isLockedWorkspacePath = (relPath: string): boolean => {
+    const segments = relPath.split(/[\\/]/).filter((segment) => segment !== "" && segment !== ".");
+    if (segments[0] === ".git") {
+        return true;
+    }
+    return segments.length >= 2 && segments[0] === STATE_DIR && LOCKED_STATE_ENTRIES.has(segments[1] ?? "");
+};
 
 /* Every path this table declares, as a type. `as const` above is what makes it one, and it is what finally makes
  * the first sentence of this file's header TRUE rather than aspirational.

@@ -28,6 +28,7 @@ import { rendersAsBytes } from "./fileType";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "./dropEntries";
 import { explorerShows } from "./explorerFilter";
 import { iconForEntry } from "@intentic/ui";
@@ -522,14 +523,20 @@ const onPick = (event: Event): void => {
                                 type="button"
                                 class="flex h-11 w-full items-center gap-3 px-3 text-left transition-colors active:bg-overlay"
                                 v-longpress="() => (sheetEntry = node)"
-                                @click="node.type === 'dir' ? openDir(node.path) : openFile(node.path)"
+                                @click="node.type === 'dir' && !isLockedWorkspacePath(node.path) ? openDir(node.path) : openFile(node.path)"
                             >
+                                <!-- A row the sandbox keeps to itself: padlock, dimmed, and a tap opens the tab
+                                     that explains it rather than walking into a folder with nothing in it. -->
                                 <Icon
-                                    :name="iconForEntry(node.name, node.type)"
+                                    :name="isLockedWorkspacePath(node.path) ? 'lock' : iconForEntry(node.name, node.type)"
                                     class="shrink-0 text-base"
-                                    :class="node.ignored ? 'text-subtle' : 'text-muted'"
+                                    :class="node.ignored || isLockedWorkspacePath(node.path) ? 'text-subtle' : 'text-muted'"
                                 />
-                                <span class="min-w-0 flex-1 truncate text-sm" :class="{ 'text-subtle': node.ignored }">{{ node.name }}</span>
+                                <span
+                                    class="min-w-0 flex-1 truncate text-sm"
+                                    :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) }"
+                                    >{{ node.name }}</span
+                                >
                                 <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
                                 <span
                                     v-if="node.path === REFERENCE_DIR"
@@ -542,7 +549,11 @@ const onPick = (event: Event): void => {
                                     class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
                                     >public</span
                                 >
-                                <Icon v-if="node.type === 'dir'" name="chevron-right" class="shrink-0 text-xs text-subtle" />
+                                <Icon
+                                    v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path)"
+                                    name="chevron-right"
+                                    class="shrink-0 text-xs text-subtle"
+                                />
                             </button>
                             <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">Loading…</p>
                             <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
@@ -613,28 +624,35 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="copy" class="text-base text-muted" /> Copy path
                 </button>
-                <button
-                    v-if="sheetEntry.type === 'file'"
-                    type="button"
-                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
-                    @click="download(sheetEntry)"
-                >
-                    <Icon name="download" class="text-base text-muted" /> Download
-                </button>
-                <button
-                    type="button"
-                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
-                    @click="startRename(sheetEntry)"
-                >
-                    <Icon name="pencil" class="text-base text-muted" /> Rename
-                </button>
-                <button
-                    type="button"
-                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
-                    @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
-                >
-                    <Icon name="trash" class="text-base" /> Delete
-                </button>
+                <!-- Everything below Copy path is something the sandbox refuses on a locked entry, so a locked
+                     one is offered the explanation instead of four actions that would each fail. -->
+                <p v-if="isLockedWorkspacePath(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-muted">
+                    <Icon name="lock" class="text-base text-subtle" /> Kept private by the sandbox
+                </p>
+                <template v-else>
+                    <button
+                        v-if="sheetEntry.type === 'file'"
+                        type="button"
+                        class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                        @click="download(sheetEntry)"
+                    >
+                        <Icon name="download" class="text-base text-muted" /> Download
+                    </button>
+                    <button
+                        type="button"
+                        class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                        @click="startRename(sheetEntry)"
+                    >
+                        <Icon name="pencil" class="text-base text-muted" /> Rename
+                    </button>
+                    <button
+                        type="button"
+                        class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
+                        @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
+                    >
+                        <Icon name="trash" class="text-base" /> Delete
+                    </button>
+                </template>
             </div>
         </BottomSheet>
 

@@ -87,6 +87,7 @@ const mount = async (props: {
     tree: WorkspaceTreeEntry[];
     selectedPath?: string;
     rowActions?: (dir: string) => readonly RowAction[];
+    onOpenFile?: (path: string) => void;
 }): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -253,5 +254,50 @@ describe(`the hide-tests toggle`, () => {
         const el = await mount({ tree: TEST_TREE });
 
         expect(rows(el)).toEqual([`src`, `main.ts`, `README.md`]);
+    });
+});
+
+/* The sandbox keeps a few of its own files private — its capability sign-ins, the agents' provider homes. They
+ * are listed, because they are there and a tree that dropped them would read as files having gone missing, but
+ * clicking one used to flash a tab open and shut: the read is refused, and the viewer treated that as "deleted
+ * on disk". The row now says so before it is clicked, and the click lands on an explanation. */
+describe(`the rows the sandbox keeps to itself`, () => {
+    const LOCKED_TREE: WorkspaceTreeEntry[] = [
+        dir(`.intentic`, [
+            file(`.intentic/capabilities.json`),
+            file(`.intentic/settings.json`),
+            { name: `auth`, path: `.intentic/auth`, type: `dir` },
+        ]),
+        file(`README.md`),
+    ];
+
+    it(`wears a padlock, and leaves the state dir's ordinary files as themselves`, async () => {
+        restoreFrom([`.intentic`]);
+
+        const el = await mount({ tree: LOCKED_TREE });
+
+        const iconOf = (name: string): string | undefined =>
+            [...el.querySelectorAll(`[role="treeitem"]`)]
+                .find((row) => row.textContent?.trim() === name)
+                ?.querySelector(`[data-icon]:not([data-icon^="chevron"])`)
+                ?.getAttribute(`data-icon`) ?? undefined;
+        expect(iconOf(`capabilities.json`)).toBe(`lock`);
+        expect(iconOf(`auth`)).toBe(`lock`);
+        expect(iconOf(`settings.json`)).not.toBe(`lock`);
+    });
+
+    // A locked folder has nothing behind it — the daemon's walk stops there — so the gesture that would open an
+    // empty folder opens the explanation instead.
+    it(`opens a locked folder's explanation rather than expanding into nothing`, async () => {
+        restoreFrom([`.intentic`]);
+        const opened: string[] = [];
+
+        const el = await mount({ tree: LOCKED_TREE, onOpenFile: (path: string) => opened.push(path) });
+        const authRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `auth`) as HTMLElement;
+        authRow.click();
+        await nextTick();
+
+        expect(opened).toEqual([`.intentic/auth`]);
+        expect(rows(el)).toEqual([`.intentic`, `capabilities.json`, `settings.json`, `auth`, `README.md`]);
     });
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { type IconName, useExplorerStyle } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
@@ -30,7 +31,9 @@ const emit = defineEmits<{
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
 
-const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
+// A file the sandbox keeps to itself wears the padlock in the strip too, so the tab matches the row that opened
+// it and the reason is on screen from the moment it appears (isLockedWorkspacePath; FileLocked says the rest).
+const fileIcon = (path: string): IconName => (isLockedWorkspacePath(path) ? `lock` : iconForEntry(basename(path), `file`));
 
 const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `directory`) {
