@@ -768,7 +768,11 @@ const setProvider = (provider: string): void => {
                 <div class="ui-field">
                     <label class="ui-field-label" for="automation-acts-as">Runs as</label>
                     <select id="automation-acts-as" v-model="form.actsAs" :class="cmp.input()">
-                        <option value="">Nobody — no accounts, and every tool</option>
+                        <!-- Blank means something different on a Doorbell, and the option has to say so: a
+                             stranger writes the prompt, so leaving this alone is filled in with the read-only
+                             front desk on save rather than left unbounded. -->
+                        <option v-if="isDoorbell" value="">Front desk — reads the workspace, speaks as nobody</option>
+                        <option v-else value="">Nobody — no accounts, and every tool</option>
                         <option v-for="persona in personas" :key="persona.id" :value="persona.id">
                             {{ persona.label }}{{ persona.ready ? `` : ` (not signed in yet)` }}
                         </option>
@@ -779,11 +783,17 @@ const setProvider = (provider: string): void => {
                             {{ form.actsAs }} (no longer exists)
                         </option>
                     </select>
-                    <!-- The four states this picker can be in, most specific first. The orphan case is third
-                         rather than folded into "not signed in": a pin to a persona that no longer exists is
-                         read by the turn as no accounts AND no tools, and telling someone to go finish a login
-                         for a card that isn't there would send them looking for something they deleted. -->
-                    <p v-if="personas.length === 0" class="text-xs text-muted">
+                    <!-- The states this picker can be in, most specific first. The Doorbell case comes first
+                         because it is the one where blank is not "unbounded" — the note below it would otherwise
+                         promise the opposite of what saving does. The orphan case is third-from-last rather than
+                         folded into "not signed in": a pin to a persona that no longer exists is read by the turn
+                         as no accounts AND no tools, and telling someone to go finish a login for a card that
+                         isn't there would send them looking for something they deleted. -->
+                    <p v-if="isDoorbell && form.actsAs === ``" class="text-xs text-muted">
+                        Strangers write these prompts, so this chat is answered by a front desk: it reads the workspace to answer questions and can do
+                        nothing else — no accounts, no commands, no edits. Saving adds it to your personas, where you can widen it.
+                    </p>
+                    <p v-else-if="personas.length === 0" class="text-xs text-muted">
                         You haven't set up any personas yet, so this wake can do anything and speak as nobody.
                         <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Set one up</button>
                     </p>

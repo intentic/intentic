@@ -87,8 +87,9 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   function whose header carries the reasoning for why accounts default to nothing and powers default to
   everything. Identities count as accounts there — an unattended wake that names no persona loses them first. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the
   "change the sandbox" switch as a PreToolUse hook — a refusal, honestly weaker than the container, and the
-  card's own UI says so where it is set. [src/personas/default-personas.ts](src/personas/default-personas.ts)
-  seeds Visitor, Maintainer and Publisher once each.
+  card's own UI says so where it is set. Nothing is seeded: a fresh workspace has no personas, and
+  [src/personas/front-desk.ts](src/personas/front-desk.ts) is the one card the daemon writes by itself — the
+  read-only front desk a public web chat answers through, created when a Doorbell is saved rather than at boot.
 - [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.

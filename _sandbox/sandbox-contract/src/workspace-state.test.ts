@@ -233,7 +233,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/environment.d/`,
             `.intentic/extension-enablement.json`,
             `.intentic/personas.json`,
-            `.intentic/personas.seeded.json`,
             `.intentic/settings.json`,
             `.intentic/templates.json`,
             `.intentic/workflows.json`,

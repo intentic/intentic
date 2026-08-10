@@ -3300,6 +3300,20 @@ export const PersonaSchema = z.object({
 });
 export type Persona = z.infer<typeof PersonaSchema>;
 
+/* THE ONE CARD ID THE PRODUCT NAMES ITSELF — the read-only persona a public web chat answers through.
+ *
+ * Nothing else is stock: a fresh workspace has no personas at all, and every card on the Personas page is one
+ * the owner wrote. This id is the exception because a Doorbell is driven by a stranger with nobody watching, so
+ * it is the one wake whose bounds cannot be left to the prompt's wording — the daemon writes the card the moment
+ * a Doorbell is saved (personas/front-desk.ts) and the automations form fills a blank Doorbell persona with it.
+ *
+ * It lives HERE because those two are in different packages and must agree exactly. A literal in each would
+ * drift into a Doorbell pinned to a card nobody creates, and turnPersona answers a missing card by denying
+ * everything — a public chat that cannot even read, which is safe and useless.
+ *
+ * It is FRONT DESK and not "visitor": the card is who answers the people who arrive, not the person arriving. */
+export const FRONT_DESK_PERSONA = "front-desk";
+
 /* HOW BOUNDED A CARD IS, in one phrase — for the row badge on the Personas page and for the sentence under the
  * automations composer's persona picker.
  *

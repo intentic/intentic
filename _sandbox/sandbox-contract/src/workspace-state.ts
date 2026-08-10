@@ -108,14 +108,6 @@ const STATE_FILES = [
      * length, and its reasoning is why the flag exists rather than a second hand-kept list). */
     { path: ".intentic/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
 
-    {
-        path: ".intentic/personas.seeded.json",
-        invalidates: [],
-        why: "Which stock personas this workspace has been offered (default-personas.ts); nothing renders it — it exists so deleting a seeded card is final.",
-        portability: "carry",
-        versioned: true,
-    },
-
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
      * split here because they answer PORTABILITY differently while answering invalidation identically, and the
      * split is the whole difference between an export that reproduces an environment and one that reproduces a

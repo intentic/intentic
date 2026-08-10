@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { automationsContract } from "@intentic/sandbox-contract";
+import { automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { listenerProvidersOf } from "../extensions/installed-extensions.js";
+import { ensureFrontDeskPersona } from "../personas/front-desk.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, runHeldWake } from "./scheduler.js";
 
@@ -70,6 +71,20 @@ export const createAutomationsRoutes = (services: Services) => {
                     ? { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } }
                     : input;
             await services.automations.upsert(automation);
+            /* A DOORBELL PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
+             * the card this wake names may not exist yet — and turnPersona answers a named-but-missing card by
+             * denying everything, which would make a freshly installed public chat one that cannot even read.
+             * Written here rather than by the surface that installed it, so a Doorbell arriving through any
+             * route — the composer, a hand-edited manifest, an extension — lands with its bound present and
+             * visible on the Personas page. Awaited: the wake it bounds can fire the moment this returns. */
+            if (automation.actsAs === FRONT_DESK_PERSONA) {
+                await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
+                    services.logger.warn(
+                        { err: error, automation: automation.id },
+                        "front desk persona not created — the wake it names will be denied everything",
+                    ),
+                );
+            }
             // The first enabled listener automation is what materializes its provider's gateway process (and the
             // last one's removal below stops it) — detached, the gateway's own poll handles the rest.
             void reconcileListenerProcesses(services);

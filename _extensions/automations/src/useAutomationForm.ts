@@ -1,5 +1,5 @@
 import type { AgentHarness, AgentProvider, Automation, AutomationSummary, WebchatConfig, WorkspaceEventKind } from "@intentic/sandbox-contract";
-import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
@@ -19,15 +19,6 @@ import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
  * produced the record — so a save that changes nothing must round-trip to an identical automation. */
 
 export const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-
-/* The persona a Doorbell starts on — the stock read-only card the sandbox seeds (default-personas.ts).
- *
- * A Doorbell is driven by a stranger and runs with nobody watching, so it is the one automation whose bounds
- * cannot be left to the prompt's wording. It used to carry a hidden four-tool allowlist for exactly that
- * reason; naming a persona instead does the same job in a place the owner can SEE, edit, and reuse for
- * everything else a stranger drives. Changing this row's persona is a deliberate edit, as widening the old
- * allowlist was. */
-export const DOORBELL_PERSONA = `visitor`;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
 
@@ -439,11 +430,17 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         else delete automation.chore;
         if (isDoorbell.value) {
             automation.webchat = webchatOf();
-            /* A Doorbell that named no persona gets the read-only one. The owner's own choice always stands —
-             * a Doorbell deliberately pointed at a card with more powers is a decision they made on a visible
-             * field — so this fills a blank rather than overriding an answer. */
+            /* A DOORBELL THAT NAMED NO PERSONA GETS THE FRONT DESK — the read-only card, which the daemon writes
+             * on save if the workspace has not got one yet (nothing is seeded; personas/front-desk.ts).
+             *
+             * A Doorbell is driven by a stranger and runs with nobody watching, so it is the one automation whose
+             * bounds cannot be left to the prompt's wording. It used to carry a hidden four-tool allowlist for
+             * exactly that reason; naming a persona does the same job in a place the owner can SEE, edit, and
+             * reuse. The owner's own choice always stands — a Doorbell deliberately pointed at a card with more
+             * powers is a decision they made on a visible field — so this fills a blank rather than overriding an
+             * answer. */
             if (automation.actsAs === undefined) {
-                automation.actsAs = DOORBELL_PERSONA;
+                automation.actsAs = FRONT_DESK_PERSONA;
             }
         } else {
             delete automation.webchat;
