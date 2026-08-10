@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # What a desktop artifact is CALLED — the one place that decides, for every script that builds, verifies,
 # stages or publishes one.
 #
@@ -18,6 +18,13 @@
 #   . "$(dirname "$0")/desktop-artifacts.sh"
 #   name="$(desktop_artifact_name nsis "$VERSION")"   # building: the exact name to write
 #   file="$(desktop_artifact "$DIST" deb)"            # consuming: whichever version is in that directory
+#
+# PLAIN POSIX sh, AND IT HAS TO STAY THAT WAY — hence the shebang, though nothing executes this file. Its
+# callers are bash scripts AND workflow steps, and a workflow step's default shell inside these container jobs
+# is `sh`, i.e. dash. A bash array in here is not a portability nicety anyone can defer: it is a syntax error
+# raised while dash PARSES the file, so the whole step dies at the `. desktop-artifacts.sh` line, before any
+# question has been asked. That is how the Windows build broke — the one place that decides the names took the
+# staging step down with it.
 #
 # The one name NOT here is latest.json. The updater fetches it from `releases/latest/download/latest.json`,
 # which resolves only for a name that never changes — so the manifest is fixed and the installers it points at
@@ -53,16 +60,19 @@ desktop_artifact_glob() {
 # previous version is about to be published or verified in place of the fresh one, and guessing between them
 # is exactly the failure this naming scheme exists to prevent.
 desktop_artifact() {
-    local _dir="$1" _pattern _candidate
-    local -a _matches=()
+    local _dir _pattern _candidate _match _names _count
+    _dir="$1" _match='' _names='' _count=0
     _pattern="$(desktop_artifact_glob "$2")" || return 2
     for _candidate in "$_dir"/$_pattern; do
-        [ -f "$_candidate" ] && _matches+=("$_candidate")
+        [ -f "$_candidate" ] || continue
+        _count=$((_count + 1))
+        _match="$_candidate"
+        _names="$_names ${_candidate##*/}"
     done
-    if [ "${#_matches[@]}" -gt 1 ]; then
-        echo "desktop-artifacts.sh: ${#_matches[@]} '$2' artifacts in $_dir (${_matches[*]##*/}) — expected one; clear the stale build" >&2
+    if [ "$_count" -gt 1 ]; then
+        echo "desktop-artifacts.sh: $_count '$2' artifacts in $_dir (${_names# }) — expected one; clear the stale build" >&2
         return 1
     fi
-    [ "${#_matches[@]}" -eq 1 ] && printf '%s\n' "${_matches[0]}"
+    [ "$_count" -eq 1 ] && printf '%s\n' "$_match"
     return 0
 }

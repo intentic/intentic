@@ -155,19 +155,73 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
  * assertions after it wait out their deadlines on a screen that was never going to come, and the log blames
  * the setup screen for a Return that landed on somebody's browser. `focusWindow` is the one step that CAN
  * tell, so its refusal is carried out to the tier verbatim rather than collapsed into a boolean — the
- * difference between "this machine would not give the dialog the keyboard" and thirty seconds of silence. */
-export const answerConfirm = async (app: string, titleFragment: string): Promise<string | undefined> => {
-    const found = (await appWindows(app)).find((window) => window.title.includes(titleFragment));
-    if (found === undefined) {
-        return `no window of ${app}'s is showing "${titleFragment}" any more`;
+ * difference between "this machine would not give the dialog the keyboard" and thirty seconds of silence.
+ *
+ * AND FOCUS ALONE IS NOT ENOUGH TO TELL, WHICH IS WHY THE DIALOG GOING AWAY IS THE PROOF. `focusWindow`
+ * reports the foreground as it stands when it returns; the keystroke is a separate round trip, and in the gap
+ * between them the foreground can move. It DOES move, on the one path this matters most: a link that arrives
+ * while the app is not running starts the app, the dialog is the first thing that maps, and the app's own main
+ * window maps a second or two later and takes the keyboard with it. The Return then lands in the workspace,
+ * the dialog stays up untouched, and every assertion after it fails describing a product that was never asked.
+ * That is a race, not a machine that refused, so the answer is to look and press again rather than to give up
+ * — and the only reading that settles it is the dialog being gone. */
+const ANSWER_ATTEMPTS = 3;
+const ANSWER_SETTLE_MS = 3_000;
+const ANSWER_POLL_MS = 250;
+
+/* The window layer the loop below drives, named so it can be handed a fake. The loop is the only thing in this
+ * file that is a DECISION rather than a round trip — when to press again, and which silence is a pass — and
+ * `createHarness` sets the precedent for injecting the clock and the sleep to test one. */
+export interface ConfirmOps {
+    /** The dialog's window id, or `undefined` when no window of the app's is showing that title. */
+    readonly showing: () => Promise<string | undefined>;
+    readonly focus: (id: string) => Promise<void>;
+    readonly press: () => Promise<void>;
+    readonly sleep: (ms: number) => Promise<void>;
+    readonly now: () => number;
+}
+
+const desktopOps = (app: string, titleFragment: string): ConfirmOps => ({
+    showing: async () => (await appWindows(app)).find((window) => window.title.includes(titleFragment))?.id,
+    focus: async (id) => await screen.focusWindow(id),
+    press: async () => await screen.key(`Return`),
+    sleep: async (ms) => await new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    now: () => Date.now(),
+});
+
+export const answerConfirm = async (
+    app: string,
+    titleFragment: string,
+    ops: ConfirmOps = desktopOps(app, titleFragment),
+): Promise<string | undefined> => {
+    const closed = async (): Promise<boolean> => {
+        const deadline = ops.now() + ANSWER_SETTLE_MS;
+        for (;;) {
+            if ((await ops.showing()) === undefined) return true;
+            if (ops.now() >= deadline) return false;
+            await ops.sleep(ANSWER_POLL_MS);
+        }
+    };
+
+    let refusal = `"${titleFragment}" was still up after ${ANSWER_ATTEMPTS} presses of Return, each one sent to a window this machine confirmed had the keyboard`;
+    for (let attempt = 1; attempt <= ANSWER_ATTEMPTS; attempt += 1) {
+        const dialog = await ops.showing();
+        if (dialog === undefined) {
+            // Gone before the first press is the dialog never having been there to answer; gone after one is
+            // the press that worked, arriving while this was still looking.
+            return attempt === 1 ? `no window of ${app}'s is showing "${titleFragment}" any more` : undefined;
+        }
+        try {
+            await ops.focus(dialog);
+            await ops.press();
+        } catch (error) {
+            refusal = error instanceof Error ? error.message : String(error);
+            await ops.sleep(ANSWER_POLL_MS);
+            continue;
+        }
+        if (await closed()) return undefined;
     }
-    try {
-        await screen.focusWindow(found.id);
-    } catch (error) {
-        return error instanceof Error ? error.message : String(error);
-    }
-    await screen.key(`Return`);
-    return undefined;
+    return refusal;
 };
 
 /** Fire a link at the OS the way a browser does — `Start-Process`, resolved through the registered handler. */
