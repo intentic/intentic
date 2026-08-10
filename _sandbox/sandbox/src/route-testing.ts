@@ -321,11 +321,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
         workspace,
         processes: fakeProcesses(),
-        workspaceMaintenance: {
-            enterTurn: async () => ({ release: () => {} }),
-            runMaintenance: (run) => run(),
-            runChecks: (run) => run(),
-        },
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {
             status: async () => [],
             issueAt: async () => undefined,

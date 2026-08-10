@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { createWorkspaceMaintenanceGate, type WorkspaceMaintenanceGate } from "./maintenance-gate.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./reconcile-deps.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "reconcile-"));
@@ -33,16 +32,10 @@ const processes = (started: string[], runMs = 10): ManagedProcesses => {
     } as unknown as ManagedProcesses;
 };
 
-const coordinator = (
-    root: string,
-    started: string[],
-    gate: WorkspaceMaintenanceGate = createWorkspaceMaintenanceGate(),
-    runMs = 10,
-): DependencyCoordinator =>
+const coordinator = (root: string, started: string[], runMs = 10): DependencyCoordinator =>
     createDependencyCoordinator({
         workspace: { root },
         processes: processes(started, runMs),
-        maintenance: gate,
         logger: silent,
         requestsPath: join(root, "requests.json"),
         settleMs: 20,
@@ -72,15 +65,10 @@ test("a requested first-time setup wakes the coordinator without needing a land"
     await write(root, "app/package.json", `{"dependencies":{"left-pad":"^1.0.0"}}`);
     await write(root, "app/pnpm-lock.yaml", "");
     const started: string[] = [];
-    const gate = createWorkspaceMaintenanceGate();
-    const turnLease = await gate.enterTurn();
-    const deps = coordinator(root, started, gate);
+    const deps = coordinator(root, started);
 
     const result = await deps.requestInstall(["app"], { kind: "request", conversationId: "conversation-1" });
     expect(result.queued).toEqual(["app"]);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(started).toEqual([]);
-    turnLease.release();
     await settle(() => started.length > 0);
     expect(started).toEqual(["app--install"]);
 });
@@ -89,9 +77,20 @@ test("a queued first-time setup survives until a later coordinator starts it", a
     const root = await workspace();
     await write(root, "app/package.json", `{"dependencies":{"left-pad":"^1.0.0"}}`);
     await write(root, "app/pnpm-lock.yaml", "");
-    const blockedGate = createWorkspaceMaintenanceGate();
-    const turnLease = await blockedGate.enterTurn();
-    await coordinator(root, [], blockedGate).requestInstall(["app"], { kind: "request", conversationId: "conversation-1" });
+    // The first daemon cannot open a panel at all, so the request outlives it on disk — the case a restart
+    // mid-setup leaves behind.
+    const failing = { start: async () => Promise.reject(new Error("tmux unavailable")), running: () => false } as unknown as ManagedProcesses;
+    const stranded = createDependencyCoordinator({
+        workspace: { root },
+        processes: failing,
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        pollMs: 1,
+    });
+    const failed: string[] = [];
+    stranded.subscribeFailures(({ dir }) => failed.push(dir));
+    await stranded.requestInstall(["app"], { kind: "request", conversationId: "conversation-1" });
+    await settle(() => failed.length > 0);
 
     const started: string[] = [];
     const restarted = coordinator(root, started);
@@ -99,7 +98,6 @@ test("a queued first-time setup survives until a later coordinator starts it", a
     await settle(() => started.length > 0);
     expect(started).toEqual(["app--install"]);
     stop();
-    turnLease.release();
 });
 
 test("a durable request can be retried by a later status read if its panel did not start", async () => {
@@ -119,7 +117,6 @@ test("a durable request can be retried by a later status read if its panel did n
     const deps = createDependencyCoordinator({
         workspace: { root },
         processes: managed,
-        maintenance: createWorkspaceMaintenanceGate(),
         logger: silent,
         requestsPath: join(root, "requests.json"),
         pollMs: 1,
@@ -135,7 +132,7 @@ test("a durable request can be retried by a later status read if its panel did n
     expect(attempts).toBe(2);
 });
 
-test("manifest bursts reserve maintenance immediately but install only after the burst is quiet", async () => {
+test("a manifest burst installs only once the writes around it have gone quiet", async () => {
     const root = await workspace();
     const started: string[] = [];
     const changes = watch();
@@ -146,7 +143,7 @@ test("manifest bursts reserve maintenance immediately but install only after the
     changes.emit(["app/package.json"]);
     await new Promise((resolve) => setTimeout(resolve, 15));
     // A checkout commonly writes the manifest early and ordinary source for much longer. Once the manifest
-    // reserves maintenance, that later source traffic must keep extending the trailing quiet window.
+    // arms the window, that later source traffic must keep extending it.
     changes.emit(["app/src/main.ts"]);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(started).toEqual([]);
@@ -155,30 +152,9 @@ test("manifest bursts reserve maintenance immediately but install only after the
     stop();
 });
 
-test("a turn arriving after maintenance is reserved waits until the install has finished", async () => {
+test("an install that outruns its watch window is stopped rather than left going", async () => {
     const root = await workspace();
     await drifted(root);
-    const started: string[] = [];
-    const gate = createWorkspaceMaintenanceGate();
-    const deps = coordinator(root, started, gate, 60);
-    const stop = deps.watch(watch().subscribe);
-    await settle(() => started.length > 0);
-    let entered = false;
-    const turn = gate.enterTurn().then((lease) => {
-        entered = true;
-        lease.release();
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(entered).toBe(false);
-    await turn;
-    expect(entered).toBe(true);
-    stop();
-});
-
-test("a timed-out install is fully stopped before the maintenance lease admits a turn", async () => {
-    const root = await workspace();
-    await drifted(root);
-    const gate = createWorkspaceMaintenanceGate();
     let running = false;
     let stopped = false;
     const managed = {
@@ -195,7 +171,6 @@ test("a timed-out install is fully stopped before the maintenance lease admits a
     const deps = createDependencyCoordinator({
         workspace: { root },
         processes: managed,
-        maintenance: gate,
         logger: silent,
         requestsPath: join(root, "requests.json"),
         pollMs: 1,
@@ -203,37 +178,57 @@ test("a timed-out install is fully stopped before the maintenance lease admits a
     });
 
     await deps.status();
-    await settle(() => running);
-    let entered = false;
-    const turn = gate.enterTurn().then((lease) => {
-        entered = true;
-        lease.release();
-    });
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    expect(entered).toBe(false);
-    await turn;
+    await settle(() => stopped);
     expect(stopped).toBe(true);
+    expect(running).toBe(false);
 });
+
+// A panel that refuses to open once: the install is still owed afterwards, which is what leaves a cause on the
+// books long enough for a later observation to try to overwrite it.
+const startsOnSecondTry = (): { processes: ManagedProcesses; attempts: () => number } => {
+    let attempts = 0;
+    return {
+        processes: {
+            start: async () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw new Error("tmux unavailable");
+                }
+            },
+            running: () => false,
+        } as unknown as ManagedProcesses,
+        attempts: () => attempts,
+    };
+};
 
 test("the watcher cannot erase the land that caused a deferred install", async () => {
     const root = await workspace();
     await drifted(root);
-    const started: string[] = [];
-    const gate = createWorkspaceMaintenanceGate();
-    const turnLease = await gate.enterTurn();
     const changes = watch();
-    const deps = coordinator(root, started, gate);
+    const deps = createDependencyCoordinator({
+        workspace: { root },
+        processes: startsOnSecondTry().processes,
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        settleMs: 5,
+        pollMs: 1,
+    });
     const origins: string[] = [];
+    const failed: string[] = [];
     deps.subscribe(({ origin }) => origins.push(origin.kind));
-    const stop = deps.watch(changes.subscribe);
+    deps.subscribeFailures(({ dir }) => failed.push(dir));
+
     await deps.reconcileLand({
         kind: "land",
         agentId: "agent-1",
         branch: "agent/agent-1",
         repos: [{ repo: "app", from: "abc", dir: "app" }],
     });
+    await settle(() => failed.length > 0);
+    // The watcher sees the same manifest a moment later — an ordinary background observation of a project the
+    // land is still on the hook for.
+    const stop = deps.watch(changes.subscribe);
     changes.emit(["app/package.json"]);
-    turnLease.release();
     await settle(() => origins.length > 0);
     expect(origins).toEqual(["land"]);
     stop();
@@ -242,11 +237,17 @@ test("the watcher cannot erase the land that caused a deferred install", async (
 test("a newer land in the same project replaces the older cause", async () => {
     const root = await workspace();
     await drifted(root);
-    const gate = createWorkspaceMaintenanceGate();
-    const turnLease = await gate.enterTurn();
-    const deps = coordinator(root, [], gate);
+    const deps = createDependencyCoordinator({
+        workspace: { root },
+        processes: startsOnSecondTry().processes,
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        pollMs: 1,
+    });
     const agents: Array<string | undefined> = [];
+    const failed: string[] = [];
     deps.subscribe(({ origin }) => agents.push(origin.kind === "land" ? origin.agentId : undefined));
+    deps.subscribeFailures(({ dir }) => failed.push(dir));
     const land = (agentId: string) =>
         deps.reconcileLand({
             kind: "land",
@@ -256,8 +257,8 @@ test("a newer land in the same project replaces the older cause", async () => {
         });
 
     await land("agent-1");
+    await settle(() => failed.length > 0);
     await land("agent-2");
-    turnLease.release();
     await settle(() => agents.length > 0);
     expect(agents).toEqual(["agent-2"]);
 });

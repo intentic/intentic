@@ -560,7 +560,6 @@ const main = async (): Promise<void> => {
     const dependencyChecks: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
-        maintenance: services.workspaceMaintenance,
         logger: services.logger,
         verifyStore: services.verifyStore,
         activity: services.activity,

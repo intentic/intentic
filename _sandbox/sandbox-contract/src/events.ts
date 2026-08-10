@@ -298,16 +298,6 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * waiting for an answer), so it reads where it happened, under the answer that triggered it, and is drawn by
      * the client alone like every other mid-turn notice. */
     z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema), duringTurn: z.boolean().optional() }),
-    /* THIS TURN HAS NOT STARTED YET, and why — it is queued behind a dependency repair (the readers/writer
-     * lease in sandbox workspace/maintenance-gate.ts, which holds every turn out while the tree is rewritten
-     * and its checks run). Emitted only when the wait is long enough to notice, so an ordinary turn still opens
-     * on its first real frame.
-     *
-     * It exists because the wait is otherwise INVISIBLE: admission happens before any frame, so a message sent
-     * during a repair simply sat there, for the length of a settle window plus an install plus a project's
-     * checks, indistinguishable from a hang. The turn resumes by itself the moment the workspace frees up —
-     * this says so, and the client hangs its "watch the install" offer off the same line. */
-    z.object({ kind: z.literal("waiting"), on: z.literal("dependencies") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the

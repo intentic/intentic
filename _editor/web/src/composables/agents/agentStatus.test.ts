@@ -10,7 +10,6 @@ import {
     turnInFlight,
     unfinishedMark,
     unregistered,
-    waitingLine,
 } from "./agentStatus";
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
@@ -134,15 +133,6 @@ describe("unregistered", () => {
         expect(turnInFlight({ status: `starting`, attention: none })).toBe(true);
         expect(blocked({ status: `starting`, attention: none })).toBe(false);
         expect(awaitingUser({ status: `starting`, attention: none })).toBe(false);
-    });
-});
-
-// Why a sent turn has not started, in the words the chat's own notice uses — the two surfaces describe one wait.
-describe("waitingLine", () => {
-    it("names the dependency wait, and degrades an unknown reason to itself", () => {
-        expect(waitingLine(`dependencies`)).toBe(`Waiting for dependency setup`);
-        expect(waitingLine(`something new`)).toBe(`Waiting for something new`);
-        expect(waitingLine(undefined)).toBeUndefined();
     });
 });
 

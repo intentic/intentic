@@ -7,7 +7,6 @@ import type { Logger } from "pino";
 import { expect, test, vi } from "vitest";
 import type { ManagedProcesses, ProcessSpec } from "../processes/managed-processes.js";
 import type { DependencyLandOrigin } from "./dependency-origin.js";
-import { createWorkspaceMaintenanceGate, type WorkspaceMaintenanceGate } from "./maintenance-gate.js";
 import { checkCommandFor, type VerifyDeps } from "./verify-deps.js";
 import { fileVerifyStore } from "./verify-store.js";
 
@@ -64,16 +63,9 @@ const freshQueue = async (): Promise<typeof import("./verify-deps.js")> => {
     return import("./verify-deps.js");
 };
 
-const deps = (
-    root: string,
-    processes: ManagedProcesses,
-    events: WorkspaceEvent[],
-    feed: string[],
-    maintenance: WorkspaceMaintenanceGate = createWorkspaceMaintenanceGate(),
-): VerifyDeps => ({
+const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[], feed: string[]): VerifyDeps => ({
     workspace: { root },
     processes,
-    maintenance,
     logger: silent,
     verifyStore: fileVerifyStore(join(root, `${STATE_DIR}/verify.json`)),
     activity: {
@@ -179,23 +171,6 @@ test("an install that left the project unready stops at telling the owner — no
     expect(started).toEqual([]);
     expect(events).toEqual([]);
     expect(feed).toEqual(["deps.install_failed"]);
-});
-
-test("a live turn holds the check until its workspace lease is released", async () => {
-    const { queueVerify } = await freshQueue();
-    const root = await workspace();
-    await ready(root, { test: "vitest run" });
-    const events: WorkspaceEvent[] = [];
-    const feed: string[] = [];
-    const started: string[] = [];
-    const maintenance = createWorkspaceMaintenanceGate();
-    const turnLease = await maintenance.enterTurn();
-    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed, maintenance), context, ["app"]);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(started).toEqual([]);
-    turnLease.release();
-    await settle(() => events.length > 0);
-    expect(started).toEqual(["app--verify"]);
 });
 
 test("a pane that dies before reporting reads as red, never green", async () => {

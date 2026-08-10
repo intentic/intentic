@@ -5,7 +5,6 @@ import type { Logger } from "pino";
 import type { ActivityStore } from "../activity/activity-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import type { DependencyOrigin } from "./dependency-origin.js";
-import type { WorkspaceMaintenanceGate } from "./maintenance-gate.js";
 import { statePath } from "./state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
@@ -31,13 +30,11 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * answer is an activity entry saying so, not a guessed command. Scripts are a node-manifest concept, so a
  * python project reads as check-less for now — same honest entry.
  *
- * SCHEDULING RULES: verification runs under the gate's CHECKS mode (maintenance-gate.ts), never as a writer.
- * It starts only when the workspace is quiet — after the install that prompted it, and never over a live
- * turn's half-written edits — but once running it holds a reader slot, so a new turn walks straight in
- * instead of waiting minutes for a test suite it never asked for. The tree cannot be rewritten beneath the
- * check (installs are writers and queue), and a turn that lands mid-check can at worst stale an advisory
- * verdict. Origins stay attached to their own batches. One chain runs at a time across the daemon, so panels
- * and Activity tell one ordered story.
+ * SCHEDULING RULES: verification holds nothing back. It waits for the install that prompted it and then runs
+ * beside whatever else the workspace is doing — a turn started mid-check can at worst stale an advisory
+ * verdict, which costs a re-run, where making anyone wait on a test suite they never asked for costs minutes
+ * of their own work. Origins stay attached to their own batches. One chain runs at a time across the daemon,
+ * so panels and Activity tell one ordered story.
  *
  * THE EXIT CODE comes out of the panel by wrapping the command: tmux reports a pane's foreground command,
  * never an exit status, so the wrapped line tees output to a log (for the event's bounded tail) and drops
@@ -54,14 +51,13 @@ const LOG_TAIL = 2_000;
 // Polls of the panel sweep while an install or a check runs. Nothing here is latency-sensitive; the sweep
 // itself only samples every 2s.
 const POLL_MS = 2_000;
-// How long the verifier watches a run before stopping it. Releasing maintenance while the process still reads
-// the tree would break the lease's promise, so a timeout is visible in Activity and terminal output, then ends.
+// How long the verifier watches a run before stopping it. A check that never ends would hold the chain — and
+// every later verdict — forever, so a timeout is visible in Activity and terminal output, then ends.
 const WATCH_MAX_MS = 30 * 60_000;
 
 export interface VerifyDeps {
     readonly workspace: { readonly root: string };
     readonly processes: ManagedProcesses;
-    readonly maintenance: WorkspaceMaintenanceGate;
     readonly logger: Logger;
     readonly verifyStore: VerifyStore;
     readonly activity: Pick<ActivityStore, "append">;
@@ -257,10 +253,9 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
     }
 };
 
-/* Verification queues behind the install that prompted it and starts into a quiet workspace, but it never
- * holds a new turn out — the checks lease (maintenance-gate.ts) is what encodes that trade. Origins stay
- * attached to their own batches instead of a process-wide "latest cause wins" slot: a watcher observation
- * can no longer erase a land and prevent its failed check waking the fix automation. */
+/* Verification queues behind the install that prompted it and never holds a turn out. Origins stay attached to
+ * their own batches instead of a process-wide "latest cause wins" slot: a watcher observation can no longer
+ * erase a land and prevent its failed check waking the fix automation. */
 export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: readonly string[]): void => {
     if (dirs.length === 0) {
         return;
@@ -276,8 +271,7 @@ export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: re
             return;
         }
         running = true;
-        void next.deps.maintenance
-            .runChecks(() => runChain(next))
+        void runChain(next)
             .catch((error: unknown) => next.deps.logger.warn({ err: error }, "dependency verify: chain failed"))
             .finally(attempt);
     };

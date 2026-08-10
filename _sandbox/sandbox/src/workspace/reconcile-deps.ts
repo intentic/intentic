@@ -6,13 +6,13 @@ import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { jsonFile } from "../store/json-file.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
-import type { WorkspaceMaintenanceGate } from "./maintenance-gate.js";
 import { INSTALLABLE, installPanelKey, missingCount, type ProjectSetupStatus, startInstall, workspaceSetup } from "./workspace-setup.js";
 
 /* Dependency maintenance has one owner. Every path that discovers drift or requests first-time setup feeds this
- * coordinator; none starts a package manager itself. The coordinator reserves the workspace-wide maintenance
- * lease, waits until manifest writes have actually gone quiet, starts each visible install panel once, and
- * keeps the lease until those panels settle. New turns therefore cannot mount a dependency tree mid-rewrite.
+ * coordinator; none starts a package manager itself. The coordinator waits until manifest writes have actually
+ * gone quiet, starts each visible install panel once, and watches those panels until they settle. It runs
+ * BESIDE the agents: an install never holds a turn out, so a message sent into a repair starts immediately and
+ * the install proceeds in its own terminal where anyone can watch it.
  *
  * Explicit setup requests are durable until the project is ready. Drift needs no durable queue — it is a fact
  * on disk and the startup scan rediscovers it — but its in-memory origin is retained so a land remains the
@@ -91,7 +91,6 @@ export interface DependencyCoordinator {
 export interface DependencyCoordinatorDeps {
     readonly workspace: { readonly root: string };
     readonly processes: ManagedProcesses;
-    readonly maintenance: WorkspaceMaintenanceGate;
     readonly logger: Logger;
     readonly requestsPath: string;
     readonly settleMs?: number;
@@ -148,7 +147,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
         }
         const timedOut = keys.filter((key) => deps.processes.running(key));
         for (const key of timedOut) {
-            deps.logger.warn({ key }, "dependency install exceeded its watch window — stopping it before turns resume");
+            deps.logger.warn({ key }, "dependency install exceeded its watch window — stopping it");
             await deps.processes.stop(key);
         }
     };
@@ -235,17 +234,18 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             return;
         }
         scheduled = true;
-        void deps.maintenance
-            .runMaintenance(async () => {
-                while (dirty) {
-                    if (stopped) {
-                        break;
-                    }
-                    dirty = false;
-                    await waitForQuiet();
-                    await pass();
+        // One pass at a time, so two observations of the same drift cannot start the same install twice — but
+        // nothing outside this loop waits on it.
+        void (async () => {
+            while (dirty) {
+                if (stopped) {
+                    break;
                 }
-            })
+                dirty = false;
+                await waitForQuiet();
+                await pass();
+            }
+        })()
             .catch((error: unknown) => deps.logger.warn({ err: error }, "dependency coordinator: maintenance pass failed"))
             .finally(() => {
                 scheduled = false;
@@ -320,7 +320,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             stopped = false;
             const unsubscribe = subscribe((paths) => {
                 const manifestChanged = paths.length === 0 || paths.some((path) => isManifest(basename(path)));
-                // A manifest is the event that reserves maintenance. Once it does, every later workspace batch
+                // A manifest is the event that arms the settle window. Once it does, every later workspace batch
                 // extends the quiet window: a checkout often writes package.json early and source files for
                 // seconds afterwards, and installing two seconds after the manifest alone would still run in
                 // the middle of that checkout. Before a manifest, ordinary source edits remain free.

@@ -24,7 +24,6 @@ import {
     turnInFlight,
     unreadBadge,
     unregistered,
-    waitingLine,
 } from "../composables/agents/agentStatus";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
@@ -121,10 +120,6 @@ const closeHint = computed(() =>
         ? `Close — the turn keeps running, and its own card appears once the sandbox has filed it`
         : `Close — this never started, so there is no branch or transcript to keep`,
 );
-// Why a sent turn is sitting there, when the daemon has said (agentStatus.waitingLine). Carried by a
-// `starting` card, and by a registered card whose follow-up is queued behind a dependency repair — the roster
-// files a turn only on admission, so for the length of the queue this line is the send's only visible trace.
-const waiting = computed(() => waitingLine(props.agent.waitingFor));
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
@@ -528,16 +523,6 @@ const grab = (event: PointerEvent): void => {
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
                 <Icon name="repeat" class="shrink-0 text-2xs" :class="loopLine?.spin ? 'animate-spin' : ''" />
                 <span class="truncate">{{ loopLine?.text }}</span>
-            </p>
-
-            <!-- WHY A SENT TURN IS SITTING THERE. It takes the activity line's slot because it is the same kind
-                 of fact one step earlier — what this card is doing right now — and the two can never both apply:
-                 a turn that is queued has produced no activity to report, and one that is running is no longer
-                 queued. Muted rather than link-blue: nothing is happening yet, and the card should not spend the
-                 colour it uses for live work on a wait. What ENDS it is the turn's own first frame. -->
-            <p v-if="waiting !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs text-muted" :class="dense ? 'min-w-32 flex-1' : ''">
-                <Icon name="clock" class="shrink-0 text-2xs" />
-                <span class="truncate">{{ waiting }}</span>
             </p>
 
             <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a

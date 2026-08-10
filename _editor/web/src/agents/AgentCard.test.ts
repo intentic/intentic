@@ -206,11 +206,10 @@ it(`draws an agent whose turn is being resumed as work still in flight`, () => {
 /* THE CARD OF A TURN THAT HAS GONE AND HAS NOT BEEN FILED YET.
  *
  * It was drawn from the four identity fields alone, so the board showed a title under a spinner and nothing
- * else — no model, no elapsed, no reason — and the click that was supposed to open it took it off the board
- * instead. What is pinned here is the half the user reads: the card says it is starting, it says WHY it is
- * sitting there when the daemon has told us, its elapsed runs from the send, and the exit stays on it. Turn
- * admission queues behind dependency maintenance, so this state can last minutes rather than a blink. */
-const starting = (waitingFor?: string): FleetAgent => ({
+ * else — no model, no elapsed — and the click that was supposed to open it took it off the board instead. What
+ * is pinned here is the half the user reads: the card says it is starting, its elapsed runs from the send, and
+ * the exit stays on it. */
+const starting = (): FleetAgent => ({
     id: `a4`,
     status: `starting`,
     provider: `claude`,
@@ -223,7 +222,6 @@ const starting = (waitingFor?: string): FleetAgent => ({
     open: true,
     unread: false,
     unsent: false,
-    ...(waitingFor === undefined ? {} : { waitingFor }),
 });
 
 it(`draws a sent turn the daemon has not filed as work in flight, with what this browser knows`, () => {
@@ -232,15 +230,6 @@ it(`draws a sent turn the daemon has not filed as work in flight, with what this
     // The model it went out under, and an elapsed measured from the send — `now` is 2ms against a 1ms start.
     expect(card.textContent).toContain(`Claude Opus 5`);
     expect(card.textContent).toContain(`0s`);
-});
-
-it(`says what a queued turn is waiting for, in the words the chat uses for it`, () => {
-    expect(mount(starting(`dependencies`)).textContent).toContain(`Waiting for dependency setup`);
-});
-
-// Nothing to say when nothing said it: the line is the daemon's answer, not a placeholder for one.
-it(`leaves the line off a turn that is merely starting`, () => {
-    expect(mount(starting()).textContent).not.toContain(`Waiting for`);
 });
 
 /* The exit, on the state that most needs one. Its turn is genuinely running daemon-side, so the daemon has no

@@ -509,25 +509,6 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // nothing holds any more. (The daemon's fleet registry reads the same frame for how long the turn
             // was parked; see agents-registry.ts.)
             return step(resolveCard(state, event));
-        case `waiting`:
-            /* THE TURN HAS NOT STARTED — it is queued behind a dependency repair, which holds every turn out
-             * while the tree is rewritten (only the install itself; the checks that follow run beside turns).
-             *
-             * Prepended, like the rebase line above it and for the same reason: this describes the ground the
-             * turn starts from, so it belongs above the bubble the answer will be written into rather than
-             * appended under it. The offer is the same one the landed notice uses — it finds the running
-             * install among the live work terminals and retires itself when that ends, so a transcript
-             * replayed later reads as a plain sentence about a wait that is over.
-             *
-             * No "still waiting" upkeep: the line is true once and stays true, and the turn's own first frame
-             * is what tells anyone watching that the wait ended. */
-            return step(
-                prependTurnNotice(
-                    state,
-                    `Waiting for dependency setup to finish — this message starts on its own as soon as the workspace is ready.`,
-                    { noticeAction: `depsInstall` },
-                ),
-            );
         case `preamble`:
             /* WHAT THE DAEMON PUT IN FRONT OF THE MODEL, as one collapsed row carrying the exact words.
              *

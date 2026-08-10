@@ -192,7 +192,6 @@ import {
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/workspace-tree.js";
 import type { WorkspaceScopeDeps } from "./workspace/workspace-scope.js";
 import { statePath } from "./workspace/state-paths.js";
-import { createWorkspaceMaintenanceGate, type WorkspaceMaintenanceGate } from "./workspace/maintenance-gate.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/reconcile-deps.js";
 
 /* The daemon's collaborators, wired once at boot and handed to the route factories — the injection seam the
@@ -232,9 +231,6 @@ export interface Services {
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
     readonly processes: ManagedProcesses;
-    // One admission boundary shared by turns and jobs that rewrite/read the dependency tree. A maintenance
-    // job queued here drains existing turns and prevents a new one mounting a half-rewritten tree.
-    readonly workspaceMaintenance: WorkspaceMaintenanceGate;
     // The single owner of dependency status, durable setup requests, watcher reconciliation and installs.
     readonly dependencies: DependencyCoordinator;
     // The extension backend host's supervisor: one separate node process running every enabled extension's
@@ -729,11 +725,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const terminalRun = createTerminalRunner();
     const acpConnections = createAcpConnections(logger, terminalRun);
     const processes = createManagedProcesses();
-    const workspaceMaintenance = createWorkspaceMaintenanceGate();
     const dependencies = createDependencyCoordinator({
         workspace,
         processes,
-        maintenance: workspaceMaintenance,
         logger,
         requestsPath: join(config.historyRoot, "dependency-requests.json"),
     });
@@ -849,7 +843,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         announcer: createAnnouncer(config, logger),
         workspace,
         processes,
-        workspaceMaintenance,
         dependencies,
         extensionBackend: createExtensionBackend(
             () => {

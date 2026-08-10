@@ -198,17 +198,6 @@ export class Conversation {
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
     readonly turnStartedAt = ref<number | undefined>();
 
-    /* WHAT A SENT TURN IS QUEUED BEHIND, from the daemon's `waiting` frame — dependency maintenance, which holds
-     * every turn out while it rewrites the tree and runs the project's own checks.
-     *
-     * The reducer already writes this into the transcript as a notice, and that is the right place for someone
-     * READING the conversation. It is held here as well because the BOARD needs it and cannot get it from
-     * anywhere else: a queued turn has no registry entry yet (admission happens before the daemon files the
-     * agent), so its card is drawn from this conversation alone — and a spinner with no elapsed and no reason is
-     * indistinguishable from a card that is broken. Retired against any other frame, exactly like
-     * `providerRetry` above and for the same reason: the wait is over the moment anything else arrives. */
-    readonly waitingFor = ref<string | undefined>();
-
     // This conversation's turn selection, seeded from the module defaults at construction. All of it — provider
     // and account included — is switchable mid-chat (the composer binds them); send() decides whether the
     // session above still matches (resume) or a fresh one starts seeded with the transcript so far.
@@ -1292,11 +1281,6 @@ export class Conversation {
         if (event.kind !== `provider_retry`) {
             this.providerRetry.value = undefined;
         }
-        /* And the same reading for the queue this turn was admitted from: the `waiting` frame says the turn has
-         * not started, so the very next frame — whatever it is — says it has. Retired against any other frame
-         * for the same reason the retry is, and set here rather than off an effect because the notice the
-         * reducer writes is a transcript row: what the BOARD needs is the live fact (see `waitingFor`). */
-        this.waitingFor.value = event.kind === `waiting` ? event.on : undefined;
         for (const effect of effects) {
             this.applyEffect(effect, turn);
         }

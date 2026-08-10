@@ -416,16 +416,6 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
 export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
     !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
 
-/* WHY A SENT TURN HAS NOT STARTED — the card's line for FleetAgent.waitingFor (the daemon's `waiting` frame,
- * held on the conversation because a queued turn has no registry entry to carry it).
- *
- * The words are the chat notice's own, shortened to a line: the two surfaces are describing the same wait, and a
- * board that called it something else would read as a different problem. An unknown reason degrades to its own
- * name rather than disappearing — a wait nobody can name is still the answer to "why is this card doing
- * nothing", which is the question the blank spinner could not answer at all. */
-export const waitingLine = (waitingFor: string | undefined): string | undefined =>
-    waitingFor === undefined ? undefined : waitingFor === `dependencies` ? `Waiting for dependency setup` : `Waiting for ${waitingFor}`;
-
 /* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
  * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
  * as it waits on them. So the children lead, and what the parent was doing trails. */

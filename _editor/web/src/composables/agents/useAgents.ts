@@ -233,13 +233,6 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     // so it is false for every agent this window isn't holding — including one being written to on another
     // device, whose composer this browser has no account of.
     readonly unsent: boolean;
-    // What a SENT turn is queued behind, when the daemon has said (Conversation.waitingFor) — dependency
-    // maintenance holds every turn out while it rewrites the tree. Set on a `starting` card, and on a
-    // REGISTERED card whose open conversation is queued: the roster only learns of a turn once it is admitted,
-    // so for the length of the queue the entry still wears the last turn's ending — which is exactly when the
-    // card owes the user a reason it is sitting there. Written like the AgentSummary fields beside it in
-    // `fleet`, which is why it is not readonly.
-    waitingFor?: string;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
@@ -372,14 +365,6 @@ const fleet = computed<FleetAgent[]>(() => {
                 if (conversation.costUsd.value > 0) {
                     draft.costUsd = conversation.costUsd.value;
                 }
-                /* WHY IT IS SITTING THERE, when the daemon has told us. Turn admission queues behind dependency
-                 * maintenance, so a message sent while the workspace is being repaired waits — minutes, if the
-                 * repair is waiting on a long turn of its own to finish first. The chat says so in a notice; the
-                 * board could not, and a spinner with no elapsed and no reason is exactly the card the user
-                 * cannot tell apart from a broken one. */
-                if (conversation.waitingFor.value !== undefined) {
-                    draft.waitingFor = conversation.waitingFor.value;
-                }
             }
             return draft;
         });
@@ -403,39 +388,13 @@ const fleet = computed<FleetAgent[]>(() => {
             held.push({ ...agent, open: true, unsent: true });
         }
     }
-    // This window's account of each registered conversation, for the one fact the roster cannot hold yet: a
-    // queued turn (Conversation.waitingFor, the daemon's own `waiting` frame).
-    const conversationById = new Map(conversations.value.map((conversation) => [conversation.conversationId, conversation]));
     return [
-        ...registry.value.map((agent): FleetAgent => {
-            const merged: FleetAgent = {
-                ...agent,
-                open: openIds.has(agent.id),
-                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
-                unsent: unsentIds.has(agent.id),
-            };
-            /* A SENT TURN THE ROSTER HAS NOT CAUGHT UP WITH. The registry files a turn only once it clears
-             * workspace admission, so a message sent into a dependency repair leaves the entry wearing the
-             * LAST turn's ending — an "Error" card that stayed in Attention for the length of an install,
-             * with the user's follow-up invisibly queued behind it, read as the board ignoring their send.
-             * The turn is factually live (its run and stream exist; only the filing lags), so the card says
-             * what a just-admitted turn's card would: running, no stale attention flags, elapsed from the
-             * send, and the waiting line for why nothing is streaming yet. The next roster frame takes over
-             * the moment the turn is admitted — the same handoff every `starting` draft already makes. */
-            const conversation = conversationById.get(agent.id);
-            const waitingFor = conversation?.waitingFor.value;
-            if (conversation === undefined || waitingFor === undefined || turnInFlight(agent)) {
-                return merged;
-            }
-            return {
-                ...merged,
-                status: `running`,
-                attention: { plan: false, question: false, permission: false, conflict: false },
-                unread: false,
-                waitingFor,
-                ...(conversation.turnStartedAt.value !== undefined ? { startedAt: conversation.turnStartedAt.value } : {}),
-            };
-        }),
+        ...registry.value.map((agent): FleetAgent => ({
+            ...agent,
+            open: openIds.has(agent.id),
+            unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+            unsent: unsentIds.has(agent.id),
+        })),
         ...held,
         ...drafts,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);

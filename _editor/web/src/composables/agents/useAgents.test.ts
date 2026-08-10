@@ -323,9 +323,7 @@ describe("draft cards", () => {
     /* A SENT TURN THE DAEMON HAS NOT FILED YET is `starting`, and the card says what this browser knows about it.
      *
      * It used to report the wire's own `running` and carry the four identity fields alone, so the board drew a
-     * title under a spinner and nothing else — no model, no elapsed, no reason — for as long as the wait lasted.
-     * That wait is normally a blink and is not always one: turn admission queues behind dependency maintenance,
-     * so a message sent during a repair can sit there for minutes looking exactly like a broken card. */
+     * title under a spinner and nothing else — no model, no elapsed — for as long as the filing took. */
     it("cards a sent turn the fleet has not registered as starting, with the settings and elapsed it knows", () => {
         const conversation = new Conversation(`sent`);
         conversation.model.value = `claude-opus-5`;
@@ -336,45 +334,6 @@ describe("draft cards", () => {
         expect(
             useAgents().lanes.value.active.map((card) => ({ id: card.id, status: card.status, model: card.model, startedAt: card.startedAt })),
         ).toEqual([{ id: `sent`, status: `starting`, model: `claude-opus-5`, startedAt: 4_000 }]);
-    });
-
-    // ...and why it is sitting there, when the daemon has said so. The chat carries the same sentence as a
-    // notice; the board is the surface that had no way to say it at all.
-    it("says on the card what a queued turn is waiting for", () => {
-        const conversation = new Conversation(`sent`);
-        conversation.streaming.value = true;
-        conversation.waitingFor.value = `dependencies`;
-        useChat().conversations.value = [...useChat().conversations.value, conversation];
-
-        expect(useAgents().lanes.value.active.map((card) => card.waitingFor)).toEqual([`dependencies`]);
-    });
-
-    /* A FOLLOW-UP QUEUED ON A REGISTERED AGENT — the same wait, seen from a card the roster DOES know. The
-     * registry files a turn only once it clears workspace admission, so a message sent into a dependency
-     * repair left the entry wearing the LAST turn's ending: the reported card sat in Attention as "Error" for
-     * the length of an install, its send invisible. The conversation's `waiting` frame is the proof a turn is
-     * live, and for as long as it stands the card reads as a just-admitted one — running, in Active, with the
-     * reason on it — then hands back to the roster's own account the moment the wait ends. */
-    it("moves a registered card whose follow-up is queued into Active, saying what it waits for", () => {
-        const conversation = new Conversation(`a1`);
-        useChat().conversations.value = [...useChat().conversations.value, conversation];
-        setAgents([{ ...registered(`a1`), status: `error` }], 1);
-        conversation.turnStartedAt.value = 4_000;
-        conversation.waitingFor.value = `dependencies`;
-
-        expect(useAgents().lanes.value.attention).toEqual([]);
-        expect(
-            useAgents().lanes.value.active.map((card) => ({
-                id: card.id,
-                status: card.status,
-                waitingFor: card.waitingFor,
-                startedAt: card.startedAt,
-            })),
-        ).toEqual([{ id: `a1`, status: `running`, waitingFor: `dependencies`, startedAt: 4_000 }]);
-
-        conversation.waitingFor.value = undefined;
-
-        expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `error` }]);
     });
 
     /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD — the reported bug, in one case.

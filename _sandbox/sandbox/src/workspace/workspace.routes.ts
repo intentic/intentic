@@ -238,9 +238,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             ),
         })),
         // Install the named projects. This UI request joins the same durable coordinator queue as an agent's
-        // request; starting a panel directly here would bypass the workspace maintenance lease and could
-        // rewrite the dependency tree under an active turn. The client list is still only a pre-upload guess,
-        // so the coordinator re-resolves it and an already-ready project remains a silent no-op.
+        // request; starting a panel directly here would bypass the one owner of installs and could run two
+        // package managers over the same tree. The client list is still only a pre-upload guess, so the
+        // coordinator re-resolves it and an already-ready project remains a silent no-op.
         install: i.install.handler(async ({ input }) => {
             const result = await services.dependencies.requestInstall(input.dirs, { kind: "request", title: "Workspace import" });
             return { queued: [...result.queued] };
