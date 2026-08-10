@@ -61,9 +61,12 @@ const toggle = (): void => {
 const readAccentSetting = (): string => {
     try {
         const stored = localStorage.getItem(ACCENT_STORAGE_KEY);
-        // Anything that isn't a colour — a hand-edited value, a leftover from another app — reads as the default.
-        if (stored !== null && /^#[0-9a-fA-F]{6}$/.test(stored)) {
-            return stored;
+        // Through the same door a fresh pick goes through: anything that isn't a colour — a hand-edited value, a
+        // leftover from another app — comes back as the default, and anything off the ladder is snapped onto it.
+        // So `accent` holds one canonical spelling of a legal accent, whatever is in storage, and the picker can
+        // tell which of its swatches is the live one by comparing strings.
+        if (stored !== null) {
+            return normalizeAccent(stored);
         }
     } catch {
         // Storage may be unavailable (private mode); the default accent stands.

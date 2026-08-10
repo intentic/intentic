@@ -169,9 +169,8 @@ export { type Device, useDevice } from "./composables/useDevice.js";
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
-// The accent picker, and the colour maths behind it. The app wears ONE colour that the reader chooses, and
-// these two are the whole of it: the control that picks it, and the module that turns it into the ramps every
-// surface, border and link resolves through (see themeColor.ts).
+// The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns
+// the picked colour into the ramps every surface, border and link resolves through) — a caller only ever
+// needs the picker and `useTheme().accent`.
 export { default as ColorPicker } from "./components/ColorPicker.vue";
-export { type Accent, accentHex, DEFAULT_ACCENT, normalizeAccent, readAccent, themeCss, themeVars } from "./themeColor.js";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";

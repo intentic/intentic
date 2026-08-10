@@ -105,3 +105,12 @@ export const hexToOklch = (hex: string): Oklch | undefined => {
     const rgb = hexToRgb(hex);
     return rgb === undefined ? undefined : rgbToOklch(rgb);
 };
+
+/**
+ * The one spelling of a colour — `#rrggbb`, lowercase — so that two of them can be compared as strings.
+ * Byte-exact: this expands and lowercases, it does not go near a colour space, so nothing rounds.
+ */
+export const canonicalHex = (hex: string): string | undefined => {
+    const rgb = hexToRgb(hex);
+    return rgb === undefined ? undefined : rgbToHex(rgb);
+};

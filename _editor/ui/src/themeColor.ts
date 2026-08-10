@@ -36,10 +36,15 @@
  * holding lightness and hue and spending chroma — exactly what oklch.ts does in TypeScript, so the colour the
  * page paints and the colour computed here for a swatch agree. */
 
-import { clampBetween, hexToOklch, maxChroma, oklchToHex } from "./oklch.js";
+import { canonicalHex, clampBetween, hexToOklch, maxChroma, oklchToHex } from "./oklch.js";
 
 /** Where the accent itself sits on the ladder — step 600, the shade the picker shows and stores. */
 const ACCENT_LIGHTNESS = 0.67;
+
+/* How far off that a colour may read and still count as being ON the ladder. Writing a colour as eight bits a
+ * channel moves its lightness by up to ~0.002, so this is the rounding and nothing more — see normalizeAccent,
+ * which is the reason a tolerance exists at all. */
+const LADDER_TOLERANCE = 0.005;
 
 /* The chroma step 600 carries in the ramp this file's ladders come from. Everything is scaled against it, so a
  * colour picked at this chroma reproduces the original ramp and one at half of it halves the app's colour. */
@@ -88,7 +93,7 @@ const NEUTRAL_LADDER: readonly (readonly [string, number, number])[] = [
     [`950`, 0.16, 0.007],
 ];
 
-/** Hue and saturation of a picked accent, 0–360 and 0–1 — what the two rails of the picker move. */
+/** Hue and saturation of an accent, 0–360 and 0–1 — how the picker's swatches are stated. */
 export interface Accent {
     readonly hue: number;
     /** Fraction of the chroma sRGB can hold at this hue and the accent lightness, so full means full HERE. */
@@ -97,18 +102,15 @@ export interface Accent {
 
 /**
  * The hex for a hue and a saturation. Saturation is a fraction of what the hue can actually hold rather than an
- * absolute chroma, because the two differ by nearly threefold across the wheel — an absolute scale would leave
- * the top third of the rail doing nothing at all on a blue while a yellow ran out long before the end.
+ * absolute chroma, because the two differ by nearly threefold across the wheel — one absolute figure across a
+ * set of colours would leave the blues washed out and the magentas shouting.
  */
 export const accentHex = ({ hue, saturation }: Accent): string =>
     oklchToHex({ L: ACCENT_LIGHTNESS, C: maxChroma(ACCENT_LIGHTNESS, hue) * Math.min(1, Math.max(0, saturation)), h: hue });
 
-/**
- * Any hex read back as the two rails' positions. A colour from outside — pasted, or off a brand's own site —
- * keeps its hue and its saturation and gives up its lightness to the ladder, which is why the picker writes
- * back what it read: the swatch is then the accent the app will actually wear, with nothing left implicit.
- */
-export const readAccent = (hex: string): Accent | undefined => {
+/* Any hex read back as a hue and a saturation. A colour from outside — a value stored by an older build, or
+ * one handed in by a caller — keeps both and gives up its lightness to the ladder. */
+const readAccent = (hex: string): Accent | undefined => {
     const colour = hexToOklch(hex);
     if (colour === undefined) {
         return undefined;
@@ -117,8 +119,26 @@ export const readAccent = (hex: string): Accent | undefined => {
     return { hue: colour.h, saturation: ceiling === 0 ? 0 : Math.min(1, colour.C / ceiling) };
 };
 
-/** A hex snapped onto the accent's own lightness — what an arbitrary colour becomes when it is picked. */
+/**
+ * A hex snapped onto the accent's own lightness — what an arbitrary colour becomes when it is chosen, and the
+ * canonical `#rrggbb` spelling of one that was already legal.
+ *
+ * A COLOUR ALREADY ON THE LADDER IS RETURNED BYTE FOR BYTE, and that early exit is load-bearing rather than an
+ * optimisation. Decoding a colour and rebuilding it moves a channel by one, and not randomly: `saturation`
+ * above is a FRACTION of the chroma available at whatever hue was just read back, so a colour whose hue shifts
+ * by a rounding step is rebuilt a shade duller — and a shade duller again the next time. Left in, that ratchet
+ * walks the stored accent away from the swatch it was picked from (three of the thirteen moved on the first
+ * pass, one of them every pass), and a picker whose swatches are compared by value then shows nothing as
+ * chosen. Exiting early makes this a projection: everything it returns is a fixed point of itself.
+ */
 export const normalizeAccent = (hex: string): string => {
+    const colour = hexToOklch(hex);
+    if (colour === undefined) {
+        return DEFAULT_ACCENT;
+    }
+    if (Math.abs(colour.L - ACCENT_LIGHTNESS) <= LADDER_TOLERANCE) {
+        return canonicalHex(hex) ?? DEFAULT_ACCENT;
+    }
     const accent = readAccent(hex);
     return accent === undefined ? DEFAULT_ACCENT : accentHex(accent);
 };
