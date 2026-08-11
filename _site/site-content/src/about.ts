@@ -81,14 +81,14 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "It builds itself",
-        body: "Agents built most of intentic in public, one reviewed commit at a time.",
+        body: "Agents built most of intentic in public.",
         stat: "commits",
         href: `${githubUrl}/commits/main`,
         linkLabel: "Read the commit log",
     },
     {
-        title: "Honest about its age",
-        body: "No case studies, no logo wall. It's young, and you get a real sandbox, not a trial.",
+        title: "We are transparent",
+        body: "As much as we possibly can.",
     },
 ];
 
