@@ -12,6 +12,7 @@ import { workspacePaths } from "../workspace/workspace.js";
 import type { IsolatedAgent } from "./agents-store.js";
 import { landAgent } from "./land.js";
 import { createLandStandings } from "./standing.js";
+import { syncConversation } from "./sync.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 const exec = promisify(execFile);
@@ -174,6 +175,50 @@ test("a refused land arms the conflict against the same shas", async () => {
 
     expect(await standings.refresh([isolatedAgent(refused.repos, { conflicts: refused.conflicts })])).toBe(true);
     expect(standings.of("c1")).toBe("conflict");
+});
+
+/* COMMITS ARE NOT CONTENT — the shape that had a finished card offering "Land now" over a workspace holding
+ * every byte of the work.
+ *
+ * The user commits what the agent landed, so the next turn rebases the branch onto that commit. The agent's own
+ * work commit is dropped (it is upstream now), but commits are dropped ONE BY ONE and only when each is empty on
+ * its own — so a pair that cancels out (a generated file written one way and then back) survives the replay. The
+ * branch ends up two commits ahead of a main tree that already has everything, and a standing read off the shas
+ * called that outstanding for good: the button applied an empty patch, and the review panel beside it listed
+ * nothing to explain the offer. */
+test("a branch ahead by commits that cancel out is landed, not ready", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(landed.landed).toBe(true);
+
+    // Two more commits on the branch, cancelling each other out: a generated file regenerated, then put back.
+    await writeFile(join(conversation.cwd, "lock.json"), "regenerated\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "chore: regenerate the lock");
+    await rm(join(conversation.cwd, "lock.json"));
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "chore: put the lock back");
+
+    // The user does what the card asks and commits the landed work. The next turn's sync then puts the branch on
+    // that commit, which drops the agent's own work commit (upstream now) and keeps the two that cancel out.
+    await sh(work, "add", "-A");
+    await commit(work, "user reviews and commits");
+    await syncConversation(worktrees, "c1", conversation.repos, "Creator pool");
+    expect(await sh(conversation.cwd, "rev-parse", "HEAD^^")).toBe(await sh(work, "rev-parse", "HEAD"));
+
+    // Two commits ahead of a main tree holding every byte of it. Nothing to land, so nothing is offered — and
+    // the entry still carries the landedTip that rebase orphaned, which is the anchor this used to be read from.
+    const rebased = isolatedAgent(landed.repos);
+    expect(await standingOf(worktrees, rebased)).toBe("landed");
+
+    // And the moment the branch carries something real again, the offer comes back.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three MORE\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "more agent work");
+    expect(await standingOf(worktrees, rebased)).toBe("ready");
 });
 
 test("forget drops an agent's standing, and an unprobed one reads idle", async () => {

@@ -1,7 +1,7 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../git/changes.js";
 import type { IsolatedAgent, PersistedAgent } from "./agents-store.js";
-import { anchorOf } from "./agent-changes.js";
+import { anchorOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "./agent-refs.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -21,11 +21,11 @@ import type { AgentWorktrees } from "./worktrees.js";
  * `interrupted` are events, not states of the world, and nothing but the entry remembers them.
  *
  * WHAT IS DERIVED, in one rule: an agent is `conflict` or `ready` exactly while it has an OUTSTANDING delta —
- * something at its tip that the anchor does not cover — and `conflict` only if the last land refused. Which
- * makes the stale-conflict case impossible rather than merely fixed: a conflict verdict has a premise, and once
- * the delta is empty the premise is gone whatever the report says. The anchor is land's own (anchorOf), so this
- * cannot drift from what a land would actually do — the same rung, asked as a question instead of taken as an
- * instruction.
+ * content at its tip that the anchor does not cover, commits being no evidence of content on their own (see
+ * carriesContent) — and `conflict` only if the last land refused. Which makes the stale-conflict case impossible
+ * rather than merely fixed: a conflict verdict has a premise, and once the delta is empty the premise is gone
+ * whatever the report says. The anchor is land's own (anchorOf), so this cannot drift from what a land would
+ * actually do — the same rung, asked as a question instead of taken as an instruction.
  */
 
 // `landed` and `idle` are the two shapes of "nothing outstanding": work that reached the main tree, and an
@@ -134,7 +134,14 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                     // leaves an entry that never landed anything and a branch that is nonetheless done.
                     produced ||= tip !== composed.base;
                     const main = worktrees.mainDir(composed.repo);
-                    if ((await anchorOf(main, main, tip, composed.landedTip, composed.base, git)) !== tip) {
+                    /* Ahead of the anchor AND carrying something. The second half is not a refinement of the
+                     * first: a branch can sit two commits ahead of a main tree that holds every byte of it,
+                     * which is what a rebase leaves behind whenever it drops a delta already upstream and
+                     * keeps a pair of commits that cancel out (see carriesContent). Asked as a sha comparison
+                     * alone, that card offered "Land now" over an empty patch — a press that applied nothing,
+                     * on work the user had already committed, with nothing on screen able to explain it. */
+                    const anchor = await anchorOf(main, main, tip, composed.landedTip, composed.base, git);
+                    if (anchor !== tip && (await carriesContent(main, anchor, tip, git))) {
                         outstanding = true;
                     }
                 }

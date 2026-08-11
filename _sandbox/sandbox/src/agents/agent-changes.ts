@@ -83,6 +83,37 @@ export const anchorOf = async (
     return merged === "" ? base : merged;
 };
 
+/* DOES A SPAN CARRY ANYTHING — the question two shas cannot answer, and the one every "is there work
+ * outstanding?" reading actually means to ask.
+ *
+ * A tip that sits ahead of its anchor LOOKS like outstanding work, and normally is. But commits and content
+ * are different things, and a rebase is what pulls them apart: replaying a branch onto a main line that has
+ * absorbed its work drops the commits that come out empty ONE BY ONE, so a pair that cancels out — a
+ * generated lock file written one way and then back the other — survives as two commits spanning nothing.
+ * The branch is then two commits "ahead" of a main tree holding every byte of it.
+ *
+ * Read off the shas alone, that branch offered "Land now" for good: the press had nothing to apply, and only
+ * the land's own bookkeeping (land.ts, the empty-patch case) could retire it — which is exactly the pass a
+ * turn ending on a dismissed question never reaches. The land has always asked the real question, by building
+ * the patch and finding it empty; this asks it for the price of one ref read, which is what makes it
+ * affordable on a whole-roster probe.
+ *
+ * TREES, not a diff: two commits differ in content precisely when their trees differ, git's trees being
+ * canonical — so this is the same answer `git diff` would give, without walking anything to get it. */
+export const carriesContent = async (dir: string, from: string, tip: string, git: GitRunner = defaultGit): Promise<boolean> => {
+    if (from === tip) {
+        return false;
+    }
+    try {
+        const [fromTree, tipTree] = (await git(dir, ["rev-parse", `${from}^{tree}`, `${tip}^{tree}`])).stdout.trim().split("\n");
+        return fromTree === undefined || tipTree === undefined || fromTree !== tipTree;
+    } catch {
+        // A sha that will not resolve is not an emptiness claim — answer the way the bare comparison did, and
+        // let the land itself report whatever is really wrong with the ref.
+        return true;
+    }
+};
+
 /* ONE repo of one agent's composition, in the GitChange shape the Changes panel already renders.
  *
  * The checkout when it is on disk, the two refs out of the main repo when it is not — decided per repo, NOT by

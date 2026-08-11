@@ -112,6 +112,39 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     }
 }
 
+/* THE BOOKS, SETTLED ON A TURN NOBODY LET FINISH — everything the end-of-turn pass does EXCEPT touch the main
+ * tree.
+ *
+ * A dismissed question ends its turn by aborting it (the reply handler below), as does the user's own Stop, and
+ * an aborted turn skipped that pass outright. Skipping the LAND is the point and stays — half-finished work does
+ * not belong in someone's workspace. But landing is not all that pass does: it is also the only moment a
+ * conversation's bookkeeping is reconciled with the world. The worktree's remainder is preserved on the branch,
+ * the card's diffstat is refreshed, and a span the main tree has since taken by another road — the user
+ * committed what was landed, an agent put its work on the main line itself — is finally marked accounted-for.
+ *
+ * Unrun, that reconciliation has no other moment: it waits for the next turn, and a conversation the user has
+ * finished with never has one. A card sat in Finished offering to land work the workspace already held, and the
+ * one press that would have cleared it was the one press that could not be explained. So the pass still runs,
+ * in `measure` — the mode that means settle the books, the main tree is not yours to touch. Waving a question
+ * away still cannot put a line of code in the user's workspace.
+ *
+ * Never fatal: this runs on the way out of a turn that has already ended, and a git fault here must not become
+ * the ending the user reads. */
+const settleLandBooks = async (services: Services, conversationId: string): Promise<void> => {
+    const entry = services.agents.entry(conversationId);
+    if (entry === undefined || !isIsolated(entry)) {
+        return;
+    }
+    try {
+        const measured = await landAgent(services.agentWorktrees, entry, "measure");
+        if (measured.changed) {
+            await services.agents.recordLanded(conversationId, measured);
+        }
+    } catch (error) {
+        services.logger.warn({ err: error, id: conversationId }, "agents: settling an ended turn's land books failed");
+    }
+};
+
 // The fleet-registry lifecycle around every conversation turn. `conversationId` is the boundary: workspace and
 // isolated conversations both acquire the mutex, publish every frame and finish in a finally. `isolated` only
 // chooses the placement-specific worktree/land flow inside that shared lifecycle.
@@ -223,6 +256,9 @@ async function* runConversationTurn(
     let span: WorkspaceEvent["repos"] = [];
     let branch = "";
     let failed = false;
+    // Whether the end-of-turn pass below actually ran. The finally settles the books itself when it did not —
+    // which is every turn a person ended early (see settleLandBooks).
+    let reconciled = false;
     try {
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
@@ -421,6 +457,7 @@ async function* runConversationTurn(
                 : undefined;
             const decided = landingVerdict(rules, { repos: span.map(({ repo }) => repo), paths }, input.autoLand ?? finished.autoLand);
             const landed = await landAgent(services.agentWorktrees, finished, decided.land ? "check" : "measure");
+            reconciled = true;
             /* A rule that decided a card's fate did something, and the settings list says so. The per-agent
              * override reports no rule, because in that case none decided.
              *
@@ -536,6 +573,16 @@ async function* runConversationTurn(
         }
         throw error;
     } finally {
+        /* A turn a PERSON ended — a dismissed question, their own Stop — never reached the pass above, so its
+         * books are settled here instead: on the branch only, nothing into the main tree (settleLandBooks).
+         * Before `finish`, which re-derives the standing this may just have moved.
+         *
+         * An ERRORED turn is deliberately left alone. Its worktree is mid-thought and its own failure is the
+         * thing the card has to say; the next clean turn reconciles everything, and until then the card reads
+         * `error` rather than any standing this could change. */
+        if (!reconciled && !failed) {
+            await settleLandBooks(services, conversationId);
+        }
         await services.agents.finish(conversationId, Date.now());
         // Once per turn, whatever the outcome — the errored and conflicted ones are the ones most worth a
         // second pair of eyes. An empty span means the worktree never came up, so there is nothing to review.
