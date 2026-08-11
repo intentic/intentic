@@ -4,9 +4,14 @@
 name: "Intentic Agent Gate"
 description: "Run your intentic agent from CI — block on an agent-judged release gate, or wake the agent with the event payload"
 author: "intentic"
+# The Marketplace tile, and the ONLY logo an unpublished-by-a-verified-creator action gets: GitHub renders a
+# glyph from its own fixed set over one of eight colours, and ignores any image. A verified creator's listing
+# shows the publisher's avatar instead (docker/login-action declares an anchor and shows the Docker whale) —
+# so the org's real mark is unreachable until intentic is verified. `orange` is the nearest of the eight to
+# that mark's #FE6A00, which is what makes the tile read as ours at a glance; `shield` is what a gate does.
 branding:
   icon: "shield"
-  color: "purple"
+  color: "orange"
 inputs:
   url:
     description: >-
