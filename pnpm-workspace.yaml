@@ -67,11 +67,17 @@ allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
   "@resvg/resvg-js": true
+  # vsce's package-signing helper; its install script stages the platform signing binary vsce runs at
+  # publish time.
+  "@vscode/vsce-sign": true
   baileys: true
   bun: true
   core-js: false
   cpu-features: false
   esbuild: true
+  # vsce's OS credential store, used only by interactive `vsce login`; CI publishes with VSCE_PAT in the
+  # environment, so the native binding is never loaded.
+  keytar: false
   lmdb: false
   msgpackr-extract: false
   node-pty: true
@@ -151,11 +157,11 @@ catalog:
   "@types/pg": 8.20.0
   "@types/ssh2": 1.15.5
   "@types/tar-stream": 3.1.4
-  "@types/vscode": 1.96.0
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   "@vitejs/plugin-vue": 6.0.8
+  "@vscode/vsce": 3.9.2
   "@vue-flow/core": 1.48.2
   "@xterm/addon-fit": 0.11.0
   "@xterm/addon-serialize": 0.14.0
@@ -194,6 +200,7 @@ catalog:
   mermaid: 11.16.0
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
+  ovsx: 1.1.1
   oxlint: 1.76.0
   pg: 8.22.0
   pino: 10.3.1

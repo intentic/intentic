@@ -342,7 +342,9 @@ jobs:
   # The groups deliberately OVERLAP on shared packages (_sandbox contracts, _deploy resources, _tools), because turbo's `pkg...` includes a package's dependencies: a
   # shared lib break fails every group that depends on it, which is the correct blast radius. The duplicated
   # work is a turbo cache replay off the shared /ci-cache dir, not a second build.
-  # The OSS core: every npm-published package plus the sandbox image's tree. Gates `images` and `release`.
+  # The OSS core: every npm-published package plus the sandbox image's tree — and the VSCode extension,
+  # named bare `intentic` (a marketplace extension ID is `publisher.name` and cannot carry an npm scope),
+  # so it needs its own filter or nothing checks it.
   #
   # The two desktop packages are subtracted rather than left to fall in with the rest: the launcher UI is the
   # desktop group's leaf, desktop-check owns it, and leaving it here would mean a vue-tsc error in a Tauri
@@ -351,7 +353,7 @@ jobs:
     needs: preflight
     uses: ./.github/workflows/verify.yml
     with:
-      filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke"
+      filters: "--filter=@intentic/*... --filter=intentic... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke"
     secrets: inherit
 
   # The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which

@@ -1,4 +1,4 @@
-# @intentic/vscode
+# intentic (the VSCode extension)
 
 The **VSCode extension** — intentic's chat, agents board, and AI accounts inside the editor, over an engine
 running in its **local profile** on the user's own machine. No sandbox, no platform, no sign-in: the person
@@ -27,11 +27,28 @@ Three existing pieces, hosted rather than rebuilt:
 
 The engine command is overridable (`intentic.engine.command` + `intentic.engine.cwd`) so a checkout runs
 engine source (`["pnpm", "exec", "tsx", "src/main.ts"]` from `_sandbox/sandbox`) without any packaging step.
-The shipped default is the engine bundle at `engine/main.cjs`, assembled at release (not yet wired).
+The shipped default is the assembled engine tree at `engine/` (entry `engine/dist/main.js`).
 
 - `pnpm build` — bundle the extension host code (esbuild → `dist/extension.cjs`) and typecheck.
 - `pnpm build:app` — copy the web build into `media/app` (build `@intentic-app/web` first).
 - `pnpm test` — the pure cores: webview document derivation, the engine env contract, JSONC.
+
+## Releasing
+
+`.github/workflows/vscode-publish.yml` runs on every `v*` tag semantic-release pushes — the same trigger as
+the npm publish. It calls `_tools/scripts/publish-vscode.sh`, which for each target runs
+`_tools/scripts/build-vscode-extension.sh`: build the closure, deploy the daemon as `engine/` (hoisted
+layout — vsce cannot package pnpm's symlink forest), prune what the local profile can never use (the
+vendored Codex CLI, the onnx runtimes, foreign node-pty prebuilds), **smoke-boot the assembled engine**
+(/health must answer with the local profile — a .vsix that would not start never reaches a marketplace), and
+pack one platform-specific .vsix per target into `dist-bin/`.
+
+Publishing is gated on secrets and skips loudly without them, so the release train never fails over this
+artifact: `VSCE_PAT` (Azure DevOps PAT, Marketplace ▸ Manage, publisher `intentic` — creating that publisher
+is a one-time manual step) gates the Visual Studio Marketplace, `OVSX_PAT` gates Open VSX. Tokenless runs
+still build and upload the .vsix files as a workflow artifact — installable by hand with
+`code --install-extension`. The package is named bare `intentic` (a marketplace extension ID is
+`publisher.name` and cannot carry an npm scope), so CI's verify-core names it in its own filter.
 
 ## Key files
 

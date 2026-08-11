@@ -1,0 +1,26 @@
+# What the .vsix carries is an allowlist by exclusion: the extension bundle (dist/), the app build
+# (media/app/), the icon, and the assembled engine (engine/ — including its OWN node_modules, which is the
+# whole point of the deploy tree). Everything development-shaped stays out.
+src/**
+scripts/**
+build.mjs
+tsconfig.json
+*.tsbuildinfo
+*.map
+dist/*.map
+node_modules/**
+# The engine tree ships, but not its sources, tests or container furniture — the deploy carries them because
+# pnpm deploy copies the package whole, and the runtime needs only dist/ + node_modules + package.json.
+engine/src/**
+engine/**/*.test.*
+engine/bench/**
+engine/docs/**
+engine/skills/**
+engine/packs/**
+engine/scripts/**
+engine/Dockerfile
+engine/docker-entrypoint.sh
+engine/tsconfig*.json
+engine/vitest.config.ts
+engine/pnpm-lock.yaml
+engine/pnpm-workspace.yaml

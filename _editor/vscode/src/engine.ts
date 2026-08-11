@@ -12,9 +12,10 @@ import { engineEnv } from "./engineEnv.js";
  * free loopback port; killed on deactivate. Health is the engine's own /health (which also names its boot
  * step, so the chat panel can narrate a slow start instead of showing a dead pane).
  *
- * WHAT RUNS: the engine bundled with the extension (engine/main.cjs beside dist/) — or, in a development
- * checkout, whatever `intentic.engine.command` says. The override is what makes this package testable against
- * engine source without a packaging step; the bundled path is the shipped default (build.mjs assembles it). */
+ * WHAT RUNS: the engine bundled with the extension (engine/dist/main.js, the daemon's deploy tree) — or, in
+ * a development checkout, whatever `intentic.engine.command` says. The override is what makes this package
+ * testable against engine source without a packaging step; the bundled tree is the shipped default
+ * (build-vscode-extension.sh assembles it). */
 
 const HEALTH_INTERVAL_MS = 500;
 const HEALTH_TIMEOUT_MS = 60_000;
@@ -70,9 +71,10 @@ const engineCommand = (context: vscode.ExtensionContext): { argv: readonly strin
     if (override.length > 0) {
         return { argv: override, cwd: config.get<string>("cwd") ?? "" };
     }
-    const bundled = join(context.extensionPath, "engine", "main.cjs");
+    // The deploy tree's built entry (build-vscode-extension.sh assembles engine/ from the daemon package).
+    const bundled = join(context.extensionPath, "engine", "dist", "main.js");
     // The extension host's own Node runs the bundle — no system Node required.
-    return { argv: [process.execPath, bundled], cwd: context.extensionPath };
+    return { argv: [process.execPath, bundled], cwd: join(context.extensionPath, "engine") };
 };
 
 export const startEngine = async (
