@@ -123,7 +123,7 @@ const configSchema = z.object({
             // extension's creator this share, a consumed credit pays the service's provider this share
             // (credit value is derived and published: priceUsd / (30 × dailyCredits)). The published number
             // the whole model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
-            creatorShare: z.coerce.number().min(0).max(1).default(0.7),
+            creatorShare: z.coerce.number().min(0).max(1).default(0.9),
             // A member's daily credit allowance, reset at UTC midnight like the trial. The membership's cost
             // ceiling: 1000/day bounds what a member can spend — on service runs and on install donations —
             // which is what lets a flat price fund a per-credit economy at all. POOL_DAILY_CREDITS.
@@ -131,7 +131,7 @@ const configSchema = z.object({
             // What a service's provider earns per consumed credit, as a share of its value — kept a separate
             // knob from creatorShare because a service carries real upstream costs a prompt-pack does not.
             // POOL_SERVICE_SHARE.
-            serviceShare: z.coerce.number().min(0).max(1).default(0.7),
+            serviceShare: z.coerce.number().min(0).max(1).default(0.9),
             // What installing (or, at most monthly, updating) a premium non-service extension donates to its
             // creator, in credits. Flat across the catalog on purpose: a price the listing could set would be
             // the first number anyone games. POOL_DONATION_CREDITS.

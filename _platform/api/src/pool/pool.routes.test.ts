@@ -31,9 +31,9 @@ const baseConfig = {
         stripeWebhookSecret: `whsec_test`,
         stripePriceId: `price_1`,
         priceUsd: 20,
-        creatorShare: 0.7,
+        creatorShare: 0.9,
         dailyCredits: 100,
-        serviceShare: 0.7,
+        serviceShare: 0.9,
         donationCredits: 50,
         demoService: false,
     },
@@ -255,13 +255,13 @@ describe(`the creator pool`, () => {
             donationCredits: number;
             months: { month: string; poolCents: number; paidCents: number; extensions: { extensionId: string; donors: number; credits: number; earningsCents: number }[] }[];
         };
-        expect(body.creatorShare).toBe(0.7);
+        expect(body.creatorShare).toBe(0.9);
         expect(body.donationCredits).toBe(50);
         const current = body.months.find((entry) => entry.month === month);
-        // Ceiling: 1 member × $20 × 70% = 1400¢. Paid: 50 credits × (2000¢/3000) × 70% = 23¢ — the ledger
+        // Ceiling: 1 member × $20 × 90% = 1800¢. Paid: 50 credits × (2000¢/3000) × 90% = 29¢ — the ledger
         // states both, so nobody can read the ceiling as a promise.
-        expect(current).toMatchObject({ poolCents: 1400, paidCents: 23 });
-        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 23 }]);
+        expect(current).toMatchObject({ poolCents: 1800, paidCents: 29 });
+        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 29 }]);
     });
 
     it(`refuses an unsigned webhook and honours a signed subscription lapse`, async () => {
@@ -479,12 +479,12 @@ describe(`metered service runs`, () => {
             serviceShare: number;
             months: { month: string; poolCents: number; paidCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { extensionId: string; earningsCents: number }[] }[];
         };
-        expect(body.serviceShare).toBe(0.7);
+        expect(body.serviceShare).toBe(0.9);
         const current = body.months.find((entry) => entry.month === month);
-        // Credit value = 2000¢/3000 = 2/3¢. Service: 40 ok credits × 2/3¢ × 70% = 18¢ (the refunded run
-        // earns nothing). Donation: 50 credits × 2/3¢ × 70% = 23¢. Both on the same ledger, side by side.
-        expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 18 }]);
-        expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 23 }]);
-        expect(current).toMatchObject({ poolCents: 1400, paidCents: 41 });
+        // Credit value = 2000¢/3000 = 2/3¢. Service: 40 ok credits × 2/3¢ × 90% = 24¢ (the refunded run
+        // earns nothing). Donation: 50 credits × 2/3¢ × 90% = 29¢. Both on the same ledger, side by side.
+        expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 24 }]);
+        expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 29 }]);
+        expect(current).toMatchObject({ poolCents: 1800, paidCents: 53 });
     });
 });

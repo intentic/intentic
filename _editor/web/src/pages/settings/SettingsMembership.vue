@@ -82,7 +82,8 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
             <p v-else-if="membership && !membership.enabled" class="text-xs text-muted">This platform doesn't offer memberships.</p>
             <template v-else-if="membership && membership.member">
                 <p class="text-sm">
-                    You're a member<template v-if="renewsOn"> — renews on {{ renewsOn }}</template>.
+                    You're a member<template v-if="renewsOn"> — renews on {{ renewsOn }}</template
+                    >.
                 </p>
                 <p v-if="creditsLine" class="text-xs text-muted">{{ creditsLine }}</p>
                 <p v-if="membership.status && membership.status !== `active`" class="text-xs text-muted">
@@ -101,8 +102,9 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                     Payment received — your membership activates as soon as Stripe confirms it (usually seconds). Reload to see it.
                 </p>
                 <p class="text-sm">
-                    ${{ membership.priceUsd }}/month unlocks premium extensions everywhere you work — and {{ sharePercent }}% of it is shared
-                    with the creators of what you install and run, credit by credit, on a
+                    <!-- The share is of every credit SPENT, not of the membership: credits nobody spends pay nobody. -->
+                    ${{ membership.priceUsd }}/month unlocks premium extensions everywhere you work — and {{ sharePercent }}% of every credit you then
+                    spend goes to the creators of what you install and run, on a
                     <a :href="transparencyUrl" target="_blank" rel="noopener" class="underline">public ledger</a>.
                 </p>
                 <div class="mt-1">

@@ -9,9 +9,9 @@
  * after the 200 that made it true has moved, and nothing fails to warn anybody. Written once as arithmetic,
  * they cannot disagree with the figures they come from.
  *
- * `creditUsd` mirrors the platform's own derivation (pool-share.ts `creditCents`: priceUsd over thirty days of
- * allowance) rather than inventing a second one, because a credit's value is the hinge the whole model turns
- * on — it is what makes a member's total support bounded by what they actually paid.
+ * A credit's value is priced the platform's own way (pool-share.ts `creditCents`: priceUsd over thirty days of
+ * allowance) rather than by a second derivation invented here, because that value is the hinge the whole model
+ * turns on — it is what makes a member's total support bounded by what they actually paid.
  *
  * The live numbers are published by the platform itself on GET /pool/transparency, and that ledger is what
  * payouts settle on. This module is what a static page can state without a backend behind it. */
@@ -26,7 +26,7 @@ export const pool = {
     // across the catalog on purpose: a price a listing could set would be the first number anyone games.
     donationCredits: 200,
     // The fraction of a spent credit's value its recipient earns, for both donations and service runs.
-    creatorShare: 0.7,
+    creatorShare: 0.9,
 } as const;
 
 // The month the credit value is derived over, matching the platform's own arithmetic.
@@ -40,7 +40,7 @@ const monthlyCredits = pool.dailyCredits * DAYS;
 // the cent" is a number a reader can hold where "$0.000667" is one they skip.
 export const creditsPerCent = Math.round(monthlyCredits / (pool.priceUsd * 100));
 
-// The creator share as whole percent, for copy that says "70%".
+// The creator share as whole percent, for copy that says "90%".
 export const creatorSharePct = Math.round(pool.creatorShare * 100);
 
 // A day's credits as premium installs.
