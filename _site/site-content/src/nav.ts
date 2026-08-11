@@ -21,6 +21,17 @@ import { DEMO_PATH } from "./site";
  * It stays reachable in the two places that matter: a full column in the footer, sitewide, which is what
  * keeps every comparison page linked; and the home page FAQ, where the row that asks the question links the
  * hub — the moment the doubt actually forms, rather than before it.
+ *
+ * Download is the second deliberate omission, and for a different reason. The app is not a way INTO the
+ * product — both roads end at the same signed-in workspace, and what it replaces is one step, the terminal
+ * command that puts a sandbox on your machine. A permanent tab beside "Get started free" therefore offers
+ * two openings where there is one, and most of the people who take it are first-timers clicking the most
+ * concrete-sounding word in the bar: they get a longer road to the same place, a binary to install before
+ * they know what it is for, and on a Mac no build at all. That cost is paid on every page view; the
+ * returning reader installing on a second machine, who is the case FOR the tab, arrives rarely.
+ *
+ * So it lives where the need is instead: the Resources column of the footer, sitewide, and the band of the
+ * home page that asks for a terminal — beside the command, at the moment the hesitation lands.
  */
 
 export interface MenuItem {
@@ -118,14 +129,6 @@ export const navEntries: NavEntry[] = [
         label: "Extensions",
         href: "/extensions/",
         prefix: "/extensions",
-    },
-    // A bare link, and high in the bar on purpose: the download page is an ANSWER to the objection the
-    // quickstart raises ("run this command"), so it has to be visible from the page that raises it.
-    {
-        type: "link",
-        label: "Download",
-        href: "/download/",
-        prefix: "/download",
     },
     // Last of the text links, where a bar conventionally keeps it — and in the bar at all because "who is
     // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container

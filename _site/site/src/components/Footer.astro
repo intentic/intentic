@@ -56,6 +56,11 @@ const columns: { label: string; links: { href: string; label: string; external?:
         label: "Resources",
         links: [
             { href: APP_URL, label: "Open the app", external: true },
+            // Directly under "Open the app", and worded to rhyme with it, because they are the same app
+            // reached two ways rather than two products — which is the one thing a reader weighing an
+            // installer against a browser needs to know. This is also the sitewide home of the download
+            // page now that it has left the top bar (see nav.ts for why it left).
+            { href: "/download/", label: "Download the app" },
             { href: "/changelog/", label: "Changelog" },
             { href: "/about/", label: "About the creator" },
             { href: githubUrl, label: "GitHub", external: true },
