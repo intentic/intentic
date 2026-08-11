@@ -409,6 +409,12 @@ export const createExtensionApi = (
                 startAgent();
                 useChat().active.value.workflowId.value = workflowId;
             },
+            // The loop badge's half of the same handover — a new chat with the loop picked, waiting for the
+            // sentence that becomes its goal.
+            composeLoop: (loopId) => {
+                startAgent();
+                useChat().active.value.loopId.value = loopId;
+            },
         },
         /* The shell's own model picker, the default it opens on, and what to call a pin already saved. Nothing
          * here is gated on a manifest permission: the extension never learns a credential, never reaches a

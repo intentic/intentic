@@ -9,28 +9,40 @@ import {
     Page,
     PageAction,
     PageHeader,
+    Row,
     RowGroup,
     StatusBadge,
     type StatusVariant,
     timeAgo,
 } from "@intentic/extension-ui";
-import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
-import { computed, ref, shallowRef } from "vue";
+import { type LoopDesign, loopDesignLine, type Workflow, type WorkflowRun, type WorkflowSummary } from "@intentic/sandbox-contract";
+import { computed, ref, shallowRef, watch } from "vue";
 import GateAccess from "./GateAccess.vue";
+import LoopForm from "./LoopForm.vue";
 import WorkflowCard from "./WorkflowCard.vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
 import { host } from "./host";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "./templates";
 import { STEP_TONE } from "./workflowDag";
+import { loopIdFrom, useLoopDesigns } from "./useLoopDesigns";
 import { useWorkflows } from "./useWorkflows";
 
-/* WORKFLOWS: designed graphs of agent sessions, each producing a declared output.
+/* WORKFLOWS AND LOOPS: the two shapes you keep and point at a job.
  *
- * The third driver, and the page says which by what it does NOT have. An automation has an enabled switch,
- * because something fires it. A loop has no page at all, because it is started against a conversation and then
- * it is history. A workflow has neither: it is a DESIGN you keep, edit and run — so this page is a gallery of
- * designs with a Run button, and everything about watching one lives behind that button.
+ * A workflow is a designed graph of agent sessions, each producing a declared output. A loop is one session
+ * repeated until a bar you can state is cleared. They share this page because they are the same KIND of thing
+ * — a design you author once, pick from a composer, and hand today's sentence to — and differ only in their
+ * answer: a workflow spreads the message across sessions that are not this one, a loop repeats it in one.
+ *
+ * The page says what neither of them is by what it does NOT have. An automation has an enabled switch, because
+ * something fires it. Nothing here fires on its own: a design runs when somebody says run it.
+ *
+ * A LOOP DID NOT USED TO HAVE A PAGE, and the sentence that justified that was "it is started against a
+ * conversation and then it is history" — true of a RUNNING loop and false of the thing a person actually
+ * wanted to keep. Every loop was configured from scratch, in a modal over the composer, whose first field
+ * asked for a goal already typed in the box behind it. What is saved here is the machinery without the goal;
+ * the goal stays where it always was, in the message.
  *
  * A GALLERY OF CARDS RATHER THAN A LIST OF ROWS, which is the one place this page departs from every other
  * list in the product. A row is right for a thing whose identity is its NAME and whose interest is its STATE —
@@ -50,6 +62,8 @@ import { useWorkflows } from "./useWorkflows";
  */
 
 const { workflows, runs, runsLoaded, error: listError, remove } = useWorkflows();
+// The page's second kind of design — see the saved-loops block below for what one is and why it lives here.
+const { loops, error: loopsError, save: saveLoop, remove: removeLoop } = useLoopDesigns();
 
 /* WHICH OF THE THREE SCREENS THIS IS, and it is read from the URL rather than held in a ref.
  *
@@ -70,7 +84,7 @@ const drafted = shallowRef<Workflow | undefined>();
 const confirmRemoveId = ref<string | undefined>();
 const actionError = ref<string | undefined>();
 
-const topError = computed(() => actionError.value ?? listError.value);
+const topError = computed(() => actionError.value ?? listError.value ?? loopsError.value);
 const watching = computed(() => runs.value.find((run) => run.runId === watchingId.value));
 /* `?run=` naming a run the ledger no longer holds. Reachable rather than theoretical: the workflow mark on a
  * fleet card is never cleared (which run a conversation came out of is what its card is read for a week later),
@@ -183,6 +197,80 @@ const removeWorkflow = async (): Promise<void> => {
     }
 };
 
+/* --- SAVED LOOPS -------------------------------------------------------------------------------------
+ * The page's second kind of design, and a deliberate neighbour rather than a page of its own. A loop and a
+ * workflow are one question with two answers — what is the next message run THROUGH — and everything about how
+ * they are used is shared: authored here, picked from the composer's badge row, pointed at whatever you type.
+ *
+ * THE FORM IS A DIALOG HERE AND WAS ONE ON THE COMPOSER, which sounds like the same thing moved sideways and is
+ * not. On a composer it interrupted a sentence somebody was in the middle of writing, opened in the app window
+ * while the chat was popped out into another, and asked for a goal that was already typed behind it. On a page
+ * it interrupts nothing, and every question in it is about the loop rather than about today's job.
+ */
+const loopEditing = ref<LoopDesign | undefined>();
+const loopFormOpen = ref(false);
+const confirmRemoveLoopId = ref<string | undefined>();
+
+/* `?loop=new` from the composer's empty picker opens the form on arrival, `?loop=list` just lands here. That is
+ * the whole of this view's loop route space: a saved loop has no canvas and no run of its own to link to, so
+ * unlike a workflow it needs no screen — only this page, and a form over it. The query is cleared as it is
+ * consumed, so a reload does not reopen a dialog the user has closed. */
+watch(
+    () => query.value[`loop`],
+    (want) => {
+        if (want === undefined) {
+            return;
+        }
+        if (want === `new`) {
+            loopEditing.value = undefined;
+            loopFormOpen.value = true;
+        }
+        host().route.setQuery({ loop: undefined });
+    },
+    { immediate: true },
+);
+
+const newLoop = (): void => {
+    loopEditing.value = undefined;
+    loopFormOpen.value = true;
+};
+const editLoop = (design: LoopDesign): void => {
+    loopEditing.value = design;
+    loopFormOpen.value = true;
+};
+
+const persistLoop = async (fields: Omit<LoopDesign, "id">): Promise<void> => {
+    actionError.value = undefined;
+    const existing = loopEditing.value;
+    try {
+        // An edit keeps its id even when the name changes — a composer badge pointing at this loop must not be
+        // orphaned by a rename, which is exactly the sort of breakage nobody connects back to the edit.
+        const design: LoopDesign = { ...fields, id: existing?.id ?? loopIdFrom(fields.name, loops.value) };
+        await saveLoop.mutateAsync({ design, create: existing === undefined });
+        loopFormOpen.value = false;
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : `The loop could not be saved.`;
+    }
+};
+
+const deleteLoop = async (): Promise<void> => {
+    const id = confirmRemoveLoopId.value;
+    if (id === undefined) {
+        return;
+    }
+    actionError.value = undefined;
+    try {
+        await removeLoop.mutateAsync(id);
+        confirmRemoveLoopId.value = undefined;
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : `The loop could not be removed.`;
+    }
+};
+
+// Aim a fresh session at this loop, the same handover Run performs for a workflow: the composer opens with the
+// loop on its badge and nothing is spent until the user types what they want done and presses send.
+const loopNow = (design: LoopDesign): void => host().chat.composeLoop(design.id);
+
 const doneSteps = (run: WorkflowRun): number => run.steps.filter((step) => step.state === `done`).length;
 const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0);
 
@@ -230,7 +318,10 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
     <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
 
     <Page v-else width="wide">
-        <PageHeader title="Workflows" description="A designed run of agent sessions, each one handing a declared result to the next.">
+        <PageHeader
+            title="Workflows"
+            description="Shapes you point at a job: a run of agent sessions handing results down the line, or one session repeating until a bar is cleared."
+        >
             <template #info>
                 <InfoHint label="How a workflow runs">
                     <span class="block text-sm font-medium text-content">Every step is an agent session</span>
@@ -250,6 +341,10 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </InfoHint>
             </template>
             <template #actions>
+                <!-- Two kinds of design, two ways in. The loop is the secondary one because it is the smaller
+                     idea, not the lesser one: a workflow is what most people come here for, and a loop is what
+                     they reach for once they have a bar they can state. -->
+                <PageAction icon="repeat" label="New loop" @click="newLoop()" />
                 <PageAction icon="plus" label="New workflow" primary @click="blank()" />
             </template>
         </PageHeader>
@@ -381,6 +476,59 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </div>
             </section>
 
+            <!-- SAVED LOOPS: rows, where a workflow gets a card, and the difference is honest rather than a
+                 downgrade. A card exists to give a workflow's SHAPE two dimensions — that is what a graph needs
+                 and what a row could never show. A loop has no shape: it is one session, repeated, and
+                 everything worth knowing about it is three facts on a line — what ends it, how far it may go,
+                 what it is for. That is a row, and pretending otherwise would be a picture of nothing. -->
+            <RowGroup
+                v-if="loops.length > 0"
+                label="Your loops"
+                :count="loops.length"
+                caption="Pick one in a chat — what you type there is what it works towards."
+            >
+                <Row v-for="design in loops" :key="design.id" icon="repeat" density="compact" class="group/loop">
+                    <template #title>{{ design.name }}</template>
+                    <template #description>
+                        Ends on {{ loopDesignLine(design) }}{{ design.context === `continue` ? ` · keeps context` : `` }}
+                        <span v-if="design.description"> — {{ design.description }}</span>
+                    </template>
+                    <!-- Use is the loud one, for the reason Run is loud on a workflow card: reading this
+                             list is the common act, and starting one is what the list is FOR. Edit and delete
+                             come up under the pointer, and stay put below `md` where there is no hover. -->
+                    <template #control>
+                        <Button
+                            label="Use"
+                            size="small"
+                            severity="secondary"
+                            :outlined="true"
+                            v-tooltip.top="`Opens a chat with this loop picked — nothing runs until you send`"
+                            @click="loopNow(design)"
+                        >
+                            <template #icon><Icon name="play" /></template>
+                        </Button>
+                        <button
+                            type="button"
+                            :class="cmp.iconButton('md:opacity-0 md:group-hover/loop:opacity-100 md:focus-visible:opacity-100')"
+                            :aria-label="`Edit ${design.name}`"
+                            v-tooltip.top="`Edit`"
+                            @click="editLoop(design)"
+                        >
+                            <Icon name="pencil" />
+                        </button>
+                        <button
+                            type="button"
+                            :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/loop:opacity-100 md:focus-visible:opacity-100')"
+                            :aria-label="`Delete ${design.name}`"
+                            v-tooltip.top="`Delete`"
+                            @click="confirmRemoveLoopId = design.id"
+                        >
+                            <Icon name="trash" />
+                        </button>
+                    </template>
+                </Row>
+            </RowGroup>
+
             <!-- THE GALLERY, drawn as the same card as a saved workflow and dashed. That is the whole fix: the
                  old block was a bare box under the words "Start from", which named neither what it held nor what
                  pressing it would do — and it sat under a list whose items looked nothing like it, so there was
@@ -464,6 +612,25 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
         >
             <p class="text-sm text-subtle">Its run history stays — every run kept its own copy of the design. A run already going is not stopped.</p>
         </ConfirmDialog>
+
+        <ConfirmDialog
+            :open="confirmRemoveLoopId !== undefined"
+            header="Delete this loop?"
+            confirm-label="Delete"
+            confirm-icon="trash"
+            :loading="removeLoop.isPending.value"
+            @confirm="deleteLoop()"
+            @cancel="confirmRemoveLoopId = undefined"
+        >
+            <p class="text-sm text-subtle">A loop already running from it keeps going — it copied what it needed when it started.</p>
+        </ConfirmDialog>
+
+        <LoopForm
+            v-model="loopFormOpen"
+            :editing="loopEditing"
+            :taken="loops.filter((design) => design.id !== loopEditing?.id).map((design) => design.name)"
+            @save="persistLoop($event)"
+        />
 
         <!-- The gate badge's panel: the same <GateAccess> the designer shows, so the two copies of the one
              string a pipeline is taught cannot disagree. -->

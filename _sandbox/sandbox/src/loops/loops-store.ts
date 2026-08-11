@@ -1,4 +1,12 @@
-import { type Loop, type LoopIteration, type LoopRecord, LoopRecordSchema, type LoopState } from "@intentic/sandbox-contract";
+import {
+    type Loop,
+    type LoopDesign,
+    LoopDesignSchema,
+    type LoopIteration,
+    type LoopRecord,
+    LoopRecordSchema,
+    type LoopState,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
@@ -70,6 +78,57 @@ export const fileLoopsStore = (path: string): LoopsStore => {
         countResume: async (conversationId) => {
             await amend(conversationId, (record) => ({ ...record, resumed: record.resumed + 1 }));
             return (await file.read()).find((record) => record.conversationId === conversationId);
+        },
+    };
+};
+
+/* THE SECOND FILE (<workspace>/.intentic/loop-designs.json): the loops a user has SAVED, which is a manifest and
+ * not a ledger. It shares this module with the record store above and nothing else — the split is the one
+ * workflows-store.ts draws for the same reason. A manifest is a handful of entries authored by a person and
+ * changing at human speed; a ledger is written several times per iteration by a pump. Keeping them apart is
+ * what stops a loop's fourth iteration write from rewriting the designs the user is editing in another tab.
+ *
+ * Unbounded, unlike the records: there is no machine here writing entries, so the only thing that can grow the
+ * file is somebody deciding they want another saved loop.
+ */
+export interface LoopDesignsStore {
+    readonly list: () => Promise<LoopDesign[]>;
+    readonly get: (id: string) => Promise<LoopDesign | undefined>;
+    // Atomic create-or-update with the caller's intent explicit — a create never overwrites, an update never
+    // invents. The same collision guard a workflow save keeps, and for the same reason: these ids are minted
+    // from names, so two loops called "until tests pass" would collide in the ordinary course of use.
+    readonly save: (design: LoopDesign, create: boolean) => Promise<"saved" | "conflict" | "missing">;
+    readonly remove: (id: string) => Promise<boolean>;
+}
+
+export const fileLoopDesignsStore = (path: string): LoopDesignsStore => {
+    const file = jsonFile<LoopDesign[]>(path, {
+        parse: (raw) => z.array(LoopDesignSchema).safeParse(raw).data,
+        fallback: () => [],
+    });
+    return {
+        list: () => file.read(),
+        get: async (id) => (await file.read()).find((design) => design.id === id),
+        save: async (design, create) => {
+            let outcome: "saved" | "conflict" | "missing" = "saved";
+            await file.update((designs) => {
+                const index = designs.findIndex((entry) => entry.id === design.id);
+                if (create && index !== -1) {
+                    outcome = "conflict";
+                    return designs;
+                }
+                if (!create && index === -1) {
+                    outcome = "missing";
+                    return designs;
+                }
+                return create ? [...designs, design] : designs.map((entry, at) => (at === index ? design : entry));
+            });
+            return outcome;
+        },
+        remove: async (id) => {
+            const before = (await file.read()).length;
+            const after = await file.update((designs) => designs.filter((design) => design.id !== id));
+            return after.length < before;
         },
     };
 };

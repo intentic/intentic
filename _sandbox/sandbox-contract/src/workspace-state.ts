@@ -174,6 +174,13 @@ const STATE_FILES = [
      * (WorkflowSummary) — a settled step changes that answer as surely as an edited design does. */
     { path: ".intentic/workflows.json", invalidates: ["workflows"], portability: "carry", versioned: true },
     { path: ".intentic/workflow-runs.json", invalidates: ["workflows", "workflow-runs"], portability: "carry" },
+    /* The SAVED loops, which are a manifest and so the opposite of the ledger below them: a handful of entries
+     * a person authors, read by two surfaces at once — the workflows page that owns them, and every chat
+     * composer's loop picker. Those two are in different windows as often as not (a popped-out chat is its own
+     * window), so an edit made on the page has to reach a picker nobody is going to think to reopen. A CORE key
+     * rather than the workflows extension's, for the reason the workflow designs beside it are: the composer
+     * lists saved loops whether or not that extension is switched on. */
+    { path: ".intentic/loop-designs.json", invalidates: ["loop-designs"], portability: "carry", versioned: true },
     {
         path: ".intentic/loops.json",
         invalidates: [],

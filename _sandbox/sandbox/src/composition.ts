@@ -46,7 +46,7 @@ import { createProviderCatalogs, type ProviderCatalog } from "./agent/provider-c
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
-import { fileLoopsStore, type LoopsStore } from "./loops/loops-store.js";
+import { fileLoopDesignsStore, fileLoopsStore, type LoopDesignsStore, type LoopsStore } from "./loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, type WorkflowRunsStore, type WorkflowsStore } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
@@ -315,6 +315,9 @@ export interface Services {
     // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
     // its own restart journal — a loop still marked `running` at boot is one the daemon died under.
     readonly loops: LoopsStore;
+    // Saved loops (.intentic/loop-designs.json): the manifest half of the same feature — a loop's machinery with
+    // its goal left out, so the composer can arm one and the message supplies the job.
+    readonly loopDesigns: LoopDesignsStore;
     // Workflow designs (.intentic/workflows.json): a manifest the user authors and edits, changing at human
     // speed. /workflows edits it; nothing fires it on its own.
     readonly workflows: WorkflowsStore;
@@ -887,6 +890,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/control-tokens.json")),
         automations: fileAutomationsStore(statePath(workspace.root, ".intentic/automations.json")),
         loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
+        loopDesigns: fileLoopDesignsStore(statePath(workspace.root, ".intentic/loop-designs.json")),
         workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/workflows.json")),
         workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/workflow-runs.json")),
         chores,

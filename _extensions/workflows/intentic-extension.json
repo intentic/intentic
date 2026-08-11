@@ -13,6 +13,9 @@
             "POST /workflows/*/run",
             "GET /workflows/runs",
             "POST /workflows/runs/*/stop",
+            "GET /loops/designs",
+            "POST /loops/designs",
+            "DELETE /loops/designs/*",
             "GET /personas"
         ]
     },

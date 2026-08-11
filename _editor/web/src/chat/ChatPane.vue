@@ -2,7 +2,16 @@
 import { Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type AgentCommand, isTrialProvider, providerLabel, TRIAL_NOTICE, type Workflow } from "@intentic/sandbox-contract";
+import {
+    type AgentCommand,
+    isTrialProvider,
+    type LoopDesign,
+    loopDesignLine,
+    loopFromDesign,
+    providerLabel,
+    TRIAL_NOTICE,
+    type Workflow,
+} from "@intentic/sandbox-contract";
 import { trialExhausted } from "../composables/chat/access";
 import { turnInFlight } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
@@ -43,8 +52,9 @@ import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
 import ChatPersonaMenu from "./ChatPersonaMenu.vue";
 import ChatWorkflowMenu from "./ChatWorkflowMenu.vue";
-import LoopDialog from "../agents/LoopDialog.vue";
-import { stopLoop } from "../composables/agents/useLoops";
+import ChatLoopMenu from "./ChatLoopMenu.vue";
+import { useLoopDesigns } from "../composables/agents/useLoopDesigns";
+import { startLoop, stopLoop } from "../composables/agents/useLoops";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import { formatTokens, ProgressRing } from "@intentic/ui";
 import ComposerEffort from "./ComposerEffort.vue";
@@ -172,10 +182,12 @@ const input = ref<HTMLTextAreaElement>();
 const modelOpen = ref(false);
 const modeOpen = ref(false);
 const workflowOpen = ref(false);
+const loopOpen = ref(false);
 const personaOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
 const workflowPill = ref<HTMLElement>();
+const loopPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
@@ -312,26 +324,52 @@ watch(fleetTurn, (now, before) => {
     hydrateOnce(props.conversation);
 });
 
-/* THE LOOP CONTROL. A loop is started from the conversation it will drive and nowhere else — see LoopDialog on
- * why. Two things are read off the fleet entry rather than asked in the form: whether this agent works in its
- * own worktree (a loop cannot change that mid-flight), and whether one is already running (the pill then stops
- * the loop instead of offering a second one, which the daemon would refuse anyway). */
-const loopDialogOpen = ref(false);
+/* THE LOOP CONTROL, and it is a BADGE with three states rather than a button with two.
+ *
+ * Unarmed it is a bare glyph that opens the picker. Armed it names the saved loop, in the composer's active
+ * tint, and the next Send starts that loop with whatever is in the box as its goal — the workflow badge's
+ * behaviour exactly, because it is the same bargain: pick the shape, type the job, press send once.
+ *
+ * RUNNING it is a stop, with the round count beside it, and that state outranks the other two: a loop already
+ * going is not something the next message decides, so the press has to mean "end it" no matter what else the
+ * composer is holding.
+ *
+ * Two things are read off the fleet entry rather than asked anywhere: whether this agent works in its own
+ * worktree (a loop cannot change that mid-flight), and whether one is already running (the daemon refuses a
+ * second, so offering one would only spend a round to say no).
+ */
 const activeLoop = computed(() => agentById(props.conversation.conversationId)?.loop);
 const looping = computed(() => activeLoop.value?.state === `running`);
 const loopIsolated = computed(() => agentById(props.conversation.conversationId)?.branch !== undefined);
+const { designs: loopDesigns } = useLoopDesigns();
+const loopFailure = ref<string>();
+const pickedLoop = computed(() => loopDesigns.value.find((design) => design.id === props.conversation.loopId.value));
 const endLoop = async (): Promise<void> => {
     // Stops the LOOP, not the turn: whatever iteration is running finishes and lands. Abandoning it outright is
     // this plus the Stop button beside it, which is exactly how it reads on screen.
     await stopLoop(props.conversation.conversationId).catch(() => undefined);
 };
+const pickLoop = (design: LoopDesign | undefined): void => {
+    loopOpen.value = false;
+    loopFailure.value = undefined;
+    props.conversation.loopId.value = design?.id;
+};
+// The picker's way out to the page that owns saved loops — the same errand the persona menu's "Manage" runs,
+// and the only door to the long form now that the composer no longer carries one.
+const manageLoops = (): void => {
+    loopOpen.value = false;
+    void router.push({ name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
+};
 // Said in full on the control, because "stop" next to a Stop button that means something else is the one place
 // this feature can genuinely mislead someone.
-const loopHint = computed(() =>
-    looping.value
-        ? `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`
-        : `Run this agent again and again until a goal is met`,
-);
+const loopHint = computed(() => {
+    if (looping.value) {
+        return `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`;
+    }
+    return pickedLoop.value === undefined
+        ? `Send this message over and over, until something you can state is true`
+        : `Send runs “${pickedLoop.value.name}” — this message is the goal, repeated until it is met`;
+});
 
 // Claude subscription headroom for this conversation's account, pushed from the agent stream at no token
 // cost — a small ring once that account's first Claude turn reports its limits, tinted as the binding pool
@@ -736,6 +774,7 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
         modelOpen.value = false;
         modeOpen.value = false;
         personaOpen.value = false;
+        loopOpen.value = false;
     }
 });
 
@@ -810,8 +849,28 @@ const sendThroughWorkflow = async (workflow: Workflow): Promise<void> => {
     }
 };
 
+/* Start the armed loop with the draft as its goal. The draft clears on success for the reason an ordinary send
+ * clears it — the words have gone somewhere — and is KEPT on failure, because the message is all the user has.
+ *
+ * The badge clears too, and that is the one thing here that must not be forgotten: a loop spends money per
+ * round with nobody pressing anything in between, so a badge that survived its own start would turn the next
+ * ordinary message into a second paid loop, silently.
+ */
+const sendThroughLoop = async (design: LoopDesign): Promise<void> => {
+    loopFailure.value = undefined;
+    const goal = draft.value.trim();
+    try {
+        await startLoop(loopFromDesign(design, { conversationId: props.conversation.conversationId, goal, isolated: loopIsolated.value }));
+        draft.value = ``;
+        props.conversation.loopId.value = undefined;
+    } catch (error) {
+        loopFailure.value = error instanceof Error ? error.message : `The loop could not be started.`;
+    }
+};
+
 const submit = (): void => {
     workflowFailure.value = undefined;
+    loopFailure.value = undefined;
     /* THE BADGE INTERCEPTS THE SEND, ahead of every gate below it — those are about a TURN on this
      * conversation (a pending plan, a running turn to steer, staged attachments), and this message is not one.
      * It goes to a graph of sessions that are not this chat, so none of the machinery for putting words into
@@ -819,6 +878,17 @@ const submit = (): void => {
     const workflow = pickedWorkflow.value;
     if (workflow !== undefined && connected.value) {
         void sendThroughWorkflow(workflow);
+        return;
+    }
+    /* The loop badge intercepts next, and BELOW the workflow one because a workflow greys the loop pill: the
+     * two can never be armed at once, so the order is a formality kept explicit rather than a precedence.
+     *
+     * Unlike a workflow's, this send does need a goal — a loop with an empty one has nothing to converge on and
+     * the daemon's own schema refuses it — so the empty-composer gate applies here too, and `canSend` is where
+     * that lives. It is not a turn on this chat, though, so nothing below it applies: a loop drives its own. */
+    const loop = pickedLoop.value;
+    if (loop !== undefined && connected.value && canSend.value && !looping.value) {
+        void sendThroughLoop(loop);
         return;
     }
     // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
@@ -1540,20 +1610,43 @@ watch(
                                         label-class="@max-sm:hidden"
                                     />
 
-                                    <!-- PERSONA — who the chat IS when it reaches outside, and the first of the
-                                         right-hand group because it is a question about the message rather than
-                                         about the model: which of your accounts this turn may speak through,
-                                         and how much of the toolbox it holds.
+                                    <!-- MODE leads the right-hand group, and the group reads left to right as a
+                                         gradient away from the model: which brain (model · effort), then how it
+                                         works (mode), then who it is (persona), then how the message is run
+                                         (loop · workflow). Mode sits closest to effort because the two are one
+                                         thought — how hard it thinks, and how much rope it has — and because it
+                                         is the only pill here that is always worded, so it anchors the row's
+                                         baseline where a bare glyph could not. -->
+                                    <button
+                                        ref="modePill"
+                                        type="button"
+                                        class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                        :disabled="pickedWorkflow !== undefined"
+                                        @click="modeOpen = !modeOpen"
+                                        :aria-expanded="modeOpen"
+                                        aria-label="Agent mode"
+                                    >
+                                        <Icon :name="modeIcon" class="text-2xs text-link" />
+                                        <span class="@max-md:hidden">{{ modeLabel }}</span>
+                                        <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                    </button>
+
+                                    <!-- PERSONA — who the chat IS when it reaches outside: which of your accounts
+                                         this turn may speak through, and how much of the toolbox it holds.
 
                                          A BADGE like the workflow pill beside it, for the same reason: unpicked
                                          it is a bare glyph, because most chats are nobody in particular and a
                                          name would be noise; picked it NAMES the persona in the active tint,
                                          because a message about to go out under somebody's account must say
-                                         whose before it is sent, not after. -->
+                                         whose before it is sent, not after. Which is also why it stands AFTER
+                                         mode rather than leading the group: a bare glyph at the group's edge is
+                                         the easiest thing in the row to read as decoration, and the one pill
+                                         whose unset state most needs to be noticed cannot afford that. -->
                                     <button
                                         ref="personaPill"
                                         type="button"
-                                        class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                         :class="{
                                             'composer-active': conversation.actsAs.value !== undefined && pickedWorkflow === undefined,
                                             'composer-steered': pickedWorkflow !== undefined,
@@ -1575,45 +1668,55 @@ watch(
                                         <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
                                     </button>
 
-                                    <button
-                                        ref="modePill"
-                                        type="button"
-                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        @click="modeOpen = !modeOpen"
-                                        :aria-expanded="modeOpen"
-                                        aria-label="Agent mode"
-                                    >
-                                        <Icon :name="modeIcon" class="text-2xs text-link" />
-                                        <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                        <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                    </button>
-
                                     <!-- LOOP. Sits with the controls that shape the TURN (mode, effort) rather than
                                          with Send, because that is what it changes: the next message is run over
-                                         and over instead of once. It reads as a toggle because it is one — while a
-                                         loop runs, the same pill ends it, and the count is the only progress
-                                         readout the composer has room for.
+                                         and over instead of once.
 
-                                         Which is why a RUNNING loop keeps this pill under a workflow badge, where
-                                         the three controls before it lose theirs: stopping something already going
-                                         is not a thing the next message decides, and a badge that took the stop
-                                         away would leave the loop no way out but the fleet board. -->
+                                         A BADGE, like the workflow pill it stands next to and for the same
+                                         reason — a saved loop is a shape you pick, and the message you type is
+                                         the job you point it at. Unpicked it is a bare glyph; picked it names
+                                         the loop in the active tint, so a composer about to spend money round
+                                         after round says so before the press rather than after it.
+
+                                         A RUNNING loop takes the pill over entirely — the count replaces the
+                                         name and the press ends it — and it keeps that under a workflow badge,
+                                         where the three controls before it lose theirs: stopping something
+                                         already going is not a thing the next message decides, and a badge that
+                                         took the stop away would leave the loop no way out but the fleet board. -->
                                     <button
+                                        ref="loopPill"
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-active': looping, 'composer-steered': pickedWorkflow !== undefined && !looping }"
+                                        :class="{
+                                            'composer-active': looping || (pickedLoop !== undefined && pickedWorkflow === undefined),
+                                            'composer-steered': pickedWorkflow !== undefined && !looping,
+                                        }"
                                         :disabled="pickedWorkflow !== undefined && !looping"
-                                        @click="looping ? endLoop() : (loopDialogOpen = true)"
+                                        @click="looping ? endLoop() : (loopOpen = !loopOpen)"
                                         v-tooltip.top="loopHint"
                                         :aria-pressed="looping"
-                                        aria-label="Loop until a goal is met"
+                                        :aria-expanded="looping ? undefined : loopOpen"
+                                        :aria-label="
+                                            looping
+                                                ? `Stop looping`
+                                                : pickedLoop !== undefined
+                                                  ? `Loop: ${pickedLoop.name}`
+                                                  : `Loop until a goal is met`
+                                        "
                                     >
-                                        <Icon name="repeat" class="text-2xs" :class="looping ? 'animate-spin text-link' : ''" />
+                                        <Icon
+                                            name="repeat"
+                                            class="text-2xs"
+                                            :class="looping || pickedLoop !== undefined ? 'text-link' : ''"
+                                            :spin="looping"
+                                        />
                                         <span v-if="activeLoop && looping" class="@max-md:hidden"
                                             >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
                                         >
+                                        <template v-else-if="pickedLoop">
+                                            <span class="max-w-32 truncate @max-md:hidden">{{ pickedLoop.name }}</span>
+                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                        </template>
                                     </button>
 
                                     <!-- WORKFLOW. Loop's neighbour because it answers the same question about
@@ -1689,6 +1792,7 @@ watch(
 
                             <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
+                            <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
                             <!-- What the badge changes about the press, said under the box that is about to do
                                  it: the message is going to a design, not to this chat. The second sentence is
                                  what the greyed pills above would otherwise only say on hover — and a control
@@ -1696,6 +1800,15 @@ watch(
                             <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts “{{ pickedWorkflow.name }}” — this message is
                                 what every step is asked to do. Model, effort, mode and looping are each step's own.
+                            </p>
+                            <!-- The loop badge's own sentence, and it carries the STOP CONDITION rather than just
+                                 the name. This is the one badge in the row whose press starts something that goes
+                                 on spending after the user has looked away, so "what ends it" belongs where the
+                                 message is being written — not behind a hover on the pill, which no touch device
+                                 will ever show anyone. -->
+                            <p v-else-if="pickedLoop && !looping" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
+                                <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met — ends on
+                                {{ loopDesignLine(pickedLoop) }}.
                             </p>
                             <!-- A persona that CANNOT do what the pill implies, said where the message is being
                                  written rather than discovered when the turn comes back empty-handed. Only ever
@@ -1764,7 +1877,7 @@ watch(
             </div>
         </div>
 
-        <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
+        <!-- The five composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
              — the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
              itself to it, so a picker fits whether this panel is docked in a column or floating in a window the
@@ -1782,15 +1895,8 @@ watch(
         <ResponsiveOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end" header="Run through a workflow" panel-class="w-80 p-1">
             <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
         </ResponsiveOverlay>
-        <!-- Mounted here rather than app-wide: a loop belongs to the conversation whose composer opened it, and
-             the dialog takes that conversation's id as a prop precisely so it can never be started against
-             whichever agent happened to be active when a global dialog was raised.
-
-             ON BOTH DEVICES, which it was not: it sat inside the mobile half of a `v-if="mobile"` / `v-else`
-             fork around the three pickers, though it is an ordinary centred dialog with no touch variant. The
-             loop pill is drawn unconditionally, so on a DESKTOP pressing it set the flag and nothing opened.
-             That fork is gone now (the pickers each own their own device swap), and with it the only reason a
-             device-agnostic dialog was ever filed under one. -->
-        <LoopDialog v-model="loopDialogOpen" :conversation-id="conversation.conversationId" :isolated="loopIsolated" />
+        <ResponsiveOverlay v-model="loopOpen" :anchor="loopPill" cross="end" header="Loop until" panel-class="w-80 p-1">
+            <ChatLoopMenu :picked="conversation.loopId.value" @picked="pickLoop($event)" @manage="manageLoops()" />
+        </ResponsiveOverlay>
     </div>
 </template>

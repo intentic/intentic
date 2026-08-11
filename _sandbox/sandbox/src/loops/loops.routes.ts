@@ -39,5 +39,32 @@ export const createLoopsRoutes = (services: Services) => {
             }
             return { ok: true as const };
         }),
+
+        designs: i.designs.handler(async () => ({ designs: await services.loopDesigns.list() })),
+        saveDesign: i.saveDesign.handler(async ({ input }) => {
+            /* The same refusal `start` makes, made at the moment of SAVING instead — which is the point of
+             * saving. An ad-hoc loop with no output and no check wastes one person's afternoon; a SAVED one
+             * that cannot converge is a trap left lying around for everybody who picks it afterwards, and every
+             * one of them pays a full run to discover it. */
+            if (!loopCanConverge(input.design)) {
+                throw new ORPCError("BAD_REQUEST", {
+                    message: "This loop has no output and no check, so nothing could ever tell it it is finished.",
+                });
+            }
+            const outcome = await services.loopDesigns.save(input.design, input.create);
+            if (outcome === "conflict") {
+                throw new ORPCError("CONFLICT", { message: `A saved loop called “${input.design.name}” already exists.` });
+            }
+            if (outcome === "missing") {
+                throw new ORPCError("NOT_FOUND", { message: "That saved loop no longer exists — it may have been deleted in another tab." });
+            }
+            return input.design;
+        }),
+        removeDesign: i.removeDesign.handler(async ({ input }) => {
+            if (!(await services.loopDesigns.remove(input.id))) {
+                throw new ORPCError("NOT_FOUND", { message: "No saved loop with that id." });
+            }
+            return { ok: true as const };
+        }),
     };
 };

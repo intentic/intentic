@@ -271,6 +271,7 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/environment.custom.Dockerfile`,
             `.intentic/environment.d/`,
             `.intentic/extension-enablement.json`,
+            `.intentic/loop-designs.json`,
             `.intentic/personas.json`,
             `.intentic/settings.json`,
             // The skills the owner wrote. Tracked for the reason the rules in settings.json are: text that

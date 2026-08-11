@@ -105,9 +105,15 @@ open never places at all and sits parked off-screen), and there must be **one** 
 surface. `SuggestedSessionBox` had grown exactly that second bug — a `modelOpen` and a `modelSheetOpen`.
 
 ⚑ **The loop dialog never opened on desktop.** `ChatPane` forked its whole picker block on `v-if="mobile"` /
-`v-else`, and `LoopDialog` — an ordinary centred dialog with no touch variant — sat in the mobile half. The loop
-pill is drawn on both, so pressing it on a desktop set the flag and nothing appeared. Collapsing the fork is
-what made it visible; the dialog is now mounted unconditionally.
+`v-else`, and the loop dialog — an ordinary centred dialog with no touch variant — sat in the mobile half. The
+loop pill is drawn on both, so pressing it on a desktop set the flag and nothing appeared. Collapsing the fork
+is what made it visible.
+
+Since resolved a second time and more thoroughly: the loop pill now opens a `ResponsiveOverlay` menu like its
+four neighbours, and the long form moved to the workflows page. A centred dialog raised from a composer had a
+failure this audit's own rule predicts — it teleports into the app's document, so pressing the pill in a
+**popped-out chat window** opened it in the window behind. The anchor is what decides the window, and a dialog
+has no anchor.
 
 `Picker.vue` still has its own internal swap. Folding it onto `ResponsiveOverlay` is a follow-up — `Picker`
 additionally measures its trigger to floor the panel width, which `ResponsiveOverlay` has no notion of.

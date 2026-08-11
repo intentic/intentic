@@ -406,6 +406,15 @@ export interface IntenticApi {
          * nothing here can name a `Workflow` type.
          */
         composeWorkflow(workflowId: string): void;
+        /* AIM A NEW CHAT AT A SAVED LOOP — the same handover as `composeWorkflow` above, for the other kind of
+         * design: the host opens a session with the composer's loop badge set, so the next message the user
+         * types becomes the loop's GOAL and Send starts it running.
+         *
+         * It is a separate call rather than a flag on that one because the two badges are separate picks that
+         * cannot both be armed, and a single "compose with this id" would have had to guess which kind an id
+         * was. A loop id, not a running loop's — nothing has started, and nothing is spent until the send.
+         */
+        composeLoop(loopId: string): void;
     };
     /* WHICH MODEL A RUN THIS EXTENSION STARTS WILL SPEND, the way `terminal` is the shell's one terminal panel:
      * the extension names the choice it is holding, the host owns the picker.

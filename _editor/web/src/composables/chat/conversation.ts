@@ -239,6 +239,18 @@ export class Conversation {
      * paid sessions, and carrying that pick silently into the next chat is the one default nobody would want.
      * It clears on send, for the same reason. */
     readonly workflowId = ref<string | undefined>();
+    /* THE SAVED LOOP THIS COMPOSER'S NEXT MESSAGE RUNS AS, if any — the id of a saved loop, or undefined for the
+     * ordinary send-it-once.
+     *
+     * The workflow pick's twin, held beside it because it is the same KIND of answer to "what happens when I
+     * press send": one hands the message to a graph of other sessions, this one hands it to this agent over and
+     * over until a stated bar is cleared. Both leave the sentence to the composer, which is what stopped a loop
+     * needing a form with a goal field in it.
+     *
+     * Never sticky and cleared on send, for the workflow pick's reason and more sharply: a loop spends money
+     * per round with nobody pressing anything between rounds, and a badge that survived its own run would make
+     * the next message do it all again silently. */
+    readonly loopId = ref<string | undefined>();
     // The reasoning effort the user ASKED for — which is not always runnable, because the tier scale belongs to
     // the MODEL: a pick made on Claude ('max', 'xhigh') is off Kimi K3's scale, and 'max' leaves Claude's own the
     // moment thinking is switched off. Everything that selects an effort writes this; everything that renders or

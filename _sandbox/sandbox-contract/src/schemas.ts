@@ -474,8 +474,9 @@ export type Loop = z.infer<typeof LoopSchema>;
 
 // Can this loop ever end on its own terms? A loop with nothing to produce and nothing to check runs to its
 // iteration ceiling and reports `exhausted`, having been unable to succeed from the moment it was configured.
-// A predicate rather than a schema refinement because both callers want it as one: the route refuses, and the
-// dialog greys out its button while you are still deciding.
+// A predicate rather than a schema refinement because two routes want it as one, at different moments: `start`
+// refuses an ad-hoc loop, and `saveDesign` refuses a SAVED one — which is the more valuable of the two, since a
+// saved loop that cannot converge is a trap everyone who picks it afterwards pays a full run to discover.
 export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean => loop.output.kind !== "none" || loop.checks.length > 0;
 
 /* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/artifacts/loops/<conversationId>/.
@@ -540,6 +541,84 @@ export type LoopRecord = z.infer<typeof LoopRecordSchema>;
 
 export const LoopsListSchema = z.object({ loops: z.array(LoopRecordSchema) });
 export const LoopIdParamSchema = z.object({ conversationId: ConversationIdSchema });
+
+/* ---- saved loops: the machinery, kept; the job, typed fresh each time ----
+ *
+ * A SAVED LOOP IS A LOOP WITH ITS GOAL TAKEN OUT, and that subtraction is the whole idea. Everything a loop
+ * needs besides "what are we doing" is the same every time somebody sets one up — end on `pnpm test`, fresh
+ * context, eight rounds, five dollars, stop after two idle ones — and every one of those was being retyped, in
+ * a modal, before any work could begin. The goal is the only field that is genuinely new each time, and it is
+ * the one field the user has ALREADY WRITTEN: it is sitting in the composer.
+ *
+ * So this holds the machinery and the composer holds the job, which makes a loop the same gesture as a
+ * workflow — pick the shape, type the request, send. `WorkflowSchema` and this are deliberately siblings: both
+ * are designs, both are picked from the composer, both leave the sentence to the message. What a workflow
+ * spreads across sessions, a loop repeats in one.
+ *
+ * NO `conversationId` AND NO `isolated`, unlike the Loop this becomes. Both are facts about the agent the loop
+ * is aimed at, decided at the moment of sending and unknowable when the design is written — a saved loop that
+ * remembered a conversation would be a loop that could only ever be run once.
+ */
+export const LoopDesignSchema = z.object({
+    id: entryId,
+    // What it is called on the composer badge and in the picker — so it has to survive being read at pill width.
+    name: z.string().min(1).max(60),
+    // One line: what this loop is FOR. Optional, because a well-named loop has already said it.
+    description: z.string().max(280).optional(),
+    /* What each iteration is asked to do, when that is worth saying twice. Optional for the reason the ad-hoc
+     * form made it optional: `goal` and `prompt` are different sentences, but making somebody write both before
+     * anything runs doubles the cost of trying a loop at all. Absent ⇒ the iteration works towards the goal
+     * however it sees fit. */
+    prompt: z.string().optional(),
+    context: LoopContextSchema,
+    output: LoopOutputSchema,
+    checks: z.array(LoopCheckSchema),
+    maxIterations: z.number().int().min(1).max(LOOP_ITERATIONS_MAX),
+    maxSpendUsd: z.number().positive().optional(),
+    stallLimit: z.number().int().min(1),
+});
+export type LoopDesign = z.infer<typeof LoopDesignSchema>;
+
+export const LoopDesignsListSchema = z.object({ designs: z.array(LoopDesignSchema) });
+// Create and update on one route with the intent spelled out, exactly as a workflow saves — so an id collision
+// cannot silently turn "new loop" into "replace the one you had".
+export const LoopDesignSaveSchema = z.object({ design: LoopDesignSchema, create: z.boolean() });
+export const LoopDesignIdParamSchema = z.object({ id: entryId });
+
+/* The design, aimed at an agent — the one conversion in the feature, kept here so the composer and anything
+ * else that starts a saved loop cannot disagree about what a saved loop MEANS. The goal is the message the user
+ * typed; `isolated` is a fact about the agent it is aimed at. */
+export const loopFromDesign = (design: LoopDesign, aim: { conversationId: string; goal: string; isolated: boolean }): Loop => ({
+    conversationId: aim.conversationId,
+    goal: aim.goal,
+    prompt: design.prompt ?? "Work towards the goal above. Do the next most useful thing.",
+    context: design.context,
+    output: design.output,
+    checks: design.checks,
+    maxIterations: design.maxIterations,
+    ...(design.maxSpendUsd === undefined ? {} : { maxSpendUsd: design.maxSpendUsd }),
+    stallLimit: design.stallLimit,
+    isolated: aim.isolated,
+});
+
+/* HOW A SAVED LOOP ENDS, IN ONE LINE — the sentence under its name in the picker and on its card, computed
+ * rather than stored so the two can never describe the same loop differently. Ordered as it is read: the bar it
+ * has to clear first, then how far it may go trying. */
+export const loopDesignLine = (design: LoopDesign): string => {
+    const command = design.checks.find((check) => check.kind === "command");
+    const ends =
+        command !== undefined
+            ? command.command
+            : design.checks.some((check) => check.kind === "judge")
+              ? "a reviewer agrees"
+              : design.output.kind === "none"
+                ? "nothing checks it"
+                : "the agent says so";
+    const ceilings = [`${design.maxIterations} rounds`, design.maxSpendUsd === undefined ? `` : `$${design.maxSpendUsd}`].filter(
+        (part) => part !== ``,
+    );
+    return [ends, ...ceilings].join(" · ");
+};
 
 // ---- agents: the conversation fleet ----
 // A "fleet agent" is any conversation with a registry entry, keyed by its conversationId. Isolated ones own a
