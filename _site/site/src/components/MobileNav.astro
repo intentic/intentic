@@ -1,6 +1,7 @@
 ---
 import { navEntries } from "@intentic-dev/site-content/nav";
-import { APP_URL, githubUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 ---
 
@@ -101,6 +102,15 @@ import ExternalIcon from "./ExternalIcon.astro";
                         />
                     </svg>
                     GitHub
+                </a>
+            </li>
+
+            {/* Named in full here, unlike the bar: a phone menu has the room, and "Discord community" says
+                what is on the other side where a bare glyph would only say which company hosts it. */}
+            <li>
+                <a href={discordUrl} target="_blank" rel="noopener" class="mobile-nav-link">
+                    <DiscordIcon />
+                    Discord community
                 </a>
             </li>
         </ul>

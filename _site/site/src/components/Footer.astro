@@ -3,7 +3,7 @@ import { apiHref } from "@intentic-dev/site-content/api";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
-import { APP_URL, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
+import { APP_URL, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
 import logo from "../assets/intentic-full.png";
 import ExternalIcon from "./ExternalIcon.astro";
@@ -59,6 +59,10 @@ const columns: { label: string; links: { href: string; label: string; external?:
             { href: "/changelog/", label: "Changelog" },
             { href: "/about/", label: "About the creator" },
             { href: githubUrl, label: "GitHub", external: true },
+            // Directly under Issues, because the two are one decision made twice a day: a question goes to
+            // Discord and a bug goes to Issues, and a reader choosing between them should not have to hunt
+            // for the second option in a different column.
+            { href: discordUrl, label: "Discord community", external: true },
             { href: githubIssuesUrl, label: "Issues", external: true },
             { href: "/#faq", label: "FAQ" },
         ],

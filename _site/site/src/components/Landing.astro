@@ -2,12 +2,13 @@
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic-dev/site-content/about";
 import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, DEMO_PATH, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { APP_URL, DEMO_PATH, discordUrl, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import { Image } from "astro:assets";
 import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "./CreatorLinks.astro";
+import DiscordIcon from "./DiscordIcon.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
 import ProductShotFigure from "./ProductShotFigure.astro";
@@ -506,9 +507,26 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                     }
                 </div>
 
-                <div class="mt-10 flex max-w-2xl flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-card/40 px-5 py-4">
-                    <p class="text-sm text-muted">Still unanswered? Issues are public and get a real reply.</p>
-                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
+                {/* The one place on this page a visitor is holding an unanswered question, so it is the one
+                    place the community belongs — not the hero and not the final CTA, where it would compete
+                    with the thing we actually want them to do. Two doors rather than one, because the reader
+                    who bounced off the FAQ has one of two problems and Issues only ever fitted the second:
+                    a question wants a person, a bug wants a record. Discord leads because it is the lighter
+                    of the two asks, and "still unanswered" is usually a question. */}
+                <div class="mt-10 max-w-2xl rounded-2xl border border-line bg-card/40 px-5 py-4">
+                    <p class="text-sm text-muted">Still unanswered? Ask in Discord if it's a question, open an issue if it's a bug. Both get a real reply.</p>
+                    <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+                        <a
+                            href={discordUrl}
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex items-center gap-2 text-sm font-medium text-link hover:underline"
+                        >
+                            <DiscordIcon size={15} />
+                            Ask in Discord →
+                        </a>
+                        <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
+                    </div>
                 </div>
             </div>
         </section>

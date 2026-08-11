@@ -22,6 +22,11 @@ export const githubUrl = "https://github.com/intentic/intentic";
 export const githubIssuesUrl = "https://github.com/intentic/intentic/issues";
 export const githubReleasesUrl = "https://github.com/intentic/intentic/releases";
 
+/* The community server. It is the fast, human channel, and the site is deliberate about which of the two it
+ * offers where: a QUESTION goes here, a BUG goes to Issues. An invite link is the only address Discord has —
+ * there is no stable /channels/ URL a stranger can open — so this is a permanent, non-expiring invite. */
+export const discordUrl = "https://discord.gg/3veuzYp32T";
+
 /* The founder's public profiles. They are here rather than in about.ts because two consumers need them
  * and neither owns them: the visible link chips on /about/ and the landing band, and `sameAs` in the
  * Organization and Person schemas — which is how a search engine or an answer engine resolves "who is
@@ -30,5 +35,8 @@ export const githubProfileUrl = "https://github.com/radarsu";
 export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
 export const personalSiteUrl = "https://radarsu.com/";
 
-export const SAME_AS: readonly string[] = [orgUrl, githubUrl];
+/* The org's official profiles, which is how a search or answer engine resolves this domain to an entity it
+ * already knows. The Discord invite belongs here for the same reason the GitHub org does: it is a place this
+ * project is, publicly, under its own name. */
+export const SAME_AS: readonly string[] = [orgUrl, githubUrl, discordUrl];
 export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl];

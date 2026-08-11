@@ -10,10 +10,11 @@ import {
     openSource,
     whyIntentic,
 } from "@intentic-dev/site-content/about";
-import { githubIssuesUrl } from "@intentic-dev/site-content/site";
+import { discordUrl, githubIssuesUrl } from "@intentic-dev/site-content/site";
 import { buildProfilePageSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "../components/CreatorLinks.astro";
+import DiscordIcon from "../components/DiscordIcon.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import TrustCards from "../components/TrustCards.astro";
@@ -114,10 +115,18 @@ import VerifyDownload from "../components/VerifyDownload.astro";
                         >
                             {CONTACT_EMAIL_PARTS.user} [at] {CONTACT_EMAIL_PARTS.domain.replace(".", " [dot] ")}
                         </span>
-                        , or open a public issue.
+                        , in the community server, or open a public issue.
                     </p>
                 </div>
-                <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+                {/* Three channels, one card, in order of how much they ask of the reader: Discord is a message,
+                    an issue is a written-up case, the address is for the thing that belongs to nobody else. */}
+                <div class="flex flex-wrap gap-3">
+                    <a href={discordUrl} target="_blank" rel="noopener" class="btn btn-secondary inline-flex items-center gap-2">
+                        <DiscordIcon size={15} />
+                        Join the Discord
+                    </a>
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+                </div>
             </div>
 
             <p class="mt-6 text-xs leading-relaxed text-subtle">

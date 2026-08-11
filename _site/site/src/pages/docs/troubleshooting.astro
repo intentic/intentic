@@ -1,4 +1,5 @@
 ---
+import { discordUrl, githubIssuesUrl } from "@intentic-dev/site-content/site";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
@@ -213,6 +214,15 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         The daemon keeps its own debug logs — terminal captures, CLI run logs and <code>daemon.log</code> — and they are reachable over the
         API and in the desktop app. Your files are never the thing at risk while you dig: <code>/work</code> and your history are named Docker
         volumes, and removing, updating or rebuilding a container does not touch them.
+    </p>
+    {/* The real end of the page, and the one moment on this site where a human is worth more than another
+        document: a reader who has walked every symptom above and matched none of them has nowhere left to
+        click. Discord first because most of what lands here is a question someone has already answered
+        once; Issues second, for the failure that reproduces and should therefore leave a record. */}
+    <p>
+        And if none of it says anything either: bring the symptom to the <a href={discordUrl}>Discord community</a> — most of what reaches
+        this page is something somebody has already hit — or <a href={githubIssuesUrl}>open an issue</a> if you can make it happen twice.
+        Either way, the logs above are what makes it answerable.
     </p>
 
     <DocsRelated
