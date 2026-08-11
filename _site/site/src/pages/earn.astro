@@ -1,0 +1,443 @@
+---
+import { creatorSharePct, creditsPerCent, demoServiceCredits, installsPerDay, pool, runsPerDay } from "@intentic-dev/site-content/pool";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import DocsCodeBlock from "../components/DocsCodeBlock.astro";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import SpendFigure from "../components/SpendFigure.astro";
+
+/* /earn — THE ECONOMY, top-level, because it is the one system on this site with two audiences. A member asks
+ * "what does the membership get me and where do my credits go"; a creator asks "what is my share and what is
+ * it a share of". Filed under the developer book it read as a step of publishing and served only half its
+ * readers — and every other page that mentions money (the gallery, the installer's docs, the publishing
+ * guide) now states at most the headline figures and links here, so the numbers live in exactly one place.
+ *
+ * The page runs member-first on purpose: the creator's pool is "split by the credits members spend", so a
+ * reader cannot follow the creator half until they have seen what spending a credit even looks like. The
+ * spend cards and the diamond moved here FROM the extension gallery, which is a discovery surface and was
+ * carrying the site's heaviest economics above its own listings.
+ *
+ * Every figure on this page is drawn from the published pool config or derived from it — nothing retyped. */
+
+const n = (value: number) => value.toLocaleString(`en-GB`);
+
+/* WHAT A DAY BUYS, drawn to scale in both currencies: the same bar, five blocks against two hundred
+ * hairlines. Both counts are computed from the prices, so the picture cannot outlive them — and both are
+ * exact rather than suggestive, which is the only thing that makes a comb of that density honest rather
+ * than decorative. */
+const METER_W = 200;
+const meterBars = (count: number, gap: number) => {
+    const width = Math.max((METER_W - gap * (count - 1)) / count, 0.2);
+    return Array.from({ length: count }, (_, i) => ({ x: i * (width + gap), width }));
+};
+const demoRunsPerDay = runsPerDay(demoServiceCredits);
+
+/* The two ways a credit can leave a member's hands. They are genuinely different products — one flat donation
+ * attached to a deliberate install, one metered run of something with real upstream cost — and the contrast is
+ * the clearest thing about the model, so it is drawn rather than listed. The diamond that opens the section
+ * lives in SpendFigure.astro, which owns its own geometry at two aspect ratios. */
+const spendCards = [
+    {
+        tag: "One-time",
+        kicker: "Premium extensions",
+        heading: "Back an extension by installing it",
+        blurb: "The install is the whole transaction. Nothing after it is counted, reported or charged for — using the thing you installed is free forever.",
+        figure: n(pool.donationCredits),
+        unit: "credits, flat",
+        note: "Same number whatever you install, whoever made it. A price each listing could set would be the first thing anyone gamed.",
+        steps: [
+            "You approve the install, exactly like any other extension.",
+            `${n(pool.donationCredits)} credits go to the publisher named in the manifest.`,
+            "It is yours from then on — open it a thousand times, it never costs another credit.",
+        ],
+        guarantee: "If the donation cannot go through, the install stops. Nothing half-paid ever goes live.",
+        cadence: "Reinstalling charges nothing. An update can donate again, at most once a month.",
+        meter: meterBars(installsPerDay, 2.5),
+        meterLabel: `A day's credits — ${n(installsPerDay)} installs`,
+    },
+    {
+        tag: "Per run",
+        kicker: "Premium services",
+        heading: "Pay for a run that costs real money",
+        blurb: "Some tools are not a prompt and some glue — they call paid data APIs or burn real compute every time. Those are services, and they are metered per run.",
+        figure: "Its own price",
+        unit: "shown before you agree",
+        note: `Each service publishes what a run costs. The demo research run is ${n(demoServiceCredits)} credits, so a day's allowance is ${n(demoRunsPerDay)} of them.`,
+        steps: [
+            "Your agent finds one that fits and quotes the price and what is left today.",
+            "You say yes in chat. One yes, one run.",
+            "The platform makes the call for you — the provider never learns who you are, and you never hold its key.",
+        ],
+        guarantee: "If the service does not answer, your credits come straight back. A failed run costs nothing.",
+        cadence: "Every repeat needs its own yes. Nothing loops without asking you again.",
+        meter: meterBars(demoRunsPerDay, 0.45),
+        meterLabel: `A day's credits — ${n(demoRunsPerDay)} demo runs`,
+    },
+];
+
+/* The three rules that are true of BOTH lanes. Kept out of the cards deliberately: printed twice they read as
+ * two policies that happen to match, and the single most reassuring thing about this model is that there is
+ * one rule wearing two shapes. */
+const spendRules = [
+    {
+        title: `${creatorSharePct}% reaches the creator`,
+        body: "The same published share of a spent credit's value, whichever way you spent it. The rest runs the platform.",
+    },
+    {
+        title: "Capped at what you paid",
+        body: `Both draw on one meter — ${n(pool.dailyCredits)} credits a day, resetting at midnight UTC — so what you can direct to creators can never exceed your own membership. That is what makes it unfarmable.`,
+    },
+    {
+        title: "Nothing is metered",
+        body: "No usage counting anywhere, and none asked for. Installing is a choice you make; a run is one you approve. Credits you never spend pay nobody.",
+    },
+];
+
+/* The creator's side of the same money: a drawn revenue cycle. The ring geometry is computed so four
+ * arrowheads sit tangent to a clockwise loop (members → pool → split → paid → renews). Labels stay terse; the
+ * one honesty line rides underneath. */
+const ring = { cx: 150, cy: 150, r: 96 };
+const ringStr = (deg: number, rr = ring.r) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(ring.cx + rr * Math.cos(a)).toFixed(1)} ${(ring.cy + rr * Math.sin(a)).toFixed(1)}`;
+};
+const ringXY = (deg: number, rr = ring.r) => {
+    const a = (deg * Math.PI) / 180;
+    return [Number((ring.cx + rr * Math.cos(a)).toFixed(1)), Number((ring.cy + rr * Math.sin(a)).toFixed(1))];
+};
+const revNodes = [
+    { label: "Members pay", xy: ringXY(270), anchor: "middle", lx: 150, ly: 30 },
+    { label: "Pooled monthly", xy: ringXY(0), anchor: "start", lx: 262, ly: 155 },
+    { label: "Split by credits spent", xy: ringXY(90), anchor: "middle", lx: 150, ly: 286 },
+    { label: "Paid to creators", xy: ringXY(180), anchor: "end", lx: 38, ly: 155 },
+];
+// four short arcs at the quadrant midpoints; each carries one auto-oriented arrowhead so the loop reads clockwise
+const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} ${ring.r} 0 0 1 ${ringStr(m + 3)}`);
+
+const entry = `{
+    "name": "acme.reddit-research",
+    "kind": "extension",
+    "tier": "premium",
+    "description": "Deep subreddit research: audiences, timing, and what actually gets traction.",
+    "version": "1.2.0",
+    "source": { "source": "github", "repo": "acme/reddit-research", "sha": "9f2c1ab…" }
+}`;
+---
+
+<BaseLayout
+    title="Earn · intentic"
+    description="One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger."
+>
+    <Nav />
+    <main class="flex-1">
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
+                <div class="eyebrow">Earn</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+                    One membership. A shared pool. {creatorSharePct}% to creators.
+                </h1>
+                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    The whole economy on one page, for both of its sides: what a member's credits buy, and how extensions and services earn
+                    from the pool those credits split — with no telemetry anywhere, and a ledger anyone can read.
+                </p>
+                <div class="mt-7 flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href="/api/publish/">List your work</a>
+                    <a class="btn btn-secondary" href="/extensions/">Browse extensions</a>
+                </div>
+            </div>
+        </section>
+
+        {/* The member's side first: the ring below splits a pool "by the credits members spend", and this is
+            where a reader learns what spending one even looks like. */}
+        <section class="relative overflow-hidden border-b border-line" aria-labelledby="credits-heading">
+            <div class="absolute inset-0 bg-linear-to-b from-primary-600/8 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="grid-overlay"></div>
+            <div class="relative mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
+                    <div>
+                        <div class="eyebrow text-link">Credits</div>
+                        <h2 id="credits-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                            One membership. Two ways to spend it.
+                        </h2>
+                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                            Almost everything in the gallery installs free, from anyone, with no cut taken from anybody. A membership adds
+                            credits — and a credit leaves your hands in exactly two places, both of which you trigger on purpose.
+                        </p>
+                        <dl class="mt-6 flex flex-wrap gap-x-6 gap-y-3">
+                            {
+                                [
+                                    { term: `$${pool.priceUsd}`, detail: "a month" },
+                                    { term: n(pool.dailyCredits), detail: "credits a day" },
+                                    { term: n(creditsPerCent), detail: "credits to the cent" },
+                                ].map((stat) => (
+                                    <div>
+                                        <dt class="font-mono text-xl font-semibold tracking-tight text-content">{stat.term}</dt>
+                                        <dd class="text-2xs text-subtle">{stat.detail}</dd>
+                                    </div>
+                                ))
+                            }
+                        </dl>
+                    </div>
+
+                    {/* The diamond: one source, two middles, one rule. */}
+                    <figure class="w-full lg:justify-self-end">
+                        <SpendFigure />
+                    </figure>
+                </div>
+
+                {/* One card per way. Same skeleton on both, so the differences are the only thing that moves. */}
+                <div class="mt-14 grid gap-6 lg:grid-cols-2">
+                    {
+                        spendCards.map((card) => (
+                            <article class="card relative flex flex-col gap-5 overflow-hidden p-6 sm:p-7">
+                                <div
+                                    class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary-500/60 to-transparent"
+                                    aria-hidden="true"
+                                />
+                                <header>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="chip border border-primary-600/35 bg-primary-600/12 text-primary-300">{card.tag}</span>
+                                        <span class="eyebrow">{card.kicker}</span>
+                                    </div>
+                                    <h3 class="mt-3.5 text-lg font-semibold tracking-tight text-content">{card.heading}</h3>
+                                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{card.blurb}</p>
+                                </header>
+
+                                <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-y border-line py-4">
+                                    <span class="text-3xl font-semibold tracking-tight text-content">{card.figure}</span>
+                                    <span class="text-sm text-muted">{card.unit}</span>
+                                    <p class="mt-1 w-full text-2xs leading-relaxed text-subtle">{card.note}</p>
+                                </div>
+
+                                <ol class="flex flex-col gap-2.5">
+                                    {card.steps.map((step, i) => (
+                                        <li class="flex gap-3 text-sm leading-relaxed text-muted">
+                                            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-overlay/40 text-2xs font-semibold text-subtle">
+                                                {i + 1}
+                                            </span>
+                                            <span>{step}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+
+                                {/* A day's allowance to scale, in this lane's own units — five blocks against a comb. */}
+                                <div class="mt-auto">
+                                    <svg viewBox={`0 0 ${METER_W} 10`} class="h-2.5 w-full text-primary-400/70" preserveAspectRatio="none" aria-hidden="true">
+                                        {card.meter.map((bar) => (
+                                            <rect x={bar.x} y="0" width={bar.width} height="10" fill="currentColor" />
+                                        ))}
+                                    </svg>
+                                    <p class="mt-2 text-2xs text-subtle">{card.meterLabel}</p>
+                                </div>
+
+                                <div class="flex flex-col gap-2 rounded-lg border border-success/25 bg-success/8 px-3.5 py-3">
+                                    <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
+                                        <svg
+                                            class="mt-px h-3.5 w-3.5 shrink-0 text-success"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2.25"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="M20 6 9 17l-5-5" />
+                                        </svg>
+                                        <span>{card.guarantee}</span>
+                                    </p>
+                                    <p class="pl-5.5 text-2xs leading-relaxed text-subtle">{card.cadence}</p>
+                                </div>
+                            </article>
+                        ))
+                    }
+                </div>
+
+                {/* True of both lanes, which is the point of stating them once. */}
+                <div class="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-3">
+                    {
+                        spendRules.map((rule) => (
+                            <div class="border-t border-line pt-4">
+                                <h3 class="text-sm font-semibold tracking-tight text-content">{rule.title}</h3>
+                                <p class="mt-1.5 text-2xs leading-relaxed text-subtle">{rule.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
+        {/* The creator's side: the same money, seen from the other end of the month. */}
+        <section class="border-b border-line" aria-labelledby="pool-heading">
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14">
+                    <div class="relative order-last overflow-hidden rounded-2xl border border-line bg-canvas/60 lg:order-first">
+                        <div class="grid-overlay"></div>
+                        <div
+                            class="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                            style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 16%, transparent), transparent 70%)"
+                            aria-hidden="true"
+                        >
+                        </div>
+                        <div class="relative flex flex-col items-center px-5 py-9 text-center">
+                            <svg
+                                viewBox="-80 0 476 300"
+                                class="h-auto w-full max-w-[560px] text-link"
+                                role="img"
+                                aria-label="A monthly cycle: members pay, a share is pooled, the pool is split by the credits members spend, and creators are paid — then it renews."
+                            >
+                                <defs>
+                                    <marker id="rev-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+                                        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                                    </marker>
+                                </defs>
+                                <circle cx="150" cy="150" r="96" fill="none" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="3 6" />
+                                {revArcs.map((d) => <path d={d} fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#rev-arrow)" />)}
+                                <circle cx="150" cy="150" r="30" fill="color-mix(in srgb, var(--color-primary-500) 12%, transparent)" stroke="currentColor" stroke-opacity="0.35" />
+                                <text x="150" y="151" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="700" style="fill: var(--color-link)">$</text>
+                                {
+                                    revNodes.map((node) => (
+                                        <Fragment>
+                                            <circle cx={node.xy[0]} cy={node.xy[1]} r="11" fill="var(--color-canvas)" stroke="currentColor" stroke-opacity="0.35" />
+                                            <circle cx={node.xy[0]} cy={node.xy[1]} r="5" fill="currentColor" />
+                                            <text x={node.lx} y={node.ly} text-anchor={node.anchor} dominant-baseline="central" font-size="13.5" font-weight="500" style="fill: var(--color-content)">
+                                                {node.label}
+                                            </text>
+                                        </Fragment>
+                                    ))
+                                }
+                            </svg>
+                            <p class="mt-2 max-w-copy text-2xs leading-relaxed text-subtle">
+                                A monthly pool, split by the credits members actually spend — install donations and service runs — and published in the open. No usage is ever metered; free extensions never enter it; premium is opt-in.
+                            </p>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="eyebrow text-link">The pool</div>
+                        <h2 id="pool-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                            Split by what members choose. Renewed monthly.
+                        </h2>
+                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                            Creators don't set prices and members don't open wallets per tool. Memberships fill one pool, the credits members
+                            spend decide its split, and {creatorSharePct}% of every spent credit's value reaches the creator it went to.
+                            Maintained work earns again: an update can donate again, at most once a month per install.
+                        </p>
+                        <div class="mt-7 flex flex-wrap gap-3">
+                            <a class="btn btn-secondary" href="/api/publish/">Get listed</a>
+                            <a class="btn btn-secondary" href="/api/maintain/">Maintain &amp; grow</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {/* The fine print, in full — the one place on the site the model is stated rather than summarized. */}
+        <section class="mx-auto max-w-7xl px-6 py-16 lg:py-20" aria-labelledby="deal-heading">
+            <div class="eyebrow text-link">The whole deal</div>
+            <h2 id="deal-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">Stated once, in full</h2>
+            <div class="docs-body mt-8">
+                <h3>The deal</h3>
+                <p>
+                    A user buys one <strong>intentic membership</strong> (${pool.priceUsd}/month). It unlocks every <code>premium</code> extension for them,
+                    everywhere they work, and includes a daily allowance of <strong>credits</strong> — the pool's only currency.
+                    <strong>Every credit a member spends pays {creatorSharePct}% of its dollar value to the creator it went to</strong>; the rest runs the platform.
+                    Two ways credits move:
+                </p>
+                <ul>
+                    <li><strong>Install donations</strong> — installing a premium extension donates a published number of credits to its publisher, once, automatically. Updating it donates again, at most once a month. That is the whole way non-service extensions earn.</li>
+                    <li><strong>Service runs</strong> — metered per-run spends on priced services (the section below).</li>
+                </ul>
+                <p>
+                    There is no per-extension checkout, no subscription-per-tool, and no cut taken from anything you sell outside the pool. A creator
+                    lists once and earns from installs; a member pays once and supports what they choose by choosing it.
+                </p>
+
+                <h3>No telemetry, by construction</h3>
+                <p>
+                    Sandboxes are self-hosted — yours, like your editor. So the pool deliberately pays on <strong>nothing a sandbox could report</strong>:
+                    no usage pings, no active-day bits, no counts, ever. The only economic signal that exists is what passes through the platform's own
+                    hands — a member's deliberate install donation, a member's service run. Your machine tells nobody what you run on it.
+                </p>
+                <p>Why donations at install, and not the obvious alternatives:</p>
+                <ul>
+                    <li><strong>Not usage metering</strong> — a self-hosted client can invent any usage it likes, and honest ones shouldn't phone home at all.</li>
+                    <li><strong>Not minutes or tokens</strong> — those pay slow, bloated tools more for being slow and bloated.</li>
+                    <li><strong>Not a per-tool checkout</strong> — friction at every install kills the browsing that makes a catalog worth listing in.</li>
+                </ul>
+
+                <h3>Why farming loses money, arithmetically</h3>
+                <p>
+                    A member's credits are bounded by their own membership — a month's allowance is worth exactly what they paid. So a publisher
+                    "farming" donations to their own listing with bought memberships can only redirect <em>a {creatorSharePct}% share of money they themselves paid
+                    in</em>: every farmed dollar costs more than it returns, at any scale. The monthly donation dedupe closes the update-spam variant —
+                    an install can donate at most twelve times a year however often its publisher ships. What remains for policy is only nudging real
+                    users into meaningless updates, which is <strong>delisting grounds</strong>, stated on the row like every other trust decision.
+                </p>
+
+                <h3>Services &amp; credits: runs with real costs</h3>
+                <p>
+                    Some tools aren't a prompt and glue — they call paid data APIs or burn real compute per run. Those are <strong>services</strong>,
+                    and they run on <strong>credits</strong>: a membership includes a daily allowance ({n(pool.dailyCredits)} credits, resetting at UTC midnight, same
+                    honest reset as the free trial), and a service publishes its credit price. The rules a member can hold us to:
+                </p>
+                <ul>
+                    <li><strong>The price is visible before the run.</strong> Any surface can ask what a run costs and what's left today; a refusal for lack of credits answers with the remaining count and when it resets.</li>
+                    <li><strong>No charge on failure.</strong> Credits are spent atomically before the call and refunded automatically when the provider errors or never answers. A provider's "your query was malformed" is an answer — that one is paid for and relayed verbatim.</li>
+                    <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is; the user never holds a provider account or key. Every forwarded call is signed so a provider can verify it came from intentic and drop everything else.</li>
+                </ul>
+                <p>
+                    A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. Donations and runs both
+                    spend from the same daily allowance, so a member's total support is bounded by exactly what they paid — which is what makes the
+                    whole economy sybil-proof. Credits nobody spends pay nobody: the pool figure is a ceiling payouts approach, and the ledger prints
+                    both numbers so neither can pose as the other.
+                </p>
+
+                <h3>The ledger is public</h3>
+                <p>
+                    The platform serves <code>GET /pool/transparency</code> to anyone, no login. It carries member count, gross revenue, the split, the
+                    pool ceiling and the paid total, every premium extension's donors, credits and earnings, and every service's runs, credits and
+                    earnings — for this month and the two before it. The numbers are exact, computed from the same ledger the payouts will settle on.
+                    Member counts for past months are today's snapshot (the platform keeps no status history), and the page you are reading says so
+                    rather than dressing an estimate up as an audit.
+                </p>
+
+                <h3>What exists today, honestly</h3>
+                <ul>
+                    <li><strong>Working now:</strong> premium listings, the membership, install donations with the monthly dedupe, credits and metered service runs (spend, refund, signed forwarding), the demo service, the pool math, and the public ledger.</li>
+                    <li><strong>Not yet:</strong> payout rails — the ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating. Also not yet: credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
+                </ul>
+                <p>
+                    The split ({creatorSharePct}%) is configuration the platform publishes on the ledger itself, so this page and the endpoint cannot quietly
+                    disagree. If the number ever changes, it changes loudly, prospectively, and on that page first.
+                </p>
+
+                <h3>Opting in</h3>
+                <p>
+                    One field on your registry entry. Everything else on <a href="/api/publish/">Publish &amp; registries</a> — the sha-pinned pointer,
+                    the manifest gate, the <a href="/api/verify/">trust states</a> — applies to premium listings unchanged.
+                </p>
+                <DocsCodeBlock code={entry} lang="json" title=".claude-plugin/marketplace.json — one entry" />
+                <p>
+                    Premium is honored on the <a href="/extensions/">official registry</a>, because that is the registry the platform's pool reads.
+                    A private registry can mark rows premium for its own purposes, but the public pool neither sees nor pays them.
+                </p>
+            </div>
+        </section>
+
+        <section class="border-t border-line">
+            <div class="mx-auto max-w-7xl px-6 py-14 text-center">
+                <h2 class="text-xl font-semibold tracking-tight text-content">Build something worth backing.</h2>
+                <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">
+                    The pool pays what members choose. The way in is the same as for anything else here: build it, list it, keep it good.
+                </p>
+                <div class="mt-6 flex flex-wrap justify-center gap-3">
+                    <a class="btn btn-primary" href="/api/build/">Build an extension</a>
+                    <a class="btn btn-secondary" href="/api/publish/">Get listed</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+</BaseLayout>

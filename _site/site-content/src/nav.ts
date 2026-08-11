@@ -109,15 +109,17 @@ export const navEntries: NavEntry[] = [
         action: { label: "Changelog", href: "/changelog/" },
     },
     /* The authoring book, its own entry in the bar rather than a shelf inside Docs — the split this whole tree
-     * exists to make. Two rows, because the book has two shelves and the reason a reader picks one over the
-     * other is the audience line under each: one is walked front to back, the other is opened at a field name.
+     * exists to make. Two rows, one per shelf, and the reason a reader picks one over the other is the audience
+     * line under each: Build is the code, Ship is the process. "Developers" rather than "API" because the menu
+     * holds both jobs, and a bar that says "API" over registry policy is promising reference it isn't holding.
+     * The URLs stay /api/*, because a label is a word and a URL is a promise other people have already linked to.
      *
      * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an
      * author arrives with — what does a listed extension actually look like — and the row it would otherwise
      * be is already two items to the right in this same bar. */
     {
         type: "menu",
-        label: "API",
+        label: "Developers",
         prefix: "/api",
         sections: [{ items: [...apiDestinations] }],
         action: { label: "Browse the gallery", href: "/extensions/" },
@@ -129,6 +131,16 @@ export const navEntries: NavEntry[] = [
         label: "Extensions",
         href: "/extensions/",
         prefix: "/extensions",
+    },
+    /* The economy, top-level — the one system on the site with two audiences. A member asking what the
+     * membership buys and a creator asking what the split is are both sent to one page, and neither should
+     * have to look for money inside a developer menu. It sits beside Extensions because they are two halves
+     * of one story: what's listed, and how what's listed is paid for. */
+    {
+        type: "link",
+        label: "Earn",
+        href: "/earn/",
+        prefix: "/earn",
     },
     // Last of the text links, where a bar conventionally keeps it — and in the bar at all because "who is
     // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container

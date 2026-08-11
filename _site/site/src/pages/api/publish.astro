@@ -7,10 +7,10 @@ import DocsRelated from "../../components/DocsRelated.astro";
 /* THE LIST STEP, and only it.
  *
  * This page used to carry five jobs — how to list, what the installer sees, how updates behave, the trust model,
- * and money — which is why it ran to nine screens and why nobody could find "verified" in it. Three of those five
+ * and money — which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
  * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
- * the trust vocabulary on /api/verify/, and the revenue split on /api/earn/. What is left is the one thing an
- * author does here: get a pointer to their repository into a registry. */
+ * the trust vocabulary on /api/verify/, the release cycle on /api/maintain/, and the money at /earn/. What is
+ * left is the one thing an author does here: get a pointer to their repository into a registry. */
 
 const registry = `{
     "name": "acme-extensions",
@@ -138,28 +138,9 @@ const sources = `// A repo of its own
         <code>publisher.name</code>, a scan that finds a repo claiming a slug somebody else already holds refuses it rather than opening a pull
         request that looks legitimate.
     </p>
-
-    <h2>Shipping an update</h2>
     <p>
-        Open another pull request with the new sha. That is the entire release process: the version in your manifest is what users see, and the
-        sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong.
-    </p>
-    <p>Two things about the far end are worth designing around, because they decide how your release is received:</p>
-    <ul>
-        <li>
-            <strong>A release that grows your manifest re-asks.</strong> A new route in <code>permissions.sandbox</code>, a new process, a new
-            PATH entry or a badge you didn't have before turns a one-click update into a dialog that spells out every addition. Approval never
-            transfers to powers the owner didn't approve. A manifest-identical code change still points at a new sha, so the registry's
-            security gate reruns before that update appears in official discovery.
-        </li>
-        <li>
-            <strong>Nothing auto-updates by default</strong>, and the one policy that does apply updates unattended requires your listing to be
-            human-verified and your powers to have stayed the same. Both are things you earn rather than declare.
-        </li>
-    </ul>
-    <p>
-        The mechanics the owner sees — the badge, the powers diff, the health watch, the kept previous version and one-click revert — are on
-        <a href="/docs/extensions/">Install &amp; manage extensions</a>.
+        Listing is free and stays cut-free. The one paid path — a <code>premium</code> tier that draws from the creator pool — is opt-in,
+        one field on your entry, and the whole economy is stated once on <a href="/earn/">Earn</a>.
     </p>
 
     <h2>What the person installing sees</h2>
@@ -174,21 +155,14 @@ const sources = `// A repo of its own
         <a href="/docs/extensions/">installer's page</a> is the whole of what they are shown, and it is worth reading once from their side.
     </p>
 
-    <h2>Money</h2>
-    <p>
-        Listing and installing are free, and stay cut-free: a free extension pays nothing to publish, nothing to install, and hands the
-        registry no share of whatever you charge for your own repository elsewhere. There is one paid path, it is opt-in, and it is one
-        <code>tier</code> field on your registry entry — <a href="/api/earn/">The creator pool</a> states the whole deal.
-    </p>
-
     <h2>Available today, and next</h2>
     <p>
         Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
         private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
         <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
-        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the
-        whole update lifecycle — the badges, the powers diff, the kept previous version and one-click revert, the health watch,
-        blocked-listing advisories, and the per-extension update policies.
+        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the whole
+        <a href="/api/maintain/">update lifecycle</a> — the badges, the powers diff, the kept previous version and one-click revert, the
+        health watch, blocked-listing advisories, and the per-extension update policies.
     </p>
     <p>
         Still to come: a typed npm artifact for <code>@intentic/extension-ui</code> so out-of-repo authors get the shell's components with
@@ -202,7 +176,7 @@ const sources = `// A repo of its own
     <DocsRelated
         links={[
             { href: "/api/verify/", title: "Verification & trust", why: "what listed, verified and blocked each claim." },
-            { href: "/api/earn/", title: "The creator pool", why: "the one paid path, and how the split is published." },
+            { href: "/api/maintain/", title: "Maintain & grow", why: "release two: updates, ranking, and the revenue cadence." },
             { href: "/docs/extensions/", title: "Install & manage extensions", why: "the same listing, read from the other side." },
         ]}
     />

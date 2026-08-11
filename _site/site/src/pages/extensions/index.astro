@@ -1,18 +1,22 @@
 ---
 import { REGISTRY_TOPIC } from "@intentic/registry";
 import { apiHref, extensionLifecycle } from "@intentic-dev/site-content/api";
-import { creatorSharePct, creditsPerCent, demoServiceCredits, installsPerDay, pool, runsPerDay } from "@intentic-dev/site-content/pool";
+import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
 import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
-import SpendFigure from "../../components/SpendFigure.astro";
 import type { RegistryEntry } from "@intentic/registry";
 import { loadGallery, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
 /* The extension gallery: the official registry repository, rendered. Built from its two JSON files at build
  * time (src/lib/registry.ts), so this page has no backend behind it — curation is pull requests over there
  * and a deploy is how the result reaches the web.
+ *
+ * A DISCOVERY SURFACE, and the layout now says so: the listings come first. This page used to open with the
+ * site's heaviest economics — the spend diamond, two spend cards, the revenue ring — before showing a single
+ * listing, which put the marketplace below the fold of its own page. The whole economy lives at /earn/ now;
+ * what stays here is one band of headline figures and the lifecycle strip, each linking out.
  *
  * Verified leads and stars rank within it, which is what compareEntries already decided; the page just says
  * out loud what that ordering does and does not claim, because a gallery sorted by a number readers know is
@@ -59,89 +63,19 @@ const scannedNote =
 
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
-/* ── HOW A MEMBER SPENDS ──────────────────────────────────────────────────────────────────────────────────
- * The two ways a credit can leave a member's hands, which is the half of the economy this page never stated:
- * the revenue ring below says the pool is "split by the credits members spend — install donations and service
- * runs" and then leaves a reader to guess what either of those is. They are genuinely different products —
- * one flat donation attached to a deliberate install, one metered run of something with real upstream cost —
- * and the contrast is the clearest thing about the model, so it is drawn rather than listed.
- *
- * The diamond that opens the section lives in SpendFigure.astro, which owns its own geometry at two aspect
- * ratios. A third visual language on purpose: the ring below is the creator's side of the same money, the
- * panel further down is not about money at all, and three copies of one figure would flatten all three. */
-
-/* WHAT A DAY BUYS, drawn to scale in both currencies: the same bar, five blocks against two hundred
- * hairlines. Both counts are computed from the prices, so the picture cannot outlive them — and both are
- * exact rather than suggestive, which is the only thing that makes a comb of that density honest rather
- * than decorative. */
-const METER_W = 200;
-const meterBars = (count: number, gap: number) => {
-    const width = Math.max((METER_W - gap * (count - 1)) / count, 0.2);
-    return Array.from({ length: count }, (_, i) => ({ x: i * (width + gap), width }));
-};
-const demoRunsPerDay = runsPerDay(demoServiceCredits);
-const spendCards = [
-    {
-        tag: "One-time",
-        kicker: "Premium extensions",
-        heading: "Back an extension by installing it",
-        blurb: "The install is the whole transaction. Nothing after it is counted, reported or charged for — using the thing you installed is free forever.",
-        figure: n(pool.donationCredits),
-        unit: "credits, flat",
-        note: "Same number whatever you install, whoever made it. A price each listing could set would be the first thing anyone gamed.",
-        steps: [
-            "You approve the install, exactly like any other extension.",
-            `${n(pool.donationCredits)} credits go to the publisher named in the manifest.`,
-            "It is yours from then on — open it a thousand times, it never costs another credit.",
-        ],
-        guarantee: "If the donation cannot go through, the install stops. Nothing half-paid ever goes live.",
-        cadence: "Reinstalling charges nothing. An update can donate again, at most once a month.",
-        meter: meterBars(installsPerDay, 2.5),
-        meterLabel: `A day's credits — ${n(installsPerDay)} installs`,
-    },
-    {
-        tag: "Per run",
-        kicker: "Premium services",
-        heading: "Pay for a run that costs real money",
-        blurb: "Some tools are not a prompt and some glue — they call paid data APIs or burn real compute every time. Those are services, and they are metered per run.",
-        figure: "Its own price",
-        unit: "shown before you agree",
-        note: `Each service publishes what a run costs. The demo research run is ${n(demoServiceCredits)} credits, so a day's allowance is ${n(demoRunsPerDay)} of them.`,
-        steps: [
-            "Your agent finds one that fits and quotes the price and what is left today.",
-            "You say yes in chat. One yes, one run.",
-            "The platform makes the call for you — the provider never learns who you are, and you never hold its key.",
-        ],
-        guarantee: "If the service does not answer, your credits come straight back. A failed run costs nothing.",
-        cadence: "Every repeat needs its own yes. Nothing loops without asking you again.",
-        meter: meterBars(demoRunsPerDay, 0.45),
-        meterLabel: `A day's credits — ${n(demoRunsPerDay)} demo runs`,
-    },
-];
-
-/* The three rules that are true of BOTH lanes. Kept out of the cards deliberately: printed twice they read as
- * two policies that happen to match, and the single most reassuring thing about this model is that there is
- * one rule wearing two shapes. */
-const spendRules = [
-    {
-        title: `${creatorSharePct}% reaches the creator`,
-        body: "The same published share of a spent credit's value, whichever way you spent it. The rest runs the platform.",
-    },
-    {
-        title: "Capped at what you paid",
-        body: `Both draw on one meter — ${n(pool.dailyCredits)} credits a day, resetting at midnight UTC — so what you can direct to creators can never exceed your own membership. That is what makes it unfarmable.`,
-    },
-    {
-        title: "Nothing is metered",
-        body: "No usage counting anywhere, and none asked for. Installing is a choice you make; a run is one you approve. Credits you never spend pay nobody.",
-    },
+/* The three headline figures of the economy — the WHOLE of the money story this page tells. Everything they
+ * summarize (the spend cards, the diamond, the revenue ring, the fine print) is /earn/'s job; a band that
+ * grew past one row would be the old page growing back. */
+const moneyFigures = [
+    { term: `$${pool.priceUsd}/mo`, detail: "one membership, every premium extension" },
+    { term: `${n(pool.dailyCredits)}/day`, detail: "credits — installs donate them, service runs spend them" },
+    { term: `${creatorSharePct}%`, detail: "of every spent credit reaches its creator" },
 ];
 
 /* The lead figure: what an extension actually is, and how it meets the core. Drawn as a vertical architecture
  * — one extension is a container that bundles any of four contribution surfaces (Capabilities, UI, Automations,
  * Backend) and plugs, through one public interface, into the kernel every sandbox already has (Files, Events,
- * Agents, Secrets, Processes). A deliberately different visual language from the revenue cycle below: solid
- * panels and an edge-connector, not an orbit. Glyph paths are shared and positioned by gGlyph. */
+ * Agents, Secrets, Processes). Glyph paths are shared and positioned by gGlyph. */
 const gGlyph = (paths: string, x: number, y: number, size = 18) =>
     `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 
@@ -173,35 +107,10 @@ const extensions = [
 const CORE = { x: 12, y: 170, w: 496, h: 68 };
 const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90, y: CORE.y + 36 }));
 
-/* The lifecycle diagram that replaces the old prose — deliberately NOT the card figure up top. Delivery is a
- * light one-way flow of chips; the half that matters, how a premium extension pays, is a drawn revenue cycle.
- * The ring geometry is computed so four arrowheads sit tangent to a clockwise loop (members → pool → split →
- * paid → renews). Labels stay terse; the one honesty line rides underneath.
- *
- * THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here. They were six
- * inert words, which named the lifecycle to a visitor and then left them to guess where any of it was written
- * down — and the array they came from could drift from the pages that document them, because nothing tied the
- * two together. Now the same list drives this strip and the API overview's. */
-const delivery = extensionLifecycle.slice(0, -1);
-const earn = extensionLifecycle[extensionLifecycle.length - 1];
-
-const ring = { cx: 150, cy: 150, r: 96 };
-const ringStr = (deg: number, rr = ring.r) => {
-    const a = (deg * Math.PI) / 180;
-    return `${(ring.cx + rr * Math.cos(a)).toFixed(1)} ${(ring.cy + rr * Math.sin(a)).toFixed(1)}`;
-};
-const ringXY = (deg: number, rr = ring.r) => {
-    const a = (deg * Math.PI) / 180;
-    return [Number((ring.cx + rr * Math.cos(a)).toFixed(1)), Number((ring.cy + rr * Math.sin(a)).toFixed(1))];
-};
-const revNodes = [
-    { label: "Members pay", xy: ringXY(270), anchor: "middle", lx: 150, ly: 30 },
-    { label: "Pooled monthly", xy: ringXY(0), anchor: "start", lx: 262, ly: 155 },
-    { label: "Split by credits spent", xy: ringXY(90), anchor: "middle", lx: 150, ly: 286 },
-    { label: "Paid to creators", xy: ringXY(180), anchor: "end", lx: 38, ly: 155 },
-];
-// four short arcs at the quadrant midpoints; each carries one auto-oriented arrowhead so the loop reads clockwise
-const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} ${ring.r} 0 0 1 ${ringStr(m + 3)}`);
+/* THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here — the same list
+ * drives this strip and the API overview's, so the two cannot drift. The Earn chip wears the accent because it
+ * is the one that leaves the developer's track for the economy's own page; Update after it is what makes the
+ * strip a cycle rather than a line. */
 ---
 
 <BaseLayout
@@ -227,215 +136,20 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
             </div>
         </section>
 
-        {/* The member's side of the money, before the creator's side below it — the ring down there splits a pool
-            "by the credits members spend", and this is where a reader learns what spending one even looks like. */}
-        <section class="relative overflow-hidden border-b border-line" aria-labelledby="credits-heading">
-            <div class="absolute inset-0 bg-linear-to-b from-primary-600/8 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="grid-overlay"></div>
-            <div class="relative mx-auto max-w-7xl px-6 py-16 lg:py-20">
-                <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
-                    <div>
-                        <div class="eyebrow text-link">Credits</div>
-                        <h2 id="credits-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
-                            One membership. Two ways to spend it.
-                        </h2>
-                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Almost everything in this gallery installs free, from anyone, with no cut taken from anybody. A membership adds
-                            credits — and a credit leaves your hands in exactly two places, both of which you trigger on purpose.
-                        </p>
-                        <dl class="mt-6 flex flex-wrap gap-x-6 gap-y-3">
-                            {
-                                [
-                                    { term: `$${pool.priceUsd}`, detail: "a month" },
-                                    { term: n(pool.dailyCredits), detail: "credits a day" },
-                                    { term: n(creditsPerCent), detail: "credits to the cent" },
-                                ].map((stat) => (
-                                    <div>
-                                        <dt class="font-mono text-xl font-semibold tracking-tight text-content">{stat.term}</dt>
-                                        <dd class="text-2xs text-subtle">{stat.detail}</dd>
-                                    </div>
-                                ))
-                            }
-                        </dl>
-                    </div>
-
-                    {/* The diamond: one source, two middles, one rule. */}
-                    <figure class="w-full lg:justify-self-end">
-                        <SpendFigure />
-                    </figure>
-                </div>
-
-                {/* One card per way. Same skeleton on both, so the differences are the only thing that moves. */}
-                <div class="mt-14 grid gap-6 lg:grid-cols-2">
-                    {
-                        spendCards.map((card) => (
-                            <article class="card relative flex flex-col gap-5 overflow-hidden p-6 sm:p-7">
-                                <div
-                                    class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary-500/60 to-transparent"
-                                    aria-hidden="true"
-                                />
-                                <header>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="chip border border-primary-600/35 bg-primary-600/12 text-primary-300">{card.tag}</span>
-                                        <span class="eyebrow">{card.kicker}</span>
-                                    </div>
-                                    <h3 class="mt-3.5 text-lg font-semibold tracking-tight text-content">{card.heading}</h3>
-                                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{card.blurb}</p>
-                                </header>
-
-                                <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-y border-line py-4">
-                                    <span class="text-3xl font-semibold tracking-tight text-content">{card.figure}</span>
-                                    <span class="text-sm text-muted">{card.unit}</span>
-                                    <p class="mt-1 w-full text-2xs leading-relaxed text-subtle">{card.note}</p>
-                                </div>
-
-                                <ol class="flex flex-col gap-2.5">
-                                    {card.steps.map((step, i) => (
-                                        <li class="flex gap-3 text-sm leading-relaxed text-muted">
-                                            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-overlay/40 text-2xs font-semibold text-subtle">
-                                                {i + 1}
-                                            </span>
-                                            <span>{step}</span>
-                                        </li>
-                                    ))}
-                                </ol>
-
-                                {/* A day's allowance to scale, in this lane's own units — five blocks against a comb. */}
-                                <div class="mt-auto">
-                                    <svg viewBox={`0 0 ${METER_W} 10`} class="h-2.5 w-full text-primary-400/70" preserveAspectRatio="none" aria-hidden="true">
-                                        {card.meter.map((bar) => (
-                                            <rect x={bar.x} y="0" width={bar.width} height="10" fill="currentColor" />
-                                        ))}
-                                    </svg>
-                                    <p class="mt-2 text-2xs text-subtle">{card.meterLabel}</p>
-                                </div>
-
-                                <div class="flex flex-col gap-2 rounded-lg border border-success/25 bg-success/8 px-3.5 py-3">
-                                    <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
-                                        <svg
-                                            class="mt-px h-3.5 w-3.5 shrink-0 text-success"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2.25"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            aria-hidden="true"
-                                        >
-                                            <path d="M20 6 9 17l-5-5" />
-                                        </svg>
-                                        <span>{card.guarantee}</span>
-                                    </p>
-                                    <p class="pl-5.5 text-2xs leading-relaxed text-subtle">{card.cadence}</p>
-                                </div>
-                            </article>
-                        ))
-                    }
-                </div>
-
-                {/* True of both lanes, which is the point of stating them once. */}
-                <div class="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-3">
-                    {
-                        spendRules.map((rule) => (
-                            <div class="border-t border-line pt-4">
-                                <h3 class="text-sm font-semibold tracking-tight text-content">{rule.title}</h3>
-                                <p class="mt-1.5 text-2xs leading-relaxed text-subtle">{rule.body}</p>
-                            </div>
-                        ))
-                    }
-                </div>
-
-                <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                    <a class="btn btn-secondary" href={apiHref("earn")}>The arithmetic &amp; the public ledger</a>
-                    <a class="text-link hover:underline" href="/docs/extensions/">Installing, and what premium means</a>
-                </div>
-            </div>
-        </section>
-
-        <section class="border-b border-line" aria-labelledby="lifecycle-heading">
-            <div class="mx-auto max-w-7xl px-6 pt-12 pb-16 lg:pt-14 lg:pb-20">
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout</h2>
-                    {/* NOT "paid while it's used": nothing is metered, and the section above now says so out loud. */}
-                    <p class="text-xs text-subtle">Delivered once. Paid when people choose it.</p>
-                </div>
-
-                {/* One-way delivery, pivoting into the earn side. Every chip goes to the page that explains it. */}
-                <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
-                    <span class="eyebrow mr-1 text-subtle">Ship</span>
-                    {
-                        delivery.map((stage, i) => (
-                            <Fragment>
-                                {i > 0 && <span class="text-line-strong" aria-hidden="true">→</span>}
-                                <a
-                                    href={stage.href}
-                                    title={stage.what}
-                                    class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline transition-colors hover:border-primary-600/40 hover:text-link"
-                                >
-                                    {stage.step}
-                                </a>
-                            </Fragment>
-                        ))
-                    }
-                    <span class="text-line-strong" aria-hidden="true">→</span>
-                    <a
-                        href={earn.href}
-                        title={earn.what}
-                        class="rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline transition-colors hover:border-primary-600/70"
-                    >
-                        {earn.step}
-                    </a>
-                </div>
-
-                {/* The highlight: a drawn revenue cycle on a blueprint canvas. */}
-                <div class="relative mt-4 overflow-hidden rounded-2xl border border-line bg-canvas/60">
-                    <div class="grid-overlay"></div>
-                    <div
-                        class="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                        style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 16%, transparent), transparent 70%)"
-                        aria-hidden="true"
-                    >
-                    </div>
-                    <div class="relative flex flex-col items-center px-5 py-9 text-center">
-                        <div class="eyebrow text-link">How a premium extension earns</div>
-                        <svg
-                            viewBox="-80 0 476 300"
-                            class="mt-4 h-auto w-full max-w-[560px] text-link"
-                            role="img"
-                            aria-label="A monthly cycle: members pay, a share is pooled, the pool is split by the credits members spend, and creators are paid — then it renews."
-                        >
-                            <defs>
-                                <marker id="rev-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
-                                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
-                                </marker>
-                            </defs>
-                            <circle cx="150" cy="150" r="96" fill="none" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="3 6" />
-                            {revArcs.map((d) => <path d={d} fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#rev-arrow)" />)}
-                            <circle cx="150" cy="150" r="30" fill="color-mix(in srgb, var(--color-primary-500) 12%, transparent)" stroke="currentColor" stroke-opacity="0.35" />
-                            <text x="150" y="151" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="700" style="fill: var(--color-link)">$</text>
-                            {
-                                revNodes.map((n) => (
-                                    <Fragment>
-                                        <circle cx={n.xy[0]} cy={n.xy[1]} r="11" fill="var(--color-canvas)" stroke="currentColor" stroke-opacity="0.35" />
-                                        <circle cx={n.xy[0]} cy={n.xy[1]} r="5" fill="currentColor" />
-                                        <text x={n.lx} y={n.ly} text-anchor={n.anchor} dominant-baseline="central" font-size="13.5" font-weight="500" style="fill: var(--color-content)">
-                                            {n.label}
-                                        </text>
-                                    </Fragment>
-                                ))
-                            }
-                        </svg>
-                        <p class="mt-2 max-w-copy text-2xs leading-relaxed text-subtle">
-                            A monthly pool, split by the credits members actually spend — install donations and service runs — and published in the open. No usage is ever metered; free extensions never enter it; premium is opt-in.
-                        </p>
-                    </div>
-                </div>
-
-                <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                    <a class="text-link hover:underline" href={apiHref("publish")}>Listing &amp; ranking</a>
-                    <a class="text-link hover:underline" href={apiHref("manifest")}>What you approve</a>
-                    <a class="text-link hover:underline" href={apiHref("build")}>Build one</a>
-                </div>
+        {/* The money, in one row: almost everything below installs free, and the whole economy behind the
+            Premium badges is /earn/'s page to tell. This band exists so the badge is never the first a
+            visitor hears of it — and it is the ONLY economics on the page. */}
+        <section class="border-b border-line bg-canvas/60" aria-label="How premium extensions are paid for">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
+                {
+                    moneyFigures.map((stat) => (
+                        <div class="flex items-baseline gap-2">
+                            <span class="font-mono text-sm font-semibold tracking-tight text-content">{stat.term}</span>
+                            <span class="text-2xs text-subtle">{stat.detail}</span>
+                        </div>
+                    ))
+                }
+                <a class="text-xs text-link hover:underline sm:ml-auto" href="/earn/">How the pool works →</a>
             </div>
         </section>
 
@@ -596,6 +310,43 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                     </figure>
                 </div>
                 {scannedNote && <p class="mt-6 text-2xs text-subtle">{scannedNote}</p>}
+            </section>
+
+            <section aria-labelledby="lifecycle-heading">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout — and around again</h2>
+                    <p class="text-xs text-subtle">Delivered once. Paid when people choose it. Renewed when you maintain it.</p>
+                </div>
+
+                {/* The whole cycle as chips. Every chip goes to the page that explains it, and the Earn chip
+                    leaves this track for the economy's own page. */}
+                <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
+                    {
+                        extensionLifecycle.map((stage, i) => (
+                            <Fragment>
+                                {i > 0 && <span class="text-line-strong" aria-hidden="true">→</span>}
+                                <a
+                                    href={stage.href}
+                                    title={stage.what}
+                                    class={
+                                        stage.step === "Earn"
+                                            ? "rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline transition-colors hover:border-primary-600/70"
+                                            : "rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline transition-colors hover:border-primary-600/40 hover:text-link"
+                                    }
+                                >
+                                    {stage.step}
+                                </a>
+                            </Fragment>
+                        ))
+                    }
+                    <span class="text-line-strong" aria-hidden="true">↻</span>
+                </div>
+
+                <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                    <a class="text-link hover:underline" href={apiHref("publish")}>Listing &amp; ranking</a>
+                    <a class="text-link hover:underline" href={apiHref("maintain")}>Maintain &amp; grow</a>
+                    <a class="text-link hover:underline" href="/earn/">The pool &amp; the ledger</a>
+                </div>
             </section>
         </div>
 

@@ -3,29 +3,28 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 /* /api — written for somebody BUILDING ON intentic, the way code.visualstudio.com/api is. Everything here has
  * one reader: an author. The person installing what they made reads /docs.
  *
- * WHY THIS IS ITS OWN BOOK. It was one shelf of a user manual, and it could not hold what it had to. An
- * extension's life has six steps — build, list, verify, discover, install, earn — and the four that belong to
- * the author each need a page of their own rather than a heading inside somebody else's. Wedged into /docs they
- * were two pages doing five jobs: one of them opened with authoring a manifest and closed with a revenue split.
+ * TWO SHELVES, AND THEY ARE THE TWO JOBS. "Build" is the code: the format, the APIs, a working extension, and
+ * the reference you open at a field name. "Ship" is the process: getting a pointer into a registry, what the
+ * trust words claim, and staying listed release after release. The old single "lifecycle" shelf braided the
+ * two — a reader after a manifest field scrolled through registry policy to reach it — and its last row was
+ * money, which belongs to neither.
  *
- * TWO SHELVES, AND THEY ARE DIFFERENT KINDS OF READING. The lifecycle is walked once, front to back, by someone
- * shipping their first extension. The reference is never walked at all — it is opened at a field name by someone
- * who already shipped one. Putting a forty-row route table in the same run as a getting-started guide made the
- * guide look like reference material and the reference look optional.
+ * THE MONEY IS NOT IN THIS BOOK, deliberately. The economy — membership, credits, the pool, the split, the
+ * ledger — has TWO audiences: the member spending credits and the creator earning them. Filed here it read as
+ * a step of publishing and served only half its readers; it now lives at /earn/, top-level, and Ship's
+ * lifecycle strip points out to it the same way it points out to /docs for the installer's steps.
  *
- * THE TWO MISSING STEPS ARE DELIBERATE. Discover and install are things a USER does, so they are written once, in
- * /docs, and the overview's lifecycle strip links out to them rather than restating them here. An author still
- * meets them — as the experience their listing produces, which is the useful framing anyway. */
+ * Inside Build, the guide and the reference stay DIFFERENT KINDS OF READING: the guide is walked once, front
+ * to back, by someone shipping their first extension; the reference is never walked at all — it is opened at
+ * a field name by someone who already shipped one. The "Reference" group label is what keeps a forty-row
+ * route table from making the getting-started guide look like reference material. */
 export const apiBook: Book = {
     id: "api",
-    label: "API",
+    label: "Developers",
     sections: [
         {
-            /* Named for the JOURNEY rather than the noun. "Extensions" as a shelf label put the reader in a
-             * category; "Extension lifecycle" tells them the five rows under it are in order and that following
-             * them is the point — which is the one thing a first-time author most needs to be told. */
-            label: "Extension lifecycle",
-            audience: "Author one, ship it, get it verified, earn from it.",
+            label: "Build",
+            audience: "The code: one format, the APIs it reaches, a working extension.",
             entry: "",
             groups: [
                 {
@@ -52,55 +51,10 @@ export const apiBook: Book = {
                                 datePublished: "2026-07-31",
                             },
                         },
-                        {
-                            id: "publish",
-                            title: "Publish & registries",
-                            blurb: "Your repo stays yours; a listing is a pointer to a commit",
-                            meta: {
-                                title: "Publish an extension · intentic API",
-                                description:
-                                    "Your extension stays in your repo; a registry is a git repo of sha-pinned pointers. Add one topic and the pull request that lists you writes itself.",
-                                datePublished: "2026-07-31",
-                            },
-                        },
-                        {
-                            /* ITS OWN PAGE, though it was four paragraphs inside the publishing guide. "Verified" is a
-                             * claim two different people act on — an author deciding whether it is worth pursuing, and
-                             * a user deciding whether to install — and buried under a heading about registries it was
-                             * unfindable to both. Searching "verified" returned the gallery and nothing else. */
-                            id: "verify",
-                            title: "Verification & trust",
-                            blurb: "What listed, verified and blocked each actually claim",
-                            meta: {
-                                title: "Verification & trust · intentic API",
-                                description:
-                                    "What listed, verified and blocked each mean, the nightly check behind them, and precisely what sha pinning, the manifest gate and registry review do and do not guarantee.",
-                                datePublished: "2026-08-11",
-                            },
-                        },
-                        {
-                            /* Last of the lifecycle, because it is the last question an author has: build it, list it,
-                             * get it read, get paid for it. */
-                            id: "earn",
-                            title: "The creator pool",
-                            blurb: "Premium listings, credits, the revenue split, and the public ledger",
-                            meta: {
-                                title: "The creator pool · intentic API",
-                                description:
-                                    "How premium extensions and services earn: the membership, daily credits, install donations with no telemetry anywhere, per-run service pricing with no charge on failure, the published split, and the transparency ledger anyone can read.",
-                                datePublished: "2026-08-10",
-                            },
-                        },
                     ],
                 },
-            ],
-        },
-        {
-            label: "Reference",
-            audience: "Every field and every route, for looking up.",
-            entry: "manifest",
-            groups: [
                 {
+                    label: "Reference",
                     items: [
                         {
                             id: "manifest",
@@ -142,6 +96,61 @@ export const apiBook: Book = {
                 },
             ],
         },
+        {
+            /* Named for the JOURNEY rather than the noun. "Publishing" as a shelf label put the reader in a
+             * category; "Ship" tells them the rows under it are in order and that following them is the point —
+             * list it, understand what the trust words claim, then keep it alive release after release. */
+            label: "Ship",
+            audience: "From your repo to the marketplace, and staying listed.",
+            entry: "publish",
+            groups: [
+                {
+                    items: [
+                        {
+                            id: "publish",
+                            title: "Publish & registries",
+                            blurb: "Your repo stays yours; a listing is a pointer to a commit",
+                            meta: {
+                                title: "Publish an extension · intentic API",
+                                description:
+                                    "Your extension stays in your repo; a registry is a git repo of sha-pinned pointers. Add one topic and the pull request that lists you writes itself.",
+                                datePublished: "2026-07-31",
+                            },
+                        },
+                        {
+                            /* ITS OWN PAGE, though it was four paragraphs inside the publishing guide. "Verified" is a
+                             * claim two different people act on — an author deciding whether it is worth pursuing, and
+                             * a user deciding whether to install — and buried under a heading about registries it was
+                             * unfindable to both. Searching "verified" returned the gallery and nothing else. */
+                            id: "verify",
+                            title: "Verification & trust",
+                            blurb: "What listed, verified and blocked each actually claim",
+                            meta: {
+                                title: "Verification & trust · intentic API",
+                                description:
+                                    "What listed, verified and blocked each mean, the nightly check behind them, and precisely what sha pinning, the manifest gate and registry review do and do not guarantee.",
+                                datePublished: "2026-08-11",
+                            },
+                        },
+                        {
+                            /* Last of the shelf, because it is the step that repeats: everything above happens once
+                             * per extension, this happens once per release. It existed only as fragments — updates
+                             * inside the publishing guide, the donation cadence inside the money page, going bad
+                             * inside trust — so "how do I stay listed and keep earning" had no page to be asked of. */
+                            id: "maintain",
+                            title: "Maintain & grow",
+                            blurb: "Ship updates, stay ranked, and what sustained revenue rests on",
+                            meta: {
+                                title: "Maintain & grow an extension · intentic API",
+                                description:
+                                    "Ship an update with one pull request, know when it re-asks for approval, stay ranked in discovery, and how the monthly donation cadence turns maintenance into sustained revenue.",
+                                datePublished: "2026-08-11",
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
     ],
 };
 
@@ -152,17 +161,21 @@ export function apiHref(id: string): string {
     return bookHref(apiBook, id);
 }
 
-/* THE SIX STEPS, in order, with the page that owns each — the strip the API overview and the gallery both draw.
+/* THE SEVEN STEPS, in order, with the page that owns each — the strip the API overview and the gallery both
+ * draw.
  *
- * It exists as data because two very different surfaces render it and they were drifting: the gallery drew five
- * grey chips and an "Earn" pill, none of them a link, while the docs described a lifecycle with no picture of it
- * anywhere. Two of the six deliberately point OUT of this book, into /docs, because they are what the reader on
- * the other side of the listing does. */
+ * It exists as data because two very different surfaces render it and they were drifting: the gallery drew
+ * grey chips that were not links while the docs described a lifecycle with no picture of it anywhere. Three of
+ * the seven deliberately point OUT of this book: Discover and Install into /docs, because they are what the
+ * reader on the other side of the listing does, and Earn to the top-level /earn/, because the economy is a
+ * system of its own with two audiences. The last step loops — Update is what makes the revenue renewable —
+ * which is why it comes after Earn rather than before it. */
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
     { step: "Build", href: apiHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },
     { step: "List", href: apiHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
     { step: "Verify", href: apiHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
     { step: "Discover", href: "/extensions/", what: "The gallery, and browse from inside the app.", audience: "user" },
     { step: "Install", href: "/docs/extensions/", what: "One commit, approved by its owner.", audience: "user" },
-    { step: "Earn", href: apiHref("earn"), what: "Premium listings draw from the creator pool.", audience: "author" },
+    { step: "Earn", href: "/earn/", what: "Premium listings draw from the creator pool.", audience: "author" },
+    { step: "Update", href: apiHref("maintain"), what: "A new sha, and the cycle above runs again.", audience: "author" },
 ];

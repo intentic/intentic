@@ -54,6 +54,14 @@ export const pageMeta: Record<string, PageMeta> = {
             "Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories; intentic hosts none of the code.",
         datePublished: "2026-08-01",
     },
+    /* The economy's own page, top-level because it serves members and creators alike. Its FIGURES come from
+     * pool.ts at render time; only the framing is authored here. */
+    "/earn/": {
+        title: "Earn · intentic",
+        description:
+            "One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger.",
+        datePublished: "2026-08-11",
+    },
     [compareHref("")]: compareIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(apiPages.map((page) => [apiHref(page.id), page.meta])),

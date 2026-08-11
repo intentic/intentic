@@ -1,0 +1,89 @@
+---
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE STEP THAT REPEATS. Everything else on this shelf happens once per extension; this page is what happens
+ * once per release, and it existed only as fragments before — updates inside the publishing guide, the
+ * donation cadence inside the money page, going bad inside trust. The reader it serves has already shipped:
+ * their question is not "how do I list" but "what does release two cost me, and what does it earn". */
+
+const update = `# The whole release process:
+# 1. push the new code
+git push
+
+# 2. open a pull request against the registry pointing at the new sha
+#    (or wait — the nightly topic scan opens it for you)`;
+---
+
+<DocsLayout
+    book={apiBook}
+    pageId="maintain"
+    heading="Maintain & grow"
+    lead="A listing is not a launch, it's the start of a cycle: ship a release, get re-checked, stay ranked, and — if you're premium — earn again. This page is release two and every one after it."
+>
+    <h2>Shipping an update</h2>
+    <p>
+        Open another pull request against the registry with the new sha. That is the entire release process: the version in your manifest is
+        what users see, and the sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong — and if your repo
+        carries the <code>intentic-extension</code> topic, the nightly scan opens the pull request for you, same as it did the first time.
+    </p>
+    <DocsCodeBlock code={update} lang="bash" title="Release two" />
+
+    <h2>When an update re-asks</h2>
+    <p>Two rules decide whether your release is a one-click update or a dialog, and both are worth designing around:</p>
+    <ul>
+        <li>
+            <strong>A release that grows your manifest re-asks.</strong> A new route in <code>permissions.sandbox</code>, a new process, a new
+            PATH entry or a badge you didn't have before turns a one-click update into a dialog that spells out every addition. Approval never
+            transfers to powers the owner didn't approve.
+        </li>
+        <li>
+            <strong>A manifest-identical change is still re-checked.</strong> It points at a new sha, so the registry's security gate reruns
+            before that update appears in official discovery. Same code review bar, every release.
+        </li>
+    </ul>
+    <p>
+        <strong>Nothing auto-updates by default</strong>, and the one policy that does apply updates unattended requires your listing to be
+        human-verified and your powers to have stayed the same. Both are things you earn rather than declare.
+    </p>
+
+    <h2>How your release is received</h2>
+    <p>
+        The owner sees an update badge, a diff of any new powers, the kept previous version and a one-click revert, and a health watch on
+        what they're running. A release flagged as a <strong>security fix</strong> promotes the badge from ambient to loud, because there the
+        version they already have is the dangerous one. The whole far end is on
+        <a href="/docs/extensions/">Install &amp; manage extensions</a>, and it is worth reading once from that side: it is the experience
+        your release notes and your manifest diff produce.
+    </p>
+
+    <h2>Staying ranked</h2>
+    <p>
+        The <a href="/extensions/">gallery</a> and in-app discovery rank <strong>verified</strong> listings first and order by stars within
+        each tier — both facts read back off your source host nightly, never edited by hand. Three things keep a listing healthy in that
+        ordering:
+    </p>
+    <ul>
+        <li><strong>Stay loadable.</strong> The nightly scan re-checks your manifest and bundle at the pinned commit; a card that stops loading says so in public until you fix it.</li>
+        <li><strong>Pursue verification.</strong> It is the one rank input that is a decision rather than a metric — <a href="/api/verify/">Verification &amp; trust</a> says what it claims and how to get it.</li>
+        <li><strong>Don't go quiet on a problem.</strong> A listing that goes bad is blocked and its installers advisories-notified; the trust page covers how that unwinds and how a fixed sha returns.</li>
+    </ul>
+
+    <h2>Updates are the revenue cadence</h2>
+    <p>
+        For a premium listing, maintenance and revenue are the same motion. An install donates once; <strong>an update can donate again, at
+        most once a month per install</strong> — so a maintained extension can earn up to twelve donations a year from every install it keeps,
+        and an abandoned one earns exactly once. The cap is also the guard: shipping meaningless updates to farm the cadence is
+        <strong>delisting grounds</strong>, stated on the row like every other trust decision. The whole economy — credits, the split, the
+        public ledger — is on <a href="/earn/">Earn</a>.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/api/publish/", title: "Publish & registries", why: "the first listing this page assumes you already have." },
+            { href: "/api/verify/", title: "Verification & trust", why: "the rank input that is a decision, and what blocked means." },
+            { href: "/earn/", title: "Earn", why: "the pool, the split, and the ledger your donations land on." },
+        ]}
+    />
+</DocsLayout>
