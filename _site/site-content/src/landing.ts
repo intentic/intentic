@@ -111,8 +111,7 @@ export const landingContent: LandingContent = {
         // Plain, high-signal words: the three differentiators are ownership (your hardware), persistence
         // (survives the browser closing) and control (nothing lands unread) — name exactly those and stop.
         // "Close the browser", not "log off": nothing is ended for the runs to continue.
-        subhead:
-            "Your agents run on hardware you own and keep working after you close the browser. Reopen from any device to steer the fleet — and read every change before it lands.",
+        subhead: "Agents that run on your hardware, keep going when you close the browser, and land nothing until you review.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
@@ -146,7 +145,7 @@ export const landingContent: LandingContent = {
             {
                 verb: "Empower",
                 href: productHref("empower"),
-                line: "Wire an agent into GitHub, Postgres, Sentry, Stripe, Discord or any MCP server — it sees and acts, and the credential stays in your sandbox.",
+                line: "Give an agent GitHub, Postgres, Stripe, Discord or any MCP server — it sees and acts, keys kept safe.",
                 shot: {
                     name: "capabilities",
                     alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -172,7 +171,7 @@ export const landingContent: LandingContent = {
             {
                 verb: "Delegate",
                 href: productHref("delegate"),
-                line: "Give the workspace a server of its own and hand off end-to-end operation — the sandbox runs on hardware you own, the platform off the command path.",
+                line: "Give the workspace its own server and hand off the running — it stays on your hardware, you keep control.",
                 shot: {
                     name: "sandbox-overview",
                     alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",
@@ -206,8 +205,7 @@ export const landingContent: LandingContent = {
                 holds: ["Your email address", "Your sandbox's URL"],
                 never: "No code, no keys, and no way to command your agents.",
             },
-            footnote:
-                "Your browser holds the token that drives the sandbox; the platform never does. All of intentic is MIT on GitHub, platform included, so you can check.",
+            footnote: "Your browser holds the token that drives the sandbox, not the platform. It's all MIT on GitHub — check it.",
         },
     },
     economics: {

@@ -148,18 +148,40 @@ export const comparePages: ComparePage[] = [
         table: [
             { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your Mac, or Conductor Cloud on a paid plan" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS" },
-            { label: "Reach it from elsewhere", intentic: "any browser over a private tunnel, phone included", them: "the Mac, or Conductor Cloud (mobile app coming)" },
+            {
+                label: "Reach it from elsewhere",
+                intentic: "any browser over a private tunnel, phone included",
+                them: "the Mac, or Conductor Cloud (mobile app coming)",
+            },
             {
                 label: "What you can change about the environment",
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "your local machine, as it already is",
             },
             { label: "Where credentials live", intentic: "inside the sandbox, injected per turn", them: "your local shell" },
-            { label: "Runs without you at the keyboard", intentic: "automations on cron, webhook, push, alert, email, chat", them: "background tasks in early access; you start each session" },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "background tasks in early access; you start each session",
+            },
             { label: "Isolation", intentic: "one git worktree per agent", them: "one workspace and branch per task" },
-            { label: "Price", intentic: "free — sandbox, platform, sharing, all of it", them: "free tier; cloud, multiplayer and teams from $50–60/seat" },
-            { label: "A machine you do not have to provide", intentic: "you bring the hardware", them: "Conductor Cloud, nothing to host", theirs: true },
-            { label: "Native desktop app", intentic: "native on Windows and Linux, browser elsewhere, plus desktop sync", them: "a refined native macOS app", theirs: true },
+            {
+                label: "Price",
+                intentic: "free — sandbox, platform, sharing, all of it",
+                them: "free tier; cloud, multiplayer and teams from $50–60/seat",
+            },
+            {
+                label: "A machine you do not have to provide",
+                intentic: "you bring the hardware",
+                them: "Conductor Cloud, nothing to host",
+                theirs: true,
+            },
+            {
+                label: "Native desktop app",
+                intentic: "native on Windows and Linux, browser elsewhere, plus desktop sync",
+                them: "a refined native macOS app",
+                theirs: true,
+            },
             { label: "Source you can read", intentic: "all of it — MIT on GitHub, platform included", them: "not published" },
         ],
         pickThem:
@@ -209,9 +231,21 @@ export const comparePages: ComparePage[] = [
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "your machine and per-workspace setup scripts",
             },
-            { label: "Where credentials live", intentic: "capabilities, kept inside the sandbox", them: "your environment; GitHub and Linear app connectors" },
-            { label: "Runs without you at the keyboard", intentic: "cron, webhook, push, alert, email, chat, CI/CD, workspace events", them: "cron-like scheduled runs" },
-            { label: "Reach it from elsewhere", intentic: "any browser over a private tunnel, phone included", them: "remote workspaces on Pro; mobile coming" },
+            {
+                label: "Where credentials live",
+                intentic: "capabilities, kept inside the sandbox",
+                them: "your environment; GitHub and Linear app connectors",
+            },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "cron, webhook, push, alert, email, chat, CI/CD, workspace events",
+                them: "cron-like scheduled runs",
+            },
+            {
+                label: "Reach it from elsewhere",
+                intentic: "any browser over a private tunnel, phone included",
+                them: "remote workspaces on Pro; mobile coming",
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "source-available (Elastic License 2.0)" },
             { label: "Price", intentic: "free, everything included", them: "free tier; Pro from $15–20/user, remote on Pro", theirs: true },
         ],
@@ -262,7 +296,12 @@ export const comparePages: ComparePage[] = [
                 intentic: "Claude Code, Codex, Grok, Kimi Code or Google, plus any ACP agent",
                 them: "Claude Code, Codex, OpenCode, Cursor, Grok",
             },
-            { label: "On a phone", intentic: "the workspace on your home screen, with push notifications", them: "native iOS and Android apps", theirs: true },
+            {
+                label: "On a phone",
+                intentic: "the workspace on your home screen, with push notifications",
+                them: "native iOS and Android apps",
+                theirs: true,
+            },
             {
                 label: "What you can change about the environment",
                 intentic: "the image, the capabilities, the context loaded each turn",
@@ -270,7 +309,11 @@ export const comparePages: ComparePage[] = [
             },
             { label: "Where credentials live", intentic: "inside the sandbox, injected per turn", them: "your shell, one login per harness" },
             { label: "Isolation", intentic: "one git worktree per agent", them: "a branch per agent thread" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "you start each thread" },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "you start each thread",
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT throughout" },
         ],
         pickThem:
@@ -326,8 +369,16 @@ export const comparePages: ComparePage[] = [
                 them: "your machine, as it already is",
             },
             { label: "Where credentials live", intentic: "inside the sandbox, injected per turn", them: "your machine, one login per runtime" },
-            { label: "Reach it from elsewhere", intentic: "any browser over a private tunnel, phone included", them: "explicit, self-hosted remote access over your own network" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "automations and autonomous approval modes" },
+            {
+                label: "Reach it from elsewhere",
+                intentic: "any browser over a private tunnel, phone included",
+                them: "explicit, self-hosted remote access over your own network",
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "automations and autonomous approval modes",
+            },
             { label: "Sharing with a teammate", intentic: "invite by email; grants enforced by the daemon", them: "single-user, local-first" },
             { label: "Account required", intentic: "a Google sign-in for the hosted workspace", them: "none at all", theirs: true },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
@@ -373,7 +424,12 @@ export const comparePages: ComparePage[] = [
         table: [
             { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your machine, in your checkout" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
-            { label: "On a phone", intentic: "the workspace on your home screen, with push notifications", them: "a native iOS app for managing sessions", theirs: true },
+            {
+                label: "On a phone",
+                intentic: "the workspace on your home screen, with push notifications",
+                them: "a native iOS app for managing sessions",
+                theirs: true,
+            },
             {
                 label: "Visual editors for docs, mockups and diagrams",
                 intentic: "a code editor and a diff reader",
@@ -385,7 +441,11 @@ export const comparePages: ComparePage[] = [
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "your local machine, as it already is",
             },
-            { label: "Where credentials live", intentic: "capabilities, kept inside the sandbox", them: "your Claude Code / Codex subscription or your keys" },
+            {
+                label: "Where credentials live",
+                intentic: "capabilities, kept inside the sandbox",
+                them: "your Claude Code / Codex subscription or your keys",
+            },
             { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "you start it" },
             {
                 label: "Team collaboration",
@@ -412,7 +472,8 @@ export const comparePages: ComparePage[] = [
         family: "editors",
         heading: "Cursor grew a fleet of cloud agents. The question is now whose machines they run on.",
         sub: "This used to be editor-versus-agents. It isn't any more: Cursor runs parallel cloud agents on schedules and triggers. What still differs is where they run, what you can change about it, and the bill.",
-        theirPitch: "“Cursor is your coding agent for building ambitious software.” A desktop IDE plus cloud agents you can launch in parallel, on schedules and triggers, from your editor, phone or Slack.",
+        theirPitch:
+            "“Cursor is your coding agent for building ambitious software.” A desktop IDE plus cloud agents you can launch in parallel, on schedules and triggers, from your editor, phone or Slack.",
         verdict: [
             "Cursor is an excellent editor that now also runs cloud agents — fleets in parallel, automations on schedules and triggers, review from anywhere. Its agents run in Cursor's own sandboxes, and it is proprietary with paid tiers.",
             "intentic runs the same kind of fleet, but on hardware you own: a container per agent whose image you approve, credentials kept inside it, MIT throughout and free on the subscription you already pay for. Keep Cursor as your editor — desktop sync opens what an agent just wrote.",
@@ -433,16 +494,38 @@ export const comparePages: ComparePage[] = [
         ],
         table: [
             { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "Cursor's cloud sandboxes, or your local IDE" },
-            { label: "The editor", intentic: "a shared editor plus desktop sync to the one you have", them: "a first-class AI IDE — its strongest surface", theirs: true },
-            { label: "Model choice", intentic: "5 native harnesses on your own subscriptions, plus any ACP agent", them: "every frontier model, on Cursor's plan", theirs: true },
-            { label: "Parallel / cloud agents", intentic: "a fleet of sandboxes, each on your hardware", them: "fleets of cloud agents on Cursor's infrastructure" },
+            {
+                label: "The editor",
+                intentic: "a shared editor plus desktop sync to the one you have",
+                them: "a first-class AI IDE — its strongest surface",
+                theirs: true,
+            },
+            {
+                label: "Model choice",
+                intentic: "5 native harnesses on your own subscriptions, plus any ACP agent",
+                them: "every frontier model, on Cursor's plan",
+                theirs: true,
+            },
+            {
+                label: "Parallel / cloud agents",
+                intentic: "a fleet of sandboxes, each on your hardware",
+                them: "fleets of cloud agents on Cursor's infrastructure",
+            },
             {
                 label: "What you can change about the environment",
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "your local machine; the cloud agent's sandbox is theirs",
             },
-            { label: "Where credentials live", intentic: "inside a sandbox you own, injected per turn", them: "with Cursor for the cloud agent's run" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "schedules and triggers from GitHub, Slack, Linear, webhooks" },
+            {
+                label: "Where credentials live",
+                intentic: "inside a sandbox you own, injected per turn",
+                them: "with Cursor for the cloud agent's run",
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "schedules and triggers from GitHub, Slack, Linear, webhooks",
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "proprietary" },
             { label: "Price", intentic: "free, on your own model subscription", them: "free tier; Pro from $20/user, cloud agents on paid plans" },
         ],
@@ -490,22 +573,43 @@ export const comparePages: ComparePage[] = [
         ],
         table: [
             { label: "What it is", intentic: "the machine and fleet an agent works in", them: "an agentic coding tool — and one intentic runs" },
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your terminal, or Anthropic-managed cloud VMs on the web" },
+            {
+                label: "Where the agent runs",
+                intentic: "a Docker sandbox on hardware you own",
+                them: "your terminal, or Anthropic-managed cloud VMs on the web",
+            },
             {
                 label: "Harnesses / models",
                 intentic: "Claude Code, Codex, Grok, Kimi Code, Google, plus any ACP agent",
                 them: "Claude, on your Claude plan (CLI also supports other providers)",
             },
-            { label: "Parallel agents", intentic: "a fleet of sandboxes sorted by who needs you", them: "background sessions and 10s–100s of subagents", theirs: true },
+            {
+                label: "Parallel agents",
+                intentic: "a fleet of sandboxes sorted by who needs you",
+                them: "background sessions and 10s–100s of subagents",
+                theirs: true,
+            },
             {
                 label: "What you can change about the environment",
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "the cloud VM's setup; on the web it is Anthropic-managed",
             },
-            { label: "Where credentials live", intentic: "inside a sandbox you own, injected per turn", them: "a scoped credential proxy; keys kept out of the VM" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "Routines: schedule, API call, or event; GitHub Actions" },
+            {
+                label: "Where credentials live",
+                intentic: "inside a sandbox you own, injected per turn",
+                them: "a scoped credential proxy; keys kept out of the VM",
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "Routines: schedule, API call, or event; GitHub Actions",
+            },
             { label: "Price", intentic: "free, on your own model subscription", them: "a paid Claude plan from $17–20/mo (Claude Code included)" },
-            { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "proprietary product; a Claude subscription or API account" },
+            {
+                label: "Licence",
+                intentic: "MIT throughout — sandbox, platform and CLI",
+                them: "proprietary product; a Claude subscription or API account",
+            },
         ],
         together: {
             title: "Run Claude Code inside intentic",
@@ -529,7 +633,8 @@ export const comparePages: ComparePage[] = [
         family: "harnesses",
         heading: "OpenCode is an open harness. In intentic it is one of the agents you run.",
         sub: "OpenCode is MIT, provider-agnostic and private by design — and it is exactly the kind of agent intentic is built to run. The comparison is really harness versus the machine around a harness.",
-        theirPitch: "“The open source AI coding agent.” A terminal, desktop and IDE agent that works with any model from 75+ providers, storing none of your code or context.",
+        theirPitch:
+            "“The open source AI coding agent.” A terminal, desktop and IDE agent that works with any model from 75+ providers, storing none of your code or context.",
         verdict: [
             "OpenCode is a first-rate open harness: MIT, any model from any provider, local models included, multiple parallel sessions, and it stores none of your code. If you want a lean terminal agent you fully control, it is a great one.",
             "intentic is the layer around a harness rather than a harness itself — a container per agent, capabilities, a fleet board, automations — and OpenCode plugs into it as an ACP agent, so this is add-it-here more than either/or.",
@@ -562,9 +667,21 @@ export const comparePages: ComparePage[] = [
                 intentic: "the image, the capabilities, the context loaded each turn",
                 them: "your local machine, as it already is",
             },
-            { label: "Systems the agent can reach", intentic: "capabilities: GitHub, Postgres, Sentry, SSH, any MCP server", them: "MCP servers and your local tools" },
-            { label: "Reach it from elsewhere", intentic: "any browser over a private tunnel, phone included", them: "runs where you launch it; share a session by link" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "you start each session" },
+            {
+                label: "Systems the agent can reach",
+                intentic: "capabilities: GitHub, Postgres, Sentry, SSH, any MCP server",
+                them: "MCP servers and your local tools",
+            },
+            {
+                label: "Reach it from elsewhere",
+                intentic: "any browser over a private tunnel, phone included",
+                them: "runs where you launch it; share a session by link",
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "you start each session",
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
         ],
         together: {
@@ -624,10 +741,27 @@ export const comparePages: ComparePage[] = [
                 them: "the chat apps you already use — WhatsApp, Telegram, Signal, iMessage and more",
                 theirs: true,
             },
-            { label: "Reviewing what it did", intentic: "a diff reader you tick through, then land or discard", them: "the reply in the thread, and git afterwards" },
-            { label: "Where credentials live", intentic: "inside the sandbox, injected per turn", them: "with the gateway, on the device it runs on" },
-            { label: "Runs unattended", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "cron jobs, reminders and background tasks" },
-            { label: "Extending it", intentic: "capabilities, extensions and any MCP server", them: "tools, skills and plugins from ClawHub", theirs: true },
+            {
+                label: "Reviewing what it did",
+                intentic: "a diff reader you tick through, then land or discard",
+                them: "the reply in the thread, and git afterwards",
+            },
+            {
+                label: "Where credentials live",
+                intentic: "inside the sandbox, injected per turn",
+                them: "with the gateway, on the device it runs on",
+            },
+            {
+                label: "Runs unattended",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "cron jobs, reminders and background tasks",
+            },
+            {
+                label: "Extending it",
+                intentic: "capabilities, extensions and any MCP server",
+                them: "tools, skills and plugins from ClawHub",
+                theirs: true,
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
         ],
         together: {
@@ -684,7 +818,11 @@ export const comparePages: ComparePage[] = [
                 them: "a learning loop: generated skills, persistent memory, a model of you",
                 theirs: true,
             },
-            { label: "Where the work runs", intentic: "always a Docker sandbox on hardware you own", them: "local, Docker, SSH or a serverless sandbox, as configured" },
+            {
+                label: "Where the work runs",
+                intentic: "always a Docker sandbox on hardware you own",
+                them: "local, Docker, SSH or a serverless sandbox, as configured",
+            },
             { label: "Isolation", intentic: "one container and one git worktree per agent", them: "isolated subagents inside a conversation" },
             {
                 label: "How you reach it",
@@ -698,8 +836,16 @@ export const comparePages: ComparePage[] = [
                 them: "any endpoint — Nous Portal, OpenRouter, OpenAI or your own",
                 theirs: true,
             },
-            { label: "Reviewing changes", intentic: "a diff reader over an isolated worktree, then land or discard", them: "git, in the terminal it ran in" },
-            { label: "Starts on an event", intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events", them: "a natural-language cron scheduler" },
+            {
+                label: "Reviewing changes",
+                intentic: "a diff reader over an isolated worktree, then land or discard",
+                them: "git, in the terminal it ran in",
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "a natural-language cron scheduler",
+            },
             { label: "Licence", intentic: "MIT throughout — sandbox, platform and CLI", them: "MIT" },
         ],
         together: {
@@ -751,9 +897,18 @@ export const comparePages: ComparePage[] = [
             { label: "Where your service credentials sit", intentic: "inside your sandbox", them: "in the vendor's secret store" },
             { label: "Model billing", intentic: "your own subscription, never metered by us", them: "the vendor's plan, usually with a markup" },
             { label: "Compute billing", intentic: "hardware you already own", them: "the vendor's, metered or bundled" },
-            { label: "Supervision", intentic: "fleet board, plan mode, diff review, transcripts", them: "plan, diff and PR review, from the browser" },
+            {
+                label: "Supervision",
+                intentic: "fleet board, plan mode, diff review, transcripts",
+                them: "plan, diff and PR review, from the browser",
+            },
             { label: "Setup", intentic: "Docker, a Google account, one pasted command", them: "connect a repo; nothing to host", theirs: true },
-            { label: "Elastic capacity", intentic: "bounded by the machine you provide", them: "as many parallel agents as you will pay for", theirs: true },
+            {
+                label: "Elastic capacity",
+                intentic: "bounded by the machine you provide",
+                them: "as many parallel agents as you will pay for",
+                theirs: true,
+            },
             {
                 label: "Enterprise paperwork",
                 intentic: "no certifications yet; the whole system is MIT and auditable",
@@ -782,7 +937,7 @@ export const familyPages = (id: string): ComparePage[] => comparePages.filter((p
 export const compareIndex = {
     eyebrow: "Compare",
     heading: "Most of these are not competitors.",
-    sub: "“How does this compare to X?” is the question we get most. For four out of five values of X, the honest answer is that X is something intentic runs or something you keep alongside it.",
+    sub: "Usually, “how does this compare to X?” has a simple answer: intentic runs X, or works alongside it.",
     axes: {
         heading: "Two questions sort the entire field",
         items: [

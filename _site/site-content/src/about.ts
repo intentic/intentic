@@ -62,34 +62,33 @@ export const creatorLinks: AboutLink[] = [
 
 export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shipping production systems.";
 
-export const creatorBio =
-    "I built intentic because I wanted a real workspace for my own agents. Not a chat window, and not somebody else's cloud holding my source. It runs on my hardware, and now on yours.";
+export const creatorBio = "I wanted a real workspace for my agents, on my own hardware. Now it runs on yours too.";
 
 /* Four cards, and the fourth is the one that makes the other three believable. A trust section with no
  * admission in it reads as marketing; this product is genuinely new, and saying so is the position. */
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "Built by a verifiable person, and built so that trusting the person is optional. The platform holds your identity and a URL, with no path to your code, your keys, or your sandbox.",
+        body: "The platform holds only your identity and a URL — never your code, keys or sandbox.",
         href: productHref("delegate"),
         linkLabel: "What the platform actually holds",
     },
     {
         title: "Open source first",
-        body: "All of intentic is MIT on GitHub — the parts that touch your credentials and the platform behind them. No hidden binaries, no telemetry. Read what executes on your hardware before you run it.",
+        body: "All of intentic is MIT on GitHub. No hidden binaries, no telemetry, nothing to trust blind.",
         href: githubUrl,
         linkLabel: "Read the source",
     },
     {
         title: "It builds itself",
-        body: "Agents running in this product wrote most of it, in public, one reviewable commit at a time. The fleet on this page is what shipped the page.",
+        body: "Agents built most of intentic in public, one reviewed commit at a time.",
         stat: "commits",
         href: `${githubUrl}/commits/main`,
         linkLabel: "Read the commit log",
     },
     {
         title: "Honest about its age",
-        body: "No case studies, no testimonials, no logo wall. The project is young, and what you get is a real sandbox rather than a trial. Read what it does before pointing it at something you care about.",
+        body: "No case studies, no logo wall. It's young, and you get a real sandbox, not a trial.",
     },
 ];
 
@@ -128,8 +127,8 @@ export const openSource: OpenSourceProject[] = [
 ];
 
 export const whyIntentic = [
-    "Agents got good enough to do real work, and the tools around them did not. The only layer you are allowed to change is the prompt; the environment the agent works in is somebody else's, and so is the machine.",
-    'That trade is fine until the agent needs your database password to do the job. Then "whose computer is this?" stops being a philosophical question. intentic is the other answer: the workspace is yours, the hardware is yours, and the vendor is architecturally unable to reach either.',
+    "Agents got good enough for real work; their tools did not. All you can change is the prompt.",
+    "Fine — until it needs your database password. With intentic the machine is yours, and the vendor can't reach it.",
 ];
 
 export const aboutMeta = {

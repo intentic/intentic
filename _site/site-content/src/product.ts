@@ -102,7 +102,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Every card carries the receipts",
-                body: "Model, branch, turns, tokens in and out, dollars spent, and the diff so far. No opening a transcript to find out where your money went.",
+                body: "Model, branch, turns, tokens, cost and the diff so far — without opening a transcript.",
                 shot: {
                     name: "mobile-fleet",
                     alt: "The same fleet board on a phone: agent cards stacked in one column with model, branch, cost and diff stats.",
@@ -111,7 +111,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Isolated by construction",
-                body: "Each agent gets its own git worktree off your base commit. They never write over each other, and nothing reaches your tree until you land it.",
+                body: "Each agent works in its own git worktree — they never collide, and nothing lands until you say so.",
                 figure: "worktrees",
             },
         ],
@@ -127,7 +127,7 @@ export const productPages: ProductPage[] = [
         navLabel: "Empower",
         menuBlurb: "Wire agents into your systems — they see and act",
         heading: "An agent is only as useful as what it can reach.",
-        sub: "Capabilities are how a sandbox grows: GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH, any MCP server. Each installs a real tool and keeps its credential in your sandbox — and one puts the agent on your own website.",
+        sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server — each a real tool, its key kept in your sandbox.",
         hero: {
             name: "capabilities",
             alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -142,7 +142,7 @@ export const productPages: ProductPage[] = [
         blocks: [
             {
                 title: "Adding one tells you exactly what it will do",
-                body: "Before you paste a token, the card lists the effects: the skill the agent gains, the variable it lands in, the image fragment that installs the client.",
+                body: "Before you paste a token, the card shows what it adds: a new skill, a secret, and the tool it installs.",
                 shot: {
                     name: "capability-github",
                     alt: "The GitHub capability: a connected instance, a name field, a personal access token field, a Git access toggle, and a panel listing what it adds to the sandbox: a skill the agent loads next turn and a secret injected into its environment.",
@@ -152,22 +152,22 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "The credential never leaves the sandbox",
-                body: "Secrets are written inside your sandbox and injected each turn. They are denylisted from the file relay, and the platform has no path to them at all.",
+                body: "Secrets live in your sandbox and are injected each turn. The platform has no path to them.",
                 figure: "platform-boundary",
             },
             {
                 title: "The systems around one sandbox",
-                body: "A specialized agent is three or four capabilities from doing a real job: the repo, the database, the error tracker, the CI and deploys, the chat where its colleagues live.",
+                body: "A specialized agent is a few capabilities from a real job: repo, database, error tracker, chat.",
                 figure: "integrations",
             },
             {
                 title: "Talk to it where your team already works",
-                body: "Connect Discord or Slack and the agent joins as a real participant. Assign work with an @mention; it plans, executes and reports back in the same thread.",
+                body: "Connect Discord or Slack and the agent joins in — @mention it, and it works and reports back there.",
                 figure: "teammate",
             },
             {
                 title: "Put it on your own website",
-                body: "One script tag drops a chat bubble on your site, answered by the same agent that has your repo, your docs and your tools. Every conversation opens on your fleet board for you to watch or take over.",
+                body: "One script tag adds a chat bubble to your site, answered by your agent. Every chat opens on your board to join.",
                 bullets: [
                     "A read-only toolbox by default: it can read, search and fetch, nothing else.",
                     "Each visitor thread runs in its own throwaway git worktree, behind a bot check.",
@@ -192,7 +192,7 @@ export const productPages: ProductPage[] = [
         navLabel: "Automate",
         menuBlurb: "Agents that start themselves on an event, and act",
         heading: "Agents that start themselves — on a schedule, or an event.",
-        sub: "An automation wakes an agent under permissions you set: a push, an alert, a payment, an email, a chat message, or plain cron. A guard command you write decides whether each wake runs, and every run is a fresh session you can watch.",
+        sub: "A push, alert, payment, email, chat or cron wakes an agent. A guard you write vets each run, and you watch it.",
         // Diagram-led: there is no captured automations screen, and a mockup would be the one lie on the
         // shelf. The triggers figure IS the hero; a real screen (the fleet board) carries a block below.
         heroFigure: "triggers",
@@ -204,7 +204,7 @@ export const productPages: ProductPage[] = [
         blocks: [
             {
                 title: "A persona with permissions, not a free-for-all",
-                body: "Each automation runs as an agent persona you've configured — which model, which tools, how much it may do unattended. The guard command runs first and can veto the wake before a single token is spent.",
+                body: "Each wake runs as a persona you set — model, tools, limits — vetoed by your guard before a token is spent.",
                 bullets: [
                     "Wake on a GitHub push, a Sentry alert, a Stripe payment, inbound email, a Discord message, or cron",
                     "The guard is your code: it decides, per event, whether this one is worth an agent",
@@ -212,7 +212,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Watch every run land on the board",
-                body: "A woken agent appears on your fleet board like any other — its own card, its transcript, its diff, the same review before anything lands. The nightly dependency audit arrives that way, already waiting when you get in.",
+                body: "A woken agent lands on your board like any other: its own card, diff and review, waiting when you arrive.",
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -222,7 +222,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "One run can wake the next",
-                body: "An automation can finish by starting another, so a chain of specialists hands work down the line — triage wakes the fixer, the fixer wakes the reviewer — each a fresh session with its own transcript.",
+                body: "One run can start the next, so work hands down a chain: triage wakes the fixer, the fixer wakes the reviewer.",
             },
         ],
         meta: {
@@ -237,7 +237,7 @@ export const productPages: ProductPage[] = [
         navLabel: "Supervise",
         menuBlurb: "It proposes, you approve, and nothing lands unread",
         heading: "It proposes. You approve. Nothing lands until you've read the diff.",
-        sub: "Every agent starts in plan mode: it reads, writes a plan, and waits. You approve, steer, or reject — and its finished work sits on its own branch until you have read every hunk. You keep it sharp by curating what it knows, not by nagging it.",
+        sub: "Every agent plans first, then waits. You approve or reject — and nothing lands until you've read every hunk.",
         hero: {
             name: "chat-plan",
             alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
@@ -251,7 +251,7 @@ export const productPages: ProductPage[] = [
         blocks: [
             {
                 title: "The plan is the contract",
-                body: "Before it edits anything, the agent shows which files it will touch and what it will do to each. Approve it and the plan becomes a to-do list you watch.",
+                body: "Before editing, the agent shows which files it will touch. Approve, and the plan becomes a to-do list you watch.",
                 bullets: [
                     "Thinking, tool calls and to-dos stream as they happen, never summarised after the fact",
                     "Steer mid-turn: a message lands in the running turn instead of queuing behind it",
@@ -260,11 +260,11 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Permission is a dial, not a switch",
-                body: "The same conversation can be strict on a migration and loose on a changelog — the composer's mode pill sets how much the agent may do unattended, per turn. An approved plan is the exception: you have read what it intends, so it runs the lot.",
+                body: "A mode pill sets how far the agent may go on its own, per turn — strict on a migration, loose on a changelog.",
             },
             {
                 title: "Reviewed by file, not by wall of text",
-                body: "Finished work is grouped by repo with per-file line counts, so a 400-line change reads as six decisions. Comments attach to a hunk, and unread files stay marked until you have looked at them.",
+                body: "Work is grouped by file, so a 400-line change reads as six decisions. Unread files stay marked until you look.",
                 shot: {
                     name: "workspace-changes",
                     alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
@@ -274,17 +274,17 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "The review boundary is a real branch",
-                body: "Landing replays the agent's delta onto your tree as ordinary git changes you can stage, amend or revert. Discarding removes the worktree and leaves your tree untouched. A land conflict comes back as an Attention card the agent can resolve.",
+                body: "Landing adds the agent's work as ordinary git changes you can stage, amend or revert.",
                 figure: "worktrees",
             },
             {
                 title: "Steer it by what it knows, not by nagging",
-                body: "You can't make the model smarter; you can make it better equipped. Open the context it loads every turn — skills, runbooks, house style — and the systems it may reach, and the same prompt does a better job.",
+                body: "You can't make the model smarter, but you can equip it: better context and tools each turn.",
                 figure: "prompt-vs-environment",
             },
             {
                 title: "One workspace, two operators",
-                body: "The editor, file tree, search and terminal aren't a viewer bolted onto the chat — they are the same surfaces the agent works through, so what it edits is what you open. Nothing reconciles your view with the agent's, because there is only one.",
+                body: "You and the agent share one workspace — the editor, files and terminal it uses are what you open.",
                 figure: "shared-surfaces",
             },
         ],
@@ -300,7 +300,7 @@ export const productPages: ProductPage[] = [
         navLabel: "Delegate",
         menuBlurb: "Give it a server of its own and hand off the job",
         heading: "Delegate the running. Keep the owning.",
-        sub: "A sandbox is a Docker container on your own laptop, desktop or VPS. Put it on a server, hand it end-to-end operation — and because the platform sits off the command path, you give up none of the control.",
+        sub: "A sandbox is a Docker container on your laptop, desktop or server. Hand off the running, and keep full control.",
         hero: {
             name: "sandbox-overview",
             alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",
@@ -315,12 +315,12 @@ export const productPages: ProductPage[] = [
         blocks: [
             {
                 title: "It runs on hardware you own",
-                body: "The sandbox dials out over a private Cloudflare tunnel and your browser talks to that address. Put the machine on a VPS and it keeps working without you — the platform never relays a file, a keystroke or a credential.",
+                body: "A private tunnel connects your browser to the sandbox. On a server, it keeps running without you.",
                 figure: "ownership",
             },
             {
                 title: "The image is a file you approve",
-                body: "Everything past the base image is an overlay Dockerfile. The agent can propose a line and then waits: you read the diff and approve before a rebuild applies it.",
+                body: "The image is a Dockerfile you own. The agent proposes a change and waits for you to approve the diff.",
                 shot: {
                     name: "sandbox-environment",
                     alt: "The sandbox Environment tab: an overlay Dockerfile diff awaiting review, adding an imagemagick install, with Reject and Approve buttons.",
@@ -330,7 +330,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "The bill is measured where it is spent",
-                body: "Every turn's tokens and cost land in the sandbox's own ledger, by day, provider and model. It is your subscription, so the platform never meters it.",
+                body: "Each turn's tokens and cost land in the sandbox's own ledger. It's your plan, so the platform never meters it.",
                 shot: {
                     name: "sandbox-spend",
                     alt: "The sandbox Usage tab: a stacked spend-per-day chart split by Claude Code and Codex, with cost broken down by model and by agent.",
@@ -340,12 +340,12 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "What the platform actually holds",
-                body: "Identity, the sandbox's URL, and the grants that let a teammate reach it. Not your code, not your keys, not your transcripts.",
+                body: "Your identity, the sandbox URL, and teammate access — not your code, keys or transcripts.",
                 figure: "platform-boundary",
             },
             {
                 title: "One sandbox, several people",
-                body: "The owner installs the tools; invited teammates share that same sandbox, each signed in as themselves. Setup stays owner-gated.",
+                body: "The owner installs the tools; invited teammates share the sandbox, each signed in as themselves.",
                 bullets: [
                     "Invite by email; grants are enforced by the daemon, fail-closed.",
                     "Teammates chat, drive and review, and mirror the sandbox's ports.",
