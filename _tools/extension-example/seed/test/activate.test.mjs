@@ -26,7 +26,7 @@ const disposable = () => ({ dispose: () => {} });
 const hostStub = () => {
     const registered = { views: [], commands: [], requested: [] };
     const api = {
-        apiVersion: `1.0.0`,
+        apiVersion: `2.1.0`,
         views: {
             register: (view) => {
                 assert.ok(declaredViews.has(view.id), `view "${view.id}" is not declared in contributes.views`);

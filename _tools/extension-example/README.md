@@ -39,9 +39,16 @@ Both repositories now exist, and the discovery path ran end to end for the first
 
 | | |
 | --- | --- |
-| The extension | [`intentic/extension-example`](https://github.com/intentic/extension-example) @ `9305c108` |
+| The extension | [`intentic/extension-example`](https://github.com/intentic/extension-example) @ `b129cfc4` |
 | The registry | [`intentic/registry`](https://github.com/intentic/registry) |
 | The listing it produced | [`intentic/registry#1`](https://github.com/intentic/registry/pull/1), labelled `listing`, **merged** |
+
+The published repo sat at `9305c108` — `engines.intentic: "^0.4.0"` — for long enough to outlive two major
+bumps of the extension API, so the one repository an author is told to copy was the one guaranteed not to
+load. `b129cfc4` is that fix, and the listing moved to it in
+[`intentic/registry#4`](https://github.com/intentic/registry/pull/4). **A listing pins a commit, so bumping
+`engines` anywhere means opening a listing PR in the same sitting** — the repo being right is not the same as
+the thing anyone installs being right.
 
 That pull request was not hand-written. `_tools/registry-scan`'s scan ran against the live GitHub API, found the repo by
 its `intentic-extension` topic, parsed the manifest, resolved the head sha, and emitted the proposal, title and body
