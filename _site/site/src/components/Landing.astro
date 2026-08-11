@@ -430,6 +430,26 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                     <pre class="px-4 py-3 text-content"><code><span class="text-subtle">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
                 </div>
                 <p class="mt-3 text-xs text-subtle">{content.connect.commandNote}</p>
+
+                {/* The alternative to step 3, sitting under step 3 rather than in place of it. This band is
+                    where the page asks for a terminal, and a terminal is where it loses people — so the way
+                    out belongs here, at the moment the hesitation lands, not only in the top bar.
+
+                    Secondary, and narrower than the code window above it: the app is a window around that same
+                    install, not a rival to it, and the hero already spends the page's one primary button. The
+                    width is the CONTENT's — a note at its readable measure, the button beside it — because at
+                    the band's full 77rem the two sat half a metre apart with nothing between them. The
+                    platforms are named on the button because there is no macOS build: a reader on a Mac
+                    learns that here, with the one-liner that does work still on screen, not after a click. */}
+                <div
+                    class="mt-6 flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line bg-card/40 px-5 py-4"
+                >
+                    <div class="min-w-64 flex-1">
+                        <p class="text-sm font-medium text-content">{content.connect.desktop.lead}</p>
+                        <p class="mt-1 max-w-copy text-xs leading-relaxed text-muted">{content.connect.desktop.note}</p>
+                    </div>
+                    <a class="btn btn-secondary shrink-0" href="/download/">{content.connect.desktop.cta}</a>
+                </div>
             </div>
         </section>
 

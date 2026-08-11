@@ -90,7 +90,18 @@ export interface LandingContent {
      * at build time — never authored. The band has no slot that can render a zero: an empty social-proof
      * counter is the one thing here that would cost more trust than it buys. */
     trust: { eyebrow: string; cta: string };
-    connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
+    /* Step 3 is "paste this in a terminal", and that is the likeliest place on this page to lose somebody who
+     * has read all of it — not because the command does more than an installer would, but because it arrives
+     * with none of an installer's affordances. `desktop` is the way out, and it sits BESIDE the command rather
+     * than above it: there is no macOS build, so a download offered first reads as a gap to a third of the
+     * audience, while the same download offered next to a one-liner that works everywhere reads as the
+     * shortcut it is. It stays secondary for the same reason the hero has one button — the app is a window
+     * around this install, not a second product to choose between. */
+    connect: LandingSectionIntro & {
+        steps: LandingFact[];
+        commandNote: string;
+        desktop: { lead: string; cta: string; note: string };
+    };
     finalCta: { heading: string; sub: string };
 }
 
@@ -250,6 +261,13 @@ export const landingContent: LandingContent = {
             },
         ],
         commandNote: "Nothing deployed, nothing exposed. Just a workspace your agents can call home.",
+        desktop: {
+            lead: "Rather not touch a terminal?",
+            cta: "Get the app for Windows or Linux",
+            // Says what it IS, so nobody reads it as a different product: the same install with a window
+            // around it. The Mac reader is not stranded — the command above is what the app runs anyway.
+            note: "The app runs this very command for you: it puts Docker in place if the machine has none, starts the sandbox, and opens your workspace when it answers.",
+        },
     },
     finalCta: {
         heading: "Put ten agents to work. Come back whenever.",

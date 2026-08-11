@@ -1,5 +1,4 @@
 import { apiDestinations } from "./api";
-import { compareHref } from "./compare";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
@@ -12,10 +11,16 @@ import { DEMO_PATH } from "./site";
  * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
  * opens on, which the mega-menu previews.
  *
- * Compare is a bare LINK, not a third menu. "How does this compare to X?" is the most asked question we get,
- * and the hub's whole answer is that the field sorts into four families before any individual name matters —
- * a menu of six competitor rows would hand a visitor the names without the sorting, which is the part that
- * changes their mind.
+ * Compare is NOT in the bar, and that is the deliberate omission here. The hub's own headline is "Most of
+ * these are not competitors" — a reframe, and a reframe only lands on somebody who already had the doubt.
+ * A permanent tab announces the doubt to everyone else, naming a field of rivals to a visitor who had not
+ * thought to look for one. The bar is also the site's scarcest space, spent best on what people RETURN to
+ * (Features, Docs) or act on (Get started); a comparison is read once, by someone search already sent
+ * straight to it.
+ *
+ * It stays reachable in the two places that matter: a full column in the footer, sitewide, which is what
+ * keeps every comparison page linked; and the home page FAQ, where the row that asks the question links the
+ * hub — the moment the doubt actually forms, rather than before it.
  */
 
 export interface MenuItem {
@@ -106,19 +111,13 @@ export const navEntries: NavEntry[] = [
         sections: [{ items: [...apiDestinations] }],
         action: { label: "Browse the gallery", href: "/extensions/" },
     },
-    // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
-    // no authored list here to build a menu out of.
+    // A bare link: the gallery's contents come from the registry repo at build time, so there is no authored
+    // list here to build a menu out of.
     {
         type: "link",
         label: "Extensions",
         href: "/extensions/",
         prefix: "/extensions",
-    },
-    {
-        type: "link",
-        label: "Compare",
-        href: compareHref(""),
-        prefix: "/compare",
     },
     // A bare link, and high in the bar on purpose: the download page is an ANSWER to the objection the
     // quickstart raises ("run this command"), so it has to be visible from the page that raises it.
