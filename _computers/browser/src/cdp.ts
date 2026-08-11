@@ -3,11 +3,12 @@ import { BrowserError } from "./types.js";
 /* The Chrome DevTools Protocol, as much of it as driving a page needs: an HTTP handshake to find the tabs, then
  * one WebSocket per tab carrying JSON-RPC.
  *
- * Hand-rolled rather than puppeteer/playwright, and for a reason that has already been tested rather than
- * assumed: this ships inside a `bun build --compile` binary, and the last native/`bindings`-shaped dependency
- * that looked reasonable could not be loaded from a compiled binary at all (see @intentic/desktop's
- * input-windows.ts). CDP over a WebSocket needs no dependency — the protocol is JSON, and both `fetch` and
- * `WebSocket` are globals — so there is nothing here that can fail to load on somebody's laptop.
+ * Hand-rolled rather than puppeteer/playwright, for a reason that was measured rather than assumed — and NOT the
+ * one you would guess. Bundling is not the obstacle: Playwright packs into the `bun build --compile` binary this
+ * ships inside for about 6 MB. What it cannot do is reach a browser from Bun. `connectOverCDP` fetches the
+ * debugger's WebSocket URL over HTTP and then stalls on the upgrade until it times out, compiled and uncompiled
+ * alike, while the same script on Node drives the page fine. Bun's global `WebSocket` does connect, which is
+ * what the rest of this file is built on. The README carries the versions and says when to re-test.
  *
  * Correlation is the only real machinery: every request gets an id and the matching response resolves it. Events
  * (a message with a `method` and no `id`) are dropped — this package asks questions and does not subscribe. */

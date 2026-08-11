@@ -42,13 +42,23 @@ automated and never at risk from a misfired click.
 
 ## Why hand-rolled CDP rather than Puppeteer or Playwright
 
-This ships inside a `bun build --compile` binary, and that constraint has already been tested rather than
-assumed: the last native-dependency-shaped library that looked reasonable (nut.js, for input injection) turned
-out to be unloadable from a compiled binary at all — its addon is found through `bindings`, which walks up from
-`__dirname` looking for a `package.json`, and inside a standalone binary there isn't one.
+**Not because Playwright is too heavy to ship.** It bundles into the `bun build --compile` binary this ends up
+inside perfectly well: one `--external chromium-bidi`, for a require its own bundle makes and never resolves, and
+about 6 MB on top of a binary that already weighs ~95 MB. Anyone who assumes packaging is the obstacle will try
+it, watch it compile, and conclude this package exists for no reason.
 
-CDP needs no dependency. The protocol is JSON, `fetch` and `WebSocket` are globals, and the ~200 lines here are
-the subset that driving a page actually uses. Nothing in it can fail to load on somebody's laptop.
+**It is that Playwright cannot reach a browser from Bun.** `chromium.connectOverCDP()` fetches the debugger's
+WebSocket URL over HTTP, then stalls on the upgrade and times out thirty seconds later. That happens compiled and
+uncompiled alike, so it is the runtime rather than the bundling — and the same script against the same Chrome on
+Node drives the page and returns an accessibility snapshot. Bun's own global `WebSocket`, which is what this
+package is built on, connects from inside the compiled binary and gets a CDP reply back.
+
+CDP needs no dependency either way. The protocol is JSON, `fetch` and `WebSocket` are globals, and the ~200 lines
+here are the subset that driving a page actually uses.
+
+**Worth re-testing rather than inheriting.** The above was measured against playwright-core 1.62.1 on Bun 1.3.14.
+If a later pair connects, Playwright's accessibility snapshot is a better instrument than the DOM walk in
+`snapshot.ts`, and this whole package is ~500 lines — the trade would be worth making, not merely tolerable.
 
 ## What is testable without a browser
 
