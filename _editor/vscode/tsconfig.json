@@ -1,0 +1,9 @@
+{
+    "compilerOptions": {
+        "types": ["node", "vscode"],
+        "noEmit": true,
+        "rootDir": "./src"
+    },
+    "include": ["./src/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

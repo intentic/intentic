@@ -52,6 +52,11 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     // agreement is what makes the browser's "did I reach the right daemon" check meaningful.
     const named = await createApp(services({ config: { ...testConfig, connectToken: "tok" } })).request("/health");
     expect(await named.json()).toMatchObject({ ok: true, sandboxId: sandboxIdFromToken("tok") });
+
+    // The posture rides the liveness probe because a local client needs it before any authenticated read.
+    expect(await (await createApp(services()).request("/health")).json()).toMatchObject({ profile: "container" });
+    const local = services({ config: { ...testConfig, sandbox: { ...testConfig.sandbox, profile: "local" } } });
+    expect(await (await createApp(local).request("/health")).json()).toMatchObject({ profile: "local" });
 });
 
 /* /health is the one route that answers a stranger, and it answers with the sandbox id — which is also what the
@@ -61,8 +66,8 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
 test("CORS names the configured origins and no others, so an arbitrary page cannot read /health", async () => {
     const app = createApp(
         services({
-            config: { ...testConfig, connectToken: "tok" },
-            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigins: ["https://app.intentic.dev", "https://localhost:47145"] },
+            config: { ...testConfig, connectToken: "tok", webOrigin: "https://app.intentic.dev,https://localhost:47145" },
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
         }),
     );
     const originOf = async (origin: string) => (await app.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
@@ -70,6 +75,22 @@ test("CORS names the configured origins and no others, so an arbitrary page cann
     // Each configured origin is reflected verbatim — a list, so one sandbox serves the hosted SPA and a dev origin.
     expect(await originOf("https://app.intentic.dev")).toBe("https://app.intentic.dev");
     expect(await originOf("https://localhost:47145")).toBe("https://localhost:47145");
+
+    // The same emission with NO auth at all — the local profile's shape, where the host application serves
+    // the app from its own origin and the browser preflights loopback like any cross-origin call.
+    const authless = createApp(services({ config: { ...testConfig, webOrigin: "http://127.0.0.1:47188" } }));
+    const authlessProbe = await authless.request("/health", { headers: { origin: "http://127.0.0.1:47188" } });
+    expect(authlessProbe.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:47188");
+
+    // A family entry admits one floating label and nothing more — an editor webview's per-session origin,
+    // without opening the suffix to subdomain chains or foreign hosts.
+    const family = createApp(services({ config: { ...testConfig, webOrigin: "https://*.webview.example.net" } }));
+    const familyOf = async (origin: string) =>
+        (await family.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
+    expect(await familyOf("https://0a1b2c.webview.example.net")).toBe("https://0a1b2c.webview.example.net");
+    expect(await familyOf("https://a.b.webview.example.net")).toBeNull();
+    expect(await familyOf("https://webview.example.net")).toBeNull();
+    expect(await familyOf("https://x.webview.example.net.evil.dev")).toBeNull();
 
     // Anything else gets NO header, not a wildcard and not someone else's origin — the browser refuses the read.
     expect(await originOf("https://evil.example")).toBeNull();
@@ -501,7 +522,8 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
     const app = createApp(
         services({
             automations: store,
-            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth, allowOrigins: ["https://app.intentic"] },
+            config: { ...testConfig, webOrigin: "https://app.intentic" },
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
         }),
     );
     const send = (origin: string | undefined, body: unknown = { conversationId: "c1", content: "fix the header" }) =>

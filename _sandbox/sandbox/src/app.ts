@@ -278,9 +278,62 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return next();
     });
 
+    /* CORS is emitted in EVERY auth mode, from the same allowlist the authorizer would use. It used to live
+     * inside the auth block below, because the only authless daemons were tests and the host-internal preview
+     * — same-origin callers that never trip CORS. The local profile broke that assumption: its host serves
+     * the app from its own origin (an editor webview is one), so the browser preflights loopback like any
+     * cross-origin call, and a daemon that emits nothing is unreachable from the very UI it exists to serve.
+     * The allowlist reasoning is identical with or without auth — see the /health note below. */
+    const allowOrigins = services.config.webOrigin
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter((origin) => origin !== "");
+    /* An allowlist entry may name a FAMILY: `https://*.example.net` admits any single label in the wildcard
+     * position. Editor webviews are why — a webview's origin is minted per session from a fixed suffix, so no
+     * exact spelling can be written down ahead of time. Still an allowlist, never a wildcard: the scheme and
+     * the suffix are pinned, only one label floats, and the entry is the operator's own explicit config. */
+    const originAllowed = (origin: string): boolean =>
+        allowOrigins.some((entry) => {
+            const star = entry.indexOf("*");
+            if (star === -1) {
+                return entry === origin;
+            }
+            const prefix = entry.slice(0, star);
+            const suffix = entry.slice(star + 1);
+            const label = origin.slice(prefix.length, origin.length - suffix.length);
+            return origin.startsWith(prefix) && origin.endsWith(suffix) && label.length > 0 && !label.includes(".") && !label.includes("/");
+        });
+    app.use(
+        "*",
+        cors({
+            /* The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
+             * arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
+             * browser-blocked; the route's own allowedOrigins check is the real gate there.
+             *
+             * Everywhere else this is an ALLOWLIST, never a wildcard, and the reason is /health. CORS buys
+             * nothing on a route that checks a bearer — a stranger has no token to send — but /health
+             * deliberately checks nothing and answers with the sandbox id, and the loopback listener's port
+             * is derived from that id (@intentic/sandbox-run localDaemonPort). Under `*` any page in the
+             * user's browser could walk that port range, read the id, and derive every preview hostname the
+             * sandbox publishes. An unmatched origin gets no ACAO header, so the browser refuses the read. */
+            origin: (origin, c) => {
+                if (webchatPublicPath(c.req.path)) {
+                    return origin ?? "*";
+                }
+                // Reflect only a match (exact, or one family entry's single floating label): returning the
+                // list's first entry for a foreign origin would hand the browser a header naming someone
+                // else, which it correctly ignores — but it also hides the misconfiguration. null ⇒ no
+                // header at all, which is the honest answer.
+                return originAllowed(origin) ? origin : null;
+            },
+            allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
+            maxAge: 600,
+        }),
+    );
+
     if (services.auth !== undefined) {
         const authorize = services.auth.authorize;
-        const allowOrigins = services.auth.allowOrigins;
         // Built once: the secrets are per-boot and the stores are already live, so nothing here is per-request.
         const grants = grantsOf({
             panelToken: services.panelToken,
@@ -289,33 +342,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             verifySync: (presented) => verifySyncToken(services.config.historyRoot, presented),
             verifyExtension: (presented) => services.extensionBackend.verifyExtensionToken(presented),
         });
-        app.use(
-            "*",
-            cors({
-                /* The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
-                 * arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
-                 * browser-blocked; the route's own allowedOrigins check is the real gate there.
-                 *
-                 * Everywhere else this is an ALLOWLIST, never a wildcard, and the reason is /health. CORS buys
-                 * nothing on a route that checks a bearer — a stranger has no token to send — but /health
-                 * deliberately checks nothing and answers with the sandbox id, and the loopback listener's port
-                 * is derived from that id (@intentic/sandbox-run localDaemonPort). Under `*` any page in the
-                 * user's browser could walk that port range, read the id, and derive every preview hostname the
-                 * sandbox publishes. An unmatched origin gets no ACAO header, so the browser refuses the read. */
-                origin: (origin, c) => {
-                    if (webchatPublicPath(c.req.path)) {
-                        return origin ?? "*";
-                    }
-                    // Reflect only an exact match: returning the list's first entry for a foreign origin would
-                    // hand the browser a header naming someone else, which it correctly ignores — but it also
-                    // hides the misconfiguration. null ⇒ no header at all, which is the honest answer.
-                    return allowOrigins.includes(origin) ? origin : null;
-                },
-                allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
-                maxAge: 600,
-            }),
-        );
         app.use("*", async (c, next) => {
             // /system/terminal is a WebSocket upgrade: the browser can't set an Authorization header on it, so
             // the terminal route authorizes the token from the query string itself (see createTerminalRoute).
@@ -410,6 +436,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         c.json({
             ok: true,
             sandboxId: sandboxIdFromToken(services.config.connectToken),
+            // Which posture answers (see platform/profile.ts) — on the liveness probe because a client needs
+            // it before any authenticated read: a local daemon has no auth to establish at all.
+            profile: services.config.sandbox.profile,
             boot: services.boot.progress(),
             announce: services.announcer.status(),
         }),

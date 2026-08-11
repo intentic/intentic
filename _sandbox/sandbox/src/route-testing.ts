@@ -586,9 +586,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ensurePreviewRoutes: async () => {},
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         /* Loopback mode unless a test asks for the exposed daemon — `auth: undefined` is the mode, so it is the
-         * ABSENCE of the key that means loopback, not an override that happens to be undefined. Spelled out
-         * rather than left to `unstubbed` because `allowOrigins` is a DATA member: a stand-in that answers every
-         * unread key with a throwing function would make it read as set, and the CORS branch turn on. */
+         * ABSENCE of the key that means loopback, not an override that happens to be undefined. (CORS is not
+         * part of this switch: it emits in every mode, from config.webOrigin — see createApp.) */
         auth:
             auth === undefined
                 ? undefined
@@ -606,7 +605,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                           throw new Error("auth.disableBrowserAccess was called, and this test did not stub it");
                       },
                       connections: createAuthConnections(),
-                      allowOrigins: [],
                       ...auth,
                   },
         authRoot: `${WORKSPACE_ROOT}/${STATE_DIR}`,

@@ -2,6 +2,19 @@
 
 The **per-project AI-agent dev daemon** — a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own Cloudflare tunnel (Google-backed renewable sessions): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
 
+The daemon runs in one of two **profiles** ([src/platform/profile.ts](src/platform/profile.ts)). `container`
+(the default) is everything above. `local` is the same daemon as a plain process on the user's own machine,
+serving a folder they already own — for host applications (an editor extension, a CLI) that embed the product
+without a sandbox. Local means: loopback only and refuses any env that says otherwise (the fail-closed floor
+beside the auth floor), no auth (the person at the keyboard is the owner), HOME never claimed or converged,
+repos never reshaped (no separate git dirs, no gitlink surgery — a `.gitmodules`-declared submodule is spared
+in *both* profiles), no unasked-for writes to the user's folder (no skill/seed/shelf convergence; the state
+dir is appended to the repo's own `info/exclude` instead), and no container furniture (tmux sweeps, preview
+proxy, TLS loopback listener, dockerd, CI hooks, probes, automations scheduler, drafts publisher, extension
+processes, image-update checks). What stays on is the product the host embeds: agent turns, the fleet with
+per-agent worktrees and review/land, accounts and usage, the guard, watchers, search, resume. `/health`
+reports the profile.
+
 ## Responsibilities
 
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by a daemon session minted from verified Google identity (`/health` carved out for liveness).

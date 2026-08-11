@@ -8,7 +8,7 @@ import { afterEach, expect, test } from "vitest";
 import { rootExcludes } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { changedFiles } from "./changes.js";
-import { commitRootBaseline, commitWorktreeRemainder, ensureRootRepo } from "./root-repo.js";
+import { commitRootBaseline, commitWorktreeRemainder, ensureLocalRootRepo, ensureRootRepo } from "./root-repo.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -243,4 +243,93 @@ test("re-ensure is idempotent and heals a deleted .git pointer without a new bas
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
     expect(await sh(work, "rev-parse", "HEAD")).toBe(head);
     expect(await sh(work, "log", "--format=%s")).toBe("Initialize workspace");
+});
+
+// A gitlink DECLARED in .gitmodules is the user's own submodule, not the accident the convergence exists to
+// undo — see strayGitlinks. `git submodule add` needs the file protocol re-allowed (git 2.38 closed it).
+const declareSubmodule = async (work: string, source: string, path: string): Promise<void> => {
+    await sh(work, "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, path);
+    await sh(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "feat: add submodule");
+};
+
+test("a declared submodule survives the untrack convergence; a stray gitlink beside it does not", async () => {
+    const { work, historyRoot } = await tempBase();
+    const { work: elsewhere } = await tempBase();
+    const upstream = await nestedRepo(elsewhere, "lib");
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    await declareSubmodule(work, upstream, "lib");
+    await nestedRepo(work, "intent");
+    await trackNestedRepo(work, "intent");
+
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
+
+    // The submodule keeps its gitlink and its .gitmodules line; the stray is gone from index and commit.
+    expect(await sh(work, "ls-files")).toBe(".gitmodules\nlib");
+    expect(await sh(work, "ls-tree", "--name-only", "HEAD")).toBe(".gitmodules\nlib");
+});
+
+test("a conversation's root worktree commit spares declared submodules too", async () => {
+    const { work, historyRoot } = await tempBase();
+    const { work: elsewhere } = await tempBase();
+    const upstream = await nestedRepo(elsewhere, "lib");
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    await declareSubmodule(work, upstream, "lib");
+    await nestedRepo(work, "stray");
+    await writeFile(join(work, "notes.md"), "the turn's own work\n");
+
+    expect(await commitWorktreeRemainder("root", work, "Agent: one")).toBe(true);
+
+    const listed = await sh(work, "ls-files");
+    expect(listed).toContain("lib");
+    expect(listed).not.toContain("stray");
+});
+
+// ——— the LOCAL profile's ensure: the folder is the user's own ———
+
+test("local ensure of a folder that is not a repo inits in-tree, excludes state, and takes a baseline", async () => {
+    const { work } = await tempBase();
+    await writeFile(join(work, "notes.md"), "hello\n");
+    await nestedRepo(work, "service");
+
+    expect(await ensureLocalRootRepo(workspacePaths(work))).toBe(true);
+    await commitRootBaseline(workspacePaths(work));
+
+    // A real in-tree git dir — nothing relocated, no pointer file.
+    expect(await sh(work, "rev-parse", "--git-dir")).toBe(".git");
+    // The discovered nested repo and the daemon's own furniture stay out of the baseline.
+    expect(await sh(work, "ls-files")).toBe("notes.md");
+    const excludes = await readFile(join(work, ".git", "info", "exclude"), "utf8");
+    expect(excludes).toContain("/service/");
+    expect(excludes).toContain(`/${STATE_DIR}/`);
+});
+
+test("local ensure takes an existing repo exactly as it stands, appending only the state excludes", async () => {
+    const { work } = await tempBase();
+    const dir = await nestedRepo(work, "theirs");
+    await writeFile(join(dir, ".git", "info", "exclude"), "# mine\n*.scratch\n");
+    const head = await sh(dir, "rev-parse", "HEAD");
+
+    expect(await ensureLocalRootRepo(workspacePaths(dir))).toBe(false);
+    expect(await ensureLocalRootRepo(workspacePaths(dir))).toBe(false);
+
+    // No init, no commit, no reshaping — and the user's own exclude lines survive, grown once.
+    expect(await sh(dir, "rev-parse", "HEAD")).toBe(head);
+    expect(await sh(dir, "log", "--format=%s")).toBe("one");
+    const excludes = await readFile(join(dir, ".git", "info", "exclude"), "utf8");
+    expect(excludes).toContain("# mine\n*.scratch\n");
+    expect(excludes.match(new RegExp(`/${STATE_DIR}/`, "g"))).toHaveLength(1);
+});
+
+test("local ensure never converges a pre-existing repo's gitlinks — submodules are the user's", async () => {
+    const { work } = await tempBase();
+    const { work: elsewhere } = await tempBase();
+    const upstream = await nestedRepo(elsewhere, "lib");
+    const dir = await nestedRepo(work, "theirs");
+    await declareSubmodule(dir, upstream, "lib");
+
+    expect(await ensureLocalRootRepo(workspacePaths(dir))).toBe(false);
+
+    expect(await sh(dir, "ls-files")).toBe(".gitmodules\napp.ts\nlib");
 });

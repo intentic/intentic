@@ -24,6 +24,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
     unstubbed<Services>("services", {
         config: unstubbed<Services["config"]>("config", {
             sandbox: {
+                profile: "container",
                 port: 8787,
                 host: "0.0.0.0",
                 publicUrl: "",

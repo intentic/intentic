@@ -310,7 +310,9 @@ export const createAgentWorktrees = (
                     // rmdir refuses a non-empty dir — a real install the agent made stays put.
                     await rmdir(target).catch(() => undefined);
                 }
-                await symlink(join(main, rel), target, "dir").catch((error: unknown) => {
+                // "junction" on Windows: a dir symlink there needs a privilege ordinary accounts lack, while a
+                // junction does the same resolve-through job unprivileged (and takes the absolute path this is).
+                await symlink(join(main, rel), target, process.platform === "win32" ? "junction" : "dir").catch((error: unknown) => {
                     // EEXIST is the steady state, not a failure: the link — or a real install — is already there.
                     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                         logger.warn({ err: error, repo, mirror: rel }, "agents: mirror link failed");

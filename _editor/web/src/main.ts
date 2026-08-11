@@ -7,6 +7,9 @@ import { dropOutdatedMirrors } from "./composables/buildEpoch";
 import { installPerfConsole } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./composables/selfHeal";
+import { isLocalPosture } from "./environments/posture";
+import { watchHostAttention } from "./local/hostAttention";
+import { listenForHostTheme } from "./local/hostTheme";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandbox/sandboxScope";
 // …and the one that remembers each sandbox's screen, so a switch lands where that sandbox was left.
@@ -25,6 +28,14 @@ await purgeIfMarked();
 dropOutdatedMirrors();
 
 initAnalytics();
+
+// The local posture's host channels — registered here and only here, so no platform deployment ever carries
+// them: the host may recolor the panels to match itself (local/hostTheme.ts), and it is told when an agent
+// needs the person (local/hostAttention.ts).
+if (isLocalPosture()) {
+    listenForHostTheme();
+    watchHostAttention();
+}
 // Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
 // the console is the whole interface — see composables/perf.ts.
 installPerfConsole();

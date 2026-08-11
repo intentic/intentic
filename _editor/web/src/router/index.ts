@@ -1,9 +1,18 @@
 import { useDevice } from "@intentic/ui";
-import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
+import {
+    createMemoryHistory,
+    createRouter,
+    createWebHistory,
+    type RouteLocationNormalized,
+    type RouteLocationRaw,
+    type RouteRecordRaw,
+} from "vue-router";
 import { agentStarted } from "../composables/agents/firstRun";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { type LocalPosture, localPosture } from "../environments/posture";
+import { hostPresent, postToHost } from "../local/hostBridge";
 import { setupRedirect } from "./setupGate";
 
 declare module "vue-router" {
@@ -155,14 +164,62 @@ const routes: RouteRecordRaw[] = [
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
 
-export const router = createRouter({
-    /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/` — it never
-     * looks at Vite's, so an app built under a path prefix routed as if it were at the root: every path resolved
-     * one level up from where its own bundle lives. `/` for this app, which is why nothing here changes; the
-     * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
-    history: createWebHistory(import.meta.env.BASE_URL),
-    routes,
-});
+/* The LOCAL posture's route table: the three areas a host embeds (chat, the fleet with its drill-in,
+ * accounts), nothing platform-shaped (no login, no setup, no shell), and no guards — there is no signed-out
+ * state to guard against, only the per-window persistence hydration the auth guard used to own. Memory
+ * history because a hosted panel's document URL is the host's business (an editor webview's URL is not even
+ * navigable); the window opens directly on the view its host declared. */
+const localRoutes = (local: LocalPosture): RouteRecordRaw[] => [
+    { path: `/`, redirect: `/${local.view}` },
+    { path: `/chat`, name: `chat`, meta: { title: `Chat` }, component: () => import(`../local/LocalChat.vue`) },
+    { path: `/agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
+    { path: `/agents/:id`, name: `agent`, meta: { title: `Agent` }, component: () => import(`../agents/AgentDetail.vue`) },
+    { path: `/accounts`, name: `accounts`, meta: { title: `Accounts` }, component: () => import(`../local/LocalAccounts.vue`) },
+    /* A push to a platform-only surface is not an error worth a blank screen. A workspace FILE link — a chat
+     * tool card's path, the board's diff rows — names a surface the HOST owns: the editor opens its own
+     * document instead of this panel rendering a second file viewer inside it, so the intent goes over the
+     * bridge and the navigation is cancelled. Everything else (and every file link with no host listening —
+     * a plain browser tab on the dev server) lands back on this window's own view. A beforeEnter on the
+     * catch-all, not a global guard: a `redirect` resolves before any global guard could see the asked-for
+     * path. */
+    {
+        path: `/:pathMatch(.*)*`,
+        beforeEnter: (to) => {
+            if (to.path.startsWith(`/workspace/`) && hostPresent()) {
+                const path = to.path.slice(`/workspace/`.length);
+                const line = typeof to.query[`line`] === `string` ? Number(to.query[`line`]) : undefined;
+                postToHost({ type: `intentic:open-file`, path, ...(line !== undefined && Number.isFinite(line) ? { line } : {}) });
+                return false;
+            }
+            return `/${local.view}`;
+        },
+        // Never renders — the guard always redirects or cancels; the record still needs a component to be valid.
+        component: () => import(`../local/LocalChat.vue`),
+    },
+];
+
+const local = localPosture();
+
+export const router = createRouter(
+    local !== undefined
+        ? { history: createMemoryHistory(), routes: localRoutes(local) }
+        : {
+              /* The build's own base, not vue-router's default. Its default is a `<base href>` element or `/` — it never
+               * looks at Vite's, so an app built under a path prefix routed as if it were at the root: every path resolved
+               * one level up from where its own bundle lives. `/` for this app, which is why nothing here changes; the
+               * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
+              history: createWebHistory(import.meta.env.BASE_URL),
+              routes,
+          },
+);
+
+// The hydration the platform posture runs inside requireAuth, under the one identity a local window has.
+if (local !== undefined) {
+    router.beforeEach(async () => {
+        await restorePersistedQueries(`local`);
+        return true;
+    });
+}
 
 /* A redeploy replaces every content-hashed chunk, and every route above is a lazy import — so a window opened
  * before the deploy holds an index.html whose routes point at files that no longer exist. Clicking one made the

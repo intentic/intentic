@@ -131,6 +131,13 @@ const configSchema = z.object({
     cloudflareApiToken: z.string().default("").meta({ secret: true }),
     sandbox: z
         .object({
+            /* WHICH POSTURE THIS DAEMON RUNS IN. "container" is the shipped sandbox image — the two-volume
+             * layout, a tunnel, HOME converged onto the volumes, container furniture started at boot.
+             * "local" is a plain process on the machine's own account, serving a folder the user already owns:
+             * loopback only, HOME never claimed, repos never reshaped, no container furniture. The traits a
+             * subsystem may branch on — and the floor that refuses a contradictory local config — live in
+             * platform/profile.ts; nothing reads this value directly. */
+            profile: z.enum(["container", "local"]).default("container"),
             port: z.coerce.number().default(DAEMON_PORT),
             // Binds 0.0.0.0 by default (reached over the tunnel / host-internal ip); override for local runs.
             // Inside the container this is not an exposure: only the loopback listener's port is published,

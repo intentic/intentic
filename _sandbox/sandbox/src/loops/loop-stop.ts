@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
@@ -6,7 +6,7 @@ import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
 import { verdictPathIn } from "./loop-brief.js";
 
-const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 /* IS THE GOAL MET? — asked after every iteration, and asked by something that is not the iteration.
  *
@@ -139,7 +139,10 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
  * not-done, exactly as a failing one does, and the loop is ending anyway. */
 const runCommand = async (command: string, cwd: string, signal: AbortSignal): Promise<StopVerdict> => {
     try {
-        const { stdout, stderr } = await execFileAsync("sh", ["-c", command], { cwd, timeout: CHECK_TIMEOUT_MS, signal });
+        // The platform shell (`/bin/sh -c` everywhere but Windows, where exec uses the system shell): the
+        // command is the USER's own line, written for the machine the daemon runs on — a hardcoded `sh` only
+        // meant the check could never run at all on a local Windows daemon.
+        const { stdout, stderr } = await execAsync(command, { cwd, timeout: CHECK_TIMEOUT_MS, signal });
         const detail = `${stderr}${stdout}`.trim().slice(-DETAIL_TAIL);
         return { done: true, ...(detail !== "" ? { detail } : {}) };
     } catch (error) {

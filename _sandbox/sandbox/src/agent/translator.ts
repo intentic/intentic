@@ -269,9 +269,12 @@ export const createCliProxyClient = (params: {
     const auth = { authorization: `Bearer ${token}` };
 
     const listFiles = async (): Promise<TranslatorAuthFile[]> => {
-        const response = await fetchFn(`${managementUrl}/auth-files`, { headers: auth });
-        // Management not reachable (proxy still booting / not baked) ⇒ treat as nothing connected rather than throw.
-        if (!response.ok) {
+        // Management not reachable ⇒ treat as nothing connected rather than throw. Both shapes of unreachable:
+        // a non-ok answer (proxy still booting / not baked), and the fetch itself throwing — a dead port, or
+        // no translator configured at all (empty TRANSLATOR_URL makes this a relative URL, which fetch rejects
+        // before it ever dials). The local profile lives in that last shape permanently.
+        const response = await fetchFn(`${managementUrl}/auth-files`, { headers: auth }).catch(() => undefined);
+        if (response === undefined || !response.ok) {
             return [];
         }
         return ((await response.json()) as { files?: TranslatorAuthFile[] }).files ?? [];

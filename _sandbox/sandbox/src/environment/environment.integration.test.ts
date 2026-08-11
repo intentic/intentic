@@ -36,6 +36,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
             // `sandbox` is DATA, so it is spelled out whole rather than stood in for: a stand-in answering every
             // unread field with a throwing function would make `publicUrl` read as set.
             sandbox: {
+                profile: "container",
                 port: 8787,
                 host: "0.0.0.0",
                 publicUrl: "",

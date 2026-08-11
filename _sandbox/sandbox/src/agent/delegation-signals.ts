@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { noteDelegationSignal } from "./subagents.js";
 
@@ -17,9 +18,10 @@ import { noteDelegationSignal } from "./subagents.js";
  * that keeps its garbage re-reads it on every event, forever. */
 
 // Outside the workspace deliberately: /work/.intentic would put every signal through the workspace watcher and
-// the state-file table, and an isolated turn's /work is not even the same tree. /tmp is shared with every turn
-// namespace, and signals are ephemeral by nature — a reboot owing nothing is correct.
-export const AGENT_SIGNALS_DIR = "/tmp/intentic/agent-signals";
+// the state-file table, and an isolated turn's /work is not even the same tree. The system temp dir is shared
+// with every turn namespace, and signals are ephemeral by nature — a reboot owing nothing is correct.
+// tmpdir() rather than a /tmp literal so the local profile's daemon spools on Windows too.
+export const AGENT_SIGNALS_DIR = join(tmpdir(), "intentic", "agent-signals");
 
 // What the codex hook writes (codexSignalScript): its action verb, the delegation id it inherited from the
 // pane environment, and codex's own hook payload verbatim.

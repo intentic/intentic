@@ -1,3 +1,4 @@
+import { isLocalPosture } from "../../environments/posture";
 import { useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 
@@ -33,6 +34,12 @@ export const sandboxAuthenticatedFetch = async (request: Request, target = curre
     }
     if (!belongsTo(request, target)) {
         throw new DOMException(`The selected sandbox changed while this request was signing in.`, `AbortError`);
+    }
+    // The local posture has no session to establish — the engine authenticates nobody, and only answers
+    // loopback (its own floor enforces that pairing). Requests go exactly as written; a 401 would be a real
+    // engine-side refusal, not a bearer to renew.
+    if (isLocalPosture()) {
+        return globalThis.fetch(request);
     }
     const token = await getSessionToken(target);
     if (token === undefined) {

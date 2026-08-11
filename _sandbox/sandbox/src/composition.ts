@@ -622,9 +622,6 @@ export interface Services {
               readonly rotateSessions: () => Promise<void>;
               readonly disableBrowserAccess: () => Promise<void>;
               readonly connections: AuthConnections;
-              // The browser origins CORS is emitted for (config.webOrigin, split on commas). Never a wildcard:
-              // /health answers without a credential, so this is the only gate in front of it.
-              readonly allowOrigins: readonly string[];
           }
         | undefined;
 }
@@ -693,12 +690,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
               rotateSessions: sessions.rotate,
               disableBrowserAccess: browserAccess.disable,
               connections: authConnections,
-              // Comma-separated so one sandbox can serve the hosted SPA and a local dev origin at once. Never
-              // empty in practice — env.config collapses a blank WEB_ORIGIN onto the hosted default.
-              allowOrigins: config.webOrigin
-                  .split(",")
-                  .map((origin) => origin.trim())
-                  .filter((origin) => origin !== ""),
           }
         : undefined;
 

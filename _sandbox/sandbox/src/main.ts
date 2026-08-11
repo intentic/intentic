@@ -37,7 +37,7 @@ import { startExtensionUpdateWatch } from "./extensions/extension-updates.js";
 import { runGitMaintenance } from "./git/maintenance.js";
 import { prepushCheck } from "./prepush/prepush.js";
 import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
-import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
+import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { sweepStaleExports } from "./portability/exports.js";
@@ -57,6 +57,7 @@ import { linkClaudeState } from "./sessions/session-store.js";
 import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainer } from "./platform/container-owner.js";
+import { listenHost, profileTraits, requireLocalContract } from "./platform/profile.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { startResourceMetrics } from "./platform/resource-metrics.js";
 import { DAEMON_OWNER, startLeftoverSweep } from "./platform/leftovers.js";
@@ -156,6 +157,15 @@ const extensionSource = (path: string): boolean =>
 const main = async (): Promise<void> => {
     const config = loadConfig();
     requireAuthWhenReachable(config);
+    requireLocalContract(config);
+    // Every profile difference below reads a named trait, never the profile value — see platform/profile.ts.
+    const traits = profileTraits(config);
+    const host = listenHost(config);
+    if (!traits.sharedTmux) {
+        // No tmux server of our own to wrap agent shell commands into — the existing env contract the Bash
+        // rewrite honors (agent-terminals.ts), defaulted rather than forced so an operator can still override.
+        process.env["INTENTIC_AGENT_TMUX"] ??= "0";
+    }
     // Every intentic CLI run spawned in here (the /intentic routes, the panel-infra-apply tmux session) tees
     // its output to the daemon-owned logs tree — the same INTENTIC_LOG_DIR contract as an operator shell.
     process.env["INTENTIC_LOG_DIR"] ??= join(logsRoot(config.historyRoot), "intentic-runs");
@@ -188,8 +198,16 @@ const main = async (): Promise<void> => {
      * IS the daemon: agents working in it start one from source to watch a change work, and twice on 2026-08-11
      * that second daemon's first sweep killed every turn the live one had in flight. A guest serves its own
      * routes and owns nothing that was here before it — see platform/container-owner.ts for the whole list and
-     * the two days that wrote it. */
-    const role = await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger);
+     * the two days that wrote it.
+     *
+     * The LOCAL profile never asks: the claim file lives in HOME, which is the user's and not this daemon's to
+     * touch, and there is no container to own — each local engine has its own roots and every container-wide
+     * surface the `container` role gates is off in this profile by design. Its role is pinned instead of
+     * derived, which is also what keeps a local engine that happens to be alone on a machine from claiming
+     * "the container" and waking furniture the local posture promises never to run. */
+    const role = traits.convergeHome
+        ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
+        : { container: false, roots: true };
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
@@ -288,8 +306,11 @@ const main = async (): Promise<void> => {
     // `ws`'s WebSocketServer types its options.noServer as `boolean | undefined`; node-server's WebSocketServerLike
     // wants a plain boolean under exactOptionalPropertyTypes. The shapes match at runtime — assert the interface.
     const terminalSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
-    const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: config.sandbox.host, websocket: { server: terminalSockets } });
-    logger.info({ host: config.sandbox.host, port: config.sandbox.port, workspace: config.workspaceRoot }, "intentic sandbox daemon listening");
+    const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: host, websocket: { server: terminalSockets } });
+    logger.info(
+        { host, port: config.sandbox.port, workspace: config.workspaceRoot, profile: config.sandbox.profile },
+        "intentic sandbox daemon listening",
+    );
 
     /* THE LOOPBACK LISTENER — the same app on a second port, and the only one ever published to the host, so a
      * browser on this machine reaches the daemon directly instead of crossing to a Cloudflare edge and back.
@@ -318,32 +339,41 @@ const main = async (): Promise<void> => {
      * extended-CONNECT setting RFC 8441 needs), so the browser opens a SEPARATE http/1.1 connection for the
      * terminal — which this accepts, and whose `upgrade` event still reaches the `ws` server above. It is also
      * the fallback for any client that does not do ALPN at all. */
-    const localCertificate = readLocalCertificate(config);
+    const localCertificate = traits.extraListeners ? readLocalCertificate(config) : undefined;
     const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
-    const localServer = serve({
-        fetch: app.fetch,
-        port: config.local.port,
-        hostname: config.sandbox.host,
-        websocket: { server: localSockets },
-        ...(localCertificate === undefined
-            ? {}
-            : {
-                  createServer: createSecureServer,
-                  serverOptions: {
-                      cert: localCertificate.certificate,
-                      key: localCertificate.privateKey,
-                      allowHTTP1: true,
-                      // Node's default session memory (10MB) is a budget shared by every stream on the
-                      // connection — which is now ALL of them, including transcript replays that arrive in
-                      // multi-megabyte bursts. Exceeding it kills the session, i.e. the whole workspace's
-                      // connection at once, so the ceiling has to be sized for the multiplexing this enables.
-                      maxSessionMemory: 128,
-                  },
-              }),
-    });
-    logger.info({ port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname }, "loopback listener ready");
+    // A tunnel-avoiding shortcut is meaningless when the ONLY listener is already loopback — the local
+    // profile serves one plain port and nothing else (traits.extraListeners).
+    const localServer = !traits.extraListeners
+        ? undefined
+        : serve({
+              fetch: app.fetch,
+              port: config.local.port,
+              hostname: host,
+              websocket: { server: localSockets },
+              ...(localCertificate === undefined
+                  ? {}
+                  : {
+                        createServer: createSecureServer,
+                        serverOptions: {
+                            cert: localCertificate.certificate,
+                            key: localCertificate.privateKey,
+                            allowHTTP1: true,
+                            // Node's default session memory (10MB) is a budget shared by every stream on the
+                            // connection — which is now ALL of them, including transcript replays that arrive in
+                            // multi-megabyte bursts. Exceeding it kills the session, i.e. the whole workspace's
+                            // connection at once, so the ceiling has to be sized for the multiplexing this enables.
+                            maxSessionMemory: 128,
+                        },
+                    }),
+          });
+    if (localServer !== undefined) {
+        logger.info(
+            { port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname },
+            "loopback listener ready",
+        );
+    }
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
-    const localCertRenewal = role.container ? startLocalCertificateRenewal(config, logger) : undefined;
+    const localCertRenewal = role.container && traits.extraListeners ? startLocalCertificateRenewal(config, logger) : undefined;
 
     // The preview proxy: preview-<panel>-<id>.<zone>, port-<slot>-<id>.<zone> and public-<slot>-<id>.<zone>
     // land here (the tunnel's fixed origin) and the Host header's first label routes to the panel's running
@@ -354,16 +384,18 @@ const main = async (): Promise<void> => {
     // has no address to publish at. The handler is bound to public/ whether or not that directory exists: the
     // dir's existence is the switch, and it is checked per request, so `mkdir public` starts publishing without
     // a restart and `rm -rf public` stops it just as immediately.
-    const previewProxy = createPreviewProxy({
-        portOf: services.processes.portOf,
-        slotTargetOf: services.portForwards.targetOf,
-        sandboxId: sandboxIdFromToken(config.connectToken),
-        outbox:
-            config.connectToken === ""
-                ? undefined
-                : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
-    });
-    previewProxy.listen(config.preview.port, config.sandbox.host);
+    const previewProxy = !traits.extraListeners
+        ? undefined
+        : createPreviewProxy({
+              portOf: services.processes.portOf,
+              slotTargetOf: services.portForwards.targetOf,
+              sandboxId: sandboxIdFromToken(config.connectToken),
+              outbox:
+                  config.connectToken === ""
+                      ? undefined
+                      : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
+          });
+    previewProxy?.listen(config.preview.port, host);
 
     // Phone home: announce this sandbox's URL to the platform registry (once per boot, retried until acked —
     // see platform/announce.ts), so the setup wizard sees it come online without any browser→sandbox probing.
@@ -457,21 +489,26 @@ const main = async (): Promise<void> => {
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
     // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
     // failure reads as "not fresh" so we skip the baseline commit below.
+    // Local roots are the user's own folder: taken as they stand, never reshaped — see ensureLocalRootRepo.
     const freshRoot = await boot.step("rootRepo", async () =>
         !role.roots
             ? false
-            : ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) => {
-                  logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
-                  return false;
-              }),
+            : (traits.relocateGitDirs ? ensureRootRepo(services.workspace, config.historyRoot) : ensureLocalRootRepo(services.workspace)).catch(
+                  (error: unknown) => {
+                      logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
+                      return false;
+                  },
+              ),
     );
 
     // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic — its presence
     // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
     // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
     // stays gone until the next boot re-ensures an empty one.
+    // ownsWorkspaceConfig beside role.roots: the shelf convention is workspace furniture — not the daemon's
+    // to place in a folder it doesn't own. A local agent asked to fetch a reference creates the dir then.
     await boot.step("referenceShelf", async () =>
-        !role.roots
+        !role.roots || !traits.ownsWorkspaceConfig
             ? undefined
             : mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
                   logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
@@ -493,7 +530,11 @@ const main = async (): Promise<void> => {
     // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
     // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
     // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
-    await boot.step("repoGitDirs", async () => (role.roots ? ensureRepoGitDirs(services.workspace, config.historyRoot, logger) : undefined));
+    // relocateGitDirs beside role.roots: the out-of-tree shape serves namespace isolation, which local never
+    // builds — and locally the repos are the user's own, not the daemon's to reshape.
+    await boot.step("repoGitDirs", async () =>
+        role.roots && traits.relocateGitDirs ? ensureRepoGitDirs(services.workspace, config.historyRoot, logger) : undefined,
+    );
 
     // The fleet registry: load persisted conversations and broadcast the roster (an /events stream opened
     // during boot is already holding an empty fleet). Awaited — the /agents routes assume a loaded registry —
@@ -509,7 +550,9 @@ const main = async (): Promise<void> => {
     // - the baked-tool skills, per the settings `skills` list — each present only when named (the CLIs are
     //   always on PATH; the skill file is what surfaces one to the agent).
     await boot.step("skills", async () => {
-        if (!role.roots) {
+        // ownsWorkspaceConfig beside role.roots: a folder the daemon doesn't own gets no unasked-for writes
+        // (or deletes) under .claude/skills — and the baked-tool skills teach container-only CLIs anyway.
+        if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
         await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
@@ -530,7 +573,9 @@ const main = async (): Promise<void> => {
      * desk a public web chat answers through — is written when a Doorbell is saved rather than at boot
      * (personas/front-desk.ts). */
     await boot.step("seeds", async () => {
-        if (!role.roots) {
+        // ownsWorkspaceConfig beside role.roots: seeding writes automation config into the workspace — the
+        // daemon's to offer only where it owns the folder's config (and locally nothing would run them).
+        if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
         await seedDefaultAutomations(services.automations, statePath(services.workspace.root, ".intentic/automations.seeded.json")).catch(
@@ -577,9 +622,14 @@ const main = async (): Promise<void> => {
 
     // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
     // below so a tunnel the agent dials during boot already has a token to present.
-    await boot.step("agentToken", () =>
-        writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write")),
-    );
+    await boot.step("agentToken", async () => {
+        // The token file lives at a fixed container path (/run) for the in-container vpn/otp CLIs — container
+        // furniture a local daemon has neither the path nor the callers for.
+        if (!traits.containerCapabilities) {
+            return;
+        }
+        await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
+    });
 
     /* Reserve dependency maintenance before the data gate opens. The workspace watcher itself starts below,
      * but its subscriber set is intentionally usable before then; registering now also starts the boot scan.
@@ -885,16 +935,17 @@ const main = async (): Promise<void> => {
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path. Channel-aware: a stable sandbox is offered the
     // promoted release, a beta one the newest (version-check.ts explains the two pointers).
-    const versionCheck = startVersionCheck(config.sandbox.channel);
+    // Container-image update offers: meaningless for a local daemon, whose host application owns updates.
+    const versionCheck = traits.containerUpdates ? startVersionCheck(config.sandbox.channel) : undefined;
 
     // …and what that update would actually give them, on the same cadence: the offer and the reason to take it
     // come from two different reads (the Release's "latest" pointer for the version, the Release bodies for
     // the notes) and neither may hold up the /info that shows them.
-    const releaseNotesCheck = startReleaseNotesCheck();
+    const releaseNotesCheck = traits.containerUpdates ? startReleaseNotesCheck() : undefined;
 
     // The same courtesy for installed EXTENSIONS: compare each pinned sha against its registry (updates,
     // advisories) shortly after boot and daily after — the Extensions tab's own reads keep it fresher.
-    const extensionUpdateWatch = startExtensionUpdateWatch(services);
+    const extensionUpdateWatch = traits.extensionHost ? startExtensionUpdateWatch(services) : undefined;
 
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
@@ -995,9 +1046,9 @@ const main = async (): Promise<void> => {
         services.ciHooks.stop();
         ciPoller.stop();
         turnResume.stop();
-        versionCheck.stop();
-        extensionUpdateWatch.stop();
-        releaseNotesCheck.stop();
+        versionCheck?.stop();
+        extensionUpdateWatch?.stop();
+        releaseNotesCheck?.stop();
         services.announcer.stop();
         localCertRenewal?.stop();
         services.history.stop();
@@ -1006,8 +1057,8 @@ const main = async (): Promise<void> => {
         services.processes.stopAll();
         // The backend host is a direct child, not a tmux session — stopped here or it outlives the daemon.
         services.extensionBackend.stop();
-        previewProxy.close();
-        localServer.close();
+        previewProxy?.close();
+        localServer?.close();
         server.close();
         // process.exit fires the "exit" hook above, which stamps the marker "exited" — the next boot's death
         // check reads a deliberate shutdown, not a crash.

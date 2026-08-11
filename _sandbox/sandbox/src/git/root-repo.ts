@@ -1,7 +1,9 @@
-import { access, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitCommitAll, gitInit, type GitRunner } from "@intentic/scaffold";
-import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { repoGitDir, rootExcludes, syncRootExcludes } from "../history/history.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { commitIndex } from "./changes.js";
@@ -32,6 +34,35 @@ const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> 
         .filter((entry) => entry.startsWith(GITLINK_MODE))
         .map((entry) => entry.slice(entry.indexOf("\t") + 1));
 
+/* A gitlink DECLARED in .gitmodules is a submodule — the user's own arrangement, never an accident this
+ * convergence may undo. The container rarely sees one (repos arrive by clone, not by submodule add), but the
+ * local profile serves the user's own repo where submodules are ordinary; dropping their entries would land a
+ * daemon-authored commit deleting configuration nobody asked about. `git config -f` is the parser git itself
+ * uses, so paths with spaces survive; no .gitmodules (the common case) is an empty set, not an error. */
+const submodulePaths = async (root: string, git: GitRunner): Promise<Set<string>> => {
+    const listing = await git(root, ["config", "-f", ".gitmodules", "-z", "--get-regexp", "^submodule\\..*\\.path$"]).catch(() => undefined);
+    if (listing === undefined) {
+        return new Set();
+    }
+    // -z entries are "<key>\n<value>", NUL-terminated.
+    return new Set(
+        listing.stdout
+            .split("\0")
+            .filter((entry) => entry.includes("\n"))
+            .map((entry) => entry.slice(entry.indexOf("\n") + 1)),
+    );
+};
+
+// The gitlinks the invariant actually forbids: tracked nested repos MINUS declared submodules.
+const strayGitlinks = async (root: string, git: GitRunner): Promise<string[]> => {
+    const gitlinks = await trackedGitlinks(root, git);
+    if (gitlinks.length === 0) {
+        return gitlinks;
+    }
+    const declared = await submodulePaths(root, git);
+    return gitlinks.filter((path) => !declared.has(path));
+};
+
 /* ROOT TRACKS FILES, NEVER NESTED REPOSITORIES — the invariant behind the exclude list, enforced here in the
  * INDEX because the exclude list cannot enforce it.
  *
@@ -54,7 +85,7 @@ const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> 
  * does nothing at all once root's index holds no gitlink — the steady state.
  */
 const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
-    const gitlinks = await trackedGitlinks(root, git);
+    const gitlinks = await strayGitlinks(root, git);
     if (gitlinks.length === 0) {
         return;
     }
@@ -129,7 +160,7 @@ export const commitWorktreeRemainder = async (repo: string, dir: string, message
         return gitCommitAll(dir, message, AGENT_GIT_AUTHOR, git);
     }
     await git(dir, ["add", "-A"]);
-    const gitlinks = await trackedGitlinks(dir, git);
+    const gitlinks = await strayGitlinks(dir, git);
     if (gitlinks.length > 0) {
         await git(dir, ["update-index", "--force-remove", "--", ...gitlinks]);
     }
@@ -161,6 +192,50 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
     }
     await untrackNestedRepos(workspace.root, gitDir, git);
     return false;
+};
+
+/* The one write the local profile makes to a repo it did NOT create: keep the daemon's own furniture — the
+ * state dir and the reference shelf — out of the user's `git status`. $GIT_DIR/info/exclude is git's own
+ * place for local-only ignores: nothing in the working tree changes, nothing reaches their history, and the
+ * write is append-only — a file the user also edits is grown by a marked block once, never rewritten (the
+ * full-rewrite convergence syncRootExcludes does is for git dirs the daemon owns). `--git-common-dir` rather
+ * than `.git` because the opened folder may itself be a worktree, where `.git` is a pointer file. */
+const LOCAL_EXCLUDE_BLOCK = `# intentic — local workspace state, not project files\n/${STATE_DIR}/\n/${REFERENCE_DIR}/\n`;
+const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<void> => {
+    const printed = (await git(root, ["rev-parse", "--git-common-dir"])).stdout.trim();
+    const gitDir = isAbsolute(printed) ? printed : join(root, printed);
+    const target = join(gitDir, "info", "exclude");
+    const existing = await readFile(target, "utf8").catch(() => "");
+    if (existing.includes(`/${STATE_DIR}/`)) {
+        return;
+    }
+    await mkdir(join(gitDir, "info"), { recursive: true });
+    await writeFile(target, `${existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`}${LOCAL_EXCLUDE_BLOCK}`);
+};
+
+/* The LOCAL profile's root ensure — the workspace root is a folder the USER owns, usually their own repo.
+ *
+ * The container ensure above reshapes the root on sight: a separate git dir on /history, a pointer file in
+ * the tree, the gitlink convergence. Every one of those moves is wrong on a repo somebody also uses outside
+ * this daemon — `git init --separate-git-dir` would physically relocate their .git, and a daemon-authored
+ * "untrack" commit is a mutation nobody asked for. So a root that IS already a repo is taken exactly as it
+ * stands: no init, no pointer, no index surgery, no config writes. The daemon's features ride plain git —
+ * worktrees, status, commits — which need none of the container shape.
+ *
+ * Only a folder that is NOT a repo gets one made: in-tree .git (the least-surprise shape on a user's
+ * machine), the nested-repo excludes written before the caller's baseline commit can stage a discovered
+ * repo's tree, and the untracked cache that keeps repeat status scans stat-cheap — ours to set because the
+ * repo is ours to create. Returns true exactly when it made the repo, same contract as ensureRootRepo. */
+export const ensureLocalRootRepo = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<boolean> => {
+    if (await exists(join(workspace.root, ".git"))) {
+        await ensureLocalStateExcluded(workspace.root, git);
+        return false;
+    }
+    await gitInit(workspace.root, undefined, git);
+    // git init created .git/info; the excludes keep discovered nested repos out of the baseline's `add -A`.
+    await writeFile(join(workspace.root, ".git", "info", "exclude"), `${rootExcludes(await discoverRepos(workspace.root)).join("\n")}\n`);
+    await git(workspace.root, ["config", "core.untrackedCache", "true"]);
+    return true;
 };
 
 // The baseline "Initialize workspace" commit — run once, on a fresh sandbox, AFTER the daemon has converged its

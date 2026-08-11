@@ -76,6 +76,7 @@ export const testConfig: Config = {
     cloudflareApiToken: "",
     translator: { url: "", token: "" },
     sandbox: {
+        profile: "container",
         port: 8787,
         host: "0.0.0.0",
         publicUrl: "",
