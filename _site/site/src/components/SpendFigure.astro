@@ -1,0 +1,246 @@
+---
+import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
+
+/* THE SPEND DIAMOND — one membership at the top, the two ways a credit can leave in the middle, the one payout
+ * rule at the bottom. The shape IS the argument: two different middles, a shared source and a shared rule,
+ * which is exactly why "your total support is capped at what you paid" holds for both at once. A diamond says
+ * that without a sentence.
+ *
+ * TWO LAYOUTS, ONE SOURCE. A 560-wide viewBox squeezed into a phone renders its labels at seven pixels, which
+ * is a diagram nobody can read pretending to be one they can. So the geometry is data, stated twice at two
+ * aspect ratios, and the markup below is written once against it — the portrait variant narrows the canvas
+ * instead of shrinking the type, so the same 11pt label lands at 11 real pixels on a phone and 11 on a
+ * desktop. What does NOT change between them is the fork: the two lanes stay side by side at every width,
+ * because lanes stacked in a column stop reading as a branch and the branch is the whole point.
+ *
+ * Only one variant is ever visible; the other costs a few hundred bytes of inline path data and no request. */
+
+interface Variant {
+    readonly id: string;
+    // Which width this one is for.
+    readonly cls: string;
+    readonly w: number;
+    readonly h: number;
+    readonly membership: { x: number; y: number; w: number; h: number };
+    readonly allowance: { x: number; y: number; w: number; h: number };
+    // Lane tiles: `inset` is the gap at the canvas edge and between them, so the pair always fills the width.
+    readonly lane: { y: number; h: number; inset: number };
+    readonly payout: { x: number; y: number; w: number; h: number };
+    // Portrait stacks the glyph above the label; landscape sets it beside.
+    readonly stacked: boolean;
+    readonly font: { lane: number; amount: number; meter: number; note: number; payout: number; membership: number };
+}
+
+const VARIANTS: readonly Variant[] = [
+    {
+        id: "wide",
+        cls: "hidden sm:block",
+        w: 560,
+        h: 252,
+        membership: { x: 192, y: 6, w: 176, h: 32 },
+        allowance: { x: 122, y: 54, w: 316, h: 38 },
+        lane: { y: 132, h: 64, inset: 20 },
+        payout: { x: 140, y: 214, w: 280, h: 32 },
+        stacked: false,
+        font: { lane: 12.5, amount: 10.5, meter: 13.5, note: 9.5, payout: 12.5, membership: 13 },
+    },
+    {
+        id: "tall",
+        cls: "sm:hidden",
+        w: 320,
+        h: 232,
+        membership: { x: 85, y: 4, w: 150, h: 30 },
+        allowance: { x: 20, y: 48, w: 280, h: 40 },
+        lane: { y: 112, h: 64, inset: 8 },
+        payout: { x: 18, y: 196, w: 284, h: 30 },
+        stacked: true,
+        font: { lane: 10.5, amount: 9.5, meter: 12, note: 8.5, payout: 10.5, membership: 12 },
+    },
+];
+
+// The two middles. Glyphs carry the contrast on their own: one pulse landing, against a clock.
+const LANES = [
+    { d: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/>', label: "Install an extension", amount: `${pool.donationCredits} credits · once` },
+    { d: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>', label: "Run a service", amount: "its own price · per run" },
+];
+
+// Lane geometry from the variant's inset: two equal tiles filling the canvas.
+const laneBox = (v: Variant, i: number) => {
+    const width = (v.w - v.lane.inset * 3) / 2;
+    return { x: v.lane.inset + i * (width + v.lane.inset), width };
+};
+
+const glyph = (paths: string, x: number, y: number, size: number) =>
+    `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+
+const n = (value: number) => value.toLocaleString(`en-GB`);
+
+const label = `One membership funds a daily allowance of ${n(pool.dailyCredits)} credits. It can be spent two ways — installing a premium extension, which donates ${n(
+    pool.donationCredits,
+)} credits once, or running a premium service, which costs the price that service publishes, per run. Either way ${creatorSharePct}% of the credit's value reaches its creator.`;
+---
+
+{
+    VARIANTS.map((v) => {
+        const midX = v.w / 2;
+        const laneMid = (i: number) => laneBox(v, i).x + laneBox(v, i).width / 2;
+        // The fork leaves the allowance bar's bottom edge; the merge lands on the payout pill's top edge. Both
+        // are computed from those boxes, so moving one moves what points at it.
+        const forkPath = (i: number) =>
+            `M ${midX} ${v.allowance.y + v.allowance.h} C ${midX} ${v.allowance.y + v.allowance.h + 18} ${laneMid(i)} ${v.allowance.y + v.allowance.h + 14} ${laneMid(i)} ${v.lane.y - 4}`;
+        const entry = (i: number) => (i === 0 ? v.payout.x + v.payout.w * 0.22 : v.payout.x + v.payout.w * 0.78);
+        const mergePath = (i: number) =>
+            `M ${laneMid(i)} ${v.lane.y + v.lane.h + 2} C ${laneMid(i)} ${v.lane.y + v.lane.h + 12} ${entry(i)} ${v.payout.y - 10} ${entry(i)} ${v.payout.y - 3}`;
+        return (
+            <svg
+                viewBox={`0 0 ${v.w} ${v.h}`}
+                class={`mx-auto h-auto w-full text-link ${v.cls}`}
+                style={v.id === "wide" ? "max-width: 560px" : undefined}
+                role="img"
+                aria-label={label}
+                aria-hidden={v.id === "tall" ? "true" : undefined}
+            >
+                <defs>
+                    <marker id={`spend-arrow-${v.id}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                    </marker>
+                </defs>
+
+                {/* the source */}
+                <rect
+                    x={v.membership.x}
+                    y={v.membership.y}
+                    width={v.membership.w}
+                    height={v.membership.h}
+                    rx={v.membership.h / 2}
+                    fill="color-mix(in srgb, var(--color-primary-500) 14%, transparent)"
+                    stroke="color-mix(in srgb, var(--color-primary-500) 48%, transparent)"
+                    stroke-width="1.5"
+                />
+                <text
+                    x={v.membership.x + v.membership.w / 2}
+                    y={v.membership.y + v.membership.h / 2}
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    font-size={v.font.membership}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                >
+                    {`$${pool.priceUsd} / month`}
+                </text>
+                <path
+                    d={`M ${midX} ${v.membership.y + v.membership.h} L ${midX} ${v.allowance.y - 3}`}
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end={`url(#spend-arrow-${v.id})`}
+                />
+
+                {/* the one meter both ways draw on */}
+                <rect
+                    x={v.allowance.x}
+                    y={v.allowance.y}
+                    width={v.allowance.w}
+                    height={v.allowance.h}
+                    rx="12"
+                    fill="var(--color-canvas)"
+                    stroke="var(--color-line-strong)"
+                    stroke-width="1.5"
+                />
+                <text
+                    x={midX}
+                    y={v.allowance.y + v.allowance.h / 2 - 5}
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    font-size={v.font.meter}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                >
+                    {`${n(pool.dailyCredits)} credits a day`}
+                </text>
+                <text
+                    x={midX}
+                    y={v.allowance.y + v.allowance.h / 2 + 9}
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    font-size={v.font.note}
+                    style="fill: var(--color-subtle)"
+                >
+                    resets at midnight UTC
+                </text>
+
+                {/* the fork, and the two middles */}
+                {LANES.map((lane, i) => {
+                    const box = laneBox(v, i);
+                    const mid = box.x + box.width / 2;
+                    return (
+                        <Fragment>
+                            <path d={forkPath(i)} fill="none" stroke="currentColor" stroke-width="2" marker-end={`url(#spend-arrow-${v.id})`} />
+                            <rect
+                                x={box.x}
+                                y={v.lane.y}
+                                width={box.width}
+                                height={v.lane.h}
+                                rx="14"
+                                fill="color-mix(in srgb, var(--color-primary-500) 9%, transparent)"
+                                stroke="color-mix(in srgb, var(--color-primary-500) 40%, transparent)"
+                                stroke-width="1.5"
+                            />
+                            <g style="color: var(--color-link)">
+                                <Fragment
+                                    set:html={glyph(lane.d, v.stacked ? mid : box.x + 26, v.stacked ? v.lane.y + 18 : v.lane.y + v.lane.h / 2, 17)}
+                                />
+                            </g>
+                            <text
+                                x={v.stacked ? mid : box.x + 46}
+                                y={v.stacked ? v.lane.y + 39 : v.lane.y + 24}
+                                text-anchor={v.stacked ? "middle" : "start"}
+                                dominant-baseline="central"
+                                font-size={v.font.lane}
+                                font-weight="600"
+                                style="fill: var(--color-content)"
+                            >
+                                {lane.label}
+                            </text>
+                            <text
+                                x={v.stacked ? mid : box.x + 46}
+                                y={v.stacked ? v.lane.y + 53 : v.lane.y + 41}
+                                text-anchor={v.stacked ? "middle" : "start"}
+                                dominant-baseline="central"
+                                font-size={v.font.amount}
+                                style="fill: var(--color-muted)"
+                            >
+                                {lane.amount}
+                            </text>
+                        </Fragment>
+                    );
+                })}
+
+                {/* the one rule they both end at */}
+                {LANES.map((_, i) => (
+                    <path d={mergePath(i)} fill="none" stroke="currentColor" stroke-width="2" marker-end={`url(#spend-arrow-${v.id})`} />
+                ))}
+                <rect
+                    x={v.payout.x}
+                    y={v.payout.y}
+                    width={v.payout.w}
+                    height={v.payout.h}
+                    rx={v.payout.h / 2}
+                    fill="color-mix(in srgb, var(--color-primary-500) 14%, transparent)"
+                    stroke="color-mix(in srgb, var(--color-primary-500) 48%, transparent)"
+                    stroke-width="1.5"
+                />
+                <text
+                    x={v.payout.x + v.payout.w / 2}
+                    y={v.payout.y + v.payout.h / 2}
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    font-size={v.font.payout}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                >
+                    {`${creatorSharePct}% of its value → the creator`}
+                </text>
+            </svg>
+        );
+    })
+}
