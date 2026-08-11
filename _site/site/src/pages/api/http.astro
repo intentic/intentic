@@ -1,8 +1,9 @@
 ---
-import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
-import DocsIndexTable, { type DocsIndexRow } from "../../../components/DocsIndexTable.astro";
-import DocsLayout from "../../../components/DocsLayout.astro";
-import DocsRelated from "../../../components/DocsRelated.astro";
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsIndexTable, { type DocsIndexRow } from "../../components/DocsIndexTable.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The daemon's route surface as a page. Every row of `groups` says what the group is FOR rather than
  * enumerating its routes: the enumeration is what dates fastest, and the daemon already advertises its own
@@ -152,7 +153,8 @@ const groups = [
 ---
 
 <DocsLayout
-    pageId="sandbox-api"
+    book={apiBook}
+    pageId="http"
     heading="HTTP API"
     lead="Everything your sandbox does, it does over one HTTP API on hardware you own. The browser is only its first client — an extension, a script or a CI job calls the same routes with the same credential."
     requireAnchors={sections.map((section) => section.anchor)}
@@ -357,8 +359,8 @@ const groups = [
 
     <DocsRelated
         links={[
-            { href: "/docs/sandbox-api/host/", title: "Host API", why: "the same daemon from inside the app, typed, for an extension's views." },
-            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "how an extension declares which of these routes it may call." },
+            { href: "/api/host/", title: "Host API", why: "the same daemon from inside the app, typed, for an extension's views." },
+            { href: "/api/manifest/", title: "Manifest reference", why: "how an extension declares which of these routes it may call." },
         ]}
     />
 </DocsLayout>

@@ -49,8 +49,8 @@ const paths = [
 const questions: Record<string, string> = {
     Understand: `“What actually is this, and is it built the way I'd want?”`,
     "Run a sandbox": `“I want one running on my hardware, kept up to date, shared with my team.”`,
+    Integrations: `“I want it talking to my systems, my tools and my own computer.”`,
     "Drive agents": `“It's running. How do I get real work out of it?”`,
-    "Build on it": `“I want to extend it, or drive it from my own code.”`,
 };
 
 const missing = docsSections.filter((section) => questions[section.label] === undefined).map((section) => section.label);
@@ -137,7 +137,7 @@ const contentsOf = (label: string): string[] => {
 
     <h2>Find your way</h2>
     <p>
-        The docs are four shelves, sorted by what you came here to do. The list on the left is all of it; this is which part is yours.
+        These docs are four shelves, sorted by what you came here to do. The list on the left is all of it; this is which part is yours.
     </p>
     <div class="docs-embed mt-6 flex flex-col gap-3">
         {
@@ -157,8 +157,22 @@ const contentsOf = (label: string): string[] => {
             ))
         }
     </div>
+    {/* The other book, as a row of its own rather than a fifth shelf: it is a different reader, and the whole
+        reason the two are separate is that the person building against intentic should not have to scroll past
+        install instructions to reach a manifest field. */}
+    <div class="docs-embed mt-3">
+        <a href="/api/" class="group card block border-primary-600/25 p-5 no-underline transition-colors hover:border-primary-600/50">
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">Building on it →</span>
+                <span class="text-sm text-muted">“I want to extend it, or drive it from my own code.”</span>
+            </div>
+            <p class="mt-2 text-xs leading-relaxed text-subtle">
+                A separate book, at /api — the extension lifecycle end to end, the manifest reference, the host API and the sandbox's own
+                HTTP API.
+            </p>
+        </a>
+    </div>
     <p class="mt-6">
-        Looking for one specific thing? Press <kbd>/</kbd> anywhere in the docs to search every page, or jump to the
-        <a href="/docs/sandbox-api/">HTTP API</a> and the <a href="/docs/extensions/manifest/">manifest reference</a> for the lookup tables.
+        Looking for one specific thing? Press <kbd>/</kbd> anywhere in the documentation to search every page of both books at once.
     </p>
 </DocsLayout>

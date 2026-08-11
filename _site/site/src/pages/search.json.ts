@@ -1,12 +1,15 @@
 import { blocksFromPage, type SearchEntry } from "@intentic-dev/astro-integrations";
-import { docsHref, docsPlacements } from "@intentic-dev/site-content/docs";
+import { apiBook } from "@intentic-dev/site-content/api";
+import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
+import { docsBook } from "@intentic-dev/site-content/docs";
 import type { APIRoute } from "astro";
 
-/* The docs search index — this route serves it under `astro dev`; the build writes it from dist.
+/* The documentation search index — this route serves it under `astro dev`; the build writes it from dist.
  *
- * WHY THERE WAS NO SEARCH: twenty pages, one of them a forty-row route table, and the only way in was guessing
- * which shelf held the word you wanted. Someone who knows they need "webhook" should not have to know whether
- * that lives under automations, the HTTP API, or the doorbell guide. (It is all three.)
+ * BOTH BOOKS, ONE INDEX, at the site root rather than under either of them. Someone who knows they need
+ * "webhook" should not have to know whether that lives under automations, the HTTP API, or the doorbell guide
+ * (it is all three) — and after the split they would additionally have had to know which BOOK it was in, which
+ * is a worse question. The result row names the shelf it came from, so the answer still says where it lives.
  *
  * WHERE THE TEXT COMES FROM. The pages as they render, never their source. This route used to scrape the .astro
  * files with regexes, which could not see a table — and every long reference table here is `{rows.map(...)}` over
@@ -18,13 +21,14 @@ import type { APIRoute } from "astro";
  * still exists rather than the build owning search outright.
  */
 
-const pages = docsPlacements.map(({ page, section }) => ({
-    id: page.id,
-    url: docsHref(page.id),
-    title: page.title,
-    section: section.label,
-    blurb: page.blurb,
-}));
+const pages = [docsBook, apiBook].flatMap((book) =>
+    bookPlacements(book).map(({ page, section }) => ({
+        url: bookHref(book, page.id),
+        title: page.title,
+        section: section.label,
+        blurb: page.blurb,
+    })),
+);
 
 // One fetch of the corpus per dev server, not per search: the reader edits a page and reloads, which re-runs this
 // module. Within one run the pages cannot change under us.

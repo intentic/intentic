@@ -1,5 +1,7 @@
 ---
-/* The docs search dialog — mounted ONCE per page, at layout level.
+/* The documentation search dialog — mounted ONCE per page, at layout level, and covering BOTH books. One index
+ * across /docs and /api, because a reader who knows they need "webhook" should not first have to decide whether
+ * that is a user question or an author one. Each result names the shelf it came from, which is what tells them.
  *
  * It sits outside the collapsible rail deliberately: showModal() on a dialog inside a `display: none` ancestor
  * opens nothing, so a dialog living in the rail would work on a desktop and silently fail on a phone. The
@@ -9,8 +11,8 @@
  * whole results page loses the page you were reading. Both defeat the point, which is looking something up
  * without leaving what you are doing.
  *
- * INDEX FETCHED ON FIRST USE, not on page load: it is the whole docs corpus, and a reader who never searches
- * should not pay for it. Fetched once and kept for the session.
+ * INDEX FETCHED ON FIRST USE, not on page load: it is the whole documentation corpus, and a reader who never
+ * searches should not pay for it. Fetched once and kept for the session.
  *
  * RANKING is deliberately simple and explainable: a page-title hit beats a section-heading hit beats a body hit,
  * every query term must appear somewhere in the entry, and a phrase match is boosted. That is enough for twenty
@@ -47,7 +49,7 @@
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain sm:max-h-[60vh]" id="docs-search-results" role="listbox" aria-label="Search results">
-            <p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page of the docs.</p>
+            <p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page, in the docs and the API reference.</p>
         </div>
 
         <div class="hidden items-center gap-4 border-t border-line px-4 py-2 text-2xs text-subtle sm:flex">
@@ -94,7 +96,7 @@
         let cursor = 0;
 
         const load = (): Promise<void> => {
-            loading ??= fetch("/docs/search.json")
+            loading ??= fetch("/search.json")
                 .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
                 .then((data: { entries: SearchEntry[] }) => {
                     entries = data.entries;
@@ -193,7 +195,7 @@
         const render = (query: string) => {
             if (query.trim().length < 2) {
                 hits = [];
-                results.innerHTML = `<p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page of the docs.</p>`;
+                results.innerHTML = `<p class="px-4 py-8 text-center text-sm text-subtle" data-search-empty>Type to search every page, in the docs and the API reference.</p>`;
                 return;
             }
             if (entries === undefined) {

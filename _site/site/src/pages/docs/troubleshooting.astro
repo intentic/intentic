@@ -190,7 +190,8 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and a
         route it did not declare throws. So a missing surface usually means the manifest and the code disagree. When an extension's manifest
         grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences — approval never transfers to powers you did
-        not approve. See <a href="/docs/extensions/manifest/">Manifest reference</a>.
+        not approve. <a href="/docs/extensions/">Extensions</a> covers what you approved; the
+        <a href="/api/manifest/">manifest reference</a> is what its author had to declare.
     </p>
 
     <h3>One capability vanished and the rest still work</h3>
@@ -204,7 +205,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         Its registry listing is marked <code>blocked</code> — known-malicious or known-broken. The advisory on the installed row carries the
         registry's recorded reason. Disabling is the one automatic action the trust model permits, because it runs no new code and reverses
-        with a click. <a href="/docs/extensions/publish/">Publish &amp; marketplace</a> states the whole model.
+        with a click. <a href="/docs/extensions/">Extensions</a> states the whole model.
     </p>
 
     <h2>When none of this is it</h2>
@@ -218,7 +219,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         links={[
             { href: "/docs/docker/", title: "Docker setup", why: "what every install path created, and the update, rebuild and cleanup commands." },
             { href: "/docs/glossary/", title: "Glossary", why: "the words above, if any of them were doing unexplained work." },
-            { href: "/docs/sandbox-api/#failures", title: "HTTP API", why: "every status the API returns and what it actually means." },
+            { href: "/api/http/#failures", title: "HTTP API", why: "every status the API returns and what it actually means." },
         ]}
     />
 </DocsLayout>

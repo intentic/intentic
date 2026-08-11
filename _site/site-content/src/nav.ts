@@ -1,3 +1,4 @@
+import { apiDestinations } from "./api";
 import { compareHref } from "./compare";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
@@ -6,7 +7,7 @@ import { DEMO_PATH } from "./site";
 
 /* The site's navigation, as data.
  *
- * Two menus, and both are grouped: a flat list of ten docs pages made "Manifest reference" a peer of
+ * Three menus, and all are grouped: a flat list of ten docs pages made "Manifest reference" a peer of
  * "Overview", and the product used to be five anchors into one long page — nothing you could link to, rank,
  * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
  * opens on, which the mega-menu previews.
@@ -90,6 +91,20 @@ export const navEntries: NavEntry[] = [
         // lines and all. The exhaustive list is still one click further on (/changelog/ links each entry to its
         // release), which is the right order — the readable answer first, the audit trail behind it.
         action: { label: "Changelog", href: "/changelog/" },
+    },
+    /* The authoring book, its own entry in the bar rather than a shelf inside Docs — the split this whole tree
+     * exists to make. Two rows, because the book has two shelves and the reason a reader picks one over the
+     * other is the audience line under each: one is walked front to back, the other is opened at a field name.
+     *
+     * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an
+     * author arrives with — what does a listed extension actually look like — and the row it would otherwise
+     * be is already two items to the right in this same bar. */
+    {
+        type: "menu",
+        label: "API",
+        prefix: "/api",
+        sections: [{ items: [...apiDestinations] }],
+        action: { label: "Browse the gallery", href: "/extensions/" },
     },
     // A bare link, like Compare: the gallery's contents come from the registry repo at build time, so there is
     // no authored list here to build a menu out of.

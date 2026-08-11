@@ -16,7 +16,7 @@ the author path; wiring it into this monorepo's install would destroy that prope
 Everything about publishing an extension was implemented before anything had ever been published. Nothing carried
 the `intentic-extension` topic, the registry repository did not exist, and no first-party extension is built as a
 single-file bundle — the UI ones are compiled into the web bundle instead — so the author path in
-`/docs/extensions/build/` had never once been executed end to end. This is that execution, kept.
+`/api/build/` had never once been executed end to end. This is that execution, kept.
 
 Building it surfaced three things that no amount of reading would have:
 

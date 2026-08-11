@@ -1,7 +1,7 @@
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
-/* The extension bundle, built exactly as /docs/extensions/build/ prescribes.
+/* The extension bundle, built exactly as /api/build/ prescribes.
  *
  * Two rules are load-bearing and neither is a preference:
  *   externals          — the host publishes its OWN vue, vue-query and extension-api instances through the

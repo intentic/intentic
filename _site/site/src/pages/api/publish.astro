@@ -1,0 +1,202 @@
+---
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE LIST STEP, and only it.
+ *
+ * This page used to carry five jobs — how to list, what the installer sees, how updates behave, the trust model,
+ * and money — which is why it ran to nine screens and why nobody could find "verified" in it. Three of those five
+ * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
+ * the trust vocabulary on /api/verify/, and the revenue split on /api/earn/. What is left is the one thing an
+ * author does here: get a pointer to their repository into a registry. */
+
+const registry = `{
+    "name": "acme-extensions",
+    "plugins": [
+        {
+            "name": "acme.incidents",
+            "kind": "extension",
+            "trust": "listed",
+            "description": "Incident triage in the rail: open alerts, acknowledge, jump to the failing run.",
+            "version": "1.0.0",
+            "icon": "exclamation-triangle",
+            "source": { "source": "github", "repo": "acme/incidents", "sha": "9f2c1ab…" }
+        },
+        {
+            "name": "acme.linear",
+            "kind": "extension",
+            "trust": "listed",
+            "description": "Linear connector: the agent reads and files issues from its shell.",
+            "version": "0.3.0",
+            "logo": "linear",
+            "source": { "source": "github", "repo": "acme/linear-connector", "sha": "4d81e07…" }
+        }
+    ]
+}`;
+
+const sources = `// A repo of its own
+{ "source": "github", "repo": "acme/incidents", "sha": "9f2c1ab…" }
+
+// Any git host
+{ "source": "url", "url": "https://gitlab.com/acme/incidents.git", "sha": "9f2c1ab…" }
+
+// A subdirectory: one repo, several extensions
+{ "source": "git-subdir", "url": "https://github.com/acme/tools.git", "path": "ext/incidents", "sha": "9f2c1ab…" }`;
+---
+
+<DocsLayout
+    book={apiBook}
+    pageId="publish"
+    heading="Publish & registries"
+    lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
+>
+    <h2>The shape of it</h2>
+    <p>
+        intentic does not host extension code, build it, sign it, or take a cut of it. A registry entry is a
+        <strong>pointer to your repository at a commit</strong>, and installing follows that pointer directly from the owner's sandbox to
+        your git host. Three consequences worth stating plainly:
+    </p>
+    <ul>
+        <li><strong>Publishing is a pull request.</strong> No account, no upload, no packaging step, no review queue for your code.</li>
+        <li><strong>You keep the code.</strong> Your repo is the artifact. Delisting doesn't delete anything; it only removes a pointer.</li>
+        <li><strong>Registries are plural.</strong> The official one is a default, not a gate. A company can run a private registry of internal extensions and never touch ours.</li>
+    </ul>
+
+    <h2>Install without a registry at all</h2>
+    <p>
+        A registry is a convenience for discovery, never a requirement. Anyone with your repo URL and a commit sha can install your extension
+        today from <strong>Capabilities → Add → Extension</strong>. That's the whole distribution mechanism; the marketplace just saves people
+        from copy-pasting shas.
+    </p>
+    <p>It also means a private extension needs no publication path: point a sandbox at an internal repo with a token and you're done.</p>
+
+    <h2>A registry is a git repo</h2>
+    <p>
+        Add a <code>.claude-plugin/marketplace.json</code> to any repository and it is a registry. Mark an entry
+        <code>"kind": "extension"</code> and it installs as a sha-pinned intentic extension.
+    </p>
+    <DocsCodeBlock code={registry} lang="json" title=".claude-plugin/marketplace.json" />
+    <p>
+        The file format is Claude Code's plugin-marketplace format, deliberately. <code>kind</code> and <code>trust</code> are intentic's own
+        markers, and Claude Code ignores fields it doesn't know. So <strong>one registry repo can serve both</strong>: a team that already
+        publishes agent plugins lists its intentic extensions in the same file, rather than standing up a second thing.
+    </p>
+    <p>
+        An entry's <code>name</code> is <code>publisher.name</code> read from your manifest, not a label the registry picks. That is the same
+        identity the app installs under, so two publishers can both ship an <code>incidents</code> extension, and a repo that copies somebody
+        else's manifest collides with their listing instead of shadowing it.
+    </p>
+    <p>
+        A second file sits beside it. <code>registry.generated.json</code> is written by the registry's nightly job and holds only facts read
+        back off the source host: stars, and the last push date. It is separate so a nightly refresh never conflicts with an open pull
+        request, and so a review diff shows the decision being made rather than a churn of star counts. It deliberately carries no "latest
+        upstream commit": the approved sha is the one that runs, and advertising a newer one would invite a click that skips the review.
+    </p>
+
+    <h3>Source shapes</h3>
+    <p><code>source</code> says where the code is. A bare string is a path inside the registry repo itself; the object forms point outward.</p>
+    <DocsCodeBlock code={sources} lang="typescript" title="What source can be" />
+    <p>
+        Give a <code>sha</code>. A branch name is accepted for plugins, but an extension install requires a full 40-character commit sha, so a
+        registry entry without one can't be installed in a click; it makes the user go and find the sha themselves.
+    </p>
+
+    <h2>Getting listed</h2>
+    <p>
+        Two ways in, and they end at the same place: a pull request against the
+        <a href="/extensions/">official registry</a>. There is nowhere to sign up.
+    </p>
+    <ol>
+        <li>
+            <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an
+            <code>intentic-extension.json</code> at its root. A nightly job finds it, checks the manifest parses, resolves your latest commit,
+            and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or
+            <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared — a listing
+            that declares neither shows its initials.
+        </li>
+        <li>
+            <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or isn't on GitHub, because there is nowhere for
+            the scan to look.
+        </li>
+        <li>
+            <strong>Review checks the pointer, not the code.</strong> The manifest parses, the entry bundle exists at that sha, the description
+            matches what the manifest actually contributes, the publisher is yours. We do not audit your source, and we don't pretend to —
+            <a href="/api/verify/">Verification &amp; trust</a> is precise about what that review does and does not claim.
+        </li>
+    </ol>
+    <p>
+        Publisher slugs are first-come and tied to proven ownership of the source repo. Because the listing key is the manifest-derived
+        <code>publisher.name</code>, a scan that finds a repo claiming a slug somebody else already holds refuses it rather than opening a pull
+        request that looks legitimate.
+    </p>
+
+    <h2>Shipping an update</h2>
+    <p>
+        Open another pull request with the new sha. That is the entire release process: the version in your manifest is what users see, and the
+        sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong.
+    </p>
+    <p>Two things about the far end are worth designing around, because they decide how your release is received:</p>
+    <ul>
+        <li>
+            <strong>A release that grows your manifest re-asks.</strong> A new route in <code>permissions.sandbox</code>, a new process, a new
+            PATH entry or a badge you didn't have before turns a one-click update into a dialog that spells out every addition. Approval never
+            transfers to powers the owner didn't approve, so adding one is a real event for your users — batch them rather than trickling one
+            out per release.
+        </li>
+        <li>
+            <strong>Nothing auto-updates by default</strong>, and the one policy that does apply updates unattended requires your listing to be
+            human-verified and your powers to have stayed the same. Both are things you earn rather than declare.
+        </li>
+    </ul>
+    <p>
+        The mechanics the owner sees — the badge, the powers diff, the health watch, the kept previous version and one-click revert — are on
+        <a href="/docs/extensions/">Install &amp; manage extensions</a>.
+    </p>
+
+    <h2>What the person installing sees</h2>
+    <p>
+        Your manifest, rendered as plain English rather than as JSON: <em>this extension adds a tile to your rail</em>,
+        <em>reads your workspace logs</em>, <em>runs a background process</em>, <em>puts a tool on your agent's PATH</em> — one line per
+        declared contribution, with the route allowlist spelled out underneath, at one specific commit.
+    </p>
+    <p>
+        Which makes the manifest a piece of writing rather than only configuration. Declare the narrowest set of routes that works and the
+        dialog is short and reassuring; declare a broad one and it is long and alarming, whatever the code actually does. The
+        <a href="/docs/extensions/">installer's page</a> is the whole of what they are shown, and it is worth reading once from their side.
+    </p>
+
+    <h2>Money</h2>
+    <p>
+        Listing and installing are free, and stay cut-free: a free extension pays nothing to publish, nothing to install, and hands the
+        registry no share of whatever you charge for your own repository elsewhere. There is one paid path, it is opt-in, and it is one
+        <code>tier</code> field on your registry entry — <a href="/api/earn/">The creator pool</a> states the whole deal.
+    </p>
+
+    <h2>Available today, and next</h2>
+    <p>
+        Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
+        private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
+        <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
+        <strong>Capabilities → Add → Extension</strong>, against the official registry or any repo you point the field at. And so does the
+        whole update lifecycle — the badges, the powers diff, the kept previous version and one-click revert, the health watch,
+        blocked-listing advisories, and the per-extension update policies.
+    </p>
+    <p>
+        Still to come: a typed npm artifact for <code>@intentic/extension-ui</code> so out-of-repo authors get the shell's components with
+        full types.
+    </p>
+    <p>
+        Building something and want it listed? The <a href="/api/build/">build guide</a> is the whole prerequisite. Add the topic when your
+        first sha is pushed and the pull request writes itself.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/api/verify/", title: "Verification & trust", why: "what listed, verified and blocked each claim." },
+            { href: "/api/earn/", title: "The creator pool", why: "the one paid path, and how the split is published." },
+            { href: "/docs/extensions/", title: "Install & manage extensions", why: "the same listing, read from the other side." },
+        ]}
+    />
+</DocsLayout>

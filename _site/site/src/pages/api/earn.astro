@@ -1,6 +1,7 @@
 ---
-import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
-import DocsLayout from "../../../components/DocsLayout.astro";
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
 
 const entry = `{
     "name": "acme.reddit-research",
@@ -13,7 +14,8 @@ const entry = `{
 ---
 
 <DocsLayout
-    pageId="extensions/economics"
+    book={apiBook}
+    pageId="earn"
     heading="The creator pool"
     lead="One membership, one currency: credits. Installing premium work donates them; running services spends them; every spent credit pays its creator a published share — with no telemetry anywhere. This page is the whole deal, stated once."
 >
@@ -94,8 +96,8 @@ const entry = `{
 
     <h2>Opting in</h2>
     <p>
-        One field on your registry entry. Everything else on <a href="/docs/extensions/publish/">Publish &amp; marketplace</a> — the
-        sha-pinned pointer, the manifest gate, the trust states — applies to premium listings unchanged.
+        One field on your registry entry. Everything else on <a href="/api/publish/">Publish &amp; registries</a> — the sha-pinned pointer,
+        the manifest gate, the <a href="/api/verify/">trust states</a> — applies to premium listings unchanged.
     </p>
     <DocsCodeBlock code={entry} lang="json" title=".claude-plugin/marketplace.json — one entry" />
     <p>

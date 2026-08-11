@@ -1,7 +1,8 @@
 ---
-import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
-import DocsLayout from "../../../components/DocsLayout.astro";
-import DocsRelated from "../../../components/DocsRelated.astro";
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 const install = `mkdir acme-incidents && cd acme-incidents
 npm init -y
@@ -113,7 +114,8 @@ const workspace = `.intentic/workspace-extensions/
 ---
 
 <DocsLayout
-    pageId="extensions/build"
+    book={apiBook}
+    pageId="build"
     heading="Build an extension"
     lead="A rail view that reads from the daemon, badges when something needs attention, and installs into a real sandbox, start to finish."
 >
@@ -211,7 +213,7 @@ const workspace = `.intentic/workspace-extensions/
         same approved checkout. The backend's reach the <em>other</em> way, into the daemon's routes via <code>api.daemon</code>, is the
         manifest's <code>permissions.daemon</code> allowlist. Bundle the server self-contained: everything except node builtins goes in,
         because the installed checkout has no <code>node_modules</code>. The
-        <a href="/docs/sandbox-api/host/#backend">Host API page</a> documents the whole server surface.
+        <a href="/api/host/#backend">Host API page</a> documents the whole server surface.
     </p>
 
     <h2 id="workspace">Skip all of that: write it in the workspace</h2>
@@ -249,9 +251,9 @@ const workspace = `.intentic/workspace-extensions/
 
     <DocsRelated
         links={[
-            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments." },
-            { href: "/docs/sandbox-api/host/", title: "Host API reference", why: "every member of the <code>api</code> object above — the typed daemon client, workspace files and diffs, documents, models, routing." },
-            { href: "/docs/extensions/publish/", title: "Publish & the marketplace", why: "list it so other people can install it in one click." },
+            { href: "/api/manifest/", title: "Manifest reference", why: "the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments." },
+            { href: "/api/host/", title: "Host API reference", why: "every member of the <code>api</code> object above — the typed daemon client, workspace files and diffs, documents, models, routing." },
+            { href: "/api/publish/", title: "Publish & registries", why: "list it so other people can install it in one click." },
         ]}
     />
 </DocsLayout>

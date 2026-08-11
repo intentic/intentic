@@ -1,7 +1,8 @@
 ---
-import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
-import DocsLayout from "../../../components/DocsLayout.astro";
-import DocsRelated from "../../../components/DocsRelated.astro";
+import { apiBook, extensionLifecycle } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 const manifest = `{
     "publisher": "acme",
@@ -37,10 +38,44 @@ const agentPoints = [
 ---
 
 <DocsLayout
-    pageId="extensions"
-    heading="Extensions"
+    book={apiBook}
+    pageId=""
+    heading="Overview"
     lead="intentic is a lean core plus an extension system. An extension is a directory with a manifest — a git repo to share, a folder in your sandbox to just use — and unlike an editor plugin it can extend the agent as well as the UI."
 >
+    <h2>The whole lifecycle</h2>
+    <p>
+        Six steps carry an extension from an empty directory to a payout, and they are not all yours. Four are the
+        author's work and have a page each below; two happen on the other side of the listing, to the person installing,
+        and are documented where that person reads. Worth knowing both halves — what you publish is only ever met as
+        what somebody else installs.
+    </p>
+    {/* One row per step, and it FOLDS on a narrow screen: below `sm` the description drops to a second line
+        under the step name rather than sharing the row, which at 390px left it a ninety-pixel column wrapping
+        "The gallery, and browse from inside the app" over four lines. Placement is explicit rather than flow,
+        because the two layouts order the same four cells differently. */}
+    <div class="docs-embed mt-6 flex flex-col gap-2">
+        {
+            extensionLifecycle.map((stage, index) => (
+                <a
+                    href={stage.href}
+                    class="group card grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1 p-4 no-underline transition-colors hover:border-primary-600/40 sm:grid-cols-[1.25rem_5rem_minmax(0,1fr)_auto] sm:gap-x-4"
+                >
+                    <span class="font-mono text-xs text-subtle">{index + 1}</span>
+                    <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">{stage.step}</span>
+                    {/* Which side of the listing this step happens on. The two "your user" rows are the reason
+                        the strip exists: without them the book reads as though publishing were the end of it. */}
+                    <span class="col-start-3 row-start-1 text-2xs tracking-wide text-subtle uppercase sm:col-start-4">
+                        {stage.audience === "author" ? "You" : "Your user"}
+                    </span>
+                    <span class="col-start-2 col-end-4 row-start-2 text-sm leading-relaxed text-muted sm:col-start-3 sm:col-end-4 sm:row-start-1">
+                        {stage.what}
+                    </span>
+                </a>
+            ))
+        }
+    </div>
+
     <h2>What an extension is</h2>
     <p>
         A directory with an <code>intentic-extension.json</code> file at its root. That's the whole definition. The manifest names a
@@ -127,10 +162,11 @@ const agentPoints = [
         extension asks the shell for, so every extension offers the same, current list instead of five worse copies of it.
     </p>
 
-    <h2>The trust model</h2>
+    <h2>What bounds an extension</h2>
     <p>
-        Extension code runs in your browser and your sandbox, so the install is built to be understood before it's approved, not audited
-        after. Three mechanics do that work:
+        Extension code runs in somebody's browser and somebody's sandbox, so the install is built to be understood before it's approved, not
+        audited after. Three mechanics do that work, and all three are constraints on you as the author — worth knowing before you design
+        anything:
     </p>
     <ul>
         <li>
@@ -155,6 +191,11 @@ const agentPoints = [
         Credentials are never part of that surface. The transport injects auth host-side; an extension bundle never sees a token, and secret
         settings round-trip as "still set" rather than as their value.
     </p>
+    <p>
+        What those mechanics <em>guarantee</em> — and the three words a listing can carry, <strong>listed</strong>, <strong>verified</strong>
+        and <strong>blocked</strong> — is <a href="/api/verify/">Verification &amp; trust</a>. What they look like from the other side, at the
+        moment somebody clicks install, is <a href="/docs/extensions/">Install &amp; manage extensions</a>.
+    </p>
 
     <h2>Everything first-party is an extension too</h2>
     <p>
@@ -174,7 +215,7 @@ const agentPoints = [
         <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
         <li>
             <strong>Written in the workspace</strong>: a directory under <code>.intentic/workspace-extensions/</code>, run straight from
-            where it sits. No clone, no install step, no publishing — see <a href="/docs/extensions/build/#workspace">Build an extension</a>.
+            where it sits. No clone, no install step, no publishing — see <a href="/api/build/#workspace">Build an extension</a>.
         </li>
     </ul>
     <p>
@@ -184,9 +225,9 @@ const agentPoints = [
 
     <DocsRelated
         links={[
-            { href: "/docs/extensions/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },
-            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "every contribution point and every field." },
-            { href: "/docs/extensions/publish/", title: "Publish & the marketplace", why: "get yours listed, and how updates and trust work." },
+            { href: "/api/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },
+            { href: "/api/manifest/", title: "Manifest reference", why: "every contribution point and every field." },
+            { href: "/api/publish/", title: "Publish & registries", why: "get yours listed, without an account or an upload." },
         ]}
     />
 </DocsLayout>

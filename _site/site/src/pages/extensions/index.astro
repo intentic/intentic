@@ -1,5 +1,6 @@
 ---
 import { REGISTRY_TOPIC } from "@intentic/registry";
+import { apiHref, extensionLifecycle } from "@intentic-dev/site-content/api";
 import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
@@ -83,8 +84,14 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
 /* The lifecycle diagram that replaces the old prose — deliberately NOT the card figure up top. Delivery is a
  * light one-way flow of chips; the half that matters, how a premium extension pays, is a drawn revenue cycle.
  * The ring geometry is computed so four arrowheads sit tangent to a clockwise loop (members → pool → split →
- * paid → renews). Labels stay terse; the one honesty line rides underneath. */
-const delivery = ["Build", "List", "Verify", "Discover", "Install"];
+ * paid → renews). Labels stay terse; the one honesty line rides underneath.
+ *
+ * THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here. They were six
+ * inert words, which named the lifecycle to a visitor and then left them to guess where any of it was written
+ * down — and the array they came from could drift from the pages that document them, because nothing tied the
+ * two together. Now the same list drives this strip and the API overview's. */
+const delivery = extensionLifecycle.slice(0, -1);
+const earn = extensionLifecycle[extensionLifecycle.length - 1];
 
 const ring = { cx: 150, cy: 150, r: 96 };
 const ringStr = (deg: number, rr = ring.r) => {
@@ -122,8 +129,8 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                     The core is what every sandbox always has; building blocks add the rest — even the features that ship built in.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href="/docs/extensions/build/">Build one</a>
-                    <a class="btn btn-secondary" href="/docs/extensions/publish/">Get listed</a>
+                    <a class="btn btn-primary" href={apiHref("build")}>Build one</a>
+                    <a class="btn btn-secondary" href={apiHref("publish")}>Get listed</a>
                 </div>
             </div>
         </section>
@@ -135,19 +142,31 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                     <p class="text-xs text-subtle">Delivered once. Paid while it's used.</p>
                 </div>
 
-                {/* One-way delivery, pivoting into the earn side. */}
+                {/* One-way delivery, pivoting into the earn side. Every chip goes to the page that explains it. */}
                 <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
                     <span class="eyebrow mr-1 text-subtle">Ship</span>
                     {
-                        delivery.map((step, i) => (
+                        delivery.map((stage, i) => (
                             <Fragment>
                                 {i > 0 && <span class="text-line-strong" aria-hidden="true">→</span>}
-                                <span class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content">{step}</span>
+                                <a
+                                    href={stage.href}
+                                    title={stage.what}
+                                    class="rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline transition-colors hover:border-primary-600/40 hover:text-link"
+                                >
+                                    {stage.step}
+                                </a>
                             </Fragment>
                         ))
                     }
                     <span class="text-line-strong" aria-hidden="true">→</span>
-                    <span class="rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link">Earn</span>
+                    <a
+                        href={earn.href}
+                        title={earn.what}
+                        class="rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline transition-colors hover:border-primary-600/70"
+                    >
+                        {earn.step}
+                    </a>
                 </div>
 
                 {/* The highlight: a drawn revenue cycle on a blueprint canvas. */}
@@ -195,9 +214,9 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                 </div>
 
                 <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                    <a class="text-link hover:underline" href="/docs/extensions/publish/">Listing &amp; ranking</a>
-                    <a class="text-link hover:underline" href="/docs/extensions/manifest/">What you approve</a>
-                    <a class="text-link hover:underline" href="/docs/extensions/build/">Build one</a>
+                    <a class="text-link hover:underline" href={apiHref("publish")}>Listing &amp; ranking</a>
+                    <a class="text-link hover:underline" href={apiHref("manifest")}>What you approve</a>
+                    <a class="text-link hover:underline" href={apiHref("build")}>Build one</a>
                 </div>
             </div>
         </section>
@@ -212,7 +231,7 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                             <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository and a nightly job opens your pull request
                             for you.
                         </p>
-                        <a class="btn btn-primary mt-6" href="/docs/extensions/build/">
+                        <a class="btn btn-primary mt-6" href={apiHref("build")}>
                             Build an extension
                         </a>
                     </section>
@@ -370,7 +389,7 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                     take.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-center gap-3">
-                    <a class="btn btn-primary" href="/docs/extensions/build/">Build an extension</a>
+                    <a class="btn btn-primary" href={apiHref("build")}>Build an extension</a>
                     <a class="btn btn-secondary" href={APP_URL}>Open the app</a>
                 </div>
             </div>

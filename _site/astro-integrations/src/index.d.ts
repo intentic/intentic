@@ -84,18 +84,17 @@ export interface SearchEntry {
 }
 
 export interface DocsSearchPage {
-    id: string;
     url: string;
     title: string;
     section: string;
     blurb: string;
 }
 
-/** Split one rendered docs page into heading-led blocks. */
+/** Split one rendered documentation page into heading-led blocks. */
 export function blocksFromPage(html: string): SearchBlock[];
 
-/** Assemble the docs search index from pages and a source of each page's rendered HTML. */
+/** Assemble the search index from pages and a source of each page's rendered HTML. */
 export function docsSearchIndex(pages: DocsSearchPage[], htmlFor: (page: DocsSearchPage) => string | undefined): SearchEntry[];
 
-/** Write dist/docs/search.json from the docs pages that were just built. */
+/** Write dist/search.json from the documentation pages that were just built. */
 export function docsSearch(options: { pages: DocsSearchPage[] }): AstroIntegration;

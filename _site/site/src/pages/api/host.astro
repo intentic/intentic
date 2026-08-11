@@ -1,7 +1,8 @@
 ---
-import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
-import DocsLayout from "../../../components/DocsLayout.astro";
-import DocsRelated from "../../../components/DocsRelated.astro";
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The IntenticApi surface as a page. Deliberately a reference and not a tutorial — "Build an extension" is the
  * tutorial, and it links here for everything it deliberately did not use. */
@@ -74,7 +75,8 @@ const packages = [
 ---
 
 <DocsLayout
-    pageId="sandbox-api/host"
+    book={apiBook}
+    pageId="host"
     heading="Host API"
     lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object — the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
 >
@@ -83,7 +85,7 @@ const packages = [
         There is no ambient global and no client you construct. The API arrives as the argument to
         <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
         route allowlist in your manifest. If you are writing your first extension, start with
-        <a href="/docs/extensions/build/">Build an extension</a> — this page is the reference it links back to.
+        <a href="/api/build/">Build an extension</a> — this page is the reference it links back to.
     </p>
 
     <h2>Getting the handle</h2>
@@ -126,7 +128,7 @@ const packages = [
     <DocsCodeBlock code={rpc} lang="typescript" title="A typed read, cached correctly" />
     <p>
         You get the shell's own Vue and vue-query instances, so your components join the app's single query cache and re-theme with it. The
-        routes behind <code>rpc</code> are the ones on the <a href="/docs/sandbox-api/">HTTP API</a> page.
+        routes behind <code>rpc</code> are the ones on the <a href="/api/http/">HTTP API</a> page.
     </p>
 
     <h2>api.workspace — repos, files and diffs</h2>
@@ -339,9 +341,9 @@ const packages = [
 
     <DocsRelated
         links={[
-            { href: "/docs/sandbox-api/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
-            { href: "/docs/extensions/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
-            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
+            { href: "/api/http/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
+            { href: "/api/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
+            { href: "/api/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
         ]}
     />
 </DocsLayout>

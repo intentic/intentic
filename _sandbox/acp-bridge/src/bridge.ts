@@ -181,7 +181,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                         { name: "INTENTIC_CONTROL_TOKEN", label: "Control token", secret: true },
                         { name: "INTENTIC_AGENT", label: "Agent (claude | codex | grok | ACP capability id)", secret: false, optional: true },
                     ],
-                    link: "https://intentic.dev/docs/editor-bridge",
+                    link: "https://intentic.dev/docs/your-machine/#the-editor-bridge",
                 },
                 {
                     type: "terminal",

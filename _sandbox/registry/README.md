@@ -5,8 +5,8 @@ the result is shown in. Published to npm, and depended on by three otherwise-unr
 whole reason it is a package: the daemon that clones a registry, the site that builds the public gallery, and
 the [scanner](../../_tools/registry-scan) that writes the files. One zod schema instead of three that drift.
 
-See [Publish & the marketplace](https://intentic.dev/docs/extensions/publish/) for the author-facing version
-of everything below.
+See [Publish & registries](https://intentic.dev/api/publish/) for the author-facing version of everything
+below, and [Verification & trust](https://intentic.dev/api/verify/) for what each trust state claims.
 
 ## The shape of it
 
@@ -57,7 +57,7 @@ listing opts into the **creator pool**. A premium row needs an intentic membersh
 before the click, and installing it **donates a published number of the member's credits to the publisher**
 (once, deduped monthly — updates donate again at most monthly). No usage is metered or reported anywhere;
 the deliberate install is the whole signal. The economics live in
-[The creator pool](https://intentic.dev/docs/extensions/economics/).
+[The creator pool](https://intentic.dev/api/earn/).
 
 ## The mark
 

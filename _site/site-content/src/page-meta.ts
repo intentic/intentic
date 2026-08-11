@@ -1,4 +1,5 @@
 import { aboutMeta } from "./about";
+import { apiHref, apiPages } from "./api";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
 import { landingContent } from "./landing";
@@ -13,8 +14,8 @@ export interface PageMeta {
 
 // Every indexable route, keyed by canonical path. The layout resolves title, description and
 // datePublished from here, so a page's <head>, its OpenGraph card, its JSON-LD and its markdown
-// mirror can't disagree. Docs entries come straight from the docs tree; the landing page's copy
-// comes from the landing content it renders.
+// mirror can't disagree. Both books' entries come straight from their trees; the landing page's
+// copy comes from the landing content it renders.
 export const pageMeta: Record<string, PageMeta> = {
     "/": { ...landingContent.meta, datePublished: "2026-07-06" },
     "/privacy/": {
@@ -55,6 +56,7 @@ export const pageMeta: Record<string, PageMeta> = {
     },
     [compareHref("")]: compareIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
+    ...Object.fromEntries(apiPages.map((page) => [apiHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
     ...Object.fromEntries(comparePages.map((page) => [compareHref(page.slug), page.meta])),
 };

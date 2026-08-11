@@ -5,7 +5,7 @@ Drive the agents in your [intentic](https://intentic.dev) sandbox from your own 
 Claude, Codex, Grok or any installed ACP agent, reached from Zed, JetBrains, or anything else speaking the
 [Agent Client Protocol](https://agentclientprotocol.com). The bridge is a thin stdio adapter the editor
 spawns locally; the agent itself runs remotely in your sandbox, and your
-[synced folder](https://intentic.dev/docs/desktop-sync) mirrors its edits back so diffs and jump-to-file
+[synced folder](https://intentic.dev/docs/your-machine/#desktop-sync) mirrors its edits back so diffs and jump-to-file
 line up in the editor.
 
 ## Setup

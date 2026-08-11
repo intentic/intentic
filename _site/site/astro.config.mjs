@@ -1,7 +1,9 @@
 import sitemap from "@astrojs/sitemap";
 import { docsSearch, lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
+import { apiBook, apiHref, apiPages } from "@intentic-dev/site-content/api";
+import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
-import { docsHref, docsPages, docsPlacements } from "@intentic-dev/site-content/docs";
+import { docsBook, docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { landingContent } from "@intentic-dev/site-content/landing";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
@@ -70,7 +72,9 @@ export default defineConfig({
     },
     integrations: [
         sitemap({
-            filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404"),
+            // The search index is an endpoint, not a page: it has no title, no content a reader could land on,
+            // and a crawler that fetches it learns the whole corpus twice.
+            filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json"),
             changefreq: "monthly",
             priority: 0.7,
             serialize(item) {
@@ -109,20 +113,26 @@ export default defineConfig({
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
                 { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
+                // The authoring book as its own section, not folded into Docs: an answer engine asked "how do I
+                // write an intentic extension" should be able to reach the eight pages that answer it without
+                // reading the seventeen that do not.
+                { label: "Extension API", paths: apiPages.map((page) => apiHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/"] },
             ],
         }),
-        /* The docs search index, rebuilt from the pages that were just written — it replaces the near-empty file
-         * the /docs/search.json route emits in a build. Driven by the docs TREE, so a page the sidebar cannot
-         * reach is never indexed and the shelf a result names is the one the reader navigates by. */
+        /* The search index, rebuilt from the pages that were just written — it replaces the near-empty file the
+         * /search.json route emits in a build. Driven by the TREES, so a page no rail can reach is never indexed
+         * and the shelf a result names is the one the reader navigates by. Both books feed one index: a reader
+         * looking a word up should not have to know which of them documents it. */
         docsSearch({
-            pages: docsPlacements.map(({ page, section }) => ({
-                id: page.id,
-                url: docsHref(page.id),
-                title: page.title,
-                section: section.label,
-                blurb: page.blurb,
-            })),
+            pages: [docsBook, apiBook].flatMap((book) =>
+                bookPlacements(book).map(({ page, section }) => ({
+                    url: bookHref(book, page.id),
+                    title: page.title,
+                    section: section.label,
+                    blurb: page.blurb,
+                })),
+            ),
         }),
         // Submission runs at build:done, which on a deploy box is BEFORE the upload — so the first build after
         // the key file changes can be refused (403) while the old file is still live. astro-indexnow retries

@@ -33,7 +33,7 @@ const CELL = " · ";
  * @typedef {{ type: "text", value: string } | { type: "el", tag: string, attrs: Record<string, string>, children: Node[] }} Node
  * @typedef {{ heading: string, anchor: string, text: string }} SearchBlock
  * @typedef {{ url: string, title: string, section: string, blurb: string, blocks: SearchBlock[] }} SearchEntry
- * @typedef {{ id: string, url: string, title: string, section: string, blurb: string }} DocsSearchPage
+ * @typedef {{ url: string, title: string, section: string, blurb: string }} DocsSearchPage
  */
 
 const NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", mdash: "—", ndash: "–", rsquo: "’", lsquo: "‘", ldquo: "“", rdquo: "”", middot: "·", rarr: "→", larr: "←", lbrace: "{", rbrace: "}", dollar: "$" };
@@ -148,10 +148,13 @@ export function docsSearchIndex(pages, htmlFor) {
 }
 
 /**
- * Write dist/docs/search.json from the docs pages that were just built.
+ * Write dist/search.json from the documentation pages that were just built.
  *
- * @param {{ pages: DocsSearchPage[] }} options every docs page, from the docs tree — so a page the sidebar cannot
- * reach is never indexed, and the shelf label a result shows is the one the reader navigates by.
+ * At the site root rather than under one book, because there is one index across both of them: a reader
+ * searching for a word should not have to know whether it is documented for users or for authors.
+ *
+ * @param {{ pages: DocsSearchPage[] }} options every page of every book, from the trees — so a page a rail
+ * cannot reach is never indexed, and the shelf label a result shows is the one the reader navigates by.
  * @returns {import('astro').AstroIntegration}
  */
 export default function docsSearch(options) {
@@ -169,12 +172,12 @@ export default function docsSearch(options) {
                     }
                 });
 
-                const outPath = path.join(distDir, "docs", "search.json");
+                const outPath = path.join(distDir, "search.json");
                 mkdirSync(path.dirname(outPath), { recursive: true });
                 writeFileSync(outPath, JSON.stringify({ entries }));
 
                 const blocks = entries.reduce((total, entry) => total + entry.blocks.length, 0);
-                logger.info(`Docs search index written: ${entries.length} pages, ${blocks} sections.`);
+                logger.info(`Documentation search index written: ${entries.length} pages, ${blocks} sections.`);
             },
         },
     };

@@ -1,0 +1,196 @@
+---
+import { apiBook } from "@intentic-dev/site-content/api";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE VERIFY STEP.
+ *
+ * It was four paragraphs at the foot of the publishing guide, under a heading about registries, and it is read by
+ * two people who never open that guide: an author deciding whether "verified" is worth pursuing, and a user
+ * deciding whether to install. Searching the docs for "verified" returned the gallery and nothing else.
+ *
+ * THE PAGE'S ONE JOB is to be exact about who is claiming what. Three different parties make three different
+ * promises here — a commit sha, the manifest gate, and a human reviewer — and the failure mode this page exists
+ * to prevent is a reader collapsing them into one feeling of safety. So every row below says what it does NOT
+ * guarantee, in the same breath. */
+
+const states = [
+    {
+        state: `listed`,
+        claim: `The pointer resolves, the manifest parses, the publisher owns the source repo.`,
+        read: `Nobody read the code.`,
+    },
+    {
+        state: `verified`,
+        claim: `Somebody here read the source at that exact commit.`,
+        read: `A newer commit is a new listing, and is unverified until read again.`,
+    },
+    {
+        state: `blocked`,
+        claim: `Known-malicious or known-broken, with the reason recorded alongside.`,
+        read: `The row stays in the file rather than being deleted.`,
+    },
+];
+
+const layers = [
+    {
+        layer: `Sha pinning`,
+        guarantees: `The approved code is the running code. Force-pushing your branch changes nothing on an installed sandbox.`,
+        doesnt: `That the code is good.`,
+    },
+    {
+        layer: `The manifest gate`,
+        guarantees: `Blast radius. Undeclared registrations are refused; undeclared routes throw; secrets never reach the bundle.`,
+        doesnt: `That declared powers are used well.`,
+    },
+    {
+        layer: `Registry review`,
+        guarantees: `The pointer resolves, the publisher is real, the description matches what the manifest contributes.`,
+        doesnt: `A code audit. It is not one.`,
+    },
+];
+
+const checks = [
+    { field: `manifest`, what: `The manifest at that commit parses, or the reason it doesn't, verbatim.` },
+    { field: `bundle`, what: `The entry bundle exists and can load where it would be installed — or "none", for an extension that ships no UI.` },
+    { field: `engines`, what: `The app version range the manifest declares. A raw fact, not a verdict: the scan doesn't know which version you run.` },
+];
+---
+
+<DocsLayout
+    book={apiBook}
+    pageId="verify"
+    heading="Verification & trust"
+    lead="A listing carries one of three words, and each is a different party making a different promise. This page is about exactly what each one claims — and, just as importantly, what none of them claims."
+>
+    <h2>The three words a listing can carry</h2>
+    <p>
+        Every entry in a registry has a <code>trust</code> state. It is asserted by the pull request that lists you, which means a human wrote
+        it down and another human reviewed it — there is no automated promotion, in either direction.
+    </p>
+    <table>
+        <thead>
+            <tr><th>State</th><th>What it claims</th><th>What it doesn't</th></tr>
+        </thead>
+        <tbody>
+            {
+                states.map((row) => (
+                    <tr>
+                        <td><code>{row.state}</code></td>
+                        <td>{row.claim}</td>
+                        <td>{row.read}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        <strong>Listed is the honest default</strong>, and most rows will always be listed. An entry that states no trust level at all — on a
+        third-party registry that never adopted the field — resolves to listed, because a registry that doesn't use it hasn't asserted
+        anything and shouldn't be read as though it had.
+    </p>
+    <p>
+        A blocked entry <em>stays in the file</em>. Removing the row would hide it from people browsing and tell the people who already
+        installed it nothing, which is backwards: they are the ones at risk. Every blocked row carries its reason, so an advisory can quote it
+        rather than saying "this was withdrawn" and leaving the reader to guess.
+    </p>
+
+    <h2>What the nightly scan checks</h2>
+    <p>
+        Separate from all of that, and colder: a job re-derives a handful of facts from your pinned commit, as a stranger holding nothing but
+        the pointer. It answers the browser's one question — <em>will this thing load?</em> — and it is why a gallery card can show a
+        <strong>✓ loads</strong> mark that nobody typed.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Checked</th><th>What comes back</th></tr>
+        </thead>
+        <tbody>
+            {checks.map((row) => (<tr><td><code>{row.field}</code></td><td>{row.what}</td></tr>))}
+        </tbody>
+    </table>
+    <p>
+        Each answer is bound to the sha it was read from. Repoint your listing at a new commit and the checks simply <strong>disappear</strong>
+        from the card until the next scan, rather than yesterday's verdict describing today's code. An absent check says nothing at all, which
+        is the honest thing for it to say.
+    </p>
+    <p>
+        This is evidence, not endorsement. "It loads" and "somebody read it" are different claims made by different parties, and the gallery
+        keeps them visually apart for that reason.
+    </p>
+
+    <h2>Three layers, and precisely what each guarantees</h2>
+    <p>
+        Trust in an extension is not one thing. Three separate mechanisms protect the person installing yours, they fail in different ways, and
+        the reason to lay them out in a table is that the middle column is easy to over-read:
+    </p>
+    <table>
+        <thead>
+            <tr><th>Layer</th><th>What it guarantees</th><th>What it doesn't</th></tr>
+        </thead>
+        <tbody>
+            {
+                layers.map((row) => (
+                    <tr>
+                        <td><strong>{row.layer}</strong></td>
+                        <td>{row.guarantees}</td>
+                        <td>{row.doesnt}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The honest summary: installing an extension is trusting its author, the same way installing an editor plugin is. What intentic
+        contributes is that the trust is <em>bounded and legible</em> — the owner can read what your extension may touch before saying yes, and
+        it cannot grow past that without asking them again.
+    </p>
+
+    <h2>Getting verified</h2>
+    <p>
+        Ask, in the pull request that lists you or one after it. Verification is somebody reading your source at the commit you pinned, so what
+        makes it quick is what makes it possible to read: a small entry bundle you didn't minify beyond recognition, a manifest whose declared
+        routes are the ones the code actually calls, and a description that matches the two.
+    </p>
+    <p>Three things follow from it, and they're worth knowing before you decide it matters to you:</p>
+    <ul>
+        <li><strong>The gallery ranks verified first</strong>, and sorts by stars within that. It is the one editorial thumb on the scale.</li>
+        <li>
+            <strong>It is a precondition for unattended updates.</strong> An owner may set an extension to update itself, but that policy only
+            fires when four things hold at once, and a human-verified listing is the first of them.
+        </li>
+        <li>
+            <strong>It expires at every new commit.</strong> Verified describes a commit, not a publisher. Ship a new sha and the listing is
+            back to what a fresh reading of it would support, which is the only way the word can keep meaning anything.
+        </li>
+    </ul>
+
+    <h2>When a listing goes bad</h2>
+    <p>
+        The same daily comparison that shows an owner "update available" also carries trust changes back to sandboxes that already installed
+        you. Two of them do something:
+    </p>
+    <ul>
+        <li>
+            <strong>Blocked</strong> raises an advisory on the installed row, quoting the registry's recorded reason, and by default switches
+            the extension off. That is the one automatic action the model permits — disabling runs no new code and reverses with a click.
+        </li>
+        <li>
+            <strong>Security fix</strong> is the mirror image: a flag on your new entry saying its commit fixes a security problem in earlier
+            ones. It promotes the update badge from ambient to loud, because there the <em>old</em> version is the dangerous one and waiting is
+            the risky choice.
+        </li>
+    </ul>
+    <p>
+        Both are asserted by pull request, exactly like <code>trust</code>, and are worth exactly that review. Neither can be set by the code
+        being described.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/api/publish/", title: "Publish & registries", why: "get the pointer listed in the first place." },
+            { href: "/docs/extensions/", title: "Install & manage extensions", why: "what these words look like at the moment somebody clicks install." },
+            { href: "/extensions/", title: "The gallery", why: "the states above, rendered, on real listings." },
+        ]}
+    />
+</DocsLayout>

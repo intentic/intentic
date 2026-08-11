@@ -50,5 +50,5 @@ export const demoAnswer = (query: string): object => ({
     demo: true,
     query,
     summary: `Demo summary for "${query}": this canned answer proves the metered path end to end — your credits were spent, the call was signature-verified, and a real provider would answer here.`,
-    sources: [{ title: `The creator pool, documented`, url: `https://intentic.dev/docs/extensions/economics/` }],
+    sources: [{ title: `The creator pool, documented`, url: `https://intentic.dev/api/earn/` }],
 });

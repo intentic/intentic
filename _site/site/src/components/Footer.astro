@@ -1,4 +1,5 @@
 ---
+import { apiHref } from "@intentic-dev/site-content/api";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
@@ -9,8 +10,8 @@ import ExternalIcon from "./ExternalIcon.astro";
 
 const year = 2026;
 
-/* The four columns, as data. They render through one loop because they are one thing — a labelled list of
- * links, some of which leave the site — and four hand-written copies of that markup is how the footer ended
+/* The five columns, as data. They render through one loop because they are one thing — a labelled list of
+ * links, some of which leave the site — and five hand-written copies of that markup is how the footer ended
  * up with the external mark on none of them. `external` is the whole switch: it opens the tab AND draws the
  * arrow, so the two can no longer disagree. */
 const columns: { label: string; links: { href: string; label: string; external?: boolean }[] }[] = [
@@ -26,6 +27,20 @@ const columns: { label: string; links: { href: string; label: string; external?:
         links: [
             ...docsDestinations.map((destination) => ({ href: destination.href, label: destination.label })),
             { href: githubReleasesUrl, label: "Release notes", external: true },
+        ],
+    },
+    {
+        /* The authoring book, named page by page rather than shelf by shelf — the opposite of the column above,
+         * on purpose. Its shelves are two, so shelf rows would be a column of two; and these five are the pages
+         * people deep-link and search for by name. A footer column is a shortcut, and "Manifest reference" is a
+         * shortcut in a way that "Reference" is not. */
+        label: "API",
+        links: [
+            { href: apiHref(""), label: "Extension API" },
+            { href: apiHref("build"), label: "Build an extension" },
+            { href: apiHref("publish"), label: "Publish & registries" },
+            { href: apiHref("manifest"), label: "Manifest reference" },
+            { href: apiHref("http"), label: "HTTP API" },
         ],
     },
     {
@@ -57,7 +72,9 @@ const legalLinks = [
 ---
 
 <footer class="mt-auto border-t border-line pt-12 pb-10">
-    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-5">
+    {/* Six cells at lg — the brand plus five columns. The gap tightens with the extra column so the row still
+        fits 80rem without the link labels wrapping. */}
+    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-6 lg:gap-8">
         <div class="col-span-2 sm:col-span-1">
             <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} class="h-6 w-auto" />
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
