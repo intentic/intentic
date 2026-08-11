@@ -7,9 +7,8 @@ import {
     type CapabilityCategory,
     type CapabilityEffect,
     capabilityEffects,
-    contributionCard,
 } from "@intentic-app/capability-catalog";
-import { type CapabilitySummary, type Marketplace } from "@intentic-app/api-contract";
+import { type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
 import {
     BrandMark,
     cmp,
@@ -18,39 +17,60 @@ import {
     type IconName,
     Notice,
     type NoticeModel,
-    Row,
     RowGroup,
     Segmented,
     SplitView,
     StatusBadge,
-    type StatusVariant,
 } from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import { isShaPinned, type RegistryEntry } from "@intentic/registry";
-import { type CapabilityKind, type CapabilityState, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { type CapabilityKind, type ForticlientConnection } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { type ComputedRef, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
+import ForticlientImport from "../components/ForticlientImport.vue";
 import HostConnectDialog from "../components/HostConnectDialog.vue";
+import PluginRegistryBrowse from "../components/PluginRegistryBrowse.vue";
 import CapabilityConnections, { type CapabilityConnection, type CapabilityConnectionGroup } from "../components/CapabilityConnections.vue";
 import CapabilityContext from "../components/CapabilityContext.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
+import CapabilityInstanceRow from "../components/CapabilityInstanceRow.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
 import { startAgent } from "../composables/agents/agentActions";
-import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
-import { checksOk, checksProblem } from "./sandbox/discoverListing";
 import { auditBrief, updateBrief } from "./sandbox/extensionBrief";
-import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
-import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
+import { CATEGORY_ICONS, cardHaystack, contributedCards, entryIcon, instancesOf, suggestName, withIdentityPicker } from "./capabilities/cards";
+import {
+    type ConnectionState,
+    awaitingLogin,
+    connectionFacts,
+    connectionState,
+    rebuildStep,
+    signsInByHand,
+    vpnFacts,
+} from "./capabilities/connections";
+import { rememberedSecrets, rememberSecrets } from "./capabilities/devSecrets";
+import {
+    buildConfig,
+    fieldConfig,
+    fieldError,
+    forticlientAnswers,
+    formComplete,
+    inlineField,
+    isCommitSha,
+    nameError,
+    seedValues,
+    shownFields,
+} from "./capabilities/form";
+import { noticeFrom } from "../composables/useAsyncAction";
+import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useRegistry } from "../composables/extensions/useRegistry";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
-import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
+import { useVpn } from "../composables/sandbox/useVpn";
 
 /* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
  * Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its own operator
@@ -77,10 +97,13 @@ import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
  * tile, the names their owner typed are nowhere, and a connection that quietly needs signing in again looks
  * exactly like one that works. So that slice draws <CapabilityConnections> instead: the instances themselves,
  * named, addressed and stated. It is still the same page — same rail, same filter, same click into the same card
- * — it just stops pretending the reader is shopping. */
-
-const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-const URL_RE = /^https?:\/\/.+/i;
+ * — it just stops pretending the reader is shopping.
+ *
+ * WHAT IS NOT IN THIS FILE, and why: the rules that hold whether or not a page is drawing them. A card's own
+ * facts and the join to its live instances are in ./capabilities/cards, the add form's answers and refusals in
+ * ./capabilities/form, and what a live connection is called and how it sorts in ./capabilities/connections —
+ * that last one shared with the inventory, so a Reddit account cannot be "needs sign-in" in one list and
+ * "pending" in the other. */
 
 const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
@@ -88,47 +111,13 @@ const { contributionOf, enabled: enabledExtensions, extensions, settled: extensi
 // Status card drives, so a tunnel dialled from either place reads identically in both.
 const { links: vpnLinks } = useVpn();
 
-/* The browser cards' core `identity` field, narrowed to what this sandbox can actually answer: a picker over
- * the identities that exist, or nothing at all when none do. The catalog declares the field without options
- * because the manifest cannot know instance state; a free-text id here would only mint dangling references the
- * daemon then rejects. "Standalone" is the empty value — buildInput drops empty answers, so the config carries
- * no `identity` key rather than an empty one. */
-const withIdentityPicker = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry => {
-    if (entry.kind !== `browser`) {
-        return entry;
-    }
-    const identities = capabilities.value.filter((instance) => instance.kind === `identity`).map((instance) => instance.id);
-    return {
-        ...entry,
-        fields:
-            identities.length === 0
-                ? entry.fields.filter((field) => field.key !== `identity`)
-                : entry.fields.map((field) =>
-                      field.key === `identity`
-                          ? { ...field, options: [{ value: ``, label: `Standalone` }, ...identities.map((id) => ({ value: id, label: id }))] }
-                          : field,
-                  ),
-    };
-};
+// The identities the browser cards can be filed under — instance state, which the manifest cannot know.
+const identityIds = computed(() => capabilities.value.filter((instance) => instance.kind === `identity`).map((instance) => instance.id));
 
-// The full card list: cards derived from the ENABLED extensions' contributions (first declaration of a
-// kind+id wins — the daemon contributionRegistry's precedent) + the static core cards. Enabled, not installed:
-// a switched-off extension stays listed so its switch is reachable, but the daemon wires none of its
-// contributions up, so a card from one would fail the add it advertises.
-const allCards = computed<CapabilityCatalogEntry[]>(() => {
-    const seen = new Set<string>();
-    const derived: CapabilityCatalogEntry[] = [];
-    for (const extension of enabledExtensions.value) {
-        for (const contribution of extension.manifest.contributes?.capabilities ?? []) {
-            const key = `${contribution.kind}:${contribution.id}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                derived.push(contributionCard(contribution));
-            }
-        }
-    }
-    return [...derived, ...CAPABILITY_CATALOG].map(withIdentityPicker);
-});
+// The full card list: what the enabled extensions contribute, then the static core cards.
+const allCards = computed<CapabilityCatalogEntry[]>(() =>
+    [...contributedCards(enabledExtensions.value), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(entry, identityIds.value)),
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -141,26 +130,8 @@ const name = ref(``);
 // frozen snapshot then collides ("already exists") — or worse, mints a stale-bumped id — once fresh data lands.
 const nameEdited = ref(false);
 
-// Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli cards,
-// `platform` for the browser cards (both map straight to the capability's config). The value is a single fixed
-// value, or the options for a multi-provider card (the SQL card owns postgres + mysql). Single-card kinds
-// (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. Used to find a
-// card's live instances.
-const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
-    const field = entry.fields.find((f) => f.key === `provider` || f.key === `platform`);
-    if (field === undefined) {
-        return undefined;
-    }
-    const values = field.value !== undefined ? [field.value] : (field.options ?? []).map((option) => option.value);
-    return { key: field.key, values };
-};
-const instancesOf = (entry: CapabilityCatalogEntry): CapabilitySummary[] => {
-    const disc = cardDiscriminator(entry);
-    return capabilities.value.filter(
-        (capability) => capability.kind === entry.kind && (disc === undefined || disc.values.includes(String(capability.config[disc.key]))),
-    );
-};
-const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value ? instancesOf(selected.value) : []));
+const instancesFor = (entry: CapabilityCatalogEntry): CapabilitySummary[] => instancesOf(entry, capabilities.value);
+const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value === undefined ? [] : instancesFor(selected.value)));
 
 // --- the connection's background process (a gateway's liveness, where the user forms the intent) ---
 // A connector that relays events (Discord, IMAP) only works while its extension's gateway runs, and "my bot
@@ -171,16 +142,17 @@ const { rows: processRows, busy: processBusy, start: startProcess, stop: stopPro
 // The extension that runs an instance's processes: an extension-kind capability IS the extension; a connector
 // instance is served by whichever extension declares its provider (resolved per INSTANCE, not per card — the
 // SQL card owns two providers, and they need not come from the same extension).
-const ownerExtensionId = (instance: CapabilitySummary): string | undefined =>
-    instance.kind === `extension`
-        ? instance.id
-        : enabledExtensions.value.find((extension) =>
-              (extension.manifest.contributes?.capabilities ?? []).some(
-                  (contribution) =>
-                      contribution.kind === instance.kind &&
-                      contribution.id === String(instance.config[contributionDiscriminator(instance.kind) ?? ``]),
-              ),
-          )?.id;
+const ownerExtensionId = (instance: CapabilitySummary): string | undefined => {
+    if (instance.kind === `extension`) {
+        return instance.id;
+    }
+    const provider = String(instance.config[contributionDiscriminator(instance.kind) ?? ``]);
+    return enabledExtensions.value.find((extension) =>
+        (extension.manifest.contributes?.capabilities ?? []).some(
+            (contribution) => contribution.kind === instance.kind && contribution.id === provider,
+        ),
+    )?.id;
+};
 
 // Empty until something is actually connected: a declared-but-idle gateway on a card you never configured is
 // noise, not health. Several instances of one provider share a single gateway, hence the owner set.
@@ -189,21 +161,6 @@ const cardProcesses = computed<BackgroundProcessRow[]>(() => {
     return processRows.value.filter((row) => row.extensionId !== undefined && owners.has(row.extensionId));
 });
 
-// A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, … so repeat adds create
-// distinct connections instead of upserting the same id (the silent-overwrite trap).
-const suggestName = (entry: CapabilityCatalogEntry): string => {
-    const taken = new Set(instancesOf(entry).map((instance) => instance.id));
-    // A one-per-sandbox card never bumps: the id IS the instance, so re-picking the card lands on the entry
-    // that exists and the submit reads "Update" instead of quietly minting a second one.
-    if (entry.singleton === true || !taken.has(entry.id)) {
-        return entry.id;
-    }
-    let n = 2;
-    while (taken.has(`${entry.id}-${n}`)) {
-        n += 1;
-    }
-    return `${entry.id}-${n}`;
-};
 // The typed name already exists → saving updates that connection rather than adding a new one.
 const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
 
@@ -212,38 +169,30 @@ const nameCollision = computed(() => selectedInstances.value.some((instance) => 
  * grid used to call instancesOf() three times per card while drawing it, which is a scan of every capability in
  * the sandbox per call. The INSTANCES ride along rather than just their count, because the Connected slice lists
  * them one by one and re-deriving them there would be that same scan a fourth time. */
-const cards = computed(() =>
+interface CatalogCard {
+    readonly entry: CapabilityCatalogEntry;
+    readonly instances: readonly CapabilitySummary[];
+    readonly connected: number;
+    readonly recommendation: CapabilityRecommendation | undefined;
+}
+
+const cards = computed<CatalogCard[]>(() =>
     allCards.value.map((entry) => {
-        const instances = instancesOf(entry);
+        const instances = instancesFor(entry);
         return { entry, instances, connected: instances.length, recommendation: recommendationFor(entry.id) };
     }),
 );
-const connectedCards = computed(() => cards.value.filter((card) => card.connected > 0));
-const recommendedCards = computed(() => cards.value.filter((card) => card.recommendation !== undefined));
+const connectedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.connected > 0));
+const recommendedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.recommendation !== undefined));
 // Connections, not cards: the Connected row's number is what the list it opens is long, and one card can hold
 // several (two Reddit accounts, three SSH boxes). Kept here beside the cards it counts; the rows themselves are
 // built further down, where the per-kind facts they carry are in scope.
 const connectionCount = computed(() => cards.value.reduce((total, card) => total + card.connected, 0));
 
-// The two slices that cut across every category. Constants because both the URL and the branches below name them.
+// The slices the rail offers on top of the categories, and the spelling of "no slice at all".
+const ALL = ``;
 const CONNECTED = `connected`;
 const RECOMMENDED = `recommended`;
-
-/* A category's glyph. It is not in CAPABILITY_CATEGORIES because a category is a fact about the catalog and this
- * is a fact about this rail — the same list is rendered as plain headings elsewhere. A contribution declaring an
- * unknown category lands under `extend` (contributionCard), so the record stays total. */
-const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
-    platform: `sitemap`,
-    code: `code`,
-    observability: `wave-pulse`,
-    data: `database`,
-    communication: `comments`,
-    business: `credit-card`,
-    machines: `desktop`,
-    servers: `server`,
-    deploy: `cloud-upload`,
-    extend: `th-large`,
-};
 
 const scopeOf = (key: string, label: string, icon: IconName, subset: readonly { connected: number }[]): CapabilityScope => ({
     key,
@@ -253,25 +202,31 @@ const scopeOf = (key: string, label: string, icon: IconName, subset: readonly { 
     connected: subset.filter((card) => card.connected > 0).length,
 });
 
-const allScope = computed<CapabilityScope>(() => scopeOf(``, `All capabilities`, `bolt`, cards.value));
+const countOf = (total: number, one: string, many: string): string => `${total} ${total === 1 ? one : many}`;
+
+const allScope = computed<CapabilityScope>(() => scopeOf(ALL, `All capabilities`, `bolt`, cards.value));
+// Counts CONNECTIONS rather than cards, so its number matches the list it opens; `meta` spells that out for the
+// tooltip, which would otherwise read the two figures as cards.
+const connectedScope = computed<CapabilityScope>(() => ({
+    key: CONNECTED,
+    label: `Connected`,
+    icon: `check-circle`,
+    total: connectionCount.value,
+    connected: connectionCount.value,
+    meta: `${countOf(connectionCount.value, `connection`, `connections`)} across ${countOf(connectedCards.value.length, `capability`, `capabilities`)}`,
+}));
 // Each cross-cutting row exists only while it has something in it: "Connected 0" on a fresh sandbox promises a
 // page that turns out to be empty, and "Recommended 0" reads as the workspace scan having failed.
-const pinnedScopes = computed<CapabilityScope[]>(() => [
-    allScope.value,
-    ...(connectedCards.value.length === 0
-        ? []
-        : [
-              {
-                  key: CONNECTED,
-                  label: `Connected`,
-                  icon: `check-circle` as IconName,
-                  total: connectionCount.value,
-                  connected: connectionCount.value,
-                  meta: `${connectionCount.value} ${connectionCount.value === 1 ? `connection` : `connections`} across ${connectedCards.value.length} ${connectedCards.value.length === 1 ? `capability` : `capabilities`}`,
-              },
-          ]),
-    ...(recommendedCards.value.length === 0 ? [] : [scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommendedCards.value)]),
-]);
+const pinnedScopes = computed<CapabilityScope[]>(() => {
+    const scopes = [allScope.value];
+    if (connectedCards.value.length > 0) {
+        scopes.push(connectedScope.value);
+    }
+    if (recommendedCards.value.length > 0) {
+        scopes.push(scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommendedCards.value));
+    }
+    return scopes;
+});
 // A category with no cards is not a row: several of them are empty until the extension that fills them is enabled.
 const categoryScopes = computed<CapabilityScope[]>(() =>
     CAPABILITY_CATEGORIES.flatMap((category) => {
@@ -284,14 +239,13 @@ const categoryScopes = computed<CapabilityScope[]>(() =>
  * each letter of a filter. Derived from the query rather than mirrored into refs, so there is one direction of
  * flow and no watcher pair to fight over what is shown. Writing either drops the `card` param: picking a category
  * while a form is open means "show me that category", not "keep me here". */
-const scope = computed<string>({
-    get: () => (typeof route.query[`category`] === `string` ? route.query[`category`] : ``),
-    set: (value) => void router.replace({ name: `capabilities`, query: { ...route.query, category: value === `` ? undefined : value } }),
-});
-const search = computed<string>({
-    get: () => (typeof route.query[`q`] === `string` ? route.query[`q`] : ``),
-    set: (value) => void router.replace({ name: `capabilities`, query: { ...route.query, q: value === `` ? undefined : value } }),
-});
+const queryParam = (key: string) =>
+    computed<string>({
+        get: () => (typeof route.query[key] === `string` ? route.query[key] : ``),
+        set: (value) => void router.replace({ name: `capabilities`, query: { ...route.query, [key]: value === `` ? undefined : value } }),
+    });
+const scope = queryParam(`category`);
+const search = queryParam(`q`);
 
 // An unknown slice — a stale link, or Connected after the last capability was removed — falls back to everything
 // rather than to a blank grid, which the rail offers no row to get back from.
@@ -302,33 +256,19 @@ const railScope = computed<string>({ get: () => activeScope.value.key, set: (val
 const inCategory = computed(() => categoryScopes.value.some((entry) => entry.key === activeScope.value.key));
 
 // The cards a slice covers. Connected covers them too — it just draws them as the CONNECTIONS inside them
-// rather than as tiles (see `connectionGroups`), so nothing downstream of here renders in that slice.
-const inScope = computed(() => {
-    if (activeScope.value.key === ``) {
-        return cards.value;
-    }
-    if (activeScope.value.key === CONNECTED) {
-        return connectedCards.value;
-    }
-    if (activeScope.value.key === RECOMMENDED) {
-        return recommendedCards.value;
-    }
-    return cards.value.filter((card) => card.entry.category === activeScope.value.key);
-});
+// rather than as tiles (see `connectionGroups`), so nothing downstream of here renders in that slice. Anything
+// that is not one of these three is a category.
+const SLICES: Readonly<Record<string, ComputedRef<CatalogCard[]>>> = { [ALL]: cards, [CONNECTED]: connectedCards, [RECOMMENDED]: recommendedCards };
+const inScope = computed<CatalogCard[]>(
+    () => SLICES[activeScope.value.key]?.value ?? cards.value.filter((card) => card.entry.category === activeScope.value.key),
+);
 
-// The kind is searched alongside the words a reader can see, because it is what somebody typing "mcp" or "ssh"
-// means — those are the names of the things, and no card's prose repeats them. The HINT is searched for the
-// mirror reason: a tile's description is one line now, so the words that identify a card to the person looking
-// for it ("webauthn", "socket mode", "botfather") live in prose the grid no longer prints. Searching only what
-// is visible would make the catalog findable exactly to the extent it is already scannable, which is backwards.
-const visibleCards = computed(() => {
+const visibleCards = computed<CatalogCard[]>(() => {
     const needle = search.value.trim().toLowerCase();
     if (needle === ``) {
         return inScope.value;
     }
-    return inScope.value.filter((card) =>
-        `${card.entry.name} ${card.entry.description} ${card.entry.kind} ${card.entry.hint ?? ``}`.toLowerCase().includes(needle),
-    );
+    return inScope.value.filter((card) => cardHaystack(card.entry).includes(needle));
 });
 
 // The visible cards grouped into their display sections, in category order; empty sections are dropped. Derived
@@ -342,24 +282,25 @@ const groupedCatalog = computed(() =>
 
 // The page's own sentence follows the slice: under one category it is that category's hint, which is where the
 // heading the grid no longer repeats has gone.
-const description = computed(() => {
-    if (activeScope.value.key === CONNECTED) {
-        return `Every connection your agent can reach right now. Open one to change it, to add another of the same kind, or to take it away.`;
-    }
-    if (activeScope.value.key === RECOMMENDED) {
-        return `Suggested from what is checked out in your workspace — each one is something your own code already asks for.`;
-    }
-    return (
+const SLICE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+    [CONNECTED]: `Every connection your agent can reach right now. Open one to change it, to add another of the same kind, or to take it away.`,
+    [RECOMMENDED]: `Suggested from what is checked out in your workspace — each one is something your own code already asks for.`,
+};
+const CATALOG_DESCRIPTION = `Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`;
+const description = computed(
+    () =>
+        SLICE_DESCRIPTIONS[activeScope.value.key] ??
         CAPABILITY_CATEGORIES.find((category) => category.id === activeScope.value.key)?.hint ??
-        `Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`
-    );
-});
+        CATALOG_DESCRIPTION,
+);
 
 watch(capabilities, () => {
-    if (selected.value !== undefined && !nameEdited.value) {
-        name.value = suggestName(selected.value);
+    if (selected.value === undefined || nameEdited.value) {
+        return;
     }
+    name.value = suggestName(selected.value, selectedInstances.value);
 });
+
 const values = reactive<Record<string, string>>({});
 const submitting = ref(false);
 const error = ref<NoticeModel | null>(null);
@@ -373,52 +314,12 @@ const markTouched = (key: string): void => {
     touched.add(key);
 };
 
-// Field-level error messages — undefined means the field is valid.
-const nameError = computed<string | undefined>(() => {
-    const trimmed = name.value.trim();
-    if (trimmed.length === 0) return `Name is required.`;
-    if (!NAME_RE.test(trimmed)) return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
-    return undefined;
-});
-
-const fieldError = (field: CapabilityField): string | undefined => {
-    const val = (values[field.key] ?? ``).trim();
-    if (field.optional !== true && val.length === 0) return `This field is required.`;
-    if (val.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(val)) return `Enter a valid URL (e.g. https://…).`;
-    // A value lifted straight out of a FortiClient config is ciphertext, not a credential — the daemon rejects
-    // it, so say so here rather than after a round-trip.
-    if (val.length > 0 && isForticlientCiphertext(val)) {
-        return `FortiClient encrypted this with a key tied to the machine that exported it — it can't be used. Enter the real value.`;
-    }
-    if (val.length > 0 && field.key === `port`) {
-        const n = Number(val);
-        if (!Number.isInteger(n) || n < 1 || n > 65535) return `Enter a valid port number (1–65535).`;
-    }
-    return undefined;
-};
-
-const kindIcon = (kind: string): IconName =>
-    kind === `devops`
-        ? `server`
-        : kind === `monorepo`
-          ? `sitemap`
-          : kind === `service`
-            ? `box`
-            : kind === `integration`
-              ? `link`
-              : kind === `plugin`
-                ? `th-large`
-                : kind === `browser`
-                  ? `globe`
-                  : kind === `identity`
-                    ? `user`
-                    : kind === `agent`
-                      ? `sparkles`
-                      : `bolt`;
-// The glyph tier <BrandMark> falls to when a card has no simple-icons logo (or the slug fails to load): the
-// card's explicit `icon`, else the generic per-kind fallback. A card is never left to the initials tier — its
-// KIND is always known, and "some connector" drawn as a bolt beats it drawn as two letters.
-const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
+// The refusals, over the form as it stands right now. undefined means the field is fine.
+const nameProblem = computed<string | undefined>(() => nameError(name.value));
+const fieldProblem = (field: CapabilityField): string | undefined => fieldError(field, values[field.key]);
+// The fields on screen for a card: const-valued ones are baked into the config, `when`-gated ones come and go
+// as the user toggles the mode they hang off.
+const formFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => shownFields(entry, values);
 
 /* The live-browser window for a browser-kind capability (the session is a real logged-in browser, not a pasted
  * token, so it lives out-of-band over the /system/browser-profile WebSocket). Two things open it and one
@@ -449,75 +350,33 @@ const openBrowser = (capability: string, label: string, mode: `login` | `browse`
     profileMode.value = mode;
     profileVisible.value = true;
 };
-/* A browser capability goes pending on one of TWO different things, and they lead to opposite places: its
- * Chromium is not installed yet (a sandbox rebuild, on another screen) or it is and nobody has signed in (the
- * login window, right here). The daemon tells them apart by the word "rebuild" in the detail — see the
- * handler, which is written to keep that word in one and out of the other. Read in both places that act on the
- * distinction, so the hint under a card and the hand-off after an add can never disagree about it. */
-const awaitingLogin = (instance: CapabilitySummary): boolean =>
-    instance.status.state === `pending` && !String(instance.status.detail ?? ``).includes(`rebuild`);
 
 // A completed login flips the capability's status pending → active; refresh the list so it shows.
 const onBrowserDone = (): void => {
     void refetch();
 };
 
-// A `when`-gated field applies only while its referenced field holds the given value (e.g. the SSH credential
-// matching the chosen auth mode). Read from reactive `values`, so it re-evaluates as the user toggles.
-const whenMet = (field: CapabilityField): boolean => field.when === undefined || values[field.when.key] === field.when.value;
-
-/* WHICH FIELDS ANSWER THEMSELVES BESIDE THEIR LABEL rather than under it. A switch always does. A picker does
- * when its answers are short enough to sit in the same line as the question — and the test is the WIDTH of the
- * answers, not how many there are, because that is what actually decides whether the row fits.
- *
- * Counting options would have been the obvious rule and it is the wrong one: `Allowed`/`Blocked` and
- * `OpenAI-compatible`/`Anthropic-compatible` are both two options, and only one of them leaves room for a label
- * to its left. Measuring instead puts the six Allowed/Blocked permissions of a computer inline (where they
- * halve the form) and leaves the model-endpoint protocol and the VPN's three-protocol picker stacked (where
- * they would otherwise crush the label or wrap). A long list — the DH groups — fails the same test by itself. */
-const INLINE_OPTIONS_BUDGET = 24;
-const inlineField = (field: CapabilityField): boolean => {
-    if (field.boolean === true) {
-        return true;
-    }
-    if (field.options === undefined || field.multiline === true) {
-        return false;
-    }
-    return field.options.reduce((total, option) => total + option.label.length, 0) <= INLINE_OPTIONS_BUDGET;
-};
-// The fields shown as inputs (const-valued ones are baked into config, not rendered; when-gated ones only
-// while their condition holds).
-const visibleFields = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry["fields"] =>
-    entry.fields.filter((field) => field.value === undefined && whenMet(field));
-
 const touchAll = (): void => {
     touched.add(`name`);
-    if (selected.value) {
-        for (const field of visibleFields(selected.value)) {
-            touched.add(field.key);
-        }
+    if (selected.value === undefined) {
+        return;
+    }
+    for (const field of formFields(selected.value)) {
+        touched.add(field.key);
     }
 };
-const requiresMet = computed(() => (selected.value ? (selected.value.requires ?? []).every((kind) => hasCapability(kind)) : false));
+// A card with no `requires` has them all met — the gate below only ever asks about a card that is open.
+const requiresMet = computed(() => (selected.value?.requires ?? []).every((kind) => hasCapability(kind)));
 
 // --- effect derivation (the "This will add to your sandbox" disclosure) ---
-// The config as capabilityEffects sees it: fixed fields baked in (like buildInput), the rest from a source —
-// the live form values, the card's declared defaults (grid badges), or an instance's echoed config.
-const effectConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityField) => string | undefined): Record<string, string> => {
-    const config: Record<string, string> = {};
-    for (const field of entry.fields) {
-        const value = field.value ?? source(field);
-        if (value !== undefined) {
-            config[field.key] = value;
-        }
-    }
-    return config;
-};
 // The contribution behind a config, via its kind's pinned discriminator — what capabilityEffects reads a card's
 // secret/image declarations from. Undefined for a kind whose cards carry none (agent) or a core-only kind.
 const contributionFor = (kind: CapabilityKind, config: Record<string, string | number | boolean | undefined>) => {
     const key = contributionDiscriminator(kind);
-    return key === undefined ? undefined : contributionOf(kind, String(config[key] ?? ``));
+    if (key === undefined) {
+        return undefined;
+    }
+    return contributionOf(kind, String(config[key] ?? ``));
 };
 // Live over the form state, so the plugin clone URL tracks as the user types. A selected contributed card
 // exists only because its extension is enabled (allCards derives it), so contributionOf always resolves here —
@@ -527,15 +386,16 @@ const liveEffects = computed<readonly CapabilityEffect[]>(() => {
     if (entry === undefined) {
         return [];
     }
-    const config = effectConfig(entry, (field) => (values[field.key] ?? ``).trim());
+    const config = fieldConfig(entry, (field) => (values[field.key] ?? ``).trim());
     return capabilityEffects({ kind: entry.kind, id: name.value.trim() || undefined, config, contribution: contributionFor(entry.kind, config) });
 });
-// The consequential effects a card statically implies, badged on its grid tile — image/runtime/trusted-code
-// only (the full list is one click away). Defaults decide config-dependent ones (the SQL card's default engine).
+// The consequential effects a card statically implies, badged on its grid tile — the full list is one click
+// away. Defaults decide config-dependent ones (the SQL card's default engine).
+const BADGED_EFFECTS = new Set([`image`, `runtime`, `trusted-code`]);
 const badgeEffects = (entry: CapabilityCatalogEntry): readonly CapabilityEffect[] => {
-    const config = effectConfig(entry, (field) => field.default);
-    return capabilityEffects({ kind: entry.kind, config, contribution: contributionFor(entry.kind, config) }).filter(
-        (effect) => effect.kind === `image` || effect.kind === `runtime` || effect.kind === `trusted-code`,
+    const config = fieldConfig(entry, (field) => field.default);
+    return capabilityEffects({ kind: entry.kind, config, contribution: contributionFor(entry.kind, config) }).filter((effect) =>
+        BADGED_EFFECTS.has(effect.kind),
     );
 };
 // A connected instance's effects from its secret-stripped config echo; an installed extension also resolves
@@ -585,23 +445,8 @@ const removeHostAccess = async (id: string): Promise<void> => {
 onMounted(startHosts);
 onBeforeUnmount(stopHosts);
 
-const canSubmit = computed(() => {
-    const entry = selected.value;
-    if (entry === undefined || !requiresMet.value) {
-        return false;
-    }
-    if (!NAME_RE.test(name.value.trim())) {
-        return false;
-    }
-    return visibleFields(entry).every((field) => field.optional === true || (values[field.key] ?? ``).trim().length > 0);
-});
+const canSubmit = computed(() => selected.value !== undefined && requiresMet.value && formComplete(selected.value, values, name.value));
 
-/* Registry browse — THE PLUGIN CARD ONLY, now. It used to serve the extension card too, and that was the whole
- * of extension discovery in this product: a collapsed block on a form, five clicks from the rail, presented as
- * a way to pre-fill a text field. Extensions have a surface of their own (the Sandbox screen's Discover row),
- * and this card links to it rather than growing a second, worse copy of it. What stays here is the plugin
- * marketplace, which is a genuinely different object — a plugin loads into the agent rather than running in
- * this browser, its registries are usually somebody else's, and its install form is the one below. */
 /* The two numbers on the Extension card's signpost, read from whatever the registry cache already holds
  * (`read: false` — see useRegistry). This page must not clone a repository to put a figure in a sentence, so
  * the counts are absent until something has genuinely browsed, and the sentence reads fine without them. */
@@ -609,36 +454,15 @@ const { entries: publishedExtensions } = useRegistry({ read: false });
 const publishedCount = computed(() => publishedExtensions.value.length);
 const verifiedCount = computed(() => publishedExtensions.value.filter((entry) => entry.trust === `verified`).length);
 
-const marketUrl = ref(``);
-const marketToken = ref(``);
-const market = ref<Marketplace | null>(null);
-const browsing = ref(false);
-
-const browse = async (): Promise<void> => {
-    if (marketUrl.value.trim().length === 0 || browsing.value) {
-        return;
-    }
-    browsing.value = true;
-    error.value = null;
-    market.value = null;
-    try {
-        market.value = await browseMarketplace(marketUrl.value.trim(), marketToken.value.trim() || undefined);
-    } catch (err) {
-        error.value = noticeFrom(err, `Could not browse the registry.`);
-    } finally {
-        browsing.value = false;
-    }
+// A registry row picked in <PluginRegistryBrowse>, as answers to this form.
+const applyRegistryPick = (answers: { name: string; url: string; ref: string; path: string; token: string }): void => {
+    name.value = answers.name;
+    nameEdited.value = true;
+    values[`url`] = answers.url;
+    values[`ref`] = answers.ref;
+    values[`path`] = answers.path;
+    values[`token`] = answers.token;
 };
-
-// Only the rows this card can actually install: a registry serves plugins and extensions from one file, and
-// offering an extension row on the plugin form would pre-fill a config the daemon then refuses.
-const marketEntries = computed<RegistryEntry[]>(() =>
-    selected.value === undefined ? [] : (market.value?.plugins.filter((entry) => entry.kind === selected.value?.kind) ?? []),
-);
-
-/* What the nightly scan re-derived at the row's pinned commit reads the same here as it does on Discover and on
- * the public gallery — one reading of the field, in discoverListing.ts, rather than three that can drift on
- * what "none" means. */
 
 /* THE PRE-INSTALL READ. The install dialog shows what the manifest declares and the registry's checks say the
  * thing loads; what neither can say is whether the code does what the description claims and nothing else. The
@@ -649,13 +473,7 @@ const marketEntries = computed<RegistryEntry[]>(() =>
  * and reading a branch instead would produce a confident account of code nobody is about to run. The gate does
  * not move — installing stays the same approval, made by the same person, with an account of the code in front
  * of them instead of a description written by the person selling it. */
-const auditable = computed(
-    () =>
-        selected.value?.kind === `extension` &&
-        typeof values[`url`] === `string` &&
-        values[`url`] !== `` &&
-        /^[0-9a-f]{40}$/u.test(String(values[`ref`] ?? ``)),
-);
+const auditable = computed(() => selected.value?.kind === `extension` && isCommitSha(values[`ref`]) && (values[`url`] ?? ``) !== ``);
 /* When the form is about to REPLACE an installed commit rather than add a first one, the sharper read is the
  * diff: the installed sha was approved once already, and what an update asks the owner to judge is what sits
  * between the two. Known from the same collision that flips the submit button to "Update". */
@@ -664,45 +482,19 @@ const updateFrom = computed<string | undefined>(() => {
         return undefined;
     }
     const installed = selectedInstances.value.find((instance) => instance.id === name.value.trim())?.config[`ref`];
-    return typeof installed === `string` && /^[0-9a-f]{40}$/u.test(installed) && installed !== String(values[`ref`]) ? installed : undefined;
-});
-const startAudit = (): void => {
-    const label = name.value.trim() === `` ? String(values[`url`]) : name.value.trim();
-    const shared = { label, url: String(values[`url`]), path: String(values[`path`] ?? ``) };
-    startAgent(
-        updateFrom.value !== undefined
-            ? updateBrief({ ...shared, fromRef: updateFrom.value, toRef: String(values[`ref`]) })
-            : auditBrief({ ...shared, ref: String(values[`ref`]) }),
-    );
-};
-
-/* Why a row can't be clicked, in the words the reader needs — the button is disabled either way, and a
- * disabled row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is
- * fine mechanically and the answer is still no. The sha rule bites only extensions (their code runs trusted
- * in this browser), so a plugin row pinned to a branch stays installable. */
-const blockedReason = (entry: RegistryEntry): string | undefined => {
-    if (entry.trust === `blocked`) {
-        return entry.trustReason ?? `blocked`;
-    }
-    if (entry.install === undefined) {
-        return `not installable from here`;
-    }
-    if (entry.kind === `extension` && !isShaPinned(entry.install)) {
-        return `no pinned commit`;
-    }
-    return undefined;
-};
-
-// A connected VPN instance's live facts, compactly: the assigned address and what it routes. Undefined while
-// the tunnel is down — the capability row's own status already says that.
-const vpnFacts = (id: string): string | undefined => {
-    const link = vpnLinks.value.find((candidate) => candidate.id === id);
-    if (link === undefined || link.state !== `connected`) {
+    if (typeof installed !== `string` || !isCommitSha(installed) || installed === values[`ref`]) {
         return undefined;
     }
-    return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)]
-        .filter((fact) => fact !== undefined && fact !== ``)
-        .join(` · `);
+    return installed;
+});
+const startAudit = (): void => {
+    const typed = name.value.trim();
+    const shared = { label: typed === `` ? String(values[`url`]) : typed, url: String(values[`url`]), path: String(values[`path`] ?? ``) };
+    if (updateFrom.value === undefined) {
+        startAgent(auditBrief({ ...shared, ref: String(values[`ref`]) }));
+        return;
+    }
+    startAgent(updateBrief({ ...shared, fromRef: updateFrom.value, toRef: String(values[`ref`]) }));
 };
 
 /* --- THE CONNECTED SLICE: an inventory, not a catalog with the unconnected cards taken out ---
@@ -711,45 +503,14 @@ const vpnFacts = (id: string): string | undefined => {
  * is everything that needs the page's own sources — the host roster, the vpn links, the daemon's pending detail
  * — so the component stays a renderer of rows somebody else decided the meaning of.
  *
- * Placed below the per-kind helpers it reads (hostFor, awaitingLogin, vpnFacts) rather than beside the cards it
- * derives from: `connectionCount` is up there because the rail needs only the number. */
+ * `connectionCount` is up beside the cards because the rail needs only the number; the rows themselves wait
+ * until the per-kind sources they read are in scope. */
 
-// What identifies a connection to the person who made it, in the order they would say it. `provider`/`platform`
-// are deliberately absent — they are the card, which the row already names, so printing them would spend the
-// line on "github · github". Secrets never reach here: the daemon strips them from the config it echoes back.
-// `email` is an identity row's one fact; `identity` is the born-from note on an account row filed under one.
-const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`] as const;
-
-// Two facts at most. A row is a line, and the third fact is the one that pushes the state badge off the end of it.
-const connectionFacts = (instance: CapabilitySummary): string =>
-    CONNECTION_FACTS.map((key) => instance.config[key])
-        .filter((value): value is string => typeof value === `string` && value.trim() !== ``)
-        .slice(0, 2)
-        .join(` · `);
-
-/* THE STATE IN THE READER'S WORDS, and the order the rows sort in. "active/pending/error/inactive" is the
- * daemon's vocabulary and it is the wrong one here: `pending` is the state of a thing whose setup was never
- * finished, and the reader's question is not what to call it but whether they still have something to do. Rank
- * is the same judgement as the wording — what is unfinished or broken sorts above what is merely working, so a
- * list that mostly works still opens on the part that doesn't. */
-const CONNECTION_STATES: Readonly<Record<CapabilityState, { label: string; tone: StatusVariant; rank: number }>> = {
-    error: { label: `error`, tone: `danger`, rank: 0 },
-    pending: { label: `needs setup`, tone: `warning`, rank: 1 },
-    inactive: { label: `off`, tone: `neutral`, rank: 2 },
-    active: { label: `ready`, tone: `success`, rank: 3 },
-};
-
-// Two kinds know something truer about themselves than their status field does, and both are the difference
-// between "you have something to do" and "it is simply asleep" — which is exactly what this column is for.
-const connectionState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): { label: string; tone: StatusVariant; rank: number } => {
-    if ((entry.kind === `browser` || entry.kind === `identity`) && awaitingLogin(instance)) {
-        return { label: `needs sign-in`, tone: `warning`, rank: 1 };
-    }
-    if (entry.kind === `host` && instance.status.state === `active`) {
-        return hostFor(instance.id)?.online === true ? { label: `online`, tone: `success`, rank: 3 } : { label: `offline`, tone: `neutral`, rank: 2 };
-    }
-    return CONNECTION_STATES[instance.status.state];
-};
+// A tunnel's live address and what it routes, which no stored config can answer.
+const vpnAddress = (id: string): string | undefined => vpnFacts(id, vpnLinks.value);
+// A connection's state, with the machine roster's answer folded in where there is one.
+const rowState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): ConnectionState =>
+    connectionState(entry.kind, instance, hostFor(instance.id)?.online);
 
 /* One row per live connection, carrying its category so the list groups the way the catalog does and a haystack
  * so the filter over it searches the things a row actually shows. That haystack is the reason the bar keeps
@@ -758,41 +519,40 @@ const connectionState = (entry: CapabilityCatalogEntry, instance: CapabilitySumm
  * they would search for, and neither is in any card's prose. */
 type ConnectionRow = CapabilityConnection & { readonly category: CapabilityCategory; readonly rank: number; readonly haystack: string };
 
-const connections = computed<ConnectionRow[]>(() =>
-    cards.value.flatMap((card) =>
-        card.instances.map((instance) => {
-            const state = connectionState(card.entry, instance);
-            const facts = (card.entry.kind === `vpn` ? vpnFacts(instance.id) : undefined) ?? connectionFacts(instance);
-            // Only where something is actually outstanding: the daemon writes these for a reader ("Not
-            // connected", "Needs a sandbox rebuild"), and echoing one beside a working connection would turn a
-            // status into noise.
-            const note = state.rank <= 1 ? instance.status.detail : undefined;
-            // A connection nobody named took the card's id (suggestName), and "docker" written under a Docker
-            // logo with "Docker" beneath it is the same word three times. Where the name IS the card, the card
-            // is the name — and the line under it is free for the facts that actually differ.
-            const named = instance.id !== card.entry.id;
-            return {
-                title: named ? instance.id : card.entry.name,
-                card: named ? card.entry.name : undefined,
-                cardId: card.entry.id,
-                id: instance.id,
-                logo: card.entry.logo,
-                icon: entryIcon(card.entry),
-                detail: facts,
-                state: state.label,
-                tone: state.tone,
-                note,
-                category: card.entry.category,
-                rank: state.rank,
-                haystack: `${instance.id} ${card.entry.name} ${card.entry.kind} ${facts}`.toLowerCase(),
-            };
-        }),
-    ),
-);
+const connectionRow = (card: CatalogCard, instance: CapabilitySummary): ConnectionRow => {
+    const state = rowState(card.entry, instance);
+    const facts = (card.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ?? connectionFacts(instance);
+    // A connection nobody named took the card's id (suggestName), and "docker" written under a Docker logo with
+    // "Docker" beneath it is the same word three times. Where the name IS the card, the card is the name — and
+    // the line under it is free for the facts that actually differ.
+    const named = instance.id !== card.entry.id;
+    return {
+        title: named ? instance.id : card.entry.name,
+        card: named ? card.entry.name : undefined,
+        cardId: card.entry.id,
+        id: instance.id,
+        logo: card.entry.logo,
+        icon: entryIcon(card.entry),
+        detail: facts,
+        state: state.label,
+        tone: state.tone,
+        // Only where something is actually outstanding: the daemon writes these for a reader ("Not connected",
+        // "Needs a sandbox rebuild"), and echoing one beside a working connection would turn a status into noise.
+        note: state.rank <= 1 ? instance.status.detail : undefined,
+        category: card.entry.category,
+        rank: state.rank,
+        haystack: `${instance.id} ${card.entry.name} ${card.entry.kind} ${facts}`.toLowerCase(),
+    };
+};
+
+const connections = computed<ConnectionRow[]>(() => cards.value.flatMap((card) => card.instances.map((instance) => connectionRow(card, instance))));
 
 const visibleConnections = computed<ConnectionRow[]>(() => {
     const needle = search.value.trim().toLowerCase();
-    return needle === `` ? connections.value : connections.value.filter((row) => row.haystack.includes(needle));
+    if (needle === ``) {
+        return connections.value;
+    }
+    return connections.value.filter((row) => row.haystack.includes(needle));
 });
 
 // The same headings as the grid, so the rail points at the same ten either way. Sorted inside a group rather
@@ -815,16 +575,16 @@ const nothingMatches = computed(() => (showingConnections.value ? connectionGrou
 
 /* --- AND THE SAME CONNECTION SEEN FROM INSIDE ITS CARD ---
  * The Connected slice above lists every connection in the sandbox; a card's own view lists the ones that came
- * from THAT card, which is where they are also acted on. Two surfaces, one vocabulary: both read their state
- * from connectionState(), so a Reddit account cannot be "needs sign-in" in the inventory and "pending" on its
- * card. That mattered enough to delete a second mapping written for the card rows alone.
+ * from THAT card, which is where they are also acted on (see <CapabilityInstanceRow>). Two surfaces, one
+ * vocabulary: both read their state from connectionState(), so a Reddit account cannot be "needs sign-in" in the
+ * inventory and "pending" on its card.
  *
  * What the card's rows need on top is the two live facts a stored config cannot answer — the address a tunnel
  * was actually given, the OS a machine actually reported. connectionFacts() is the fallback for everything
  * else, so a Postgres row still names its host and database. */
 const cardRowFacts = (instance: CapabilitySummary): string => {
     if (selected.value?.kind === `vpn`) {
-        return vpnFacts(instance.id) ?? connectionFacts(instance);
+        return vpnAddress(instance.id) ?? connectionFacts(instance);
     }
     if (selected.value?.kind === `host`) {
         return hostFor(instance.id)?.facts?.os ?? connectionFacts(instance);
@@ -832,16 +592,8 @@ const cardRowFacts = (instance: CapabilitySummary): string => {
     return connectionFacts(instance);
 };
 
-/* THE ONE UNFINISHED STEP THE ROW CANNOT OFFER ITSELF. A pending connection is waiting on one of three things,
- * and two of them — a browser's login, a computer's pairing command — are already a button on this very row, so
- * a second link beside the badge saying "Log in →" next to the Log in button was the same click twice.
- *
- * The third has nowhere on this card to go: a rebuild happens on the Sandbox screen. That is the only one that
- * still needs a link, and pointing it at the right place is the whole reason this is a function rather than a
- * `v-if` — a reader sent to /sandbox for a browser that merely needs signing in is a reader who does not come
- * back. The distinction is the daemon's "rebuild" wording (see awaitingLogin). */
-const rebuildStep = (instance: CapabilitySummary): boolean =>
-    instance.status.state === `pending` && selected.value?.kind !== `host` && !awaitingLogin(instance);
+// The one step a row cannot offer itself — a rebuild, which happens on the Sandbox screen.
+const soleRebuildStep = (instance: CapabilitySummary): boolean => rebuildStep(selected.value?.kind, instance);
 
 /* THE ONE-PER-SANDBOX CARD HAS NO LIST, because it never had one — it had a list of one, which is a different
  * thing wearing a list's chrome. Docker is not an account you hold N of; it is a part of the sandbox that is
@@ -850,84 +602,11 @@ const rebuildStep = (instance: CapabilitySummary): boolean =>
  * beside its name, which is where a state that describes the whole screen goes. */
 const soleInstance = computed<CapabilitySummary | undefined>(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
 
-// --- FortiClient import (vpn card only) ---
-// A user with an exported FortiClient config drops the file in and picks a connection instead of re-keying its
-// host, port and protocol per tunnel. The file is read HERE and only its text is posted: the daemon cannot
-// reach the user's Downloads folder, and asking someone to open an XML export and copy it out by hand was the
-// step that made this feature not worth using. Nothing is stored until the ordinary add below runs.
-const forticlientConnections = ref<ForticlientConnection[]>([]);
-// The file the list came from — named back at the user, so a picker full of unfamiliar connections is
-// attributable to what they dropped. Empty until one has been read successfully.
-const forticlientFile = ref(``);
-const importing = ref(false);
-const chooseForticlient = ref<HTMLInputElement>();
-// A FortiClient backup is tens of KB of XML. Far past that, the drop was a slip — reading the file into this
-// tab and posting it is the wrong answer to one.
-const FORTICLIENT_MAX_BYTES = 4_000_000;
-
-const readForticlientFile = async (file: File | undefined): Promise<void> => {
-    if (file === undefined || importing.value) {
-        return;
-    }
-    error.value = null;
-    forticlientFile.value = ``;
-    forticlientConnections.value = [];
-    if (file.size > FORTICLIENT_MAX_BYTES) {
-        error.value = noticeOf(`${file.name} is far too big to be a FortiClient configuration — that looks like the wrong file.`);
-        return;
-    }
-    importing.value = true;
-    try {
-        const xml = await file.text();
-        // An empty file is "nothing to import", which the line under the zone already says — posting it would
-        // trade that sentence for the route's validation error, which answers a question nobody asked.
-        forticlientConnections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
-        forticlientFile.value = file.name;
-    } catch (err) {
-        error.value = noticeFrom(err, `Could not read that FortiClient configuration.`);
-    } finally {
-        importing.value = false;
-    }
-};
-
-// Only an OS-file drag offers anything here; a link or an image dragged around inside the app must not light
-// the zone up as though it could be imported.
-const dragOffersFile = (event: DragEvent): boolean => event.dataTransfer?.types.includes(`Files`) ?? false;
-// Depth, not a boolean: crossing onto the zone's own children fires dragleave on the zone, and a boolean would
-// flicker the highlight off while the pointer is still inside it.
-let forticlientDragDepth = 0;
-const forticlientDragging = ref(false);
-const onForticlientDragEnter = (event: DragEvent): void => {
-    if (!dragOffersFile(event)) {
-        return;
-    }
-    forticlientDragDepth += 1;
-    forticlientDragging.value = true;
-};
-const onForticlientDragLeave = (): void => {
-    forticlientDragDepth -= 1;
-    if (forticlientDragDepth <= 0) {
-        forticlientDragDepth = 0;
-        forticlientDragging.value = false;
-    }
-};
-const onForticlientDrop = (event: DragEvent): void => {
-    forticlientDragDepth = 0;
-    forticlientDragging.value = false;
-    void readForticlientFile(event.dataTransfer?.files[0]);
-};
-const onForticlientPick = (event: Event): void => {
-    const input = event.target as HTMLInputElement;
-    void readForticlientFile(input.files?.[0]);
-    // Clear the field (the File is already captured): re-picking the SAME file after re-exporting it fires no
-    // `change` otherwise, and the zone would look dead.
-    input.value = ``;
-};
-
-// A file that misses the zone would otherwise navigate this tab to the file itself, taking a half-filled form
-// with it. Swallow file drags page-wide — the zone's own handler runs first and still gets its file.
+// A file that misses the FortiClient import zone would otherwise navigate this tab to the file itself, taking a
+// half-filled form with it. Swallow file drags page-wide — the zone's own handler runs first and still gets its
+// file.
 const swallowFileDrag = (event: DragEvent): void => {
-    if (dragOffersFile(event)) {
+    if (event.dataTransfer?.types.includes(`Files`) === true) {
         event.preventDefault();
     }
 };
@@ -940,49 +619,14 @@ onBeforeUnmount(() => {
     window.removeEventListener(`drop`, swallowFileDrag);
 });
 
-// Fill the form from a parsed connection. Credentials are never among them (FortiClient encrypts them), so the
-// user still types the secret — `needs` is what tells them which fields are waiting.
+// Fill the form from an imported FortiClient connection. Credentials are never among them (FortiClient encrypts
+// them), so the user still types the secret — `needs` is what tells them which fields are waiting.
 const pickForticlient = (connection: ForticlientConnection): void => {
     name.value = connection.id;
     nameEdited.value = true;
-    // Blank every secret first. FortiClient encrypts credentials, so none can be imported — and anything
-    // already in those fields belongs to a DIFFERENT connection (or to dev autofill, which remembers the last
-    // value pasted for this card). Carrying it over silently submits the wrong credential, which is exactly
-    // how an EncX blob reached the daemon and got rejected.
-    for (const field of selected.value?.fields ?? []) {
-        if (field.secret === true) {
-            values[field.key] = ``;
-        }
-    }
-    values[`provider`] = connection.provider;
-    values[`server`] = connection.server;
-    values[`port`] = String(connection.port);
-    values[`username`] = connection.username ?? ``;
-    if (connection.provider === `ipsec`) {
-        values[`localId`] = connection.localId ?? ``;
-        values[`aggressive`] = connection.aggressive === true ? `on` : `off`;
-        values[`ikeVersion`] = `1`;
-        // Phase 2 decides whether quick mode can succeed at all — carry both across from the export.
-        values[`pfs`] = connection.pfs === false ? `off` : `on`;
-        if (connection.dhGroup !== undefined) {
-            values[`dhGroup`] = connection.dhGroup;
-        }
-    }
+    Object.assign(values, forticlientAnswers(selected.value?.fields ?? [], connection));
     // The fields still needed are the ones to land on, not the top of the form.
     touched.clear();
-};
-
-const pickEntry = (entry: RegistryEntry): void => {
-    if (entry.install === undefined || blockedReason(entry) !== undefined) {
-        return;
-    }
-    name.value = entry.name.replace(/[^a-zA-Z0-9_-]/g, `-`);
-    nameEdited.value = true;
-    values[`url`] = entry.install.url;
-    values[`ref`] = entry.install.ref ?? ``;
-    values[`path`] = entry.install.path ?? ``;
-    // Code hosted inside a private registry repo needs the same token to clone.
-    values[`token`] = entry.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
 };
 
 const clearForm = (): void => {
@@ -992,11 +636,6 @@ const clearForm = (): void => {
         delete values[key];
     }
     error.value = null;
-    marketUrl.value = ``;
-    marketToken.value = ``;
-    market.value = null;
-    forticlientFile.value = ``;
-    forticlientConnections.value = [];
     touched.clear();
     shaking.value = false;
 };
@@ -1009,50 +648,13 @@ watch(
             return;
         }
         clearForm();
-        // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so re-adding
-        // creates another connection by default instead of overwriting the first.
-        name.value = suggestName(entry);
-        // Seed every editable field (ignoring `when`) so toggling a mode reveals an already-initialized field.
-        // A switch seeds to "off" rather than empty: it always shows one of its two positions, so an unseeded
-        // one would both render as off and count as an unfilled required field, blocking a submit over a
-        // control the user can see is answered.
-        for (const field of entry.fields) {
-            if (field.value === undefined) {
-                values[field.key] = field.default ?? (field.boolean === true ? `off` : ``);
-            }
-        }
-        // A one-per-sandbox card opens as an EDIT of the live entry: its echoed config wins over the defaults,
-        // so a switch shows where the user left it rather than resetting to off every time the card is opened —
-        // which, on a form whose submit updates in place, would turn "come and look" into "turn it back off".
-        // Booleans arrive from the echo as booleans and from the form as "on"/"off"; the form speaks strings.
-        const live = entry.singleton === true ? instancesOf(entry)[0] : undefined;
-        for (const [key, value] of Object.entries(live?.config ?? {})) {
-            values[key] = typeof value === `boolean` ? (value ? `on` : `off`) : String(value);
-        }
-        /* WHAT THE WORKSPACE SCAN ALREADY KNOWS, filled in — the self-hosted instance url it read off a remote,
-         * and anything else a card would otherwise ask a user to go and look up. This is where the recommended
-         * flow earns its keep: a wrong instance url is one of the two ways connecting a repository host fails,
-         * and the scan has already answered it correctly.
-         *
-         * NEVER A SECRET, and the guard is deliberate rather than defensive: a credential is the one thing this
-         * flow will not put into a form on the user's behalf, even where one is sitting in a file it has read. */
-        for (const [key, value] of Object.entries(recommendationFor(entry.id)?.prefill ?? {})) {
-            const field = entry.fields.find((candidate) => candidate.key === key);
-            if (field !== undefined && field.secret !== true && field.value === undefined) {
-                values[key] = value;
-            }
-        }
-        // Dev autofill (inert in prod): prefill secret fields with the values the last successful add used.
-        // A remembered value that the daemon would now reject is skipped — it was saved before the check
-        // existed, and silently re-offering it turns a convenience into a confusing 400 on submit.
-        for (const field of entry.fields) {
-            if (field.secret === true && field.value === undefined) {
-                const remembered = devFillGet(`capability.${entry.id}.${field.key}`);
-                if (remembered !== undefined && !isForticlientCiphertext(remembered)) {
-                    values[field.key] = remembered;
-                }
-            }
-        }
+        // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so
+        // re-adding creates another connection by default instead of overwriting the first.
+        name.value = suggestName(entry, instancesFor(entry));
+        // A one-per-sandbox card opens as an EDIT of the live entry, so its echoed config is part of the seed;
+        // dev autofill (inert in prod) lands on top of it.
+        const live = entry.singleton === true ? instancesFor(entry)[0]?.config : undefined;
+        Object.assign(values, seedValues(entry, live, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
     },
     { immediate: true },
 );
@@ -1123,6 +725,14 @@ const skip = (): void => {
         goNext(nextAfter(selected.value));
     }
 };
+// Where a card that is done with goes: on through the walk, or back to the slice it was picked out of.
+const leaveCard = (next: string | undefined): void => {
+    if (walking.value) {
+        goNext(next);
+        return;
+    }
+    back();
+};
 
 const selectedRecommendation = computed(() => (selected.value === undefined ? undefined : recommendationFor(selected.value.id)));
 
@@ -1138,35 +748,31 @@ const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
         error.value = noticeFrom(err, `Could not dismiss that suggestion.`);
         return;
     }
-    if (walking.value) {
-        goNext(next);
-        return;
-    }
-    back();
+    leaveCard(next);
 };
 
-const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
-    const config: Record<string, string> = {};
-    for (const field of entry.fields) {
-        if (field.value !== undefined) {
-            config[field.key] = field.value;
-            continue;
-        }
-        // Skip fields gated out by the current mode — e.g. the SSH credential of the unchosen auth branch.
-        if (!whenMet(field)) {
-            continue;
-        }
-        const value = (values[field.key] ?? ``).trim();
-        if (value.length > 0) {
-            config[field.key] = value;
-        }
+/* AN APPLY THAT ENDS `pending` HAS NOT FINISHED SETTING THE CAPABILITY UP, and going back to the catalog is what
+ * stranded it: the reader lands in front of a grid, with a capability that has quietly gone pending and nothing
+ * on screen saying what remains. The card they were just on already says it — the instance row's hint names the
+ * missing step and leads to it, in all three flavours (a machine's one-liner, a browser's login, a sandbox
+ * rebuild). So: pending stays, finished goes back.
+ *
+ * The two whose missing step is a DIALOG on this very card open it outright rather than leaving a hint to click,
+ * because the reader is standing there waiting for exactly that. The rebuild flavour cannot — it lives on the
+ * Sandbox screen — and deliberately does not get a bar or a redirect for it: a standing condition belongs on the
+ * sandbox chip that already carries it (see sandboxAttention.ts), and the row's link is the hand-off. */
+const handOff = (entry: CapabilityCatalogEntry, added: CapabilitySummary): void => {
+    // A machine that has never checked in is waiting on the one-liner. One that HAS is merely asleep, and a
+    // fresh pairing is not what wakes it — the same distinction the row's button draws when it says Reconnect.
+    if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
+        openConnect(added);
+        return;
     }
-    /* No `tier` and no `registry` are set from this form, and that is correct rather than an omission: both
-     * are the REGISTRY's facts about a listing, not something anybody types, and this form now only ever
-     * installs from a URL its user supplied — whose tier this browser has no way to know, and whose updates and
-     * advisories the daemon rightly compares against the official registry when no origin was recorded. A
-     * listing installed from Discover carries both from the row it was picked on. */
-    return { id: name.value.trim(), kind: entry.kind, config };
+    // An identity's sign-in is the ONE login the owner does by hand — open the window right away, exactly like
+    // a fresh account's.
+    if (signsInByHand(entry.kind) && awaitingLogin(added)) {
+        openBrowser(added.id, added.id);
+    }
 };
 
 const submit = async (): Promise<void> => {
@@ -1185,7 +791,7 @@ const submit = async (): Promise<void> => {
     }
     submitting.value = true;
     error.value = null;
-    const input = buildInput(entry);
+    const input: AddCapabilityInput = { id: name.value.trim(), kind: entry.kind, config: buildConfig(entry, values) };
     // Where the walk goes next, decided against the queue as it stands now — the add below takes this card out
     // of it, and asking afterwards would answer about a different list.
     const next = walking.value ? nextAfter(entry) : undefined;
@@ -1199,42 +805,13 @@ const submit = async (): Promise<void> => {
                 useTerminalPanel().openFocused(line[`session`]);
             }
         });
-        // Dev autofill persist (inert in prod): remember the secret fields that just worked, per card.
-        for (const field of entry.fields) {
-            if (field.secret === true && field.value === undefined) {
-                devFillSet(`capability.${entry.id}.${field.key}`, (values[field.key] ?? ``).trim());
-            }
-        }
-        /* AN APPLY THAT ENDS `pending` HAS NOT FINISHED SETTING THE CAPABILITY UP, and going back to the
-         * catalog is what stranded it: the reader lands in front of a grid, with a capability that has quietly
-         * gone pending and nothing on screen saying what remains. The card they were just on already says it —
-         * the instance row's hint names the missing step and leads to it, in all three flavours (a machine's
-         * one-liner, a browser's login, a sandbox rebuild). So: pending stays, finished goes back.
-         *
-         * The two whose missing step is a DIALOG on this very card open it outright rather than leaving a hint
-         * to click, because the reader is standing there waiting for exactly that. The rebuild flavour cannot —
-         * it lives on the Sandbox screen — and deliberately does not get a bar or a redirect for it: a standing
-         * condition belongs on the sandbox chip that already carries it (see sandboxAttention.ts), and the row's
-         * link is the hand-off. */
+        rememberSecrets(entry, values);
         const added = capabilities.value.find((capability) => capability.id === input.id);
         if (added?.status.state === `pending`) {
-            // A machine that has never checked in is waiting on the one-liner. One that HAS is merely asleep,
-            // and a fresh pairing is not what wakes it — that is the same distinction the row's button draws
-            // when it relabels itself Reconnect.
-            if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
-                openConnect(added);
-            } else if ((entry.kind === `browser` || entry.kind === `identity`) && awaitingLogin(added)) {
-                // An identity's sign-in is the ONE login the owner does by hand — open the window right away,
-                // exactly like a fresh account's.
-                openBrowser(added.id, added.id);
-            }
+            handOff(entry, added);
             return;
         }
-        if (walking.value) {
-            goNext(next);
-            return;
-        }
-        back();
+        leaveCard(next);
     } catch (err) {
         error.value = noticeFrom(err, `Could not add the capability.`);
     } finally {
@@ -1263,14 +840,30 @@ const confirmRemove = async (): Promise<void> => {
     confirmRemoveId.value = undefined;
 };
 
-const topError = computed<NoticeModel | undefined>(
-    () =>
-        error.value ??
-        (listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your capabilities.`, detail: listError.value }),
-);
-const submitLabel = computed(() =>
-    selected.value?.kind === `devops` ? `Activate` : nameCollision.value ? `Update` : selected.value?.kind === `service` ? `Add & provision` : `Add`,
-);
+const topError = computed<NoticeModel | undefined>(() => {
+    if (error.value !== null) {
+        return error.value;
+    }
+    if (listError.value === undefined) {
+        return undefined;
+    }
+    return { tone: `danger`, title: `Couldn't list your capabilities.`, detail: listError.value };
+});
+
+// The submit's word, in the card's own vocabulary. DevOps is activated rather than added; a name that already
+// exists is updated in place; a service is provisioned as it is added.
+const submitLabel = computed(() => {
+    if (selected.value?.kind === `devops`) {
+        return `Activate`;
+    }
+    if (nameCollision.value) {
+        return `Update`;
+    }
+    if (selected.value?.kind === `service`) {
+        return `Add & provision`;
+    }
+    return `Add`;
+});
 </script>
 
 <template>
@@ -1330,8 +923,8 @@ const submitLabel = computed(() =>
                                         v-if="soleInstance"
                                         size="xs"
                                         :dot="true"
-                                        :variant="connectionState(selected, soleInstance).tone"
-                                        :label="connectionState(selected, soleInstance).label"
+                                        :variant="rowState(selected, soleInstance).tone"
+                                        :label="rowState(selected, soleInstance).label"
                                     />
                                 </div>
                                 <div class="text-xs text-muted">{{ selected.description }}</div>
@@ -1351,7 +944,7 @@ const submitLabel = computed(() =>
                         <!-- A one-per-sandbox card whose setup never finished has no row to carry the step it is
                              waiting on, so it carries it here — directly under the heading its badge is on. -->
                         <RouterLink
-                            v-if="soleInstance && rebuildStep(soleInstance)"
+                            v-if="soleInstance && soleRebuildStep(soleInstance)"
                             to="/sandbox/environment"
                             class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
                         >
@@ -1365,16 +958,7 @@ const submitLabel = computed(() =>
                         </div>
 
                         <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-                            <!-- WHAT YOU ALREADY HAVE OF THIS CARD — a list of accounts, and therefore a LIST:
-                                 <Row> at the density every other record list in the app is read at, one line
-                                 each. It used to be a stack of two-line blocks, and the second line was a strip
-                                 of icon-only effect glyphs repeated identically under every row — the same three
-                                 symbols under all three GitHub connections, saying nothing that distinguished
-                                 one from another, and clickable-looking without being clickable. Effects are a
-                                 fact about the CARD, so they are stated once, in the column beside this one.
-                                 What is left is what actually differs per connection: its name, its state, the
-                                 live fact it reports, and what you can do to it.
-
+                            <!-- WHAT YOU ALREADY HAVE OF THIS CARD — a list of accounts, and therefore a LIST.
                                  Suppressed entirely for a one-per-sandbox card, whose single instance is the
                                  subject of the heading above rather than an entry under it. -->
                             <RowGroup
@@ -1382,135 +966,21 @@ const submitLabel = computed(() =>
                                 label="Your connections"
                                 :count="selectedInstances.length"
                             >
-                                <Row v-for="instance in selectedInstances" :key="instance.id" density="compact">
-                                    <template #title>
-                                        <span class="flex flex-wrap items-center gap-2">
-                                            <span class="font-mono">{{ instance.id }}</span>
-                                            <StatusBadge
-                                                size="xs"
-                                                :dot="true"
-                                                :variant="connectionState(selected, instance).tone"
-                                                :label="connectionState(selected, instance).label"
-                                            />
-                                            <!-- The one unfinished step this row has no button for, in line with
-                                                 the badge that named it: it is one clause, and giving it a line
-                                                 of its own is what made these rows two-deep. The badge says the
-                                                 STATE in the reader's words and this says what is actually
-                                                 outstanding, in the daemon's — the same division <CapabilityConnections>
-                                                 draws between a row's state and its note. -->
-                                            <RouterLink
-                                                v-if="rebuildStep(instance)"
-                                                to="/sandbox/environment"
-                                                class="text-2xs text-warning hover:underline"
-                                            >
-                                                {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
-                                            </RouterLink>
-                                        </span>
-                                    </template>
-                                    <!-- A tunnel's address and what it routes, a machine's reported OS: what the
-                                         connection says about itself, in the column <Row> reserves for facts.
-                                         CAPPED, because a split tunnel lists every network it carries and the
-                                         column does not shrink — left to run, it pushed the name and its badge
-                                         onto two lines. The full list is one hover away and, unabridged, on the
-                                         Status card that dials the thing. -->
-                                    <template v-if="cardRowFacts(instance)" #meta>
-                                        <span class="block max-w-40 truncate font-mono" :title="cardRowFacts(instance)">
-                                            {{ cardRowFacts(instance) }}
-                                        </span>
-                                    </template>
-                                    <template #control>
-                                        <div class="flex items-center gap-1">
-                                            <!-- A computer is connected by running a command ON IT — this button hands over that
-                                             command (and is also how a machine is re-connected after being revoked). -->
-                                            <Button
-                                                v-if="selected.kind === 'host'"
-                                                :label="
-                                                    hostFor(instance.id) === undefined || !hostFor(instance.id)?.lastSeen ? 'Connect' : 'Reconnect'
-                                                "
-                                                size="small"
-                                                :text="true"
-                                                @click="openConnect(instance)"
-                                            >
-                                                <template #icon><Icon name="desktop" /></template>
-                                            </Button>
-                                            <!-- Revoke cuts this machine off without removing the capability, so the card keeps
-                                             its name and permissions and Connect re-pairs it. Removing the capability does
-                                             both, which is a different intent. -->
-                                            <Button
-                                                v-if="selected.kind === 'host' && hostFor(instance.id)?.lastSeen"
-                                                label="Revoke"
-                                                size="small"
-                                                :text="true"
-                                                severity="warn"
-                                                @click="removeHostAccess(instance.id)"
-                                            >
-                                                <template #icon><Icon name="sign-out" /></template>
-                                            </Button>
-                                            <!-- A connected browser is an account the user still owns, so the window that signed
-                                                 it in is also the way to USE it: check a message, clear a captcha, change a
-                                                 setting the agent has no business changing. Only once it is connected — before
-                                                 that the same window's job is the sign-in beside it. Both pass THIS ROW's
-                                                 instance: the card may hold several accounts of the site, and the window opens
-                                                 one of them. -->
-                                            <Button
-                                                v-if="
-                                                    (selected.kind === 'browser' || selected.kind === 'identity') &&
-                                                    instance.status.state === 'active'
-                                                "
-                                                label="Open browser"
-                                                size="small"
-                                                :text="true"
-                                                @click="openBrowser(instance.id, instance.id, `browse`)"
-                                            >
-                                                <template #icon><Icon name="globe" /></template>
-                                            </Button>
-                                            <!-- A browser capability connects via a live login window, not a form — offer it here
-                                                 (also the way to re-log-in once a session expires). An identity's window is the
-                                                 same thing pointed at its email provider — the one login that stays human. -->
-                                            <Button
-                                                v-if="selected.kind === 'browser' || selected.kind === 'identity'"
-                                                :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
-                                                size="small"
-                                                :text="true"
-                                                @click="openBrowser(instance.id, instance.id)"
-                                            >
-                                                <template #icon><Icon name="sign-in" /></template>
-                                            </Button>
-                                            <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
-                                                 starts it in the capability's job session and the terminal panel opens on it. -->
-                                            <Button
-                                                v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
-                                                label="Sign in"
-                                                size="small"
-                                                :text="true"
-                                                @click="startAgentLogin(instance.id)"
-                                            >
-                                                <template #icon><Icon name="sign-in" /></template>
-                                            </Button>
-                                            <!-- A VPN is dialled from the Status card, which owns the whole flow (progress,
-                                             the gateway's own error text, a one-time code field). Linking there beats a
-                                             second, thinner set of controls that would handle 2FA worse. -->
-                                            <RouterLink
-                                                v-if="selected.kind === 'vpn'"
-                                                to="/sandbox/status"
-                                                class="inline-flex items-center gap-1 px-2 text-2xs text-link hover:underline"
-                                            >
-                                                Connect / disconnect <Icon name="arrow-right" class="text-2xs" />
-                                            </RouterLink>
-                                            <Button
-                                                v-if="selected.kind !== 'devops'"
-                                                size="small"
-                                                severity="danger"
-                                                :text="true"
-                                                :rounded="true"
-                                                aria-label="Remove instance"
-                                                @click="askRemove(instance.id)"
-                                            >
-                                                <template #icon><Icon name="trash" /></template>
-                                            </Button>
-                                        </div>
-                                    </template>
-                                </Row>
+                                <CapabilityInstanceRow
+                                    v-for="instance in selectedInstances"
+                                    :key="instance.id"
+                                    :entry="selected"
+                                    :instance="instance"
+                                    :host="hostFor(instance.id)"
+                                    :state="rowState(selected, instance)"
+                                    :facts="cardRowFacts(instance)"
+                                    @connect="openConnect(instance)"
+                                    @revoke="removeHostAccess(instance.id)"
+                                    @browse="openBrowser(instance.id, instance.id, `browse`)"
+                                    @login="openBrowser(instance.id, instance.id)"
+                                    @agent-login="startAgentLogin(instance.id)"
+                                    @remove="askRemove(instance.id)"
+                                />
                             </RowGroup>
 
                             <!-- The gateway serving those connections. It answers the question the connector page is
@@ -1555,81 +1025,9 @@ const submitLabel = computed(() =>
                                 </div>
                             </RowGroup>
 
-                            <!-- FortiClient import (vpn only): drop an exported config and pick a connection to pre-fill
-                             the form. FortiClient encrypts stored credentials with a machine-bound key, so the secret
-                             is never importable — each connection says which fields are still waiting. -->
-                            <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
-                                <div class="flex flex-col gap-2 px-4 py-3">
-                                    <p class="text-2xs text-muted">
-                                        Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its
-                                        connections. Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
-                                    </p>
-                                    <!-- The zone IS the button, so the drag and the click share one target and there is no
-                                     small "browse" link beside it to aim at. -->
-                                    <button
-                                        type="button"
-                                        :class="
-                                            cmp.emptyState(
-                                                `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
-                                                forticlientDragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
-                                            )
-                                        "
-                                        :disabled="importing"
-                                        @click="chooseForticlient?.click()"
-                                        @dragenter.prevent="onForticlientDragEnter"
-                                        @dragover.prevent
-                                        @dragleave="onForticlientDragLeave"
-                                        @drop.prevent="onForticlientDrop"
-                                    >
-                                        <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
-                                        <Icon v-else name="upload" :class="['text-lg', forticlientDragging ? 'text-primary-500' : 'text-muted']" />
-                                        <span class="text-xs text-content">
-                                            <template v-if="importing">Reading…</template>
-                                            <template v-else-if="forticlientDragging">Drop it to read its connections</template>
-                                            <template v-else>Drop the configuration file here</template>
-                                        </span>
-                                        <!-- Hidden, never unmounted: dropping the line would shorten the zone under the
-                                         pointer mid-drag, and a cursor near its bottom edge would then leave and
-                                         re-enter it in a loop. -->
-                                        <span :class="['text-2xs text-subtle', importing || forticlientDragging ? 'invisible' : '']"
-                                            >or click to choose one</span
-                                        >
-                                    </button>
-                                    <input
-                                        ref="chooseForticlient"
-                                        type="file"
-                                        accept=".conf,.xml,text/xml,application/xml"
-                                        class="hidden"
-                                        @change="onForticlientPick"
-                                    />
-                                    <p v-if="forticlientFile !== '' && forticlientConnections.length === 0" class="text-2xs text-warning">
-                                        No VPN connections found in {{ forticlientFile }}.
-                                    </p>
-                                    <template v-if="forticlientConnections.length > 0">
-                                        <p class="text-2xs text-subtle">From {{ forticlientFile }} — pick the connection to fill the form with.</p>
-                                        <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
-                                            <button
-                                                v-for="connection in forticlientConnections"
-                                                :key="`${connection.provider}-${connection.id}`"
-                                                type="button"
-                                                class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
-                                                @click="pickForticlient(connection)"
-                                            >
-                                                <span class="flex items-baseline gap-2">
-                                                    <span class="font-medium text-content">{{ connection.label }}</span>
-                                                    <span class="text-2xs text-subtle">{{
-                                                        connection.provider === "fortinet" ? "SSL-VPN" : "IPsec"
-                                                    }}</span>
-                                                    <span class="min-w-0 truncate font-mono text-2xs text-muted">
-                                                        {{ connection.server }}:{{ connection.port }}
-                                                    </span>
-                                                </span>
-                                                <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
-                                            </button>
-                                        </div>
-                                    </template>
-                                </div>
-                            </RowGroup>
+                            <!-- Fill this form from the file FortiClient already wrote. Keyed on the card so
+                                 leaving it and coming back starts with an empty zone rather than a stale list. -->
+                            <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
 
                             <!-- WHERE EXTENSIONS ARE FOUND, said on the card people arrive at wanting one. This
                                  form is the "I already have a repository and a commit" path and it stays exactly
@@ -1655,92 +1053,14 @@ const submitLabel = computed(() =>
                                 <Icon name="arrow-right" class="shrink-0 text-subtle" />
                             </RouterLink>
 
-                            <!-- Registry browse (plugins only — extensions have Discover). Resolve a marketplace
-                                 repo and pre-fill the form below. -->
-                            <RowGroup v-if="selected.kind === 'plugin'" label="From a registry (optional)">
-                                <div class="flex flex-col gap-2 px-4 py-3">
-                                    <div class="flex gap-2">
-                                        <input
-                                            v-model="marketUrl"
-                                            placeholder="https://github.com/owner/registry"
-                                            :class="cmp.input('min-w-0 flex-1')"
-                                        />
-                                        <input
-                                            v-model="marketToken"
-                                            type="password"
-                                            autocomplete="off"
-                                            placeholder="Token"
-                                            :class="cmp.input('w-28')"
-                                        />
-                                        <Button
-                                            label="Browse"
-                                            size="small"
-                                            :disabled="marketUrl.trim().length === 0 || browsing"
-                                            :loading="browsing"
-                                            @click="browse"
-                                        />
-                                    </div>
-                                    <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
-                                        <button
-                                            v-for="entry in marketEntries"
-                                            :key="entry.name"
-                                            type="button"
-                                            class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
-                                            :disabled="blockedReason(entry) !== undefined"
-                                            @click="pickEntry(entry)"
-                                        >
-                                            <!-- The mark the registry carries, which for most rows is the extension's own
-                                             initials: these are names nobody has seen before, and a column of marks is
-                                             the only thing here that can be scanned without reading. -->
-                                            <BrandMark :size="20" :name="entry.name" :logo="entry.logo" :icon="entry.icon" />
-                                            <!-- Verified is the only badge: it is the one state a human asserted, and badging
-                                             "listed" too would dress the honest default up as a review. -->
-                                            <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
-                                            <span class="font-medium text-content">{{ entry.name }}</span>
-                                            <!-- The price, before the click: a premium row needs a membership to install,
-                                             and its retained use is what pays its creator from the pool. -->
-                                            <span
-                                                v-if="entry.tier === 'premium'"
-                                                class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                                                v-tooltip.top="`Premium — needs an intentic membership; installing donates credits to its creator`"
-                                                >Premium</span
-                                            >
-                                            <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-                                            <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned
-                                             commit and found (or didn't) a thing that loads. Silent when there are no
-                                             checks at all — absence of evidence is not a warning. -->
-                                            <Icon
-                                                v-if="checksOk(entry)"
-                                                name="check"
-                                                class="shrink-0 text-success"
-                                                v-tooltip.top="`Loads — re-checked at the pinned commit by the registry's nightly scan`"
-                                            />
-                                            <Icon
-                                                v-else-if="checksProblem(entry)"
-                                                name="exclamation-triangle"
-                                                class="shrink-0 text-warning"
-                                                v-tooltip.top="checksProblem(entry)"
-                                            />
-                                            <span
-                                                v-if="entry.stars !== undefined"
-                                                class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle"
-                                            >
-                                                <Icon name="star" />{{ entry.stars }}
-                                            </span>
-                                            <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
-                                            <span
-                                                v-if="blockedReason(entry)"
-                                                :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
-                                            >
-                                                {{ blockedReason(entry) }}
-                                            </span>
-                                        </button>
-                                    </div>
-                                    <p v-if="market && marketEntries.length === 0" class="text-2xs text-subtle">
-                                        That registry lists no plugins.
-                                    </p>
-                                </div>
-                            </RowGroup>
+                            <!-- Registry browse (plugins only — extensions have Discover). -->
+                            <PluginRegistryBrowse
+                                v-if="selected.kind === 'plugin'"
+                                :key="selected.id"
+                                :kind="selected.kind"
+                                @pick="applyRegistryPick"
+                                @notice="error = $event"
+                            />
 
                             <!-- WHAT THE FORM BELOW IS FOR, said out loud. The fields used to begin immediately
                                  under the list of existing connections, which left "Name" — pre-filled with
@@ -1758,13 +1078,13 @@ const submitLabel = computed(() =>
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
-                                    :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
+                                    :class="[cmp.input(), touched.has('name') && nameProblem ? 'ui-field-input-error' : '']"
                                     @input="nameEdited = true"
                                     @blur="markTouched('name')"
                                 />
-                                <span v-if="touched.has('name') && nameError" class="ui-field-error">
+                                <span v-if="touched.has('name') && nameProblem" class="ui-field-error">
                                     <Icon name="exclamation-triangle" class="text-2xs" />
-                                    {{ nameError }}
+                                    {{ nameProblem }}
                                 </span>
                                 <span v-else-if="nameCollision" class="mt-1 inline-flex items-center gap-1 text-2xs text-warning">
                                     <Icon name="exclamation-triangle" />
@@ -1778,7 +1098,7 @@ const submitLabel = computed(() =>
                              From @3xl it is docked in a column of its own (see the aside below) and this one is
                              hidden — exactly one of the two is ever on screen. -->
                             <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                            <template v-for="field in visibleFields(selected)" :key="field.key">
+                            <template v-for="field in formFields(selected)" :key="field.key">
                                 <!-- AN ANSWERED QUESTION SITS BESIDE ITS LABEL, NOT UNDER IT. Stacked in the column of
                                  inputs it reads as one more thing to fill in; beside the label it reads as the thing it
                                  is — already answered, changeable. Its hint carries what the label can't say (a host
@@ -1841,7 +1161,7 @@ const submitLabel = computed(() =>
                                         spellcheck="false"
                                         :class="[
                                             cmp.input('font-mono resize-y'),
-                                            touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '',
+                                            touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '',
                                         ]"
                                         @blur="markTouched(field.key)"
                                     />
@@ -1851,12 +1171,12 @@ const submitLabel = computed(() =>
                                         :type="field.secret ? 'password' : 'text'"
                                         :autocomplete="field.secret ? 'off' : undefined"
                                         :placeholder="field.placeholder"
-                                        :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                                        :class="[cmp.input(), touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '']"
                                         @blur="markTouched(field.key)"
                                     />
-                                    <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
+                                    <span v-if="touched.has(field.key) && fieldProblem(field)" class="ui-field-error">
                                         <Icon name="exclamation-triangle" class="text-2xs" />
-                                        {{ fieldError(field) }}
+                                        {{ fieldProblem(field) }}
                                     </span>
                                     <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
                                 </label>
