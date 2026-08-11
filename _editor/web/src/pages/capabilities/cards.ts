@@ -1,5 +1,6 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
-import { type CapabilityCatalogEntry, type CapabilityCategory, contributionCard } from "@intentic-app/capability-catalog";
+import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory, contributionCard } from "@intentic-app/capability-catalog";
+import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 
@@ -98,6 +99,51 @@ export const instancesOf = (entry: CapabilityCatalogEntry, capabilities: readonl
         return capabilities.filter((capability) => capability.kind === entry.kind);
     }
     return capabilities.filter((capability) => capability.kind === entry.kind && disc.values.includes(String(capability.config[disc.key])));
+};
+
+/* WHICH CARD A LIVE CONNECTION CAME FROM — instancesOf run backwards, and the reason one account is named and
+ * drawn the same way on every surface that lists it. A kind's cards pin their own id into the instance's config
+ * (contributionDiscriminator — `provider` for the CLI cards, `platform` for browsers and computers), so that
+ * field is the lookup; a kind with no discriminator has exactly one card, which is why the static catalog is
+ * asked by kind alone.
+ *
+ * The card's FACE rather than the whole entry, because that is all any of the callers want: what to call the
+ * thing this connection is one of, and what to draw it as. */
+export interface CapabilityFace {
+    /** The card's id — a connection that never got a name of its own took it (suggestName). */
+    readonly id: string;
+    /** The card as a person names it: "Reddit", "Identity", "SSH". */
+    readonly name: string;
+    readonly logo?: string | undefined;
+    readonly icon?: string | undefined;
+}
+
+export const capabilityCard = (capability: CapabilitySummary, extensions: readonly ExtensionSummary[]): CapabilityFace | undefined => {
+    const key = contributionDiscriminator(capability.kind);
+    const cardId = key === undefined ? undefined : String(capability.config[key] ?? ``);
+    const contribution = extensions
+        .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
+        .find((entry) => entry.kind === capability.kind && entry.id === cardId);
+    if (contribution !== undefined) {
+        return { id: contribution.id, ...contribution.catalog };
+    }
+    const card = CAPABILITY_CATALOG.find((entry) => entry.kind === capability.kind);
+    return card === undefined ? undefined : { id: card.id, name: card.name, logo: card.logo, icon: card.icon };
+};
+
+/* Just the mark, for the rows that draw a connection but name it something of their own (a skill's title, a
+ * secret's key). Either half may be absent and the caller's own tiers fill the gap — a card with a brand and no
+ * glyph still needs something painted under the brand while it loads — so a card declaring NEITHER answers
+ * undefined rather than an empty object: "ask the next tier", never a hole. */
+export const capabilityMark = (
+    capability: CapabilitySummary,
+    extensions: readonly ExtensionSummary[],
+): { readonly logo?: string | undefined; readonly icon?: string | undefined } | undefined => {
+    const card = capabilityCard(capability, extensions);
+    if (card === undefined || (card.logo === undefined && card.icon === undefined)) {
+        return undefined;
+    }
+    return { logo: card.logo, icon: card.icon };
 };
 
 // A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, … so repeat adds create

@@ -1,7 +1,6 @@
 import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic-app/api-contract";
-import { CAPABILITY_CATALOG } from "@intentic-app/capability-catalog";
-import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import { capabilityMark } from "../../capabilities/cards";
 
 /* THE MARK ON A SKILL ROW — what makes "Discord, GitHub, your Windows PC" legible from the left edge alone,
  * instead of thirteen identical grey glyphs down a column where twelve of them said `link`.
@@ -145,25 +144,13 @@ const wordsOf = (text: string): string[] =>
         .filter((word) => word !== ``);
 
 /* A mark as its OWNER declares it: either half may be missing, and the row's own tiers fill the gap — a card
- * with a brand and no glyph still needs something painted under the brand while it loads. */
+ * with a brand and no glyph still needs something painted under the brand while it loads. A CONNECTION's owner
+ * is the card it came from, which is the join the Capabilities view already makes to list a card's instances,
+ * run backwards — shared with it (capabilityMark) rather than written twice. */
 type Declared = { readonly logo?: string; readonly icon?: string } | undefined;
 
 const declares = (mark: { readonly logo?: string; readonly icon?: string }): Declared =>
     mark.logo === undefined && mark.icon === undefined ? undefined : mark;
-
-/* WHICH CARD A CONNECTION CAME FROM. A kind's cards pin their own id into the instance's config
- * (contributionDiscriminator — `provider` for the CLI cards, `platform` for browsers and computers), so this is
- * the same join the Capabilities view makes to list a card's instances, run backwards. A kind with no
- * discriminator has exactly one card, which is why the static catalog is asked by kind alone. */
-const cardMark = (capability: CapabilitySummary, extensions: readonly ExtensionSummary[]): Declared => {
-    const key = contributionDiscriminator(capability.kind);
-    const cardId = key === undefined ? undefined : String(capability.config[key] ?? ``);
-    const contribution = extensions
-        .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
-        .find((entry) => entry.kind === capability.kind && entry.id === cardId);
-    const card = contribution?.catalog ?? CAPABILITY_CATALOG.find((entry) => entry.kind === capability.kind);
-    return card === undefined ? undefined : declares(card);
-};
 
 // What the thing that ships this skill is drawn as everywhere else in the app. Undefined when it declares
 // nothing, or when the list it lives in has not arrived yet — both are "ask the next tier", never a hole.
@@ -178,7 +165,7 @@ const declaredMark = (skill: SkillSummary, sources: SkillSources): Declared => {
     }
     if (skill.origin === `capability` || skill.origin === `plugin`) {
         const capability = sources.capabilities.find((entry) => entry.id === skill.owner);
-        return capability === undefined ? undefined : cardMark(capability, sources.extensions);
+        return capability === undefined ? undefined : capabilityMark(capability, sources.extensions);
     }
     return undefined;
 };
