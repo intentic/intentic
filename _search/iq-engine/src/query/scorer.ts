@@ -1,5 +1,6 @@
 import type { Embedder } from "../embed/embedder.js";
 import type { Reranker } from "../embed/reranker.js";
+import type { VectorCache } from "../embed/vector-cache.js";
 import { embedPending, semanticSearch } from "../engines/semantic.js";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit } from "../types.js";
@@ -42,6 +43,9 @@ export interface InThreadScorerOptions {
     // where a query is the only thing that ever runs and so the only thing that can advance coverage; false
     // wherever an indexer owns the backlog.
     readonly topUpEmbeddings: boolean;
+    // The persistent vector sidecar, consulted only when topping up. A getter for the same reason the models
+    // are: only the query that actually tops up should pay the open.
+    readonly cache: () => VectorCache | undefined;
 }
 
 // Runs both stages on the caller's thread.
@@ -52,7 +56,7 @@ export const inThreadScorer = (options: InThreadScorerOptions): QueryScorer => (
             return undefined;
         }
         const pending = options.topUpEmbeddings
-            ? await embedPending(options.db, embedder)
+            ? await embedPending(options.db, embedder, options.cache())
             : Number(options.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
         return { hits: semanticSearch(options.db, await embedder.embedQuery(query), allowed), pending };
     },

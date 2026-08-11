@@ -2,8 +2,9 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
-import { type Embedder, loadEmbedder } from "./embed/embedder.js";
+import { type Embedder, loadEmbedder, MODEL_ID } from "./embed/embedder.js";
 import { loadReranker, type Reranker } from "./embed/reranker.js";
+import { openVectorCache, type VectorCache, vectorCachePath } from "./embed/vector-cache.js";
 import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
 import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
@@ -132,6 +133,18 @@ export const createEngine = (options: EngineOptions): Engine => {
     const getEmbedder = (): Promise<Embedder | undefined> => (embedderPromise ??= loadEmbedder(options.modelDir));
     let rerankerPromise: Promise<Reranker | undefined> | undefined;
     const getReranker = (): Promise<Reranker | undefined> => (rerankerPromise ??= loadReranker(options.modelDir));
+    // Same lazy shape as the models, for the same reason: only a query that actually writes vectors (top-up, or
+    // the explicit rebuild) should pay the open. Lives outside indexDir, so indexDrop below never clears it —
+    // vectors are keyed by model + content, and neither is what a drop is about.
+    let cacheOpened = false;
+    let cacheHandle: VectorCache | undefined;
+    const getCache = (): VectorCache | undefined => {
+        if (!cacheOpened) {
+            cacheOpened = true;
+            cacheHandle = openVectorCache(vectorCachePath(indexDir), MODEL_ID);
+        }
+        return cacheHandle;
+    };
 
     /* THE INDEX THIS QUERY WILL SEARCH, and whether this process is allowed to bring it up to date.
      *
@@ -198,6 +211,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                             db,
                             embedder: getEmbedder,
                             reranker: getReranker,
+                            cache: getCache,
                             // Nothing indexes in the background here, so `ask` filling embeddings inline is the
                             // only thing that ever advances semantic coverage. Unless someone else owns the
                             // index: topping up WRITES vectors, so a query that did not earn the write lock
@@ -237,7 +251,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                 const embedder = await getEmbedder();
                 if (embedder !== undefined) {
                     // Full embedding pass — this is the boot-time warmup path, no cap.
-                    const remaining = await embedPending(db, embedder, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+                    const remaining = await embedPending(db, embedder, getCache(), Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
                     onProgress?.(remaining === 0 ? "embeddings complete" : `embeddings incomplete: ${remaining} chunks pending`);
                 }
                 return readIndexStatus(db, generation);

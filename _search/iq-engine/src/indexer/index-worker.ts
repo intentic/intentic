@@ -1,6 +1,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import type { Embedder } from "../embed/embedder.js";
-import { loadEmbedder } from "../embed/embedder.js";
+import { loadEmbedder, MODEL_ID } from "../embed/embedder.js";
+import { openVectorCache, vectorCachePath } from "../embed/vector-cache.js";
 import { embedPending } from "../engines/semantic.js";
 import { compactIndex, openIndex } from "../store/db.js";
 import { readIndexStatus } from "../store/index-store.js";
@@ -70,6 +71,10 @@ const post = (event: IndexWorkerEvent): void => {
 // this runs the directory is settled — only one thread is ever in a position to delete it.
 const db = openIndex(indexDir, "write");
 syncModel(db, modelDir);
+// The vector sidecar deliberately does NOT live in indexDir: openIndex drops that dir on schema drift, and
+// surviving exactly that drop is this cache's whole reason to exist. undefined (open failed twice) turns the
+// cache off, never the semantic tier.
+const vectorCache = openVectorCache(vectorCachePath(indexDir), MODEL_ID);
 
 let embedderPromise: Promise<Embedder | undefined> | undefined;
 const getEmbedder = (): Promise<Embedder | undefined> => (embedderPromise ??= loadEmbedder(modelDir));
@@ -123,7 +128,7 @@ const embedSlice = async (): Promise<number> => {
     if (embedder === undefined) {
         return 0;
     }
-    return embedPending(db, embedder, EMBED_SLICE_CHUNKS, EMBED_SLICE_MS);
+    return embedPending(db, embedder, vectorCache, EMBED_SLICE_CHUNKS, EMBED_SLICE_MS);
 };
 
 // One thing at a time on this thread, FRESHNESS FIRST. Each turn re-reads `requested`, so a notification that
@@ -153,6 +158,7 @@ const drain = async (): Promise<void> => {
                 // Only once the backlog is gone — compaction between slices would pay a full incremental vacuum
                 // for every few hundred chunks of a rebuild.
                 compactIndex(db);
+                vectorCache?.compact();
                 /* WARM MEANS THE SEMANTIC TIER IS ACTUALLY THERE, which is why it is published HERE and not at
                  * the end of the first pass. Slicing the backlog made that tempting — the index answers for
                  * what is on disk long before the vectors exist — but a caller that awaits warm() and then
