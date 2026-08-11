@@ -13,6 +13,7 @@ import {
 } from "vue";
 import { traceFocus } from "./chat/focusTrace";
 import { unwatchOnScreen, watchOnScreen } from "./onScreen";
+import { appScreen, centreIn, fitInto, knownScreens, learnScreens, otherScreen, type ScreenRect, screenHolding } from "./screens";
 
 /* Pop-out window core, shared by the chat panel and the terminal panel. createPopout builds one independent
  * pop-out store: the panel's DOM is teleported into a REAL browser window (window.open) while the JS stays in
@@ -177,13 +178,11 @@ const dressWindow = (win: Window, title: string): void => {
  * (screenX / screenY / outerWidth / outerHeight). Being the same four is what lets the frame the user left the
  * window in be asked for again: popping out is a many-times-a-day gesture, and a window that always opens
  * centred on the app is one the user drags back to the same corner of the same screen every single time.
- * Chrome only honors a separate window (rather than a tab) when `popup` is asked for. */
-interface Frame {
-    readonly left: number;
-    readonly top: number;
-    readonly width: number;
-    readonly height: number;
-}
+ * Chrome only honors a separate window (rather than a tab) when `popup` is asked for.
+ *
+ * They are also the four a SCREEN's work area is described by (screens.ts), which is what lets a frame be fitted
+ * to the monitor it is going to land on rather than merely remembered. */
+type Frame = ScreenRect;
 
 const features = (frame: Frame): string =>
     `popup=1,width=${Math.round(frame.width)},height=${Math.round(frame.height)},left=${Math.round(frame.left)},top=${Math.round(frame.top)}`;
@@ -200,17 +199,29 @@ const centred = (size: { width: number; height: number }): Frame => ({
 // minimized one reporting zeros) rather than a preference — reopening into it would hand back an unusable sliver.
 const MIN_FRAME = 240;
 
-/* A remembered frame is honored verbatim, INCLUDING a position on a screen this page cannot measure — that is
- * the whole point, since the second monitor is where a popped-out panel tends to live. The one case worth
- * second-guessing is the monitor that has since been unplugged, whose coordinates now name nothing: a window
- * opened out there is one the user can neither find nor close. `screen.isExtended` is all a page is told about
- * the desktop's shape without asking permission, and only its FALSE is actionable — one screen attached, so a
- * frame that doesn't overlap it is stranded and the panel opens centred instead. Undefined (a browser that
- * doesn't answer) or true leaves the frame alone; guessing there would strand the multi-monitor user this
- * remembers the frame for. */
-const onSomeScreen = (frame: Frame): boolean =>
-    window.screen.isExtended !== false ||
-    (frame.left < window.screen.availWidth && frame.top < window.screen.availHeight && frame.left + frame.width > 0 && frame.top + frame.height > 0);
+/* Is there still a monitor where this frame remembers being? The case worth catching is the one that has since
+ * been unplugged, whose coordinates now name nothing: a window opened out there is one the user can neither find
+ * nor close.
+ *
+ * Answered against the real desktop when its shape is known (screens.ts) — every screen, not just the app's, so
+ * the second monitor a popped-out panel tends to live on is checked rather than guessed at. Failing that,
+ * `screen.isExtended` is all a page is told without asking permission, and only its FALSE is actionable: one
+ * screen attached, so a frame that doesn't overlap it is stranded and the panel opens centred instead. Undefined
+ * (a browser that doesn't answer) or true leaves the frame alone; guessing there would strand the multi-monitor
+ * user this remembers the frame for. */
+const onSomeScreen = (frame: Frame): boolean => {
+    const screens = knownScreens();
+    if (screens !== undefined) {
+        return screenHolding(frame, screens) !== undefined;
+    }
+    return (
+        window.screen.isExtended !== false ||
+        (frame.left < window.screen.availWidth &&
+            frame.top < window.screen.availHeight &&
+            frame.left + frame.width > 0 &&
+            frame.top + frame.height > 0)
+    );
+};
 
 // Every pop-out store on the page, by window name — a keeper knows only its own name, and the page it calls
 // back may be a completely fresh load, so the hook resolves the store at call time. An unknown name answers
@@ -478,6 +489,45 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         return onSomeScreen(frame) ? frame : undefined;
     };
 
+    /* WHICH MONITOR THE WINDOW OPENS ON, AND AT WHAT SIZE — the two halves of "put it where it belongs".
+     *
+     * A remembered frame still wins, because where the user keeps this window is a preference and not a default.
+     * What it no longer does is win VERBATIM: it is fitted to the work area of the monitor it points at, so a
+     * frame recorded on the big screen cannot reopen a window wider or taller than the small screen it is now
+     * being asked for — the state that leaves a chat with its own edges off the side of the display.
+     *
+     * With nothing remembered, the default is the screen the app is NOT on. That is the whole gesture this
+     * serves: a panel is popped out to be read BESIDE the app, which on a one-screen desk means beside the
+     * window and on a two-screen desk means on the other monitor — where, until the desktop's shape could be
+     * asked for, the reader had to carry it by hand every single time. */
+    const targetFrame = (): Frame => {
+        const remembered = rememberedFrame();
+        if (remembered !== undefined) {
+            const screen = screenHolding(remembered, knownScreens());
+            return screen === undefined ? remembered : fitInto(remembered, screen);
+        }
+        const elsewhere = otherScreen();
+        if (elsewhere !== undefined) {
+            return centreIn(elsewhere, size());
+        }
+        const here = appScreen();
+        const wanted = centred(size());
+        return here === undefined ? wanted : fitInto(wanted, here);
+    };
+
+    /* Put an already-open window where it belongs, for the one moment the answer arrives too late to have been
+     * asked for at open time: the very first pop-out, whose gesture is what prompted for the desktop's shape in
+     * the first place. Every pop-out after it is placed by window.open itself. */
+    const place = (win: Window): void => {
+        if (win.closed || knownScreens() === undefined) {
+            return;
+        }
+        const frame = targetFrame();
+        // Shrink before moving: a window still at its old size cannot be positioned inside a smaller screen.
+        win.resizeTo(Math.round(frame.width), Math.round(frame.height));
+        win.moveTo(Math.round(frame.left), Math.round(frame.top));
+    };
+
     /* Two ways the wait for a returning window can end, and they are NOT the same decision — running them
      * through one flag is what let a window that reported in a beat late get closed under the user, panel and
      * all, for the crime of a slow reload:
@@ -679,12 +729,18 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         }
         // A matching target name reuses the window it already refers to, navigating it: re-popping cannot stack
         // windows, and a window a reload left floating is taken back over rather than joined by a second one.
-        const win = window.open(`${popoutPage()}?panel=${name}`, name, features(rememberedFrame() ?? centred(size())));
+        const win = window.open(`${popoutPage()}?panel=${name}`, name, features(targetFrame()));
         if (win === null) {
             return; // blocked by the popup blocker — the panel stays docked
         }
         dismissed = false;
         win.focus();
+        /* The gesture that wants the desktop's shape is the one that asks for it (screens.ts). It is asked for
+         * AFTER the window is open, never before: the prompt is answered in human time, and a window.open that
+         * waits on it has spent its click and is blocked as a popup. So the first pop-out of all opens where a
+         * single screen's worth of information allows, and moves to where it belongs the moment the reader
+         * agrees — which is also the last time any of this is asked. */
+        void learnScreens().then(() => place(win));
     };
 
     const toggle = (): void => {
@@ -705,9 +761,14 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         if (win === undefined || win.closed || win.outerWidth >= width) {
             return;
         }
-        // What is left of the screen to the window's right. A window on a monitor this page cannot measure
-        // reports an offset past that screen and comes out negative, which the floor turns into "leave it".
-        const room = Math.max(win.outerWidth, window.screen.availWidth - win.screenX);
+        // What is left of the screen to the window's right — of the screen the window is ACTUALLY on when the
+        // desktop's shape is known (screens.ts), which is the only way a window on the second monitor gets to
+        // widen at all. Failing that it is measured against the one screen this page can see, where a window
+        // further right reports an offset past its edge and comes out negative: the floor turns that into
+        // "leave it alone", which is the right answer for a frame nothing here can reason about.
+        const onScreen = screenHolding({ left: win.screenX, top: win.screenY, width: win.outerWidth, height: win.outerHeight }, knownScreens());
+        const rightEdge = onScreen === undefined ? window.screen.availWidth : onScreen.left + onScreen.width;
+        const room = Math.max(win.outerWidth, rightEdge - win.screenX);
         win.resizeTo(Math.round(Math.min(width, room)), win.outerHeight);
     };
 
