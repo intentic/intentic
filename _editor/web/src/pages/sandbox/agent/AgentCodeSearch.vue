@@ -108,13 +108,14 @@ const contextDilution = computed(() => (savings.value?.context === undefined ? `
                          it ran before it opened a file. Judged on searches rather than on what the turn cost —
                          cost is dominated by how big the job was, which is not what the retrieval changes. -->
                     <div v-if="contextReadings.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2 text-2xs">
-                        <p v-for="row in contextReadings" :key="row.verdict.unit">
-                            <span class="tabular-nums" :class="row.verdict.tone === `success` ? `text-success` : `text-muted`">
-                                {{ row.verdict.value }}
-                            </span>
-                            <span class="text-muted">
-                                {{ row.verdict.unit }} — {{ row.verdict.detail }}, over {{ row.on }} retrieved vs {{ row.off }} cold turns.
-                            </span>
+                        <!-- The verdict is the only span, and the rest of the sentence is the paragraph's own
+                             text: two adjacent elements separated by a line break have that break COMPILED AWAY,
+                             which ran "Measuring" into "searches per turn". Same shape the Savings card uses. -->
+                        <p v-for="row in contextReadings" :key="row.verdict.unit" class="text-muted">
+                            <span class="tabular-nums" :class="row.verdict.tone === `success` ? `text-success` : `text-muted`">{{
+                                row.verdict.value
+                            }}</span>
+                            {{ row.verdict.unit }} — {{ row.verdict.detail }}, over {{ row.on }} retrieved vs {{ row.off }} cold turns.
                         </p>
                         <!-- The arm is intention-to-treat, so most of it may never have been treated. Naming the largest
                              reason is what turns "19% delivered" from an alarm into a fact you can act on. -->
