@@ -10,12 +10,17 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 
 /* THE CUT — one gesture for every way of going back to a point in a conversation.
  *
- * IT STANDS IN THE COLUMN'S MARGIN, level with the turn it cuts above, and it costs the transcript no height
- * whatsoever. It was a dashed rule drawn straight across the gap between every two turns with a "Fork here"
- * chip in the middle of it — and the last of those sat between the final answer and the composer, which is the
- * most valuable strip in the panel and the last place a control used once a day belongs. A mark in the margin
- * is beside the conversation instead of inside it: the reading column runs unbroken from the first turn to the
- * composer, and every turn still has its own point to cut at.
+ * IT STANDS IN THE COLUMN'S MARGIN, level with the end of the answer it follows, and it costs the transcript no
+ * height whatsoever. It was a dashed rule drawn straight across the gap between every two turns with a "Fork
+ * here" chip in the middle of it — and the last of those sat between the final answer and the composer, which is
+ * the most valuable strip in the panel and the last place a control used once a day belongs. A mark in the
+ * margin is beside the conversation instead of inside it: the reading column runs unbroken from the first turn
+ * to the composer, and every answer still has its own point to cut at.
+ *
+ * EVERY ANSWER, because that is where the thought starts. The mark used to belong to the turn below the line —
+ * level with the prompt the cut ran above — so the mark for "take that answer somewhere else" stood one turn
+ * further down, and the first answer in a chat had no mark at all. Reading an answer and wanting another go at
+ * it is the whole reason this control exists, so it hangs off the answer (see forkCutsOf).
  *
  * The margin is REAL COLUMN, not negative space borrowed from the scroller (see --chat-gutter in chat.css), so
  * the mark cannot be clipped or push a horizontal scrollbar at any panel width — it simply gets narrower where
@@ -38,14 +43,10 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
  * Only the third destroys anything, so only the third arms before it fires. */
 
 const props = defineProps<{
-    /* The message index the mark sits BESIDE — the count of bubbles a fork here inherits. Zero means the mark
-       is on the very first turn, where a fork would inherit nothing: there is no cut to offer there, only the
-       whole conversation below. */
+    /* THE LINE ITSELF — the count of bubbles above it, which is also the index of the first bubble below it.
+       Every turn hands its own (forkCutsOf), so the number arrives already meaning "everything down to the end
+       of this answer". */
     cut: number;
-    /* On the last turn, and therefore carrying the one offer that has no boundary of its own — the whole
-       conversation, carried on somewhere else. It used to be a cut line of its own past the final message,
-       which is exactly the row that was sitting on top of the composer. */
-    last?: boolean;
 }>();
 
 const { conversation, messages, forkAt, streaming: conversationStreaming } = usePaneView();
@@ -84,6 +85,12 @@ let armedTimer: ReturnType<typeof setTimeout> | undefined;
 
 // The message below the line, which is what every row here acts against.
 const below = computed(() => messages.value[props.cut]);
+
+/* NOTHING BELOW THE LINE — the mark on the last answer in the chat. There is no turn past the end and so no
+ * saved state filed under it either, which leaves exactly one honest offer: the whole conversation, carried on
+ * somewhere else, promising nothing about old files. It used to be a cut line of its own drawn past the final
+ * message, which is exactly the row that was sitting on top of the composer. */
+const whole = computed(() => props.cut >= messages.value.length);
 
 /* WHETHER THE FILES CAN COME BACK TO THIS POINT AT ALL. The daemon stamps an anchor on the messages it still
  * holds a state for; no anchor means there is nothing to put the files back to, and the rows that promise old
@@ -193,8 +200,7 @@ const rewindRow = computed<MenuItem[]>(() => [
     },
 ]);
 
-/* THE WHOLE CONVERSATION, on the last turn's mark. There is no turn below this cut and so no saved state filed
- * under it either, which leaves exactly one honest offer — the one that promises nothing about old files. */
+// THE WHOLE CONVERSATION, on the last answer's mark — see `whole` for why it is the only row there.
 const wholeRow = computed<MenuItem[]>(() => [
     {
         label: `Fork the whole conversation`,
@@ -216,14 +222,11 @@ const openRows = computed<MenuItem[]>(() =>
     })),
 );
 
-// Four groups, each of which can be absent, with a rule between whichever ones are present — so no menu ever
-// opens on a separator or wears two in a row.
+// The rows this cut has to offer — a real boundary's, or the last mark's single one — followed by the branches
+// already taken from it, with a rule between whichever groups are present. So no menu ever opens on a separator
+// or wears two in a row.
 const items = computed<MenuItem[]>(() => {
-    const groups = [
-        ...(props.cut > 0 ? [forkRows.value, rewindRow.value] : []),
-        ...(props.last === true ? [wholeRow.value] : []),
-        openRows.value,
-    ].filter((group) => group.length > 0);
+    const groups = [...(whole.value ? [wholeRow.value] : [forkRows.value, rewindRow.value]), openRows.value].filter((group) => group.length > 0);
     const rows: MenuItem[] = [];
     for (const group of groups) {
         if (rows.length > 0) {
@@ -247,10 +250,11 @@ const open = (event: Event): void => {
 </script>
 
 <template>
-    <!-- A full-height strip of the column's RIGHT margin, with the mark centred in it — level with the middle
-         of the turn it cuts above, which is what makes it read as belonging to that turn rather than to the
-         boundary line above it. Zero height in the transcript by construction: the strip is absolute, and the
-         width it occupies is padding the column was already carrying.
+    <!-- A ZERO-HEIGHT strip on the line itself, last in its turn's section, with the mark standing in the
+         column's RIGHT margin just above it — the answer's own closing band, which is what makes it read as
+         belonging to that answer rather than to the prompt that follows. The negative top margin gives back the
+         one flex gap the strip would otherwise add, so the transcript is exactly as tall as it was without it,
+         and the width the mark occupies is padding the column was already carrying.
          Revealed by hovering the TURN, not the strip, so there is nothing to hunt for with the pointer. On
          touch there is no hover to reveal anything, so it stands at low opacity the way the message actions
          already do there. A cut that HAS been forked shows permanently and in the link colour — it is no longer
@@ -264,10 +268,10 @@ const open = (event: Event): void => {
          move toward the row you just armed would leave the strip and cancel it. What guards the second press
          is the four-second decay and the disarm on every reopen, both of which are about time rather than
          about where the pointer happens to be. -->
-    <div class="absolute inset-y-0 right-[calc(-1*var(--chat-gutter))] z-[6] flex w-[var(--chat-gutter)] items-center">
+    <div class="relative z-[6] -mt-1 h-0">
         <button
             type="button"
-            class="flex h-7 w-full cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
+            class="absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
             :class="[
                 forks.length > 0 ? `text-link opacity-100` : `text-subtle`,
                 forks.length > 0 ? `` : mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover/turn:opacity-100`,

@@ -21,7 +21,7 @@ import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
-import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
+import { type ChatAttachment, type ChatMessage, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
@@ -419,13 +419,13 @@ const isStreaming = (message: ChatMessage): boolean =>
 // and just as shallow: one pass, no message read beyond its role.
 const turns = computed(() => turnsOf(messages.value));
 
-/* WHERE EACH TURN STARTS in the flat transcript — the number a fork cut above that turn hands the daemon, and
- * the one thing the grouped render has thrown away (a section knows its messages, not their positions).
+/* WHAT A FORK BELOW EACH TURN INHERITS — the number that turn's mark hands the daemon (forkCutsOf), and the one
+ * thing the grouped render has thrown away: a section knows its messages, not where they sit in the flat list.
  *
  * Built as one index rather than searched per turn: `turns` is rebuilt on every paint of a streaming answer, so
  * a findIndex per section would be quadratic in the transcript on every frame — the cost this file's v-memo
  * note is about, arriving by a different road. */
-const cuts = computed(() => new Map(messages.value.map((message, index) => [message.id, index])));
+const forkCuts = computed(() => forkCutsOf(turns.value));
 
 // --- Composer --------------------------------------------------------------------------------
 const modeLabel = computed(() => modeMeta(mode.value).label);
@@ -1323,20 +1323,8 @@ watch(
                              does. A bare "continue" and an app errand both fold into the turn they serve
                              (see foldsIntoTurn), so the question that defines the work stays pinned through
                              the continued answer. -->
-                        <template v-for="(turn, index) in turns" :key="turn.id">
-                            <!-- The fork point, in the MARGIN beside each turn: everything above that turn is
-                                 what a fork here keeps. It is drawn inside the section so it can hang off the
-                                 turn's own hover and stand level with it — and so the transcript keeps the
-                                 height the old cut line between turns used to spend.
-                                 The first turn has no cut of its own (a fork inheriting nothing is a new chat,
-                                 which the strip above already offers), so it carries a mark only when it is
-                                 also the last — the one offer left there being the whole conversation. -->
+                        <template v-for="turn in turns" :key="turn.id">
                             <section class="group/turn relative flex flex-col gap-1">
-                                <ChatForkCut
-                                    v-if="(cuts.get(turn.id) ?? 0) > 0 || index === turns.length - 1"
-                                    :cut="cuts.get(turn.id) ?? 0"
-                                    :last="index === turns.length - 1"
-                                />
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is
                                      rebuilt on each paint, so without it the whole transcript is re-created to
@@ -1351,6 +1339,13 @@ watch(
                                     :streaming="isStreaming(message)"
                                     :folded="message.id === turn.id ? turn.folded : undefined"
                                 />
+                                <!-- THE FORK POINT of this turn, in the column's MARGIN at the end of the answer:
+                                     everything down to here is what a fork keeps, and everything after it is
+                                     what it leaves behind. Last in the section so it stands level with the close
+                                     of what was said rather than in the middle of it, and drawn inside the
+                                     section so it hangs off the turn's own hover — a mark nobody is pointing at
+                                     is invisible. It costs the transcript no height (see ChatForkCut). -->
+                                <ChatForkCut :cut="forkCuts.get(turn.id) ?? messages.length" />
                             </section>
                         </template>
                     </template>

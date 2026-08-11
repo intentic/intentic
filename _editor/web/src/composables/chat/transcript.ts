@@ -380,3 +380,27 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
     }
     return turns;
 };
+
+/* WHERE THE CONVERSATION CAN BE CUT — one boundary per turn, keyed by the turn it hangs off (ChatForkCut).
+ *
+ * A cut is a boundary, and a boundary can be named from either side: "redo this prompt differently" and "carry
+ * on from that answer another way" are the same line. Which side it HANGS OFF is not a detail though — it is
+ * where the user goes looking for it. The mark used to belong to the turn BELOW the line, level with the prompt
+ * the cut ran above, which put every mark one turn away from the answer that prompted the thought and left the
+ * first answer in a chat with no mark at all (there is nothing above it to keep). Nobody reads a transcript
+ * thinking "before this prompt"; they finish an ANSWER and think "take it from here". So the cut past a turn
+ * belongs to that turn: every answer in the chat has a mark of its own, beside the end of what it said.
+ *
+ * The value is the count of messages a fork there inherits, which is also the index of the message below the
+ * line — the next turn's prompt, and therefore the checkpoint a rewind restores. Past the LAST turn there is no
+ * message below and no state filed under it, so that cut is the whole conversation carried on elsewhere: the
+ * one offer that promises nothing about old files. */
+export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
+    const cuts = new Map<number, number>();
+    let below = 0;
+    for (const turn of turns) {
+        below += turn.messages.length;
+        cuts.set(turn.id, below);
+    }
+    return cuts;
+};

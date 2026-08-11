@@ -91,10 +91,10 @@ const { default: ChatForkCut } = await import("./ChatForkCut.vue");
 
 let app: App | undefined;
 
-const mount = (cut: number, last = false): HTMLElement => {
+const mount = (cut: number): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatForkCut, { cut, last }) });
+    app = createApp({ render: () => h(ChatForkCut, { cut }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
     app.component(`Icon`, defineComponent({ render: () => h(`i`) }));
     app.directive(`tooltip`, {});
@@ -169,34 +169,26 @@ describe(`the fork cut`, () => {
         expect(forkAt).toHaveBeenLastCalledWith(2, `now`);
     });
 
-    /* THE WHOLE CONVERSATION rides the LAST turn's mark. It has no boundary of its own — there is no turn past
-     * the end, and so no state filed under it either — which leaves exactly one honest offer, the one that
-     * promises nothing about old files. It used to be a cut line of its own drawn past the final message,
-     * which is to say a full-width row sitting on top of the composer. */
-    it(`offers the whole conversation on the last turn's mark`, async () => {
-        const element = mount(2, true);
+    /* THE WHOLE CONVERSATION rides the LAST answer's mark, whose cut lands past the final message. That line has
+     * no boundary of its own — there is no turn below it, and so no state filed under it either — which leaves
+     * exactly one honest offer, the one that promises nothing about old files, and no dead rows beside it. It
+     * used to be a cut line of its own drawn past the final message, which is to say a full-width row sitting on
+     * top of the composer. */
+    it(`offers only the whole conversation where nothing is left below the line`, async () => {
+        const element = mount(4);
         await openMenu(element);
 
-        expect(row(`Fork the whole conversation`)?.disabled).toBe(false);
+        expect(shown.model.map((item) => item.label)).toEqual([`Fork the whole conversation`]);
         row(`Fork the whole conversation`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         expect(forkAt).toHaveBeenCalledWith(4, `now`);
     });
 
-    // Anywhere else that row would be a second name for the cut below it, which has a mark of its own.
-    it(`keeps the whole-conversation row off the turns that are not last`, async () => {
+    // Anywhere else that row would be a second name for the cut the mark already is.
+    it(`keeps the whole-conversation row off the marks with a turn below them`, async () => {
         const element = mount(2);
         await openMenu(element);
 
         expect(row(`Fork the whole conversation`)).toBeUndefined();
-    });
-
-    // A one-turn chat has no boundary inside it — a fork above its first turn would inherit nothing — so its
-    // mark carries the single offer that still means something rather than a menu of dead rows.
-    it(`offers only the whole conversation on a lone first turn`, async () => {
-        const element = mount(0, true);
-        await openMenu(element);
-
-        expect(shown.model.map((item) => item.label)).toEqual([`Fork the whole conversation`]);
     });
 
     // The one row that destroys anything: the first press only arms, and says what the second one would cost.

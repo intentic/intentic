@@ -414,7 +414,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
     ];
 };
 
-/* GOING BACK lives in the column's margin now, beside the turn rather than on the bubble — see ChatForkCut.
+/* GOING BACK lives in the column's margin now, beside the answer rather than on the bubble — see ChatForkCut.
  * The two controls that used to hang off a user message (a history icon that rewound in place, a pencil that
  * copied the chat into a new tab) were the same decision asked twice in different words, and neither said what
  * would happen to the files. One mark, one menu, three named outcomes. */

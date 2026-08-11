@@ -7,7 +7,7 @@ import { providerAccounts } from "./providerAccounts";
 import { transcriptView } from "./transcriptClock";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
-import { type ChatMessage, foldsIntoTurn, isAcknowledgment, turnsOf } from "./transcript";
+import { type ChatMessage, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
@@ -327,6 +327,27 @@ describe(`Conversation`, () => {
         expect(turns.map((turn) => ({ id: turn.id, ids: turn.messages.map((message) => message.id) }))).toEqual([{ id: 1, ids: [1, 2, 3, 4, 5] }]);
         expect(turns[0]!.folded.map((message) => message.id)).toEqual([3, 5]);
         expect(foldsIntoTurn(messages[3]!)).toBe(false);
+    });
+
+    /* THE FORK MARK'S NUMBER, one per turn: what a fork taken at the end of that turn's answer inherits, which
+     * is also where the message below the line sits. The last turn's cut lands past the final message — the
+     * whole conversation, the one cut with nothing below it — and a trailing notice stays above the line with
+     * the turn it belongs to, so the cut still points at the next prompt (the row a rewind restores). */
+    it(`forkCutsOf hands every turn the boundary just past it`, () => {
+        const messages: ChatMessage[] = [
+            { id: 1, role: `user`, text: `hi` },
+            { id: 2, role: `assistant`, text: `hello` },
+            { id: 3, role: `notice`, text: `Stopped.` },
+            { id: 4, role: `user`, text: `again` },
+            { id: 5, role: `assistant`, text: `sure` },
+        ];
+        expect([...forkCutsOf(turnsOf(messages))]).toEqual([
+            [1, 3],
+            [4, 5],
+        ]);
+        // Every turn has one, the first included: a fork below the opening answer keeps that whole exchange.
+        expect(forkCutsOf(turnsOf(messages.slice(0, 2)))).toEqual(new Map([[1, 2]]));
+        expect(forkCutsOf([])).toEqual(new Map());
     });
 
     it(`isAcknowledgment matches whole-message lexicon entries through trailing punctuation, nothing more`, () => {
