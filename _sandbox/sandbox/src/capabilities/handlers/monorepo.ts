@@ -11,6 +11,9 @@ import type { CapabilityHandler } from "../capability.js";
 // command in the job session the first frame surfaces (the add-apps pattern).
 export const monorepoHandler: CapabilityHandler = {
     echo: () => ({}),
+    // The name IS the repository's directory in the workspace, with the app panels and preview subdomains that
+    // hang off it. Renaming here would leave the repo where it is and lose sight of it.
+    rename: { refuse: "This name is the monorepo's folder in your workspace — rename the repository itself instead." },
     apply: async function* (ctx, id) {
         // `--` is the separator in an app preview's key/subdomain (<repo>--<app>), so a monorepo name can't
         // contain it without risking a collision with another monorepo's app panel.

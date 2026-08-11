@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { capabilitiesContract, CapabilitySchema } from "@intentic/sandbox-contract";
+import { type Capability, capabilitiesContract, CapabilitySchema } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -11,13 +11,67 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { enabledExtensions } from "../extensions/installed-extensions.js";
-import { capabilityCtx } from "./capability.js";
+import { type CapabilityCtx, capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./totp.js";
 import { browseMarketplace } from "./marketplace.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
+
+/* WHAT ELSE IN THE SANDBOX SPELLS A CONNECTION'S NAME, and therefore what a rename has to follow.
+ *
+ * Three places, and they are three because a capability id is how one stored thing points at another: an
+ * account says which identity's browser it lives in, an identity says which mailbox reads its codes, and a
+ * persona card names the accounts it may speak through. Left behind, each becomes a dangling reference that
+ * fails quietly and late — an account whose browser has no profile, a persona that has stopped being able to
+ * post. The alternative to following them is refusing to rename anything another entry points at, which is a
+ * worse answer to "what is this connection called".
+ *
+ * Deliberately here rather than in the handlers: none of these is a fact about the kind being renamed. A cli
+ * connector knows nothing about personas, and it is a persona that has to change when one is renamed. */
+const repointCapabilityReferences = async (services: Services, ctx: CapabilityCtx, from: string, to: string): Promise<void> => {
+    // Re-parsed rather than spread onto the narrowed type: a manifest entry is a union over sixteen config
+    // shapes, and the schema is both what puts the edited entry back on its own arm and what says it is still
+    // a valid one.
+    const repointed = (entry: Capability, key: "identity" | "mailbox"): Capability =>
+        CapabilitySchema.parse({ ...entry, config: { ...entry.config, [key]: to } });
+    /* Stored AND re-applied, because a reference is not only in the manifest: an account's skill file tells the
+     * agent whose browser it lives in, by name. Re-applying rewrites that sentence — otherwise the manifest
+     * would be right and the thing the agent actually reads would still name a connection that no longer
+     * exists. Both kinds here are cheap and idempotent to apply (each writes one skill file). */
+    const restore = async (entry: Capability, key: "identity" | "mailbox"): Promise<void> => {
+        const next = repointed(entry, key);
+        await services.capabilities.upsert(next);
+        try {
+            for await (const line of registry[next.kind].apply(ctx, next.id, next.config)) {
+                void line;
+            }
+        } catch (error) {
+            /* Best-effort, and only here: this entry is not the one being renamed. Its apply can fail for
+             * reasons that have nothing to do with the rename — the extension declaring its platform was
+             * uninstalled, its provider's checkout rotted — and failing the rename over it would leave the
+             * connection the user actually asked about half-moved to punish them for an unrelated fault. The
+             * reference itself is already saved, which is the part that would otherwise dangle. */
+            services.logger.warn(
+                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${error instanceof Error ? error.message : String(error)}) — re-add it from its card`,
+            );
+        }
+    };
+    for (const entry of await services.capabilities.list()) {
+        if (entry.kind === "browser" && entry.config.identity === from) {
+            await restore(entry, "identity");
+        }
+        if (entry.kind === "identity" && entry.config.mailbox === from) {
+            await restore(entry, "mailbox");
+        }
+    }
+    for (const persona of await services.personas.list()) {
+        if (persona.capabilities.includes(from)) {
+            await services.personas.upsert({ ...persona, capabilities: persona.capabilities.map((id) => (id === from ? to : id)) });
+        }
+    }
+};
 
 // The unified capability manifest routes. `add` streams its apply (mirroring /intentic): the handler yields
 // progress frames, then the manifest entry is recorded, then a terminal `result`. A `requires` precondition
@@ -113,6 +167,65 @@ export const createCapabilitiesRoutes = (services: Services) => {
             } finally {
                 adding.delete(input.id);
             }
+        }),
+        /* GIVE A CONNECTION A DIFFERENT NAME — a migration, not a label edit.
+         *
+         * The id is the agent's handle for the thing: its skill file, its tool prefix, the `$VAR_<NAME>` its
+         * credential arrives in, the alias `ssh <name>` resolves, the directory its logged-in browser lives in.
+         * Add-and-remove would produce the right manifest and lose all of it — signing an account out of every
+         * site, un-pairing a computer, re-cloning an extension. So each kind says what its own name keys
+         * (capability.ts `rename`): what has to be carried by hand, and whether re-running `apply` is how the
+         * derived half gets rewritten.
+         *
+         * ORDER IS CHOSEN FOR WHAT A FAILURE LEAVES BEHIND. The state moves first, then the manifest follows it,
+         * and only then is the new name applied. A failure in the apply therefore leaves manifest and state
+         * agreeing on the new name, with a status that says what is wrong and a card whose Update button re-runs
+         * exactly the step that failed — where applying first would leave the state under one name and the
+         * manifest under the other. */
+        rename: i.rename.handler(async ({ input }) => {
+            const capability = await services.capabilities.get(input.id);
+            if (capability === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
+            }
+            if (input.to === capability.id) {
+                return { ok: true } as const;
+            }
+            if ((await services.capabilities.get(input.to)) !== undefined) {
+                throw new ORPCError("CONFLICT", { message: `"${input.to}" is already the name of another connection` });
+            }
+            const handler = registry[capability.kind];
+            if (handler.rename.refuse !== undefined) {
+                throw new ORPCError("CONFLICT", { message: handler.rename.refuse });
+            }
+            await handler.rename.carry?.(ctx, capability.id, input.to, capability.config);
+            // Parsed, not spread: the id is the one field of a stored entry this daemon ever rewrites, and the
+            // schema is what says the result is still a capability of that kind.
+            const renamed = CapabilitySchema.parse({ ...capability, id: input.to });
+            await services.capabilities.upsert(renamed);
+            await services.capabilities.remove(capability.id);
+            await repointCapabilityReferences(services, ctx, capability.id, input.to);
+            if (handler.rename.reapply !== false) {
+                for await (const line of handler.apply(ctx, renamed.id, renamed.config)) {
+                    void line;
+                }
+            }
+            // The same convergence an add runs, for the same reasons — the fragment set is keyed by entry id, a
+            // connector's gateway by the capability serving it, the translator by the endpoint's name.
+            await composeEnvironment(services);
+            void reconcileListenerProcesses(services);
+            if (renamed.kind === "endpoint") {
+                await syncEndpointCompat(services);
+            }
+            // The warm ACP subprocess is keyed by the old name; dropping it is what an edit already does, and
+            // the next turn respawns it under the new one.
+            if (renamed.kind === "agent") {
+                services.acpConnections.drop(capability.id);
+            }
+            // An extension's server bundle is loaded under its name — the same replacement an install performs.
+            if (renamed.kind === "extension") {
+                services.extensionBackend.restart();
+            }
+            return { ok: true } as const;
         }),
         // Replace just the capability's secret field and re-run its idempotent apply (ssh/vpn rewrite their
         // credential files, plugin re-clones with the new token, cli/mcp are cheap). No composeEnvironment: a

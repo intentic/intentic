@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
 import { statePath } from "../workspace/state-paths.js";
@@ -60,11 +60,30 @@ export const clearSession = async (root: string, id: string): Promise<void> => {
     await rm(passkeyPath(root, id), { force: true });
 };
 
+/* Carry a profile owner's whole session onto a new name — a rename, where `clearSession` is a removal. Every
+ * logged-in cookie the owner has is in that directory, so moving it is the difference between renaming a
+ * connection and signing it out of everything it was signed into.
+ *
+ * Best-effort per part: a profile nobody has opened yet has no directory, an account that never finished its
+ * login has no marker, and a browser with no passkey enrolled has no key file. None of those is a failure — the
+ * rename of a connection that was never used is exactly the case with nothing to move. */
+export const moveSession = async (root: string, from: string, to: string): Promise<void> => {
+    for (const path of [sessionDir, markerPath, passkeyPath]) {
+        await rename(path(root, from), path(root, to)).catch(() => undefined);
+    }
+};
+
 // Disconnect ONE entry without touching the profile it lives in — what removing an identity-born account means:
 // the shared browser (and every sibling signed in beside it) stays, only this account stops counting as
 // connected. The site-side logout, if wanted, is the owner's or the agent's to do in that browser.
 export const clearMarker = async (root: string, id: string): Promise<void> => {
     await rm(markerPath(root, id), { force: true });
+};
+
+// The same one entry, renamed: it stays connected, and the profile it borrows is none of its business. The
+// counterpart of clearMarker, as moveSession is of clearSession.
+export const moveMarker = async (root: string, from: string, to: string): Promise<void> => {
+    await rename(markerPath(root, from), markerPath(root, to)).catch(() => undefined);
 };
 
 // A persistent `--user-data-dir` can't be opened twice: while the owner has a profile open in their own window

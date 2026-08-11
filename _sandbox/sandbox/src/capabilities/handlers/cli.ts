@@ -59,6 +59,11 @@ export const cliHandler: CapabilityHandler = {
         }
         return { ...echo, hasSecret: rotatable !== undefined && cli[rotatable] !== undefined && cli[rotatable] !== "" };
     },
+    /* Everything a connector keys by name is derived from it — the skill's frontmatter name, the $VAR_<ID>
+     * suffixes inside it, the env the agent gets each turn — so the re-apply writes the lot. All that is left
+     * is the old skill directory, which nothing would otherwise delete and which would go on offering the agent
+     * a cheatsheet for credentials that no longer exist under those names. */
+    rename: { carry: async (ctx, from) => ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from)) },
     apply: async function* (ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;

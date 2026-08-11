@@ -144,6 +144,16 @@ export const vpnHandler: CapabilityHandler = {
         };
     },
     fragment: () => VPN_FRAGMENT,
+    // A tunnel's conf files are written per name by its driver, and the re-apply writes them under the new one —
+    // so this only has to take the old tunnel down and erase what it left. A tunnel that was up comes back up
+    // where the config says it should (autoConnect), under the name it now has.
+    rename: {
+        carry: async (_ctx, from, _to, config) => {
+            const vpn = config as VpnConfig;
+            await disconnectVpn({ id: from, config: vpn }).catch(() => undefined);
+            await vpnDrivers[vpn.provider].erase(from, vpn);
+        },
+    },
     apply: async function* (ctx, id, config) {
         const vpn = config as VpnConfig;
         const entry = { id, config: vpn };

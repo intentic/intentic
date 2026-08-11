@@ -98,6 +98,14 @@ export function useCapabilities() {
         onSuccess: invalidate,
     });
 
+    // Give a connection a different name. The daemon carries what the old name keyed (a signed-in browser
+    // profile, a machine's enrollment) and re-derives the rest, so the full invalidate applies: the skills and
+    // env a rename rewrites are the same ones an add composes, and a renamed extension moves its panels.
+    const rename = useMutation({
+        mutationFn: ({ id, to }: { id: string; to: string }) => sandboxJson(`/capabilities/${encodeURIComponent(id)}/rename`, jsonBody(`POST`, { to })),
+        onSuccess: invalidate,
+    });
+
     // "Not needed": stop suggesting this card until the workspace evidence behind it changes. Only the catalog
     // moves, so only the capability list is refreshed — nothing is installed, removed or recomposed.
     const dismissRecommendation = useMutation({
@@ -124,6 +132,7 @@ export function useCapabilities() {
         refetch: query.refetch,
         add,
         remove,
+        rename,
         dismissRecommendation,
     };
 }

@@ -8,6 +8,10 @@ import type { CapabilityHandler } from "../capability.js";
 export const integrationHandler: CapabilityHandler = {
     echo: (config) => ({ provider: (config as IntegrationConfig).provider }),
     requires: ["devops"],
+    // The name is the entry's name in the intent repo, and the re-apply writes it there under the new one — so
+    // this only withdraws the old declaration. Both are ordinary commits to that repo, which is what adding and
+    // removing an integration already are.
+    rename: { carry: async (ctx, from) => removeManagedEntry(ctx.config, from, `chore(intentic): rename "${from}"`) },
     apply: async function* (ctx, id, config) {
         const { provider, ...values } = config as IntegrationConfig;
         const entry: InventoryEntry = { kind: "backend", provider, name: id, values };

@@ -18,6 +18,9 @@ export const agentHandler: CapabilityHandler = {
             hasSecret: agent.env !== undefined && agent.env !== "",
         };
     },
+    // Nothing outside the manifest carries the name: the command and its env are the whole capability, and the
+    // warm connection keyed by the old one is dropped by the route exactly as an edit drops it.
+    rename: {},
     apply: async function* (ctx, id, config) {
         const probe = await probeAcpAgent(config as AcpAgentConfig, ctx.workspace.root);
         const name = probe.agentName ?? id;

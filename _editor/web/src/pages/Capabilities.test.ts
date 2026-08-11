@@ -48,6 +48,7 @@ vi.mock(`../composables/extensions/useCapabilities`, () => ({
         error: ref(undefined),
         add: vi.fn(),
         remove: { mutateAsync: vi.fn(), isPending: ref(false) },
+        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
         refetch: vi.fn(),
         dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
     }),

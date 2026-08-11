@@ -36,6 +36,7 @@ import CapabilityConnections, { type CapabilityConnection, type CapabilityConnec
 import CapabilityContext from "../components/CapabilityContext.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CapabilityInstanceRow from "../components/CapabilityInstanceRow.vue";
+import CapabilityRenameDialog from "../components/CapabilityRenameDialog.vue";
 import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRail.vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
@@ -105,7 +106,7 @@ import { useVpn } from "../composables/sandbox/useVpn";
  * that last one shared with the inventory, so a Reddit account cannot be "needs sign-in" in one list and
  * "pending" in the other. */
 
-const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, refetch, dismissRecommendation } = useCapabilities();
+const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
 // VPN instances get live link state and connect/disconnect here too — the same daemon routes the Sandbox ▸
 // Status card drives, so a tunnel dialled from either place reads identically in both.
@@ -831,6 +832,35 @@ const removeCapability = async (id: string): Promise<void> => {
 const askRemove = (id: string): void => {
     confirmRemoveId.value = id;
 };
+
+/* RENAMING A CONNECTION. The one edit a card could not make: every other field is re-typed into the form and
+ * saved over the same name, but the name itself had no path at all — the closest thing was removing the
+ * connection and setting it up again, which for the kinds people most want to rename (a signed-in account, a
+ * paired computer) is the one operation that throws away what makes them worth keeping. The daemon carries that
+ * state across; this only has to ask which name, and to hold onto its refusals.
+ *
+ * The refusal is kept BESIDE the dialog rather than in the page's top notice: it is an answer about the name
+ * still in the field, and the reader's next act is to change it. */
+const renameId = ref<string>();
+const renameError = ref<NoticeModel>();
+const askRename = (id: string): void => {
+    renameError.value = undefined;
+    renameId.value = id;
+};
+const confirmRename = async (to: string): Promise<void> => {
+    const id = renameId.value;
+    if (id === undefined) {
+        return;
+    }
+    renameError.value = undefined;
+    try {
+        await rename.mutateAsync({ id, to });
+    } catch (err) {
+        renameError.value = noticeFrom(err, `Could not rename that connection.`);
+        return;
+    }
+    renameId.value = undefined;
+};
 const confirmRemove = async (): Promise<void> => {
     const id = confirmRemoveId.value;
     if (id === undefined) {
@@ -979,6 +1009,7 @@ const submitLabel = computed(() => {
                                     @browse="openBrowser(instance.id, instance.id, `browse`)"
                                     @login="openBrowser(instance.id, instance.id)"
                                     @agent-login="startAgentLogin(instance.id)"
+                                    @rename="askRename(instance.id)"
                                     @remove="askRemove(instance.id)"
                                 />
                             </RowGroup>
@@ -1407,6 +1438,16 @@ const submitLabel = computed(() => {
                     Remove <b>{{ confirmRemoveId }}</b> from your sandbox? This tears down its configuration and can't be undone.
                 </p>
             </ConfirmDialog>
+
+            <!-- The one edit that is a migration rather than a form field — see askRename. -->
+            <CapabilityRenameDialog
+                :visible="renameId !== undefined"
+                :id="renameId ?? ''"
+                :busy="rename.isPending.value"
+                :error="renameError"
+                @update:visible="renameId = undefined"
+                @rename="confirmRename"
+            />
 
             <!-- Guided browser login for one connected account (screencast a live Chromium the user signs into). -->
             <BrowserProfileDialog

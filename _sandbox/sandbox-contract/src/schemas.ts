@@ -3625,6 +3625,14 @@ export const CapabilityCardParamSchema = z.object({ card: z.string() });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
 // sandbox's secretField) and re-run its idempotent apply — the /secrets page's edit path.
 export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.string().min(1) });
+/* POST /capabilities/{id}/rename body: the name this connection should answer to from now on.
+ *
+ * A capability's id IS the agent's handle for it — its skill file, its tool prefix, its env suffix, the alias
+ * `ssh <name>` resolves — so renaming one is a migration and not a label edit. The shape of a name is therefore
+ * the same rule the add form enforces, spelled here because the daemon is the gate: letters and digits to start,
+ * then hyphens and underscores. Which KINDS may be renamed at all is the handler's own answer (capability.ts
+ * `rename`), not something a schema can say. */
+export const CapabilityRenameSchema = z.object({ id: z.string(), to: z.string().min(1).max(60).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/) });
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });

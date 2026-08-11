@@ -253,6 +253,9 @@ const reportOptions = async function* (config: unknown): AsyncGenerator<Intentic
 };
 
 export const dockerHandler: CapabilityHandler = {
+    // The engine is a part of the sandbox that is either on or off, not an account you hold one of — its card
+    // never asks for a name, so there is none to change.
+    rename: { refuse: "Docker is part of the sandbox itself, not a connection you name." },
     // The ASKS, not their outcomes — a summary field is what the browser may see of the config, and what
     // became of an ask belongs in `optionStatuses`. The engine options echo as present/absent rather than by
     // value: nothing here is a secret, but a card that re-opens knowing WHICH fields are set is all the

@@ -19,6 +19,13 @@ export const pluginHandler: CapabilityHandler = {
             hasToken: plugin.token !== undefined,
         };
     },
+    // `reapply: false` because this kind's apply is an INSTALL, not a write: re-running it would clone the
+    // repository again over the network to end up with the bytes already on disk. Moving the checkout is the
+    // whole rename — the plugin loader enumerates these directories, so it reads the new name next turn.
+    rename: {
+        reapply: false,
+        carry: async (ctx, from, to) => ctx.files.move(pluginDir(ctx.workspace.root, from), pluginDir(ctx.workspace.root, to)),
+    },
     apply: async function* (ctx, id, config) {
         const { url, ref, token } = config as PluginConfig;
         const session = capabilityJobSession(id);

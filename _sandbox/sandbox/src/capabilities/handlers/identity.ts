@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { IdentityConfig } from "@intentic/sandbox-contract";
 import { identitySkill } from "../../browser/browser-skill.js";
-import { clearSession, hasSession } from "../../browser/session-store.js";
+import { clearSession, hasSession, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.js";
@@ -59,6 +59,16 @@ export const identityHandler: CapabilityHandler = {
     },
     // The identity's browser is the browser pack — same probe, same fragment, same rebuild story.
     fragment: () => packFragment("browser"),
+    /* An identity's browser is the whole point of it: the Google sign-in that makes "Continue with Google" a
+     * click, and every account living beside it. So the profile MOVES rather than being re-made — the re-apply
+     * that follows only rewrites the skill, which is derived from the new name. The accounts that name this
+     * identity are repointed by the route, which is where cross-connection references belong. */
+    rename: {
+        carry: async (ctx, from, to) => {
+            await moveSession(ctx.workspace.root, from, to);
+            await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from));
+        },
+    },
     apply: async function* (ctx, id, config) {
         const { email, mailbox, openAccounts } = config as IdentityConfig;
         if (!email.includes("@")) {

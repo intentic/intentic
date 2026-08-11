@@ -31,6 +31,16 @@ export const hostHandler: CapabilityHandler = {
             ...(host.roots !== undefined ? { roots: host.roots } : {}),
         };
     },
+    /* The enrollment travels with the name, so a renamed computer is not a computer somebody has to walk over
+     * to and re-pair. Its live socket is cut instead: the machine is authenticated by a token this daemon still
+     * honours, and reconnecting is what makes it announce itself under the name it now has. */
+    rename: {
+        carry: async (ctx, from, to) => {
+            await ctx.hosts.rename(from, to);
+            ctx.hostHub.disconnect(from, "this computer was renamed — reconnecting under its new name");
+            await ctx.files.remove(skillDir(ctx.workspace.root, from));
+        },
+    },
     apply: async function* (ctx, id, config) {
         const host = config as HostConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("host", host.platform));

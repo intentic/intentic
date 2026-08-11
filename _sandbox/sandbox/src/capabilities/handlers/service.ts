@@ -18,6 +18,12 @@ export const serviceHandler: CapabilityHandler = {
         return { service: service.service, domain: service.domain, on: service.on, expose: service.expose };
     },
     requires: ["devops"],
+    // A provisioned service's name is not a label on a row: it names the running thing — its container, its
+    // volumes, the domain pointed at it — and moving that is a deployment, not an edit. Declaring the new one
+    // and retiring the old is the honest way to do it, and it goes through the same apply as any other change.
+    rename: {
+        refuse: "A provisioned service is named in your infrastructure, where its containers and volumes carry that name — declare the new one and retire this, rather than renaming it here.",
+    },
     apply: async function* (ctx, id, config) {
         const { service, domain, on, expose } = config as ServiceConfig;
         const entry: InventoryEntry = { kind: "service", service, name: id, on, expose, values: { domain } };

@@ -8,6 +8,8 @@ import type { CapabilityHandler } from "../capability.js";
 // bookkeeping and the pnpm install run in the visible job session the first frame surfaces.
 export const devopsHandler: CapabilityHandler = {
     echo: () => ({}),
+    // One per sandbox, and never named by anybody — like `remove`, a rename is not a thing this capability has.
+    rename: { refuse: "DevOps is one per sandbox and has no name of its own to change." },
     apply: async function* (ctx, id) {
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {

@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
 import { browserToolsNote } from "../../browser/browser-skill.js";
-import { clearMarker, clearSession, hasSession } from "../../browser/session-store.js";
+import { clearMarker, clearSession, hasSession, moveMarker, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
@@ -69,6 +69,16 @@ export const browserHandler: CapabilityHandler = {
         };
     },
     fragment: () => packFragment("browser"),
+    /* The connected marker is per ENTRY and always moves; the profile and its passkeys move only for a
+     * standalone account, which is the one that OWNS them — an identity-born account renamed out from under its
+     * identity must leave the shared browser (and its siblings' logins) exactly where they are. Same division
+     * `remove` already draws, for the same reason. */
+    rename: {
+        carry: async (ctx, from, to, config) => {
+            await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
+            await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from));
+        },
+    },
     apply: async function* (ctx, id, config) {
         const { platform, identity } = config as BrowserConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("browser", platform));

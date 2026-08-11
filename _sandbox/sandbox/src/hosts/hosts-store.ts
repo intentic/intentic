@@ -59,6 +59,9 @@ export interface HostsStore {
     // Which machine is presenting this token, or undefined. The only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<string | undefined>;
     readonly enrolled: (id: string) => Promise<boolean>;
+    // Move an enrollment onto a new capability id, keeping the machine's key valid — a renamed computer must
+    // not have to be re-paired by hand at the far end.
+    readonly rename: (from: string, to: string) => Promise<void>;
     // Drop a machine's enrollment — its next connect is refused and its live socket is closed by the caller.
     readonly revoke: (id: string) => Promise<boolean>;
 }
@@ -137,6 +140,12 @@ export const fileHostsStore = (historyRoot: string): HostsStore => {
             return (await file.read()).hosts.find((host) => tokenEquals(host.hash, hash))?.id;
         },
         enrolled: async (id) => (await file.read()).hosts.some((host) => host.id === id),
+        rename: async (from, to) => {
+            // The token digest is untouched, so the machine's own key keeps verifying — it simply comes back
+            // under the new name. Re-pairing would mean walking to that computer to run the installer again,
+            // which is a strange price for changing what a row is called.
+            await file.update((stored) => ({ hosts: stored.hosts.map((host) => (host.id === from ? { ...host, id: to } : host)) }));
+        },
         revoke: async (id) => {
             let revoked = false;
             await file.update((stored) => {

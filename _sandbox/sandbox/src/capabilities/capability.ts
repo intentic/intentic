@@ -67,6 +67,29 @@ export interface CapabilityCtx {
 // build deps, never rely on another fragment's layers. A handler whose payload is a feature pack resolves it
 // through environment/packs.ts (async — the pack file and the base image's stamp are both reads), which
 // returns nothing when the running base already bakes the pack.
+/* WHAT RENAMING A CONNECTION OF THIS KIND TAKES.
+ *
+ * A capability's id is not a label — it is the agent's HANDLE for the thing: the name of its skill file, the
+ * suffix on its env vars, the alias `ssh <name>` resolves, the directory its browser profile lives in. So a
+ * rename is a migration, and every kind has to say what its own costs. Required for the same reason `echo` is:
+ * the answer differs per kind and a forgotten default is the kind of thing nobody notices until a rename has
+ * quietly signed somebody out of every account in a browser profile.
+ *
+ * `carry` moves what the old name keyed and `apply` cannot re-derive; the route then re-runs `apply` under the
+ * new name, which is how everything DERIVED (a skill file, an ssh config block, a tunnel's conf) gets rewritten.
+ * A kind whose apply would re-FETCH rather than re-derive — the git checkouts — sets `reapply: false` and moves
+ * its directory in `carry` instead. */
+export interface CapabilityRename {
+    /* Why this kind's name cannot change — the route stops and says exactly this. For the capabilities whose
+     * name is part of what they ARE: the scaffolders named their repos after it, the one-per-sandbox cards
+     * never had a name to choose. Their equivalent of a rename is removing and adding. */
+    readonly refuse?: string;
+    /** Move the state the old name keyed. Runs before the re-apply, so a moved profile is in place for it. */
+    readonly carry?: (ctx: CapabilityCtx, from: string, to: string, config: unknown) => Promise<void>;
+    /** Re-run `apply` under the new name. Default true — false only where apply is an install, not a write. */
+    readonly reapply?: boolean;
+}
+
 export interface CapabilityHandler {
     readonly requires?: readonly CapabilityKind[];
     readonly fragment?: (config: unknown) => string | undefined | Promise<string | undefined>;
@@ -85,6 +108,9 @@ export interface CapabilityHandler {
     // optional: "what of this may the browser see" is a question every kind has to answer out loud, and a
     // forgotten default is how a credential reaches a browser by omission.
     readonly echo: (config: unknown, connectors: Map<string, ResolvedContribution>) => Record<string, string | number | boolean>;
+    // What a rename of this kind moves, or why it can't happen — see CapabilityRename. Required, not optional:
+    // the safe default differs per kind, and the unsafe ones fail silently.
+    readonly rename: CapabilityRename;
 }
 
 // Build the handler context from the full Services, wrapping the existing scaffolders as session-scoped closures.

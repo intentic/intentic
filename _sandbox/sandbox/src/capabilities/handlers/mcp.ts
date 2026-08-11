@@ -25,6 +25,9 @@ const reachable = async (url: string, token: string | undefined): Promise<boolea
 export const mcpHandler: CapabilityHandler = {
     secret: (config) => ((config as McpConfig).token !== undefined ? "token" : undefined),
     echo: (config) => ({ url: (config as McpConfig).url, hasToken: (config as McpConfig).token !== undefined }),
+    // Registration IS the manifest entry, so moving the entry is the entire rename. What changes for the agent
+    // is the server's name and therefore its tool prefix, which is exactly what the owner asked for.
+    rename: {},
     apply: async function* (_ctx, _id, config) {
         const { url } = config as McpConfig;
         yield { kind: "log", message: `Registered MCP server ${url} — the agent can call it next turn.` };

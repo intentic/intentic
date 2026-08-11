@@ -47,6 +47,7 @@ export type IconName =
     | "database"
     | "desktop"
     | "download"
+    | "ellipsis"
     | "envelope"
     | "eraser"
     | "exclamation-circle"
@@ -160,6 +161,8 @@ export const ICONS: Record<IconName, string> = {
     database: "ri:database-2-line",
     desktop: "ri:computer-line",
     download: "ri:download-line",
+    // The row-overflow glyph: the actions a row has that don't earn a button of their own.
+    ellipsis: "ri:more-fill",
     envelope: "ri:mail-line",
     eraser: "ri:eraser-line",
     "exclamation-circle": "ri:error-warning-line",

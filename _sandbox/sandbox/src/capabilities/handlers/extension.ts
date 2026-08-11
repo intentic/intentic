@@ -38,6 +38,22 @@ export const extensionHandler: CapabilityHandler = {
             hasToken: extension.token !== undefined,
         };
     },
+    /* `reapply: false` for the plugin handler's reason and one more: this kind's apply re-clones AND passes the
+     * premium gate, so re-running it to change a label would ask the owner's credits for code they already have.
+     * The checkout moves instead, with the version kept aside for a revert; the processes declared by the old
+     * name are stopped, since their keys carry it and the reconcile that follows starts them under the new one. */
+    rename: {
+        reapply: false,
+        carry: async (ctx, from, to, config) => {
+            const root = extensionsRoot(ctx.workspace.root);
+            const manifest = await readExtensionManifest(extensionRootOf(extensionDir(ctx.workspace.root, from), (config as ExtensionConfig).path));
+            for (const process of manifest?.contributes?.processes ?? []) {
+                ctx.panels.stop(extensionProcessKey(from, process.name));
+            }
+            await ctx.files.move(extensionDir(ctx.workspace.root, from), extensionDir(ctx.workspace.root, to));
+            await ctx.files.move(previousDir(root, from), previousDir(root, to)).catch(() => undefined);
+        },
+    },
     apply: async function* (ctx, id, config) {
         const { url, ref, path, token, tier } = config as ExtensionConfig;
         const session = capabilityJobSession(id);

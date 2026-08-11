@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
+import { hasSession, markConnected, sessionDir } from "../browser/session-store.js";
 
 import {
     clientFor,
@@ -14,6 +15,7 @@ import {
     fakeFiles,
     memoryCapabilitiesStore,
     memoryDismissalsStore,
+    memoryPersonasStore,
     services,
     tempWorkspace,
 } from "../route-testing.js";
@@ -64,6 +66,63 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
     expect((await client.capabilities.list()).recommendations).toEqual([]);
     // Nothing is being suggested for a card nobody was offered — there is no claim to record a "no" against.
     expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
+});
+
+/* RENAMING IS A MIGRATION, and this is the case that proves why it can't be an add plus a remove: the identity's
+ * logged-in browser has to arrive at the new name, and the account living in that browser has to still know
+ * whose it is. A remove would have deleted the profile (signing every account in it out) and left the account
+ * pointing at a name nothing answers to. */
+test("capabilities.rename carries the browser profile and repoints everything that named the old id", async () => {
+    const workspace = tempWorkspace([]);
+    const personas = memoryPersonasStore([{ id: "front", capabilities: ["me", "reddit"] }]);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                personas,
+                capabilities: memoryCapabilitiesStore([
+                    { id: "me", kind: "identity", config: { email: "ada@example.com", openAccounts: "off" } },
+                    { id: "reddit", kind: "browser", config: { platform: "reddit", identity: "me" } },
+                ]),
+            }),
+        ),
+    );
+    // The finished sign-in, which is the thing worth carrying: a marker beside a profile directory.
+    await markConnected(workspace.root, "me");
+    mkdirSync(sessionDir(workspace.root, "me"), { recursive: true });
+
+    expect(await client.capabilities.rename({ id: "me", to: "ada" })).toEqual({ ok: true });
+
+    const { capabilities } = await client.capabilities.list();
+    expect(capabilities.map((capability) => capability.id).toSorted()).toEqual(["ada", "reddit"]);
+    // The account still lives in that identity's browser, and the persona still speaks through both.
+    expect(capabilities.find((capability) => capability.id === "reddit")?.config["identity"]).toBe("ada");
+    expect((await personas.get("front"))?.capabilities).toEqual(["ada", "reddit"]);
+    // Still signed in, under the new name — profile and marker both followed.
+    expect(hasSession(workspace.root, "ada")).toBe(true);
+    expect(hasSession(workspace.root, "me")).toBe(false);
+    expect(existsSync(sessionDir(workspace.root, "ada"))).toBe(true);
+});
+
+test("capabilities.rename refuses a name already in use, an unknown connection, and a kind whose name isn't its own", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                capabilities: memoryCapabilitiesStore([
+                    { id: "docker", kind: "docker", config: { gpu: "off" } },
+                    { id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } },
+                    { id: "tasks", kind: "mcp", config: { url: "https://tasks.example.com/mcp" } },
+                ]),
+            }),
+        ),
+    );
+    expect(await errorCode(client.capabilities.rename({ id: "notes", to: "tasks" }))).toBe("CONFLICT");
+    expect(await errorCode(client.capabilities.rename({ id: "ghost", to: "spirit" }))).toBe("NOT_FOUND");
+    // The engine is part of the sandbox rather than a connection somebody named — its handler says so.
+    expect(await errorCode(client.capabilities.rename({ id: "docker", to: "containers" }))).toBe("CONFLICT");
+    // A name the add form would refuse never reaches a handler: the wire schema is the same rule.
+    expect(await errorCode(client.capabilities.rename({ id: "notes", to: "-nope" }))).toBe("BAD_REQUEST");
 });
 
 test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {

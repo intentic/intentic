@@ -7,6 +7,7 @@ import {
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
     CapabilityOtpSchema,
+    CapabilityRenameSchema,
     CapabilitySchema,
     CapabilitySecretInputSchema,
     CapabilityStatusSchema,
@@ -24,6 +25,11 @@ export const capabilitiesContract = {
     list: oc.route({ method: "GET", path: "/capabilities" }).output(CapabilitiesListSchema),
     add: oc.route({ method: "POST", path: "/capabilities" }).input(CapabilitySchema).output(eventIterator(IntenticLineSchema)),
     remove: oc.route({ method: "DELETE", path: "/capabilities/{id}" }).input(CapabilityIdParamSchema).output(OkSchema),
+    /* Give a connection a different name, carrying what the old one keyed: a browser profile with its logins,
+     * a connected machine's enrollment, an extension's checkout. The name is the agent's handle for the thing,
+     * so this is a migration — add + remove would lose exactly the state that makes the connection worth
+     * keeping. A kind whose name is part of what it IS (the scaffolders, the one-per-sandbox cards) refuses. */
+    rename: oc.route({ method: "POST", path: "/capabilities/{id}/rename" }).input(CapabilityRenameSchema).output(OkSchema),
     // Replace just the secret in a capability's config (the /secrets page's edit) and re-run its apply.
     setSecret: oc.route({ method: "POST", path: "/capabilities/{id}/secret" }).input(CapabilitySecretInputSchema).output(OkSchema),
     status: oc.route({ method: "GET", path: "/capabilities/{id}/status" }).input(CapabilityIdParamSchema).output(CapabilityStatusSchema),
