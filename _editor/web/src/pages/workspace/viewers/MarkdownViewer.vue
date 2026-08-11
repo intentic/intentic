@@ -154,28 +154,41 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             ></div>
         </div>
 
-        <div class="flex min-h-0 flex-1">
+        <div class="relative flex min-h-0 flex-1">
             <!-- Delegated click: the file links live inside the component's v-html, so they can hold no
                  listener of their own (the copy buttons are <Markdown>'s own business). -->
             <template v-if="view === `preview`">
-                <!-- `ui-softscroll`, NOT `scrollbar-thin`, and the rail is the reason. scrollbar-thin paints a
-                     permanent line-strong thumb, which put a solid vertical bar immediately to the left of the
-                     rail's spine — two position indicators a few pixels apart, in two visual languages, saying
-                     the same thing. This scrollbar is a whisper until the pointer is in the column and a real
-                     thumb the moment it is, so the one line standing in that gutter is the one that also names
-                     the section it marks. (Its stable gutter is why the prose does not shift when a document
-                     turns out to fit.) -->
-                <div ref="scroller" class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas px-6 py-5" @click="openFileRefFromEvent">
+                <!-- THE SCROLLER SPANS THE WHOLE PANE, so its scrollbar sits at the pane's outermost edge —
+                     which is the entire point of the layout below. The rail used to be a column BESIDE this
+                     one, which put the scrollbar between the document and the rail: a solid bar reporting
+                     position, a few pixels from a lit border reporting position, in two visual languages. Now
+                     the document keeps the room the rail occupies as PADDING, and the rail parks in it.
+
+                     `ui-softscroll`, not `scrollbar-thin`: a whisper until the pointer is in the column, a real
+                     thumb the moment it is — right for a surface being read rather than scanned. Its stable
+                     gutter is also what makes the rail's inset below a constant. -->
+                <div
+                    ref="scroller"
+                    class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas py-5 pl-6"
+                    :class="docked ? `pr-[13.5rem]` : `pr-6`"
+                    @click="openFileRefFromEvent"
+                >
                     <Markdown :source="source" :decorate="decorate" class="mx-auto max-w-3xl" />
                 </div>
-                <!-- The rail is a SIBLING of the scroller, not a sticky column inside it: its own scrolling is
-                     then independent of the document's, which is what a 60-heading outline beside a nine-screen
-                     file needs.
-                     NO BORDER ON THIS EDGE. The rows inside already draw a continuous line down their left,
-                     and a container rule beside it was a second hairline 9px away drawing the same boundary
-                     twice. What separates the rail from the prose is the gutter the centred column already
-                     leaves — which is wider than the rail itself. -->
-                <aside v-if="docked" class="flex w-52 shrink-0 flex-col py-5 pl-2 pr-4">
+                <!-- Parked in that padding rather than laid out beside it, and OUTSIDE the scroller rather than
+                     stuck to the top of it: pinned to the pane, it neither scrolls away with the document nor
+                     slides sideways when a wide table scrolls, and `inset-y-0` hands it the visible height for
+                     free, so its own list scrolls independently of the document's. `right` is the measured
+                     scrollbar strip — the one number that keeps it clear of the bar without covering it.
+
+                     NO BORDER ON THIS EDGE. The rows inside already draw a line down their left; a container
+                     rule beside it was a second hairline drawing the same boundary twice. It carries the
+                     canvas colour because content wider than the reading column scrolls underneath it. -->
+                <aside
+                    v-if="docked"
+                    class="absolute inset-y-0 flex w-52 flex-col bg-canvas py-5 pl-2 pr-2"
+                    :style="{ right: `${outline.gutter.value}px` }"
+                >
                     <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="outline.jump" />
                 </aside>
             </template>

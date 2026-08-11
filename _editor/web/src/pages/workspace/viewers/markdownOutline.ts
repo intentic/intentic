@@ -98,6 +98,12 @@ export interface MarkdownOutline {
     readonly progress: Ref<number>;
     /** Whether the document is longer than its pane. False means `progress` has nothing to report. */
     readonly scrollable: Ref<boolean>;
+    /* How wide the scroller's own scrollbar strip is, in pixels — the distance between the document's right
+     * edge and the pane's. The rail parks itself exactly this far in, so the scrollbar keeps the outermost
+     * edge (where every application puts one) and nothing of the rail sits under it. Measured rather than
+     * assumed: it is 0 where the platform draws overlay scrollbars and ~11px where it draws real ones, and
+     * `scrollbar-gutter: stable` is what keeps the answer the same whether or not the document overflows. */
+    readonly gutter: Ref<number>;
     /** Scroll heading `index` into view. */
     readonly jump: (index: number) => void;
 }
@@ -116,6 +122,7 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
     const active = ref(-1);
     const progress = ref(0);
     const scrollable = ref(false);
+    const gutter = ref(0);
 
     const element = (): HTMLElement | undefined => scroller.value ?? undefined;
 
@@ -151,8 +158,10 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
             active.value = -1;
             progress.value = 0;
             scrollable.value = false;
+            gutter.value = 0;
             return;
         }
+        gutter.value = view.offsetWidth - view.clientWidth;
         // One query for both answers: a re-measure runs on every mutation the prose makes, and the second walk
         // of a long document's DOM bought nothing the first had not already found.
         const nodes = headingNodes(view);
@@ -248,5 +257,5 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
         }
     });
 
-    return { headings, active, progress, scrollable, jump };
+    return { headings, active, progress, scrollable, gutter, jump };
 };
