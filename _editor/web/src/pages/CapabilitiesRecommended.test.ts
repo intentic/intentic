@@ -40,6 +40,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 
 // The gitlab card is CONTRIBUTED, not static — the connectors manifest narrowed to what a card needs. Its
 // instance url is the field the scan can answer and the user should not have to.
+// The Extension card's signpost reads the registry cache for its two counts; nothing has browsed one here.
+vi.mock(`../composables/extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../composables/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,

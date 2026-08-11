@@ -39,6 +39,7 @@ import {
     saveKnowledgeNote,
 } from "./fixture/knowledge";
 import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
+import { demoRegistry } from "./fixture/registry";
 import {
     demoCapabilities,
     demoEnvironment,
@@ -487,6 +488,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // answer and the same one a real started vault gives.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
+    /* Browsing a registry — what the Sandbox screen's Discover row renders. The real route clones a git repo
+     * and reads two JSON files out of it; this answers with them already joined. Every registry URL gets the
+     * same answer, which is honest enough for a demo: pointing the field at an internal repo is a real feature
+     * and there is no internal repo here to point it at. */
+    [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
@@ -495,7 +501,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/panels`, () => json({ panels: demoPanels() })],
     [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace — a dev server needs the repository on your own machine.`)],
     [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace — nothing is running to stop.`)],
-    [`GET`, `/extensions`, () => json({ extensions: demoExtensions() })],
+    // `invalid` is not optional in the contract, and answering without it fails the whole list to parse — which
+    // reads as "couldn't list this sandbox's extensions" over an empty tab. Nothing here is unreadable: every
+    // extension is compiled into this build.
+    [`GET`, `/extensions`, () => json({ extensions: demoExtensions(), invalid: [] })],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
     /* An extension's own settings, which the host loads BEFORE calling activate() so `api.settings.get` is
      * synchronous from the first line of it. Missing here, the load rejected and the extension never activated
@@ -690,7 +699,7 @@ function knowledgeForget({ request }: RouteContext): Promise<Response> {
 function setEnabled({ request, param }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
         setExtensionEnabled(param(`id`), (body as { enabled?: boolean }).enabled === true);
-        return json({ extensions: demoExtensions() });
+        return json({ extensions: demoExtensions(), invalid: [] });
     });
 }
 

@@ -106,6 +106,8 @@ vi.mock(`../composables/extensions/useCapabilities`, () => ({
     }),
     browseMarketplace: vi.fn(),
 }));
+// The Extension card's signpost reads the registry cache for its two counts; nothing has browsed one here.
+vi.mock(`../composables/extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
     viewProcessLogs: vi.fn(),

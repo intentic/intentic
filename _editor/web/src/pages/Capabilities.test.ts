@@ -56,6 +56,9 @@ vi.mock(`../composables/extensions/useCapabilities`, () => ({
 vi.mock(`../composables/extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
+// The Extension card's signpost reads the registry cache for its two counts. Empty here: the sentence renders
+// without them, which is exactly the state a first visit is in.
+vi.mock(`../composables/extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../composables/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
     viewProcessLogs: vi.fn(),

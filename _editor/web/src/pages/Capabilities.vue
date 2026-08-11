@@ -26,7 +26,7 @@ import {
     type StatusVariant,
 } from "@intentic/ui";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
+import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import { type CapabilityKind, type CapabilityState, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -41,10 +41,12 @@ import CapabilityRail, { type CapabilityScope } from "../components/CapabilityRa
 import { startAgent } from "../composables/agents/agentActions";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
+import { checksOk, checksProblem } from "./sandbox/discoverListing";
 import { auditBrief, updateBrief } from "./sandbox/extensionBrief";
 import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
+import { useRegistry } from "../composables/extensions/useRegistry";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
@@ -594,11 +596,19 @@ const canSubmit = computed(() => {
     return visibleFields(entry).every((field) => field.optional === true || (values[field.key] ?? ``).trim().length > 0);
 });
 
-/* Registry browse (the plugin and extension cards): resolve a registry repo into entries; picking one
- * pre-fills the form below, and install stays the ordinary capability apply. The extension card defaults the
- * field to the official registry and the plugin card starts blank — a plugin marketplace is usually somebody
- * else's, an extension registry is usually ours — but the field is editable in both, which is the whole of
- * "registries are plural": point it at an internal repo and this never touches intentic.dev. */
+/* Registry browse — THE PLUGIN CARD ONLY, now. It used to serve the extension card too, and that was the whole
+ * of extension discovery in this product: a collapsed block on a form, five clicks from the rail, presented as
+ * a way to pre-fill a text field. Extensions have a surface of their own (the Sandbox screen's Discover row),
+ * and this card links to it rather than growing a second, worse copy of it. What stays here is the plugin
+ * marketplace, which is a genuinely different object — a plugin loads into the agent rather than running in
+ * this browser, its registries are usually somebody else's, and its install form is the one below. */
+/* The two numbers on the Extension card's signpost, read from whatever the registry cache already holds
+ * (`read: false` — see useRegistry). This page must not clone a repository to put a figure in a sentence, so
+ * the counts are absent until something has genuinely browsed, and the sentence reads fine without them. */
+const { entries: publishedExtensions } = useRegistry({ read: false });
+const publishedCount = computed(() => publishedExtensions.value.length);
+const verifiedCount = computed(() => publishedExtensions.value.filter((entry) => entry.trust === `verified`).length);
+
 const marketUrl = ref(``);
 const marketToken = ref(``);
 const market = ref<Marketplace | null>(null);
@@ -626,19 +636,9 @@ const marketEntries = computed<RegistryEntry[]>(() =>
     selected.value === undefined ? [] : (market.value?.plugins.filter((entry) => entry.kind === selected.value?.kind) ?? []),
 );
 
-/* What the nightly scan found at the row's pinned commit, folded to the one question a browser has: will it
- * load? Absent checks say nothing (a registry with no scanner, or a listing repointed since last night) — the
- * row renders as it always did, claiming nothing. "none" is a daemon-only extension, which loads fine. */
-const checksProblem = (entry: RegistryEntry): string | undefined => {
-    if (entry.checks === undefined) {
-        return undefined;
-    }
-    if (entry.checks.manifest !== `ok`) {
-        return `At the pinned commit, ${entry.checks.manifest}`;
-    }
-    return entry.checks.bundle === `ok` || entry.checks.bundle === `none` ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
-};
-const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
+/* What the nightly scan re-derived at the row's pinned commit reads the same here as it does on Discover and on
+ * the public gallery — one reading of the field, in discoverListing.ts, rather than three that can drift on
+ * what "none" means. */
 
 /* THE PRE-INSTALL READ. The install dialog shows what the manifest declares and the registry's checks say the
  * thing loads; what neither can say is whether the code does what the description claims and nothing else. The
@@ -972,11 +972,6 @@ const pickForticlient = (connection: ForticlientConnection): void => {
     touched.clear();
 };
 
-/* The picked row's tier, remembered beside the form rather than in it: tier is the registry's fact about the
- * listing, not a field anyone types, so it rides the install config only while the URL still is the picked
- * row's (hand-editing the URL is installing something else, whose tier this browser does not know). */
-const pickedPremiumUrl = ref<string | null>(null);
-
 const pickEntry = (entry: RegistryEntry): void => {
     if (entry.install === undefined || blockedReason(entry) !== undefined) {
         return;
@@ -988,7 +983,6 @@ const pickEntry = (entry: RegistryEntry): void => {
     values[`path`] = entry.install.path ?? ``;
     // Code hosted inside a private registry repo needs the same token to clone.
     values[`token`] = entry.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
-    pickedPremiumUrl.value = entry.tier === `premium` ? entry.install.url : null;
 };
 
 const clearForm = (): void => {
@@ -1001,7 +995,6 @@ const clearForm = (): void => {
     marketUrl.value = ``;
     marketToken.value = ``;
     market.value = null;
-    pickedPremiumUrl.value = null;
     forticlientFile.value = ``;
     forticlientConnections.value = [];
     touched.clear();
@@ -1016,10 +1009,6 @@ watch(
             return;
         }
         clearForm();
-        // The extension card opens on the official registry so browsing is one click, not a URL to go and find.
-        if (entry.kind === `extension`) {
-            marketUrl.value = OFFICIAL_REGISTRY_URL;
-        }
         // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so re-adding
         // creates another connection by default instead of overwriting the first.
         name.value = suggestName(entry);
@@ -1172,10 +1161,10 @@ const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
             config[field.key] = value;
         }
     }
-    // The picked registry row's tier (see pickedPremiumUrl) — what the daemon's premium gate reads.
-    if (entry.kind === `extension` && pickedPremiumUrl.value !== null && pickedPremiumUrl.value === (values[`url`] ?? ``).trim()) {
-        config[`tier`] = `premium`;
-    }
+    /* No `tier` is set from this form, and that is correct rather than an omission: tier is the REGISTRY's fact
+     * about a listing, not something anybody types, and this form now only ever installs from a URL its user
+     * supplied — whose tier this browser has no way to know. A premium listing carries its tier from the row it
+     * was picked on, which is Discover. */
     return { id: name.value.trim(), kind: entry.kind, config };
 };
 
@@ -1641,8 +1630,33 @@ const submitLabel = computed(() =>
                                 </div>
                             </RowGroup>
 
-                            <!-- Registry browse (plugin + extension): resolve a registry repo and pre-fill the form below. -->
-                            <RowGroup v-if="selected.kind === 'plugin' || selected.kind === 'extension'" label="From a registry (optional)">
+                            <!-- WHERE EXTENSIONS ARE FOUND, said on the card people arrive at wanting one. This
+                                 form is the "I already have a repository and a commit" path and it stays exactly
+                                 that; browsing what other people have published is a surface, not a field, and
+                                 it is one link away. The counts render only when the registry is already in
+                                 cache — this page must not clone a repo to decorate a sentence. -->
+                            <RouterLink
+                                v-if="selected.kind === 'extension'"
+                                to="/sandbox/discover"
+                                class="flex items-center gap-3 rounded-lg border border-line bg-card px-3 py-2.5 transition-colors hover:border-line-strong hover:bg-overlay"
+                            >
+                                <Icon name="search" class="shrink-0 text-link" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-xs font-medium text-content">Browse published extensions</span>
+                                    <span class="block text-2xs text-muted">
+                                        <template v-if="publishedCount > 0"
+                                            >{{ publishedCount }} published<template v-if="verifiedCount > 0"
+                                                >, {{ verifiedCount }} with the source read by a human</template
+                                            >. </template
+                                        >Install in a click from the registry, or fill the form below from a repository you already trust.
+                                    </span>
+                                </span>
+                                <Icon name="arrow-right" class="shrink-0 text-subtle" />
+                            </RouterLink>
+
+                            <!-- Registry browse (plugins only — extensions have Discover). Resolve a marketplace
+                                 repo and pre-fill the form below. -->
+                            <RowGroup v-if="selected.kind === 'plugin'" label="From a registry (optional)">
                                 <div class="flex flex-col gap-2 px-4 py-3">
                                     <div class="flex gap-2">
                                         <input
@@ -1722,7 +1736,7 @@ const submitLabel = computed(() =>
                                         </button>
                                     </div>
                                     <p v-if="market && marketEntries.length === 0" class="text-2xs text-subtle">
-                                        That registry lists no {{ selected.kind === "extension" ? "extensions" : "plugins" }}.
+                                        That registry lists no plugins.
                                     </p>
                                 </div>
                             </RowGroup>

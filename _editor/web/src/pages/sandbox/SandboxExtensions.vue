@@ -95,7 +95,9 @@ const emptyNote = computed<string | undefined>(() => {
         return undefined;
     }
     if (entries.value.length === 0) {
-        return `No extensions installed. Add one from the Capabilities page — install is owner-only and pins an exact commit.`;
+        // The row beneath this tab, not another page. A surface for extensions whose empty state sends the
+        // reader somewhere else to get extensions is the reason Discover exists.
+        return `Nothing installed yet.`;
     }
     if (attention.value.length > 0) {
         return `Nothing else to show — see the group above.`;
@@ -210,6 +212,11 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <div v-if="isLoading" :class="cmp.emptyState(`py-6`)">Reading this sandbox's extensions…</div>
         <div v-else-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
             <span>{{ emptyNote }}</span>
+            <!-- An empty tab is the one moment a reader is unambiguously asking where extensions come from, so
+                 it answers rather than describing another page: the next row down. -->
+            <RouterLink v-if="entries.length === 0" to="/sandbox/discover" class="text-xs text-link hover:underline">
+                Discover what people have published →
+            </RouterLink>
             <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="clearFilters" />
         </div>
 
