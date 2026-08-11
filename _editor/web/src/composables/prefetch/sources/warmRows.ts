@@ -19,8 +19,8 @@ const SIDES: readonly GitDiffSide[] = [`conflicted`, `staged`, `unstaged`];
  * it is clicked. The cap now bounds the pathological case it was always meant for (a mass rename, a fresh clone)
  * and nothing else; an ordinary review of any size falls inside it, which is the point.
  *
- * The rows past it are not lost, only pending: their badge says so rather than printing git's number as if it were
- * the one on screen, and clicking one costs what clicking any row cost before any of this existed. */
+ * The rows past it are not lost, only unsettled: their badge holds git's count at half weight until something reads
+ * them (ReviewStat), and clicking one costs what clicking any row cost before any of this existed. */
 export const WARM_LIMIT = 120;
 
 export interface WarmRow {

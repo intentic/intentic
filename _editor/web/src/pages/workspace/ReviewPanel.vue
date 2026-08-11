@@ -386,9 +386,10 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
  *
  * HOW BIG EACH CHANGE IS IN THE READING ON SCREEN: these rows sit beside diffs that open on code alone, so
  * their +/− has to be the code's. That count is a by-product of having both sides of a file, so it is taken
- * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it — and the loader reads far
- * enough down the list (warmRows) that a row's number is normally settled before the panel is opened. A row it
- * has not reached says so; it does not stand git's number in for one it is about to replace. */
+ * where the file is READ (useChanges' fileDiff) rather than by whoever asked for it — and while this panel is the
+ * open one the loader reads its rows before anything else in the app (changesWarm's `now` band), far enough down
+ * the list (warmRows) that an ordinary review is covered whole. A row it has not reached yet still shows a
+ * number — git's, at half weight, until the code's replaces it (ReviewStat). */
 const { countOf } = useCodeStats();
 const codeOf = (repo: string, side: GitDiffSide, path: string): CodeCount => countOf(workingStatKey(repo, side, path));
 

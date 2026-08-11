@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
-// The badge's job is to never state a number the pane beside it will contradict, so what is asserted here is
-// WHICH reading it prints in each state — not its markup. Mounted with plain Vue, as markdownFigures.test does,
-// rather than adding @vue/test-utils for three assertions.
+// The badge's job is to always state a number and to be honest about which reading it is, so what is asserted
+// here is WHICH reading it prints in each state — not its markup, beyond the one class that marks a count as
+// still provisional. Mounted with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
@@ -95,24 +95,28 @@ describe(`<ReviewStat>`, () => {
         expect(host.querySelector(`[data-tip]`)).toBeNull();
     });
 
-    /* THE CASE THIS COMPONENT WAS GETTING WRONG. A row whose file had not been read printed git's number, and the
-     * read that a click performs then replaced it — so the number you scanned and the number you clicked were
-     * different, with nothing having changed but the reading. It says "not yet" instead, and keeps git's own on the
-     * hover so the reader is not left with nothing at all. */
-    it(`states no number while the reading is still being worked out`, async () => {
+    /* THE CASE THIS COMPONENT WAS GETTING WRONG. A row whose file had not been read printed nothing but a pending
+     * mark, and on the workspace Changes panel — where the reading is a background read that arrives in its own
+     * time — that was every row of the list at once: a review with no numbers on it. It prints git's, marked as
+     * standing in for a reading still being worked out. */
+    it(`stands git's numbers in, at half weight, while the reading is still being worked out`, async () => {
         await withComments(false);
-        const host = render({ counting: true, additions: 54, deletions: 0 });
-
-        expect(host.textContent).not.toContain(`54`);
-        expect(host.textContent).toContain(`…`);
-        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(`Working out how much of this is code — +54 counting comments`);
-    });
-
-    it(`has nothing to wait for when the comments are shown — git's counts are the reading`, async () => {
-        await withComments(true);
         const host = render({ counting: true, additions: 54, deletions: 0 });
 
         expect(host.textContent).toContain(`+54`);
         expect(host.textContent).not.toContain(`…`);
+        expect(host.querySelector(`.opacity-50`)).not.toBeNull();
+        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toBe(
+            `+54 counting comments — still working out how much of it is code`,
+        );
+    });
+
+    it(`has nothing to wait for when the comments are shown — git's counts are the reading, at full weight`, async () => {
+        await withComments(true);
+        const host = render({ counting: true, additions: 54, deletions: 0 });
+
+        expect(host.textContent).toContain(`+54`);
+        expect(host.querySelector(`.opacity-50`)).toBeNull();
+        expect(host.querySelector(`[data-tip]`)).toBeNull();
     });
 });

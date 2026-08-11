@@ -29,7 +29,7 @@ import type { WarmBand } from "../warmPlan";
 /* How far down A REVIEW BEING READ the rows are taken — the same bound, and the same reason, as the workspace
  * review's (warmRows' WARM_LIMIT): far enough that an ordinary review is covered whole, since its numbers are what
  * this is for. The pathological case (a mass rename, a generated client) is what the bound is for, and its tail
- * shows a pending mark rather than a number that would change. */
+ * keeps git's counts as a provisional reading (ReviewStat) until something reads it. */
 const WHOLE_REVIEW = 120;
 
 /* And how far down one that is merely LIKELY to be opened. Deliberately much smaller: the attention lane is

@@ -13,14 +13,15 @@ import type { LineStat } from "../composables/workspace/codeStat";
  * one hover away and are what the change will land as — the two readings are never both on screen as bare
  * numbers, because two totals side by side is a question, not an answer.
  *
- * A NUMBER THAT IS NOT KNOWN YET IS NOT PRINTED. That is the rule this component exists to keep, and it used to
- * break it: a row whose file had not been read had no code-only count, so it printed git's — and the moment the
- * file WAS read, which is what clicking it does, the number changed under the reader, along with its heading and
- * the panel's total. Being told +54 while scanning and +12 after clicking teaches you to trust neither. So an
- * unknown count now renders as a pending mark that says exactly that, with git's reading on the hover; the
- * background reader (prefetch/sources/agentsWarm) is what makes the state rare, by having read the review's rows
- * before its reader arrives. A file with NOTHING TO STRIP — no grammar, bytes, too big to send — is a different
- * answer and prints git's numbers for good: they are what its pane shows, line for line.
+ * A COUNT THAT IS NOT SETTLED YET IS STILL A COUNT, AND IT IS GIT'S — held at half weight, with the hover saying
+ * what is still being worked out. This is the rule that replaced a pending mark, and the mark is what earned the
+ * replacement: the code-only reading needs both whole sides of a file, which is a daemon read the background
+ * reader takes in its own time, so on the workspace Changes panel — beside an agent that is still writing, which
+ * is when that list is longest — EVERY row drew three dots and the panel showed no numbers at all. A number the
+ * reader can scan, marked as provisional, beats the honest blank that told them nothing; what the mark was
+ * protecting against (a number moving under the reader when a click reads the file) is what the half weight and
+ * the hover now say out loud. A file with NOTHING TO STRIP — no grammar, bytes, too big to send — is a settled
+ * answer at full weight: git's numbers are what its pane shows, line for line.
  *
  * A change that is ENTIRELY comments would otherwise render as +0 −0, which is the badge's way of saying "a
  * rename" and reads as nothing happened. It says what it is instead, and stays in the list: something did change
@@ -30,8 +31,9 @@ const { code, counting, additions, deletions } = defineProps<{
     // Code-only counts, once the file has been read and stripped. Absent when the file has no grammar to strip —
     // whose pane shows every line it has, making git's numbers the honest ones.
     code?: LineStat;
-    // True while the reading is still being worked out — the file has not been read, so no count can be stated.
-    // A total is `counting` when ANY row under it is (see sumCounts): part of a sum is not a sum.
+    // True while the reading is still being worked out — the file has not been read, so git's count is the only
+    // one there is and it is shown as provisional. A total is `counting` when ANY row under it is (see
+    // sumCounts): part of a sum is not a sum.
     counting?: boolean;
     // Git's own, comments included.
     additions?: number;
@@ -42,19 +44,22 @@ const { showComments } = useLayout();
 
 // Whether the surface is showing code alone — the only mode in which any of the above matters.
 const stripped = computed(() => !showComments.value);
-const pending = computed(() => stripped.value && counting === true);
+// Git's count standing in for one that has not been worked out yet, and therefore the one reading here that is
+// allowed to change. Drawn at half weight, said in the hover.
+const provisional = computed(() => stripped.value && counting === true);
 const shown = computed(() => (stripped.value && code !== undefined ? code : { additions, deletions }));
 const commentsOnly = computed(
-    () => stripped.value && !pending.value && code?.additions === 0 && code.deletions === 0 && ((additions ?? 0) > 0 || (deletions ?? 0) > 0),
+    () => stripped.value && !provisional.value && code?.additions === 0 && code.deletions === 0 && ((additions ?? 0) > 0 || (deletions ?? 0) > 0),
 );
 
 // Git's reading, spelled the way the badge spells it, for the hover.
 const full = computed(() => [additions ? `+${additions}` : ``, deletions ? `−${deletions}` : ``].filter(Boolean).join(` `));
 // Said only when the two readings differ — on everything else the hover would repeat the number under it. While a
-// count is pending it is the only number there is, which is exactly when the hover is worth having.
+// count is provisional the hover is what makes it one, so it is offered as soon as there is a number to qualify;
+// a row with nothing to count (a rename, a conflict) draws no badge at all and gets no hover either.
 const hint = computed<string | undefined>(() => {
-    if (pending.value) {
-        return full.value === `` ? `Working out how much of this is code` : `Working out how much of this is code — ${full.value} counting comments`;
+    if (provisional.value) {
+        return full.value === `` ? undefined : `${full.value} counting comments — still working out how much of it is code`;
     }
     if (!stripped.value || code === undefined || (code.additions === (additions ?? 0) && code.deletions === (deletions ?? 0))) {
         return undefined;
@@ -64,17 +69,17 @@ const hint = computed<string | undefined>(() => {
 </script>
 
 <template>
-    <!-- Not a spinner: a review is a list of these, and forty spinning glyphs down one column is a screen that
-         looks broken. Three dots in the badge's own font and size hold its place and read as "not yet". -->
-    <span v-if="pending" class="shrink-0 font-mono text-[0.65rem] text-subtle" v-tooltip.top="hint">…</span>
     <span
-        v-else-if="commentsOnly"
+        v-if="commentsOnly"
         class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-overlay px-1 py-px text-2xs text-subtle"
         v-tooltip.top="hint"
     >
         <Icon name="eye-slash" class="text-2xs" />comments
     </span>
-    <span v-else-if="hint !== undefined" class="inline-flex shrink-0" v-tooltip.top="hint">
+    <!-- Half weight, not a spinner and not a placeholder: a review is a list of these, and a column of pending
+         marks is a panel with no numbers on it. The count is git's, it may still be replaced by the code's, and
+         both of those facts are what the dimming and the hover are for. -->
+    <span v-else-if="hint !== undefined" class="inline-flex shrink-0" :class="provisional ? 'opacity-50' : ''" v-tooltip.top="hint">
         <DiffStat :additions="shown.additions" :deletions="shown.deletions" />
     </span>
     <DiffStat v-else :additions="shown.additions" :deletions="shown.deletions" />

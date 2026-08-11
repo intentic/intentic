@@ -1,5 +1,6 @@
 import type { GitChangesResponse } from "@intentic-app/api-contract";
 import { router } from "../../../router";
+import { useLayout } from "../../useLayout";
 import { queryClient } from "../../queryPersistence";
 import { changesKey, fetchChanges, fileDiffQuery } from "../../workspace/useChanges";
 import type { WarmBand, WarmTask } from "../warmPlan";
@@ -23,11 +24,29 @@ import { warmRows } from "./warmRows";
  * where it is not (a fresh connection, an invalidation) without this file having to own a second observer whose
  * lifetime nothing manages. */
 
-/* THE ROUTE IS THE ONLY THING THAT SAYS HOW CLOSE THE READER IS. Standing in the workspace, these rows are one
- * click away and belong beside the agent board's cards; standing anywhere else they are still the primary work
- * surface — the plan's whole point is that they stay warm — but the board's cards are nearer, and a band is a
- * claim about distance rather than about importance. */
-const band = (): WarmBand => (router.currentRoute.value.name === `workspace` ? `near` : `work`);
+/* HOW CLOSE THE READER IS, in the two things that say so — which page they are on, and which sidebar panel is
+ * open on it.
+ *
+ * THE LIST BEING ON SCREEN IS `now`, and that is the whole of this file's claim on the plan. These rows are not
+ * one click away when the Changes panel is the open one: they ARE the thing being read, and the +/− beside each
+ * of them is worked out from exactly this read (useCodeStats), so a band that put them behind the board's cards
+ * put the numbers on the screen in front of the user behind reads for screens that are not. It did: on the
+ * workspace route these sat in `near` after the focused conversation's whole review — up to a hundred and twenty
+ * rows of it, in the same band, filed under different keys — so a panel opened beside a working agent showed
+ * provisional counts for minutes.
+ *
+ * Standing in the workspace with another panel open they are one click away and belong beside the board's cards;
+ * standing anywhere else they are still the primary work surface — the plan's whole point is that they stay
+ * warm — but the board's cards are nearer, and a band is a claim about distance rather than about importance. */
+const band = (): WarmBand => {
+    if (router.currentRoute.value.name !== `workspace`) {
+        return `work`;
+    }
+    const layout = useLayout();
+    // Collapsed counts as closed: the aside is not drawn at all, so the rows are a click on the mode switch away
+    // rather than under the reader's eye (WorkspaceDesktop's `sidebarOpen`).
+    return layout.sidebarPanel.value === `changes` && !layout.sidebarCollapsed.value ? `now` : `near`;
+};
 
 export const changesWarmSource = (): readonly WarmTask[] => {
     const list = warmQuery(`changes:list`, `work`, { queryKey: changesKey(), queryFn: fetchChanges });

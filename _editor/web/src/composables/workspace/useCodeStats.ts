@@ -9,12 +9,11 @@ import { codeLineStat, type LineStat } from "./codeStat";
  *
  * THREE STATES, NOT TWO, and that distinction is the whole point of this file. "I have not counted this yet" and
  * "this file has no comments to take out" are opposite answers that used to leave here as the same `undefined`,
- * so a surface could not tell them apart and printed git's number for both. For the second file that number is
- * exactly right and stays. For the first it is a number about a diff nobody is being shown, and it was replaced
- * the moment the file was read — which, because reading is what a click does, meant clicking a row visibly
- * changed the row you clicked, along with its heading and the panel's total. A count that moves is worse than a
- * count that is late: the reader has no way to know which of the two numbers they were supposed to believe. So
- * `counting` is now a state a badge can render as "not yet", and nothing prints a reading it is about to contradict.
+ * so a surface could not tell them apart. Both print git's numbers — there is no other number to print — but only
+ * one of them is FINISHED: the file with nothing to strip shows every line it has, so git's count is its reading
+ * for good, while the uncounted one may be replaced the moment something reads the file. Which of the two a badge
+ * is looking at decides whether it draws the count as settled or as provisional (ReviewStat), and a reader who is
+ * told which is a reader nothing changes under.
  *
  * Keys are the caller's and must carry their scope (which agent, which repo, which side) — this is one store for
  * every review surface in the app, so a file read in two of them is tokenized once. */
@@ -24,7 +23,8 @@ export interface CodeCount {
     // The stripped counts. Absent means git's own are the honest reading — a file with no grammar to strip, bytes,
     // or a diff too big for the daemon to send: all three render whole, comments included.
     readonly code?: LineStat;
-    // Still being worked out. No number can be stated yet, and none should be guessed at.
+    // Still being worked out: git's numbers are the only reading available, and the badge marks them as standing
+    // in for one that has not arrived.
     readonly counting: boolean;
 }
 
@@ -119,9 +119,10 @@ export function useCodeStats() {
  *
  * Summed here rather than in each panel because the rule is subtle in one specific way: a file with nothing to
  * strip contributes GIT'S numbers, which for it are the code-only reading (its pane shows every line it has),
- * while a file still being counted contributes NOTHING AND POISONS THE TOTAL. A heading that added up the rows it
- * happened to know and printed the result was the worst number on the screen: it agreed with neither git nor its
- * own rows, and it changed every time the reader clicked one of them. */
+ * while one file still being counted makes the WHOLE heading unsettled. A part-sum is not a sum: a heading that
+ * added up the rows it happened to know agreed with neither git nor its own rows, and it moved every time the
+ * reader clicked one of them. Unsettled leaves the heading showing git's own total as a provisional reading
+ * (ReviewStat), which is the one number that is at least true about something. */
 export const sumCounts = (rows: readonly { readonly count: CodeCount; readonly additions?: number; readonly deletions?: number }[]): CodeCount => {
     let additions = 0;
     let deletions = 0;
