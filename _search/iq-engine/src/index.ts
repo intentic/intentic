@@ -72,6 +72,10 @@ export interface ResidentEngineOptions extends EngineOptions {
     // so nothing here decides anything — but semantic search going missing is exactly the kind of quiet
     // half-working a host should be able to see in its log.
     readonly onQueryError?: (error: Error) => void;
+    // How much of the embedding backlog is left, after every slice of it. A cold index spends half an hour of
+    // CPU here and says nothing on its own — a host that cannot see this reads the machine as mysteriously busy
+    // and the index as hung, which is exactly the diagnosis this seam exists to prevent.
+    readonly onIndexProgress?: (remaining: number) => void;
 }
 
 export interface ResidentEngineMetrics {
@@ -81,6 +85,9 @@ export interface ResidentEngineMetrics {
     readonly appliedSequence: number;
     readonly revalidated: boolean;
     readonly sweepAgeMs: number | undefined;
+    // Chunks still waiting for a vector. 0 is both "semantic coverage is complete" and "no model configured";
+    // the two are indistinguishable here on purpose — neither is work in flight.
+    readonly embedBacklog: number;
     readonly queryWorker: { readonly live: boolean; readonly pendingRequests: number };
 }
 
@@ -281,6 +288,9 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     // freshness is a comparison of two numbers rather than a flag either side could clear at the wrong moment.
     let dirtySeq = 0;
     let appliedSeq = 0;
+    // Last reading published by the worker's backlog slices; 0 until one lands, which is also the honest answer
+    // on a host with no model.
+    let embedBacklog = 0;
 
     // The sweep publishes before revalidation finishes, so the first query waits only for the file walk — it
     // searches against whatever index exists (rg hits are always live) while the parse/chunk pass catches up.
@@ -333,6 +343,11 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
             revalidatedOnce = true;
             return;
         }
+        if (event.type === "embedding") {
+            embedBacklog = event.remaining;
+            options.onIndexProgress?.(event.remaining);
+            return;
+        }
         if (event.type === "warmed") {
             warmSettled = true;
             publishWarm(event.status);
@@ -363,6 +378,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
             appliedSequence: appliedSeq,
             revalidated: revalidatedOnce,
             sweepAgeMs: sweepStart === 0 ? undefined : Date.now() - sweepStart,
+            embedBacklog,
             queryWorker: scorer.metrics(),
         }),
         async run(request, signal) {

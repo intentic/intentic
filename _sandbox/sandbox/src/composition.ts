@@ -802,12 +802,42 @@ export const createServices = (config: Config, logger: Logger): Services => {
         readClaudeSession: readWorkspaceSession,
     };
     const transcriptLines = createSpokenLinesReader(transcriptDeps);
+    /* A COLD INDEX REBUILD USED TO ANNOUNCE ITSELF NOWHERE, and that silence was the whole bug report.
+     *
+     * Rebuilding every vector in the workspace is ~30 minutes at four cores. Nothing said so: the machine simply
+     * went busy, the index reported a sweep that never completed and a change queue that only grew, and no line
+     * in this log connected the three. It reads exactly like a wedged worker, and it cost a full investigation
+     * to find out it was working correctly the whole time.
+     *
+     * Logged at a human cadence — the first slice, every 30s after, and the finish — so the load has a name
+     * while it is happening. `backlogActive` is what makes the closing line fire only for a backlog that was
+     * actually announced: with no model configured the worker reports 0 forever, and a "complete" for work that
+     * never started is noise. */
+    const BACKLOG_LOG_MS = 30_000;
+    let backlogLoggedAt = 0;
+    let backlogActive = false;
     const iq = createResidentEngine({
         root: workspace.root,
         indexDir: statePath(workspace.root, ".intentic/cache/", "iq"),
         // An index pass that fails once warm() has settled has no caller to reject — without this the index
         // would stop tracking disk and search would just quietly get older.
         onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
+        onIndexProgress: (remaining) => {
+            if (remaining === 0) {
+                if (backlogActive) {
+                    backlogActive = false;
+                    logger.info("iq index embeddings complete — semantic search at full coverage");
+                }
+                return;
+            }
+            const now = Date.now();
+            if (backlogActive && now - backlogLoggedAt < BACKLOG_LOG_MS) {
+                return;
+            }
+            backlogActive = true;
+            backlogLoggedAt = now;
+            logger.info({ remaining }, "iq index building embeddings — semantic search fills in as it goes");
+        },
         // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
         // it silently narrows one to keyword matching — so it has to be visible here.
         onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed — search fell back to keyword matching"),

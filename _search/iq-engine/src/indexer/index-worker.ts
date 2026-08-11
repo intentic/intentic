@@ -49,6 +49,9 @@ export interface IndexWorkerRequest {
 export type IndexWorkerEvent =
     | { readonly type: "swept"; readonly entries: FileEntry[]; readonly sweepStart: number }
     | { readonly type: "indexed"; readonly generation: number; readonly seq: number }
+    // How many chunks still have no vector, published after every slice of the backlog below. A cold index
+    // makes this the ONLY sign that the thread is working rather than wedged — see the slice constants.
+    | { readonly type: "embedding"; readonly remaining: number }
     | { readonly type: "warmed"; readonly status: IndexStatus }
     | { readonly type: "failed"; readonly error: Error };
 
@@ -75,29 +78,58 @@ let requested = 0;
 let applied = 0;
 let draining = false;
 let warmed = false;
+// The generation the last pass wrote, kept because `warmed` is published later than the pass that earned it —
+// see the backlog loop below, which is what has to finish before warm-up is honestly over.
+let lastGeneration = 0;
 
+/* THE EMBEDDING BACKLOG IS DRAINED IN SLICES, WHICH IS WHAT KEEPS THE INDEX FRESH WHILE IT DRAINS.
+ *
+ * A cold index — one just rebuilt, or the first boot on which a model is actually present — has every chunk in
+ * the workspace waiting for a vector. On this repo that is 66k chunks and roughly half an hour of CPU.
+ *
+ * Drained as ONE uncapped embedPending call (which is what this used to do), that half hour sits INSIDE a pass,
+ * and the loop below never reaches the top to re-read `requested`. So no second sweep runs, `applied` stays
+ * where the first pass left it, and every change notification piles up behind work that has nothing to do with
+ * them. Measured on a live sandbox: 84 notifications queued, `applied` stuck at 1, and the last completed sweep
+ * receding to the age of the process — a state indistinguishable, from the outside, from a hung worker. It is
+ * the single most expensive thing this file can get wrong, because the symptom names the wrong culprit.
+ *
+ * Sliced, the loop comes back to the top between batches: freshness is never more than one slice behind, and
+ * the backlog resumes right after the sweep it yielded to. Identical total work on the identical thread.
+ *
+ * The slice is bounded by BOTH a chunk count and a time budget because either alone misbehaves — a run of very
+ * large chunks blows the latency of a count-only slice, and a nearly-empty backlog spins through a time-only
+ * one. The time budget is what actually binds during a cold build (~150 chunks at the 4-thread rate), so a
+ * sweep waiting behind the backlog waits seconds, not the rest of the rebuild. */
+const EMBED_SLICE_CHUNKS = 512;
+const EMBED_SLICE_MS = 3_000;
+
+// The half of a pass that makes the index match disk. Embedding is deliberately NOT here: this is what
+// freshness depends on, and it must never be stuck behind the backlog.
 const pass = async (target: number): Promise<void> => {
     const sweepStart = Date.now();
     const entries = await sweep(root, false);
     post({ type: "swept", entries, sweepStart });
     const { generation } = await revalidate(db, entries, parseEntry);
+    lastGeneration = generation;
     applied = target;
     post({ type: "indexed", generation, seq: applied });
-    // The embedding backlog, uncapped — this thread has nothing else to do, and a complete backlog is what lets
-    // the query path drop its own inline top-up (see dispatch's topUpEmbeddings).
-    const embedder = await getEmbedder();
-    if (embedder !== undefined) {
-        await embedPending(db, embedder, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    }
-    compactIndex(db);
-    if (!warmed) {
-        warmed = true;
-        post({ type: "warmed", status: readIndexStatus(db, generation) });
-    }
 };
 
-// One pass at a time. A failure abandons the rest of the queue and reports — `applied` stays behind `requested`,
-// so the daemon keeps reading "stale" (honest) and the next change notification retries.
+// One bounded slice of the backlog; answers how many chunks still have no vector. No model configured (or none
+// present in the image) is not a backlog — it is a semantic tier that stays off, and 0 says so.
+const embedSlice = async (): Promise<number> => {
+    const embedder = await getEmbedder();
+    if (embedder === undefined) {
+        return 0;
+    }
+    return embedPending(db, embedder, EMBED_SLICE_CHUNKS, EMBED_SLICE_MS);
+};
+
+// One thing at a time on this thread, FRESHNESS FIRST. Each turn re-reads `requested`, so a notification that
+// arrives mid-backlog is swept before the next slice rather than after the last one. A failure abandons the rest
+// and reports — `applied` stays behind `requested`, so the daemon keeps reading "stale" (honest) and the next
+// change notification retries.
 const drain = async (): Promise<void> => {
     if (draining) {
         return;
@@ -109,10 +141,31 @@ const drain = async (): Promise<void> => {
             // claim to have seen, and a notification landing mid-pass raises `requested` so this loop runs again
             // rather than folding the change into a pass that had already swept past it.
             const target = requested;
-            if (applied >= target) {
+            if (applied < target) {
+                await pass(target);
+                continue;
+            }
+            const remaining = await embedSlice();
+            // Published even at 0: it is what tells the daemon a backlog it was watching has finished, and on a
+            // host with no model it is the steady state rather than a missing reading.
+            post({ type: "embedding", remaining });
+            if (remaining === 0) {
+                // Only once the backlog is gone — compaction between slices would pay a full incremental vacuum
+                // for every few hundred chunks of a rebuild.
+                compactIndex(db);
+                /* WARM MEANS THE SEMANTIC TIER IS ACTUALLY THERE, which is why it is published HERE and not at
+                 * the end of the first pass. Slicing the backlog made that tempting — the index answers for
+                 * what is on disk long before the vectors exist — but a caller that awaits warm() and then
+                 * queries is asking for the whole engine, and resolving early hands it a BM25-only answer with
+                 * no way to tell that is what it got. A host that wants the earlier signal has `indexed`.
+                 * On a host with no model the backlog is empty on the first look, so this still settles at the
+                 * end of the first pass — the semantic tier being off is not warm-up still running. */
+                if (!warmed) {
+                    warmed = true;
+                    post({ type: "warmed", status: readIndexStatus(db, lastGeneration) });
+                }
                 return;
             }
-            await pass(target);
         }
     } catch (error) {
         post({ type: "failed", error: error instanceof Error ? error : new Error(String(error)) });

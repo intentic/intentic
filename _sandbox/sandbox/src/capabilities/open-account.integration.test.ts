@@ -16,7 +16,12 @@ const identity = (id: string, openAccounts: "on" | "off"): Capability =>
 const harness = (entries: Capability[]) => {
     const store = memoryCapabilitiesStore(entries);
     const written = new Map<string, string>();
-    const files = fakeFiles({ write: async (path: string, content: string) => void written.set(path, content) });
+    // Skills are written as text; the binary arm of the writer's signature is decoded rather than refused so
+    // this fake matches the real one instead of narrowing it.
+    const files = fakeFiles({
+        write: async (path: string, content: string | Uint8Array) =>
+            void written.set(path, typeof content === "string" ? content : new TextDecoder().decode(content)),
+    });
     return { store, written, services: services({ workspace: tempWorkspace([]), capabilities: store, files }) };
 };
 

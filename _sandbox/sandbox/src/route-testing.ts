@@ -558,6 +558,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 appliedSequence: 0,
                 revalidated: true,
                 sweepAgeMs: 0,
+                embedBacklog: 0,
                 queryWorker: { live: false, pendingRequests: 0 },
             }),
             run: async () => ({
