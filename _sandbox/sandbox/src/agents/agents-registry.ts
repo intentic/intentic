@@ -54,28 +54,9 @@ const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(promp
  * that fits it. One number, so a note is never cut at a length nothing asked it to respect. */
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
 
-/* The same scrub for a drafted commit BODY, which differs from a title in the one way that matters: its
- * newlines are the content. The body arrives as "- " fact lines and is read back as those lines, so collapsing
- * them the way sanitizeTitle does would run separate facts into one unreadable sentence. Line breaks
- * survive; every other control character does not, and the whole thing is bounded so a model that ignored the
- * prompt's line count cannot put a page into the commit box.
- *
- * The bound has to agree with the line count it backs up, or it is not a bound: at the two lines the prompt now
- * asks for (git/commit-message.ts), 1,000 characters left room for two paragraphs wearing a bullet each, which
- * is the shape the shorter ask exists to stop. 400 is three full lines and still several times what a drafted
- * body actually runs to. */
-const MAX_BODY_LENGTH = 400;
-const sanitizeBody = (body: string): string | undefined => {
-    const clean = body
-        .replaceAll(/\r\n?/gu, "\n")
-        .replaceAll(/[\p{Cc}\p{Cf}]/gu, (character) => (character === "\n" ? "\n" : " "))
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "")
-        .join("\n")
-        .slice(0, MAX_BODY_LENGTH);
-    return clean === "" ? undefined : clean;
-};
+/* There is no body scrub here any more, and there is no body to scrub: a drafted message is a subject and, for a
+ * repo that keeps a changelog, its notes (git/commit-message.ts). The multi-line cleaner this replaces existed
+ * only to keep a model's "- " fact lines readable, and those lines are neither asked for nor read back now. */
 
 interface RuntimeState {
     running: boolean;
@@ -225,7 +206,11 @@ export interface AgentsRegistry {
      * which re-reads these entries on every scan — so what the panel needs is a REASON to scan, and the caller
      * publishes one the moment this returns (agents/landed-subject.ts). Leaves updatedAt alone for the same
      * reason setTitle does — the land already stamped the activity this describes. */
-    readonly setLandedSubject: (id: string, draft: { subject: string; body?: string; note?: string; breaking?: string }) => Promise<void>;
+    readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string }) => Promise<void>;
+    /* Say that the sentence above is being written right now, or has stopped being written — the only part of a
+     * landing a user ever waits for, and therefore the only part worth drawing a pending state for. Runtime and
+     * broadcast rather than persisted and published; the implementation says why. Unknown id ⇒ no-op. */
+    readonly setDraftingSubject: (id: string, drafting: boolean) => void;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -336,6 +321,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
      * bookkeeping could clear is not a lease. Empty in the overwhelmingly common case, so the extra read in
      * begin costs a Set miss. */
     const rewinding = new Set<string>();
+    /* Agents whose landed work is having its commit message written this second (agents/landed-subject.ts).
+     * A Set beside `rewinding` rather than a flag on RuntimeState, and for the same reason: the drafting starts
+     * AFTER the turn that landed the work has ended, so a per-turn map is either stale or already replaced by
+     * the next turn's fresh state by the time this would be cleared. */
+    const draftingSubjects = new Set<string>();
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
     // Bumped by broadcast(), so it advances exactly once per published change — see `revision` on the interface.
     let revision = 0;
@@ -432,6 +422,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(state?.contextTokens !== undefined ? { contextTokens: state.contextTokens } : {}),
             ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
+            // True only for the seconds a model is writing this landing's commit message — see setDraftingSubject.
+            ...(draftingSubjects.has(entry.id) ? { draftingSubject: true as const } : {}),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
             ...(entry.seenAt !== undefined ? { seenAt: entry.seenAt } : {}),
             ...(entry.archivedAt !== undefined ? { archivedAt: entry.archivedAt } : {}),
@@ -680,7 +672,6 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                  * answered, a check that found nothing to change — and those are the turns most likely to be
                  * followed by the commit that needed the sentence. */
                 ...(existing?.landedSubject !== undefined ? { landedSubject: existing.landedSubject } : {}),
-                ...(existing?.landedBody !== undefined ? { landedBody: existing.landedBody } : {}),
                 ...(existing?.landedNote !== undefined ? { landedNote: existing.landedNote } : {}),
                 ...(existing?.landedBreaking !== undefined ? { landedBreaking: existing.landedBreaking } : {}),
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
@@ -737,21 +728,39 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined || clean === undefined) {
                 return;
             }
-            /* The body and the note go through their own cleaners (the body keeps its line breaks; see
-             * sanitizeBody) and are both CLEARED when this land wrote none. They describe the claim as it NOW
-             * stands, so a second land that turned out to need neither must not leave the previous land's
-             * facts standing over a subject that has since been rewritten. */
-            const cleanBody = draft.body === undefined ? undefined : sanitizeBody(draft.body);
+            /* Both notes go through the note cleaner and are both CLEARED when this land wrote none. They
+             * describe the claim as it NOW stands, so a second land that turned out to need neither must not
+             * leave the previous land's sentences standing over a subject that has since been rewritten. */
             const cleanNote = draft.note === undefined ? undefined : sanitizeNote(draft.note);
             const cleanBreaking = draft.breaking === undefined ? undefined : sanitizeNote(draft.breaking);
             replace({
                 ...entry,
                 landedSubject: clean,
-                ...(cleanBody === undefined ? { landedBody: undefined } : { landedBody: cleanBody }),
                 ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }),
                 ...(cleanBreaking === undefined ? { landedBreaking: undefined } : { landedBreaking: cleanBreaking }),
             });
             await persist();
+        },
+        /* WHETHER A SENTENCE IS BEING WRITTEN FOR THIS AGENT RIGHT NOW — set around the model call and nowhere
+         * else (agents/landed-subject.ts).
+         *
+         * Runtime, never persisted, and that is the point rather than a shortcut: a daemon that died mid-draft
+         * did not leave a draft running, so a flag restored from disk would be a spinner nothing will ever
+         * clear. A restart forgetting it is the correct answer.
+         *
+         * Broadcast, because a flag nobody is told about is a flag nobody can draw. This is the cheap frame the
+         * roster already sends, not the review — see the note at the publish site for which of the two carries
+         * what. */
+        setDraftingSubject: (id, drafting) => {
+            if (entryOf(id) === undefined || draftingSubjects.has(id) === drafting) {
+                return;
+            }
+            if (drafting) {
+                draftingSubjects.add(id);
+            } else {
+                draftingSubjects.delete(id);
+            }
+            broadcast();
         },
         markSeen: async (id, now) => {
             const entry = entryOf(id);

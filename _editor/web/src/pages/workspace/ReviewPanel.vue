@@ -22,6 +22,7 @@ import { COMMIT_SCOPE, useChanges, workingStatKey } from "../../composables/work
 import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { useNow } from "../../composables/useNow";
+import { useReceipts } from "../../composables/receipts";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";
 import type { OpenMode } from "./workspaceTabs";
@@ -112,6 +113,8 @@ const { fleet } = useAgents();
 const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
+// The app's quiet channel, used here for the one thing about a landing that arrives late enough to be waited on.
+const { say } = useReceipts();
 
 const legend = computed(() => summarizeOrigins(scannable.value));
 const originFilter = ref<string | undefined>(undefined);
@@ -202,11 +205,16 @@ const originNote = (id: string): string | undefined => {
  * read. */
 const originSubject = (id: string): string | undefined => originOf(id)?.subject;
 
-/* What the chip actually files: the subject, the drafted facts under it, and the `Release-Note:` /
- * `Breaking-Note:` trailers at the bottom when this landing had them (a repo that keeps a changelog, and a
- * change its users would notice — or lose). Composed HERE rather than stored joined, because a subject is one
- * line everywhere it is SHOWN — the chip in the legend is one line — and the parts only become a commit
- * message at this moment. See OriginAgent.body.
+/* What the chip actually files: the subject, and the `Release-Note:` / `Breaking-Note:` trailers under it when
+ * this landing had them (a repo that keeps a changelog, and a change its users would notice — or lose).
+ * Composed HERE rather than stored joined, because a subject is one line everywhere it is SHOWN — the chip in
+ * the legend is one line — and the parts only become a commit message at this moment.
+ *
+ * AND NOTHING ELSE. A drafted message used to carry a body between the two — up to two "- " fact lines — and
+ * it is gone from the whole path, prompt included (the daemon's git/commit-message.ts). It was the bulk of what
+ * the model wrote and therefore the bulk of the wait, and what it bought was the subject restated at greater
+ * length over a diff git already records. A subject and, when there is one, the sentence for the people who
+ * read the release, is the whole of a message worth filing.
  *
  * The two trailers share ONE paragraph, joined by a single newline: git only reads the message's final block
  * as trailers, so a blank line between them would demote the first to body text and the release harvest would
@@ -223,7 +231,7 @@ const originMessage = (id: string): string | undefined => {
     ]
         .filter((line) => line !== ``)
         .join(`\n`);
-    return [subject, origin?.body ?? ``, trailers].filter((part) => part !== ``).join(`\n\n`);
+    return [subject, trailers].filter((part) => part !== ``).join(`\n\n`);
 };
 
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
@@ -257,6 +265,33 @@ const filterMessage = computed<string | undefined>(() =>
     originFilter.value === undefined || originFilter.value === YOURS ? undefined : originMessage(originFilter.value),
 );
 followFilledMessage(filterMessage);
+
+/* IS A SENTENCE ON ITS WAY FOR THIS SESSION — read off the fleet roster (AgentSummary.draftingSubject), which
+ * is live and costs nothing to ask, rather than off the review, which costs a workspace-wide rescan.
+ *
+ * This exists because "no message" and "a message you are about to get" were the same empty box, and the second
+ * is the ordinary state in the seconds after a land — exactly the window in which somebody who just watched an
+ * agent finish walks over to Changes and clicks its chip. Being told costs one line and turns a control that
+ * looks broken into one that is obviously working. */
+const originDrafting = (id: string): boolean => agentOf(id)?.draftingSubject === true;
+// The lit chip's own answer, for the box's placeholder below.
+const filterDrafting = computed(
+    () => originFilter.value !== undefined && originFilter.value !== YOURS && filterMessage.value === undefined && originDrafting(originFilter.value),
+);
+
+/* AND SAY WHEN IT ARRIVES. The other edge — a draft STARTING — is reported above this panel and outlives it
+ * (composables/workspace/draftingReceipts.ts): the wait begins on the /agents board, where this component does
+ * not exist. What belongs here is the answer, because this is the only place that holds the review and can
+ * therefore tell the two ways a draft ends apart: a sentence was written, or the model chain ran dry and
+ * nothing was. Announcing the second as "ready" would walk the user over to an empty box on purpose. */
+const draftingIds = computed(() => fleet.value.filter((agent) => agent.draftingSubject === true).map((agent) => agent.id));
+watch(draftingIds, (drafting, before) => {
+    for (const id of before.filter((candidate) => !drafting.includes(candidate))) {
+        if (originSubject(id) !== undefined) {
+            say(`Commit message ready for ${originLabel(id)}`);
+        }
+    }
+});
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -973,15 +1008,22 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
-            <!-- A textarea, not an input: a commit message has a body, and the release-note trailer a session's
-                 landed sentence carries lives in it. Enter breaks the line (which is what a body needs);
-                 Ctrl/Cmd+Enter still commits, as the placeholder says. One row to start with — growCommitBox
-                 takes it from there, on the real height of what is in it, and it scrolls past the ceiling. -->
+            <!-- A textarea, not an input: the release-note trailer a session's landed sentence carries lives
+                 under the subject, and a message the user writes by hand may have a body of its own. Enter
+                 breaks the line; Ctrl/Cmd+Enter still commits, as the placeholder says. One row to start with —
+                 growCommitBox takes it from there, on the real height of what is in it, and it scrolls past the
+                 ceiling.
+
+                 The placeholder does the waiting: a lit chip whose sentence is still being written says so
+                 HERE, in the box the sentence is going to land in, rather than leaving an empty box that looks
+                 identical to one nothing is coming for. It is a placeholder rather than filled text on purpose —
+                 the box must stay the user's to type in, and typing over it is how they say they'd rather not
+                 wait. -->
             <textarea
                 ref="commitBox"
                 v-model="commitMessage"
                 rows="1"
-                placeholder="Message (Ctrl+Enter to commit)"
+                :placeholder="filterDrafting ? `Writing a message for ${filterLabel}…` : `Message (Ctrl+Enter to commit)`"
                 class="scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto rounded-md border border-line bg-canvas px-2 py-1 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
@@ -1193,7 +1235,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @mouseleave="hoverCard?.hide()"
                 :aria-label="`${originFilter === entry.id ? `Clear the filter on` : `Show only`} ${originLabel(entry.id)} — ${plural(entry.files, `file`)}${
                     originMark(entry.id) ? `, ${originMark(entry.id)!.label.toLowerCase()}` : ``
-                }${originTitle(entry.id) ? `; names the commit` : ``}`"
+                }${originDrafting(entry.id) ? `; its commit message is being written` : originTitle(entry.id) ? `; names the commit` : ``}`"
             >
                 <!-- The session has not finished with your tree: its count above is an instalment, not a total.
                      A dot rather than a status glyph, and BEFORE the logo rather than on it — the logo is 11px,
@@ -1202,6 +1244,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      leading dot costs 10px, only on the rare chip that is actually live, and the words are one
                      hover away on the card the chip already raises. -->
                 <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
+                <!-- …and the same 10px, spent again on the other thing this chip can be waiting for: the
+                     sentence it will file into the commit box, still being written. It pulses rather than sits,
+                     because the unfinished dot above is already a static dot and two motionless dots in the same
+                     slot would read as one state with two colours. Gone the moment the sentence lands. -->
+                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current opacity-60"></span>
                 <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>

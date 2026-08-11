@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 import { useChat } from "../composables/chat/useChat";
 import { onScreen } from "../composables/onScreen";
 import { startBackgroundLoader, stopBackgroundLoader } from "../composables/prefetch/useBackgroundLoader";
+import { startDraftingReceipts } from "../composables/workspace/draftingReceipts";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import PoppablePanels from "./PoppablePanels.vue";
@@ -60,6 +61,12 @@ onUnmounted(() => liveness.stop());
 // open. It gates itself on the stream's verdict and on whether anyone is looking (composables/prefetch).
 onMounted(() => startBackgroundLoader());
 onUnmounted(() => stopBackgroundLoader());
+
+/* …and the report that a landing's commit message is being written, for the third variation of the reason the
+ * notice and the receipt host are up here: the seconds it takes are spent walking away from the board that
+ * landed it, so a report tied to the Changes panel would only ever reach someone already standing in front of
+ * the answer. */
+startDraftingReceipts();
 </script>
 
 <template>

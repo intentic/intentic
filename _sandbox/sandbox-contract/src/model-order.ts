@@ -135,6 +135,46 @@ const lastRankOf = (family: string, ranks: Readonly<Record<string, number>>): nu
 
 const releaseTierRankOf = (family: string): number => lastRankOf(family, RELEASE_TIER_RANK);
 
+/* HOW HARD AN ID SAYS IT WILL THINK. A routed catalog does not publish one row per model — it publishes one row
+ * per model PER THINKING LEVEL, spelling the level into the id: `gemini-3.6-flash-high` and
+ * `gemini-3.5-flash-extra-low` are the same Flash at opposite ends of its reasoning budget.
+ *
+ * Which the ranking above cannot see at all, and that blind spot has a direction: `high` and `low` are both
+ * unrecognized words, so two variants of one model tie on tier and the RELEASE tiebreak settles them — and the
+ * newest variant a channel publishes is routinely the high one. The quick model, whose entire job is to be the
+ * cheap rung, would therefore reach for the most expensive reading of the cheapest model it can find.
+ *
+ * That is not a small mis-sort. Thinking is the difference between a commit message that is in the box before
+ * the user has finished reading the file list and one that arrives half a minute later — measured at ~2s versus
+ * ~27s on the same model and the same diff (agent/one-shot.ts, which disables thinking for the rungs where a
+ * request parameter can). For a routed rung there is no such parameter: the id IS the setting, so this ranking
+ * is the only place the choice can be made.
+ *
+ * Read ONLY by the cheap-end order. A picker orders a catalog by what a person reaches for, and a person
+ * pinning `-high` on purpose means it — see compareCheapestFirst for the seam this belongs to. */
+const THINKING_RANK: Readonly<Record<string, number>> = {
+    minimal: 0,
+    none: 0,
+    low: 1,
+    medium: 3,
+    high: 4,
+    max: 4,
+    // Not a level but a switch, and the loudest statement an id can make about this: a channel that vends
+    // `kimi-k2` beside `kimi-k2-thinking` is naming the same model with its reasoning turned on.
+    thinking: 4,
+};
+
+/* An id naming NO level sits between the two ends rather than at either — the provider's own default, which for
+ * a model that can think is usually some thinking. Ranking it cheapest would seat a silent default ahead of an
+ * id that explicitly says `minimal`, and ranking it dearest would bury every model whose channel publishes no
+ * variants at all (Anthropic's, Kimi's) beneath one that does. Neither is what the id claims. */
+const UNSTATED_THINKING = 2;
+
+const thinkingRankOf = (family: string): number => {
+    const rank = lastRankOf(family, THINKING_RANK);
+    return rank === UNRANKED ? UNSTATED_THINKING : rank;
+};
+
 // The LAST recognized word wins, because tier words compose and the rightmost is the most specific one:
 // gemini-flash-lite is the cheap end of Flash, gpt-codex-max the frontier end of Codex.
 export const tierRankOf = (family: string): number => lastRankOf(family, TIER_RANK);
@@ -181,7 +221,20 @@ export const compareCheapestFirst = (left: string, right: string): number => {
     const rightFamily = familyOf(right);
     return (
         tierRankOf(rightFamily) - tierRankOf(leftFamily) ||
+        // BEFORE release, and that placement is the point: two rows of one model differing only in thinking
+        // level are the same model, so recency has nothing to say between them, and letting it speak is what
+        // seated the high variant. Tier still wins over both — a thinking Haiku is cheaper than a silent Opus.
+        thinkingRankOf(leftFamily) - thinkingRankOf(rightFamily) ||
         compareRelease(releaseOf(left), releaseOf(right)) ||
         releaseTierRankOf(rightFamily) - releaseTierRankOf(leftFamily)
     );
 };
+
+/* WOULD RUNNING THIS ID MAKE THE MODEL THINK — as far as its name admits, which for a routed catalog is as far
+ * as anyone can tell without running it. True only for an id that spells out a level ABOVE the quiet end, so an
+ * ordinary id nobody has annotated (claude-haiku-4-5, kimi-k2) is never accused of it.
+ *
+ * Exported for one job: a settings row that lets someone pin the quick model has to be able to say that the row
+ * they picked is the thinking one. The ordering above keeps Auto off these by construction; a PIN is a
+ * deliberate choice and is honoured as written, which only works if the choice is legible when it is made. */
+export const namesThinking = (id: string): boolean => thinkingRankOf(familyOf(id)) > UNSTATED_THINKING;

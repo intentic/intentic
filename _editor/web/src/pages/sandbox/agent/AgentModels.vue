@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type AgentProvider, parsePinned, quickModelKey } from "@intentic/sandbox-contract";
+import { type AgentProvider, namesThinking, parsePinned, quickModelKey } from "@intentic/sandbox-contract";
 import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { providerReady } from "../../../composables/chat/access";
@@ -186,6 +186,20 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                              run time, so the helpers keep working — but silently dropping it from the screen
                              would look like the app had eaten a setting the user made. -->
                         <span v-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
+                        <!-- …and a pin that will THINK says so too, because nothing else on this screen would.
+                             A routed channel publishes one row per reasoning level and spells the level into
+                             the id, so `…-flash-high` and `…-flash-low` sit in the dropdown looking like two
+                             ordinary models — and picking the wrong one turns a two-second commit message into
+                             a half-minute one. Auto is kept off these rows by the ordering itself
+                             (contract model-order.ts); a pin is a deliberate choice and is run as written, so
+                             the only thing owed here is that the choice be legible after it is made. -->
+                        <span
+                            v-else-if="entry.choice && namesThinking(entry.choice.model)"
+                            class="shrink-0 text-2xs text-warning"
+                            v-tooltip.top="'This model reasons before it answers — accurate, but seconds slower for a job meant to be instant. A quieter row of the same model is usually the better quick model.'"
+                        >
+                            Thinks
+                        </span>
                         <button
                             type="button"
                             class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-30"

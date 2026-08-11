@@ -1,7 +1,7 @@
 import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanBreakingNote, cleanCommitBody, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { cleanBreakingNote, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
@@ -83,7 +83,22 @@ export const describeLanding = async (services: Services, id: string): Promise<v
      * committed under that question no matter what the four turns since had done. Worse, the title is itself
      * model-written — a naming pass that failed and asked for more context put that request into the commit
      * message. What the change was for is legible in what it did, and the diff cannot go stale. */
-    const { text } = await askQuickModel(services, commitMessagePrompt(diffs, wantsNote), new AbortController().signal);
+    /* SAY THAT IT IS BEING WRITTEN, before the call rather than after it. The sentence is the one thing about a
+     * landing that arrives LATE, so the seconds it takes are the only part of this feature a user ever
+     * experiences as a wait — and until this flag they waited at a chip that looked exactly like one with
+     * nothing behind it. Broadcast on the roster rather than published as a review change, because it is a fact
+     * about the AGENT and the roster frame is already live: routing it through `landings` would spend a
+     * workspace-wide rescan to deliver one boolean (see the publish at the end, which spends one deliberately).
+     *
+     * The `finally` is the whole of the cleanup: every road out of the model call — an answer, a refusal, the
+     * chain running dry, a throw — has to clear it, or a chip keeps saying "writing…" about a call that ended
+     * minutes ago. */
+    await services.agents.setDraftingSubject(id, true);
+    const { text } = await services.perf
+        .track("landing.subject", { agent: id, repos: diffs.length }, () =>
+            askQuickModel(services, commitMessagePrompt(diffs, wantsNote), new AbortController().signal),
+        )
+        .finally(() => services.agents.setDraftingSubject(id, false));
     const subject = cleanCommitSubject(text);
     // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so it
     // is checked here rather than left to the throw above — and a model that asked a question back instead of
@@ -92,17 +107,18 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
         return;
     }
-    // The body rides along with the subject — the facts under it, which the chip never shows and the commit box
-    // files beneath the line it does. Empty whenever the model judged the subject sufficient, which is expected.
-    const body = cleanCommitBody(text);
-    // The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
-    // trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
-    // sentence rides the same gate — a repo with no changelog has no update card quoting it either.
+    /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
+     * trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
+     * sentence rides the same gate — a repo with no changelog has no update card quoting it either.
+     *
+     * These two and the subject are now the WHOLE of a drafted message. The body that used to sit between them
+     * is gone (git/commit-message.ts says why it is not read back): a subject naming what changed, and — for a
+     * repo that publishes one — a sentence for the people who will read the release, is everything the box
+     * needs to be filled with. */
     const note = wantsNote ? cleanReleaseNote(text) : ``;
     const breaking = wantsNote ? cleanBreakingNote(text) : ``;
     await services.agents.setLandedSubject(id, {
         subject,
-        ...(body === `` ? {} : { body }),
         ...(note === `` ? {} : { note }),
         ...(breaking === `` ? {} : { breaking }),
     });

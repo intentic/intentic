@@ -184,8 +184,6 @@ export const createAgentOrigins = (
                     // What the landed work did, for the chip to file into the commit box — written at land
                     // time from the diff, so it describes the change rather than the ask the title names.
                     ...(entry.landedSubject !== undefined ? { subject: entry.landedSubject } : {}),
-                    // …the facts under it, which the box files as the message's body and the chip never shows.
-                    ...(entry.landedBody !== undefined ? { body: entry.landedBody } : {}),
                     // …and the same landing said to a user, for a repo that keeps a changelog. Travels beside
                     // the subject rather than inside it so the box can compose the commit's trailer.
                     ...(entry.landedNote !== undefined ? { note: entry.landedNote } : {}),

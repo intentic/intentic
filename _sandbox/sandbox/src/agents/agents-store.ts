@@ -119,10 +119,6 @@ export const PersistedAgentSchema = z.object({
      * Overwritten by the next land (the claim grows; so does the sentence about it) and left alone otherwise —
      * a commit expires the claim, and the entry going quiet is what retires this with it. */
     landedSubject: z.string().optional(),
-    // The facts under that subject — the drafted body, as the "- " lines it was written as. Stored apart from
-    // the subject because the chip in the legend shows the subject alone, and the two only become one message
-    // at the moment the commit box is filled. Absent when the subject said everything, which is most landings.
-    landedBody: z.string().optional(),
     // The user-facing sentence for the same landing, when this repo keeps a changelog — see OriginAgent.note for
     // why it is stored apart from the subject rather than as a second line of it. Persisted for the same reason
     // the subject is: the commit that carries it is usually made long after the land that wrote it.

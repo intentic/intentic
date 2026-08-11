@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { compareCheapestFirst, compareModelIds, compareUnrankedModelIds, familyOf, releaseOf, tierRankOf } from "./model-order.js";
+import { compareCheapestFirst, compareModelIds, compareUnrankedModelIds, familyOf, namesThinking, releaseOf, tierRankOf } from "./model-order.js";
 
 /* The order every provider's catalog is served and browsed in. The rule exists because only Anthropic publishes
  * a ranking: the OpenAI-compatible endpoints behind Codex, Gemini, Kimi and Grok hand back a SET, and taking
@@ -184,6 +184,37 @@ test("finds each vendor's own cheap rung, including a re-served open-weights row
 
 test("reads a release-local tier ladder from the cheap end too", () => {
     expect(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].toSorted(compareCheapestFirst)[0]).toBe("gpt-5.6-luna");
+});
+
+test("refuses the thinking variant of a model, however new it is", () => {
+    /* The bug this rule exists for, in the shape the live catalog actually publishes it: a routed channel vends
+     * one row per thinking LEVEL, and the newest row of the cheapest model was the high one — so the ladder
+     * whose whole job is to be the cheap rung reached for the most expensive reading of it, and a commit
+     * message that takes 2s took closer to 30. */
+    expect(["gemini-3.6-flash-high", "gemini-3.5-flash-extra-low"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-extra-low");
+    // …and it is the LEVEL that decides, not the release: same model, quieter row wins.
+    expect(["gemini-3.5-flash-high", "gemini-3.5-flash-minimal"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-minimal");
+    // Tier still outranks it: a thinking cheap model beats a silent expensive one, which is the order that
+    // keeps this from quietly promoting a frontier row for being unannotated.
+    expect(["gemini-3-pro", "gemini-3.6-flash-high"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.6-flash-high");
+    // An id nobody annotated is not accused of thinking, and is not credited with silence either: it sits
+    // between the stated ends.
+    expect(["gemini-3-flash", "gemini-3.5-flash-low"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-low");
+    expect(["gemini-3-flash", "gemini-3.6-flash-high"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash");
+});
+
+test("names the thinking rows, and only those", () => {
+    // What a settings row shows beside a pin, so that choosing one is a choice rather than an accident.
+    expect(namesThinking("gemini-3.6-flash-high")).toBe(true);
+    expect(namesThinking("gemini-3.1-pro-low")).toBe(false);
+    expect(namesThinking("gemini-3.5-flash-extra-low")).toBe(false);
+    expect(namesThinking("claude-haiku-4-5-20251001")).toBe(false);
+    expect(namesThinking("gpt-5.6-luna")).toBe(false);
+    // An effort word that is not `high` still names one; so does the on/off form a channel vends beside its
+    // quiet row.
+    expect(namesThinking("gpt-oss-120b-medium")).toBe(true);
+    expect(namesThinking("kimi-k2-thinking")).toBe(true);
+    expect(namesThinking("kimi-k2")).toBe(false);
 });
 
 test("falls back on the newest release for a catalog that publishes no cheap tier at all", () => {

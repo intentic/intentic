@@ -288,8 +288,6 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         `Format:`,
         `<type>(<optional scope>): <subject>`,
         ``,
-        `- <what changed, one fact per line>`,
-        ``,
         `Rules:`,
         // Stated first because it is the part being dictated rather than inferred, and stated as a closed list
         // because an open one gets `update:` and `misc:`.
@@ -300,25 +298,24 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         /* THE INSTRUCTION THAT MAKES THIS HISTORY SEARCHABLE. A message reading "improve error handling" matches
          * nothing anyone would ever look for; the same change written as "surface the 401 from resolveCredential
          * in the account picker" matches the symbol, the surface and the condition. The cheap rung will not do
-         * this unprompted — it summarises, because summarising is what it is for — so the demand is explicit and
-         * repeated in the body rule below. */
+         * this unprompted — it summarises, because summarising is what it is for — so the demand is explicit.
+         * It carries more weight now than it used to: the subject is the ONLY line describing the change, so
+         * every identifier that does not fit in it is one this history cannot be searched by. */
         `- NAME THINGS. Use the real identifiers from the diff — function, component, route, setting, package`,
         `  and option names, spelled as the code spells them. These are what someone searching this history`,
         `  later will search for, and a message without them is unfindable.`,
-        // TWO LINES, not the four this asked for. The body is read back in a commit box the width of a panel and
-        // by whoever runs `git log` later, and a four-line body earned its length by padding: the third and
-        // fourth lines were reliably the first two said again, or a fact the diff makes obvious. Two forces the
-        // choice the "densest first" demand was always making.
-        `- Then a blank line, then up to 2 body lines starting with "- ". Each states one concrete thing the`,
-        `  change does, densest first, naming the things it touches. Say what behaviour is different now, and`,
-        `  what it was before when the contrast is the point.`,
+        /* ONE LINE, and the ban is stated before anything else can invite a second. The body used to be up to
+         * two "- " lines under the subject, and it was the wrong thing to spend on twice over: it is the bulk of
+         * what the model generates (so the bulk of the seconds the user waits for a message that is meant to be
+         * there before they finish reading the file list), and what it bought was reliably the subject said
+         * again at greater length. What actually earns its place beside the subject is the Release-Note — a
+         * sentence for a different audience that the subject genuinely cannot carry. */
+        `- ONE LINE ONLY. No body, no bullet list, no blank line after the subject, no explanation under it.`,
         // The single largest source of bloat in a drafted message, and the easiest to state as a ban: the file
         // list is already in the commit, and reproducing it costs the reader (or the agent reading it back)
         // context to learn nothing.
         `- Never list the files that changed. Git already records them; repeating them wastes the reader's time.`,
-        `- No filler. No "this commit", no "various", no "various improvements", no "improved code quality", no`,
-        `  restating the subject as the first body line.`,
-        `- Omit the body entirely when the subject already says everything — a one-line rename needs one line.`,
+        `- No filler. No "this commit", no "various", no "various improvements", no "improved code quality".`,
         // A commit spanning repos gets one message, so it has to describe the change rather than any one repo.
         diffs.length > 1 ? `- This commit spans ${diffs.length} repositories and shares one message. Describe the change as a whole.` : undefined,
         /* THE RELEASE NOTE, asked for in the terms it will be READ in — by someone deciding whether to take an
@@ -354,8 +351,8 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         ...repos,
         ``,
         wantsNote
-            ? `Reply with the message only — subject, optional body, and a Release-Note line only if a user would notice this change.`
-            : `Reply with the message only — subject, and a body only if it says something the subject does not.`,
+            ? `Reply with the subject line only, plus a Release-Note line if (and only if) a user would notice this change.`
+            : `Reply with the subject line only.`,
     ]
         .filter((line) => line !== undefined)
         .join(`\n`);
@@ -421,20 +418,17 @@ export const cleanCommitSubject = (reply: string): string => {
     return first === undefined ? `` : unwrap(first);
 };
 
-/* A hard ceiling on the body, one line over the prompt's own "up to 2". The prompt is an instruction and this is
- * a guarantee: a model that ignores the count would otherwise put a page of prose into the commit box, and the
- * whole point of the body is that it stays cheap to read back. */
-const MAX_BODY_LINES = 3;
-
-/* The body: the message's remaining lines, kept as the model wrote them.
+/* THERE IS NO BODY READER, and its absence is load-bearing rather than an omission.
  *
- * Bullets are NOT unwrapped here, unlike the subject. A leading "- " is the shape the prompt asked for and the
- * shape that makes a multi-fact body scannable — stripping it would run separate facts together into
- * something that reads like a paragraph and parses like nothing. */
-export const cleanCommitBody = (reply: string): string =>
-    messageLines(reply)
-        .slice(1, 1 + MAX_BODY_LINES)
-        .join(`\n`);
+ * A drafted message used to carry up to two "- " lines under the subject, and dropping them cost nothing anyone
+ * missed: they were the model's own summary of a diff the commit already records, they were most of what it
+ * generated (and therefore most of the seconds the user waits for a message that is supposed to be sitting in
+ * the box by the time they have finished reading the file list), and the one thing beside the subject that
+ * genuinely says something new — the Release-Note — is read separately below.
+ *
+ * So a model that writes a body anyway simply has it dropped: `cleanCommitSubject` takes the first line and the
+ * note readers take the trailers, and everything in between falls on the floor. Nothing has to enforce the
+ * prompt's "one line only" — the reader cannot express a body to begin with. */
 
 // The note, if the model wrote one — empty when it judged the change invisible to users, which is the common
 // case and not a failure. Only the FIRST is taken: a model that writes three has misunderstood the ask, and

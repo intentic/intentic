@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import {
     cleanBreakingNote,
-    cleanCommitBody,
     cleanCommitSubject,
     cleanReleaseNote,
     collectRepoDiff,
@@ -274,18 +273,23 @@ test("skips a preamble to the line that is actually the message", () => {
     // ignores "no preamble" often enough that anchoring on the type prefix is the only reliable start.
     const reply = "Sure! Here's the commit message:\nfix: stop the picker reordering on refresh\n\n- drops the sort in resolveQuickModels";
     expect(cleanCommitSubject(reply)).toBe("fix: stop the picker reordering on refresh");
-    expect(cleanCommitBody(reply)).toBe("- drops the sort in resolveQuickModels");
 });
 
-test("keeps the body's facts as separate lines, and bounds a model that runs on", () => {
+test("a model that writes a body anyway has it dropped, not filed", () => {
+    // The prompt asks for one line; this is what happens when the cheap rung answers with the shape it has seen
+    // ten thousand times instead. There is no body reader to hold those lines, so they fall on the floor — the
+    // subject is what the box gets, and a model ignoring the format cannot lengthen a commit message by it.
     const reply = ["feat: name sessions from the opening prompt", "", "- adds nameAgentTitle", "- rejects a reply that asks a question"].join("\n");
-    expect(cleanCommitBody(reply)).toBe("- adds nameAgentTitle\n- rejects a reply that asks a question");
-    // Bullets survive on purpose: stripping them runs separate facts into something that reads like a paragraph.
-    expect(cleanCommitBody("fix: x\n\n- one\n- two")).toContain("- one");
-    // The prompt asks for at most two; this is the guarantee under it.
-    expect(cleanCommitBody(`fix: x\n\n${Array.from({ length: 12 }, (_, index) => `- fact ${index}`).join("\n")}`).split("\n")).toHaveLength(3);
-    // A subject that said everything is the expected answer for a small commit, not a failure.
-    expect(cleanCommitBody("refactor: split the picker component")).toBe("");
+    expect(cleanCommitSubject(reply)).toBe("feat: name sessions from the opening prompt");
+});
+
+test("asks for one line and no body at all", () => {
+    const prompt = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", blocks: [] }]);
+    expect(prompt).toContain("ONE LINE ONLY");
+    // The format block must not show a body line either: a shape shown is a shape written, whatever the rules
+    // underneath it say.
+    expect(prompt).not.toContain("one fact per line");
+    expect(prompt).not.toContain("body lines");
 });
 
 test("asks for a release note only when the repo keeps a changelog", () => {
@@ -321,8 +325,6 @@ test("reads the note off the reply, and says so when there isn't one", () => {
 
 test("a note-first reply still yields the subject, not the note", () => {
     expect(cleanCommitSubject("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("feat: ordered model picker");
-    // …and the note does not fall through into the body either.
-    expect(cleanCommitBody("Release-Note: Your models stay put.\nfeat: ordered model picker")).toBe("");
 });
 
 test("reads the breaking sentence off the reply, apart from the note", () => {
@@ -333,9 +335,8 @@ test("reads the breaking sentence off the reply, apart from the note", () => {
     expect(cleanReleaseNote(reply)).toBe("The model picker is simpler now.");
     // The overwhelmingly common case: nothing was taken away, no line was written.
     expect(cleanBreakingNote("feat: ordered model picker\n\nRelease-Note: Your models stay put.")).toBe("");
-    // A breaking line never leaks into the subject or body, same as the note.
+    // A breaking line never leaks into the subject, same as the note.
     expect(cleanCommitSubject("Breaking-Note: The old picker is gone.\nfeat!: retire the legacy picker")).toBe("feat!: retire the legacy picker");
-    expect(cleanCommitBody("Breaking-Note: The old picker is gone.\nfeat!: retire the legacy picker")).toBe("");
 });
 
 test("leaves quotes that are part of the subject alone", () => {

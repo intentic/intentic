@@ -747,6 +747,17 @@ export const AgentSummarySchema = z.object({
     contextTokens: z.number().optional(),
     contextWindow: z.number().optional(),
     activity: AgentActivitySchema.optional(),
+    /* PRESENT WHILE A MODEL IS WRITING THIS LANDING'S COMMIT MESSAGE, and absent every other moment of the
+     * agent's life — including before the first land and after the sentence is stored.
+     *
+     * The drafting starts the instant work lands and answers seconds later (agents/landed-subject.ts), which is
+     * long enough for a user to reach the Changes panel and click the agent's "From" chip in between. Without
+     * this the two states behind an empty commit box — a sentence on its way, and no sentence coming at all —
+     * are the same empty box, and the honest thing to say about the first is that it is on its way.
+     *
+     * Runtime only: nothing about it is persisted, so a daemon restart forgets it. That is correct rather than
+     * lossy — a restart also killed the draft it would have been describing. */
+    draftingSubject: z.literal(true).optional(),
     // Present while a turn runs: its start, ms since epoch.
     startedAt: z.number().optional(),
     updatedAt: z.number(),
@@ -2132,19 +2143,11 @@ export const OriginAgentSchema = z.object({
      * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
      * commit. This is read off the code instead, so it describes the change the user is about to record.
      *
-     * Absent when no quick model is connected or when the draft failed. The panel no longer has a title-shaped
-     * fallback to reach for — guessing a subject from the ask is exactly the habit this replaced — so a chip
-     * with no subject drafts one on demand instead. */
+     * Absent for three reasons that look identical here and are told apart by `drafting` on the agent's own
+     * card: it is still being written, no quick model is connected, or the draft failed. The panel has no
+     * title-shaped fallback to reach for — guessing a subject from the ask is exactly the habit this replaced —
+     * so a chip with no subject files nothing and simply filters. */
     subject: z.string().optional(),
-    /* THE FACTS UNDER THE SUBJECT — the drafted body, already written as "- " lines (git/commit-message.ts).
-     *
-     * Stored beside the subject rather than inside it for the same reason `note` is: a subject is one bounded
-     * line everywhere it is shown, and the chip in the Changes legend shows exactly that line. The body only
-     * becomes part of a message at the moment the chip fills the commit box, which is where the three are
-     * composed.
-     *
-     * Absent whenever the model judged the subject sufficient, which is the expected answer for small commits. */
-    body: z.string().optional(),
     /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for a
      * repo that keeps a changelog (SandboxSettings.changelogRepos).
      *
