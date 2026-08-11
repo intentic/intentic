@@ -13,7 +13,9 @@ export const createSessionsRoutes = (services: SessionsRoutesDeps) => {
         list: i.list.handler(async ({ input }) => {
             const query = input.query?.trim();
             const root = services.workspace.root;
-            return { sessions: query ? await services.sessions.search(root, query) : await services.sessions.list(root) };
+            return {
+                sessions: query ? await services.sessions.search(root, query, input.caseSensitive === true) : await services.sessions.list(root),
+            };
         }),
         get: i.get.handler(async ({ input }) => {
             // The workspace root reaches an ISOLATED conversation's transcript too: its turns ran in a linked

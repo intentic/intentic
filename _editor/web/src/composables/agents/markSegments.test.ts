@@ -20,6 +20,16 @@ describe(`markSegments`, () => {
         ]);
     });
 
+    // Under the field's Aa switch the marks have to be as strict as the filter was: a lowercase twin lit up
+    // here would claim a match the search never made.
+    it(`marks only the exact casing when match case is on`, () => {
+        expect(markSegments(`FROM and from`, `FROM`, true)).toEqual([
+            { text: `FROM`, hit: true },
+            { text: ` and from`, hit: false },
+        ]);
+        expect(markSegments(`only from here`, `FROM`, true)).toEqual([{ text: `only from here`, hit: false }]);
+    });
+
     it(`returns one plain run when there is nothing to mark`, () => {
         expect(markSegments(`nothing here`, `zzz`)).toEqual([{ text: `nothing here`, hit: false }]);
         expect(markSegments(`nothing here`, ``)).toEqual([{ text: `nothing here`, hit: false }]);

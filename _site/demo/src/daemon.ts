@@ -320,7 +320,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // "needs you" wake sits beside the running cards, as it does in the real fleet.
     [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev, held: [] } satisfies AgentsList)],
-    [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``))],
+    [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``, url.searchParams.get(`caseSensitive`) === `true`))],
     [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
     // Opening a card that is NOT mid-turn reads its transcript rather than attaching — so the one agent holding
@@ -343,7 +343,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/agent/commands`, () => json({ commands: DEMO_COMMANDS })],
     [`GET`, `/agent/refusals`, () => json({ refusals: {} })],
 
-    [`GET`, `/sessions`, ({ url }) => json({ sessions: searchSessions(url.searchParams.get(`query`) ?? ``) })],
+    [
+        `GET`,
+        `/sessions`,
+        ({ url }) => json({ sessions: searchSessions(url.searchParams.get(`query`) ?? ``, url.searchParams.get(`caseSensitive`) === `true`) }),
+    ],
     [`GET`, `/sessions/{id}`, () => json({ messages: [] })],
 
     /* The recording's filesystem (fixture/workspace.ts), served the way the daemon serves /work: a tree, a lazy
@@ -714,17 +718,23 @@ function stopTurn({ request }: RouteContext): Promise<Response> {
     });
 }
 
-const searchAgents = (query: string): AgentSearchResult => {
-    const needle = query.trim().toLowerCase();
+// The field's Aa switch, honoured here too: the browser's own tier matches case-sensitively the moment it is on,
+// and a fixture that ignored it would answer the same query two different ways on one board.
+const folded = (text: string, caseSensitive: boolean): string => (caseSensitive ? text : text.toLowerCase());
+
+const searchAgents = (query: string, caseSensitive: boolean): AgentSearchResult => {
+    const needle = folded(query.trim(), caseSensitive);
     const matches =
-        needle === `` ? [] : roster.agents.filter((agent) => (agent.title ?? ``).toLowerCase().includes(needle)).map((agent) => ({ id: agent.id }));
+        needle === ``
+            ? []
+            : roster.agents.filter((agent) => folded(agent.title ?? ``, caseSensitive).includes(needle)).map((agent) => ({ id: agent.id }));
     return { matches, scanned: roster.agents.length };
 };
 
-const searchSessions = (query: string): ReturnType<typeof sessions> => {
+const searchSessions = (query: string, caseSensitive: boolean): ReturnType<typeof sessions> => {
     const all = sessions(Date.now());
-    const needle = query.trim().toLowerCase();
-    return needle === `` ? all : all.filter((session) => session.title.toLowerCase().includes(needle));
+    const needle = folded(query.trim(), caseSensitive);
+    return needle === `` ? all : all.filter((session) => folded(session.title, caseSensitive).includes(needle));
 };
 
 // Match one route pattern against a path, capturing `{param}` segments.

@@ -66,6 +66,8 @@ const props = defineProps<{
     // trusting a search, so the filter never narrows a lane without this.
     match?: MatchSnippet;
     query?: string;
+    // The filter's `Aa` switch, so the marks are struck under the rule the search actually ran.
+    matchCase?: boolean;
 }>();
 const emit = defineEmits<{
     // The click that opened it, when there was one — a modified click asks for a pane rather than the focus.
@@ -234,8 +236,10 @@ const displayTitle = computed(() => {
     return props.agent.status === `resumed` ? `Untitled chat` : `Untitled agent`;
 });
 // The title with the filter's term marked, and one plain run when no filter is on. The matched LINE is marked
-// by MatchLine, which also names the speaker — the two are never shown apart.
-const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
+// by MatchLine, which also names the speaker — the two are never shown apart. The term is folded to the card's
+// own case rule, which is the filter's: under `Aa` it stands as typed.
+const needle = computed(() => (props.matchCase === true ? (props.query ?? ``) : (props.query?.toLowerCase() ?? ``)));
+const titleRuns = computed(() => markSegments(displayTitle.value, needle.value, props.matchCase === true));
 // The unread chip (agentStatus.unreadBadge — the rail's cards wear the same one). "New" already says you have
 // not opened it; "Updated" is the flavour that hides a fact — WHEN you last looked — so only it earns a hover.
 const unread = computed(() => {
@@ -418,7 +422,7 @@ const grab = (event: PointerEvent): void => {
                  row form, so it stays a line of prose rather than a column squeezed between two stat blocks. -->
             <p v-if="match !== undefined" class="flex min-w-0 items-start gap-1.5 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-                <MatchLine :snippet="match" :needle="query?.toLowerCase()" class="line-clamp-2 min-w-0 flex-1 leading-4" />
+                <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
             <!-- WORDS OF THE USER'S STILL SITTING IN THIS CHAT'S COMPOSER (FleetAgent.unsent). Leads the body,

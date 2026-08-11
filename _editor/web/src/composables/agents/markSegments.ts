@@ -8,12 +8,16 @@
  * A LEAF of its own rather than a member of useAgentFilter, which is what it grew out of: every card that
  * marks a term (the board's, the rail's, the evidence line) would otherwise pull the filter — and through it
  * the chat store, the sandbox client and the app's environment — in to reach one pure string function.
+ *
+ * `matchCase` is the field's Aa switch, and the marks obey it for the same reason the results do: with the
+ * switch on, highlighting a lowercase twin of the term would show as a match the filter did not actually make.
+ * The needle arrives folded the same way the filter folded it — lowercased by default, verbatim under Aa.
  */
-export const markSegments = (text: string, needle: string): readonly { text: string; hit: boolean }[] => {
+export const markSegments = (text: string, needle: string, matchCase = false): readonly { text: string; hit: boolean }[] => {
     if (needle.length === 0) {
         return [{ text, hit: false }];
     }
-    const haystack = text.toLowerCase();
+    const haystack = matchCase ? text : text.toLowerCase();
     const out: { text: string; hit: boolean }[] = [];
     let at = 0;
     for (;;) {

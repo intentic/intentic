@@ -28,7 +28,7 @@ const seed = (tag: string, n: number): void => {
 test("title match returns without reading the transcript", async () => {
     seed("t", 3);
     getSessionMessages.mockClear();
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "chat 1");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "chat 1", false);
     expect(hits.map((s) => s.id)).toEqual(["t1"]);
     // t1 matched by title; the other two are read for prompts, t1 is not.
     expect(getSessionMessages).not.toHaveBeenCalledWith("t1", expect.anything());
@@ -38,7 +38,7 @@ test("title match returns without reading the transcript", async () => {
 
 test("a prompt match is found and reports the line it hit, and whose it was", async () => {
     seed("p", 3);
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body p2");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body p2", false);
     expect(hits.map((s) => s.id)).toEqual(["p2"]);
     expect(hits[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
 });
@@ -48,7 +48,7 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.
 test("a prompt match past the tenth-newest session is still found", async () => {
     seed("w", 12);
-    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body w11");
+    const hits = await searchWorkspaceSessions(WORKSPACE_ROOT, "body w11", false);
     expect(hits.map((s) => s.id)).toEqual(["w11"]);
 });
 
@@ -71,12 +71,12 @@ test("assistant prose matches as the agent's; thinking and tool output never mat
         },
         { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "grep found landAgent 214 times" }] } },
     ]);
-    expect((await searchWorkspaceSessions("/work", "landAgent")).map((s) => s.snippet)).toEqual([
+    expect((await searchWorkspaceSessions("/work", "landAgent", false)).map((s) => s.snippet)).toEqual([
         { text: "landAgent lives in laneDrop.ts", speaker: "agent" },
     ]);
-    expect((await searchWorkspaceSessions("/work", "check the config")).map((s) => s.id)).toEqual(["r0"]);
-    expect(await searchWorkspaceSessions("/work", "readWorkspaceSession")).toEqual([]);
-    expect(await searchWorkspaceSessions("/work", "214 times")).toEqual([]);
+    expect((await searchWorkspaceSessions("/work", "check the config", false)).map((s) => s.id)).toEqual(["r0"]);
+    expect(await searchWorkspaceSessions("/work", "readWorkspaceSession", false)).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "214 times", false)).toEqual([]);
 });
 
 // Both sides can hold the term, and only one line is shown. It is the USER's — a query is typed from memory,
@@ -87,7 +87,7 @@ test("the user's own words are the snippet when both sides said the term", async
         { type: "assistant", message: { content: [{ type: "text", text: "the lane drop is in laneDrop.ts" }] } },
         { type: "user", message: { content: "explain the lane drop" } },
     ]);
-    expect((await searchWorkspaceSessions("/work", "lane drop"))[0]?.snippet).toEqual({ text: "explain the lane drop", speaker: "user" });
+    expect((await searchWorkspaceSessions("/work", "lane drop", false))[0]?.snippet).toEqual({ text: "explain the lane drop", speaker: "user" });
 });
 
 // The daemon staples a readiness/delegation preamble on the front of a prompt and an attachment note on the
@@ -104,9 +104,25 @@ test("the injected preamble and attachment note are not searchable text", async 
             },
         },
     ]);
-    expect(await searchWorkspaceSessions("/work", "Dependencies are NOT")).toEqual([]);
-    expect(await searchWorkspaceSessions("/work", "shot.png")).toEqual([]);
-    expect((await searchWorkspaceSessions("/work", "rename the lane")).map((s) => s.id)).toEqual(["i0"]);
+    expect(await searchWorkspaceSessions("/work", "Dependencies are NOT", false)).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "shot.png", false)).toEqual([]);
+    expect((await searchWorkspaceSessions("/work", "rename the lane", false)).map((s) => s.id)).toEqual(["i0"]);
+});
+
+/* THE FIELD'S Aa SWITCH reaches these rows too — they are listed under the board's own cards, so a query
+ * answered case-insensitively here while the cards were matched case-sensitively would be one field showing
+ * two rules. Both halves of the rule: the title, and what was said in the transcript. */
+test("match case narrows both the title and the transcript", async () => {
+    listSessions.mockResolvedValue([{ sessionId: "c0", customTitle: "FROM the top", lastModified: 2 }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: "the landAgent bug" } }]);
+    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "from the top", false)).map((s) => s.id)).toEqual(["c0"]);
+    expect(await searchWorkspaceSessions(WORKSPACE_ROOT, "from the top", true)).toEqual([]);
+    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "FROM the top", true)).map((s) => s.id)).toEqual(["c0"]);
+    expect(await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent", true)).toEqual([]);
+    expect((await searchWorkspaceSessions(WORKSPACE_ROOT, "landAgent", true))[0]?.snippet).toEqual({
+        text: "the landAgent bug",
+        speaker: "user",
+    });
 });
 
 // A snippet is EVIDENCE, so it has to carry the hit and enough around it to read — windowed, not truncated
@@ -115,7 +131,7 @@ test("a long prompt is windowed around the hit rather than cut from the start", 
     const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
     listSessions.mockResolvedValue([{ sessionId: "n0", customTitle: "chat", lastModified: 1 }]);
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: long } }]);
-    const snippet = (await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent"))[0]?.snippet?.text ?? "";
+    const snippet = (await searchWorkspaceSessions(WORKSPACE_ROOT, "landagent", false))[0]?.snippet?.text ?? "";
     expect(snippet).toContain("landAgent");
     expect(snippet).not.toContain("\n");
     expect(snippet.startsWith("…")).toBe(true);
@@ -269,13 +285,13 @@ test("runtime-handoff search indexes what both sides said before the switch, but
         },
     ]);
 
-    expect((await searchWorkspaceSessions("/work", "blank chat")).map((session) => session.id)).toEqual(["handoff-search"]);
+    expect((await searchWorkspaceSessions("/work", "blank chat", false)).map((session) => session.id)).toEqual(["handoff-search"]);
     // The carried-over reply comes back under the agent, not folded into the user prompt that transported it.
-    expect((await searchWorkspaceSessions("/work", "replayStoredSession"))[0]?.snippet).toEqual({
+    expect((await searchWorkspaceSessions("/work", "replayStoredSession", false))[0]?.snippet).toEqual({
         text: "I will inspect replayStoredSession.",
         speaker: "agent",
     });
-    expect(await searchWorkspaceSessions("/work", "another AI runtime")).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "another AI runtime", false)).toEqual([]);
 });
 
 test("restores runtime-handoff history as ordinary bubbles", async () => {

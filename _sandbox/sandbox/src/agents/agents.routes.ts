@@ -88,18 +88,22 @@ export const createAgentsRoutes = (services: Services) => {
          * against the title it holds locally, which is all a conversation with no turn yet has.
          */
         search: i.search.handler(async ({ input }) => {
-            const needle = input.query.toLowerCase();
+            // The field's Aa switch, applied by FOLDING once here: the needle and every line it is tested against
+            // meet in the same case, so the whole scan is one substring test either way.
+            const caseSensitive = input.caseSensitive === true;
+            const needle = caseSensitive ? input.query : input.query.toLowerCase();
             const entries = [...services.agents.list(), ...services.agents.listArchived()];
             const matches = await Promise.all(
                 entries.map(async (agent) => {
-                    if (agent.title?.toLowerCase().includes(needle) === true) {
+                    const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
+                    if (title?.includes(needle) === true) {
                         return { id: agent.id };
                     }
                     const entry = services.agents.entry(agent.id);
                     if (entry === undefined) {
                         return undefined;
                     }
-                    const snippet = matchLines(conversationLines(agent.id, await services.transcripts.lines(entry)), needle);
+                    const snippet = matchLines(conversationLines(agent.id, await services.transcripts.lines(entry)), needle, caseSensitive);
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );

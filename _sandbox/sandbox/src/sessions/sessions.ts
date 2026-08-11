@@ -74,16 +74,19 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
  *
  * Result keeps the newest-first order of `list`. A session whose TITLE matched carries no snippet: the title
  * is the row's own heading, and repeating it under itself is noise rather than evidence.
+ *
+ * `caseSensitive` is that same shared rule's other half — the Aa switch in the field, which the board applies to
+ * its cards and these rows in one pass, so one query cannot come back matched two ways.
  */
-export const searchWorkspaceSessions = async (dir: string, query: string): Promise<SessionSummary[]> => {
-    const needle = query.toLowerCase();
+export const searchWorkspaceSessions = async (dir: string, query: string, caseSensitive: boolean): Promise<SessionSummary[]> => {
+    const needle = caseSensitive ? query : query.toLowerCase();
     const sessions = await listWorkspaceSessions(dir);
     const matched = await Promise.all(
         sessions.map(async (session): Promise<SessionSummary | undefined> => {
-            if (session.title.toLowerCase().includes(needle)) {
+            if ((caseSensitive ? session.title : session.title.toLowerCase()).includes(needle)) {
                 return session;
             }
-            const snippet = matchLines(await readSessionLines(dir, session.id), needle);
+            const snippet = matchLines(await readSessionLines(dir, session.id), needle, caseSensitive);
             // Object.assign, not a spread — these summaries are this call's own, built fresh by the list above.
             return snippet === undefined ? undefined : Object.assign(session, { snippet });
         }),

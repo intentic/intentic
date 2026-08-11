@@ -194,9 +194,9 @@ export const readSessionLines = async (dir: string, sessionId: string): Promise<
 // enough that the line never outgrows the card it explains.
 const SNIPPET_CHARS = 120;
 
-const windowed = (line: SpokenLine, needle: string): MatchSnippet | undefined => {
+const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
     const text = line.text.replace(/\s+/gu, " ").trim();
-    const at = text.toLowerCase().indexOf(needle);
+    const at = (caseSensitive ? text : text.toLowerCase()).indexOf(needle);
     if (at === -1) {
         return undefined;
     }
@@ -220,13 +220,14 @@ const windowed = (line: SpokenLine, needle: string): MatchSnippet | undefined =>
  * typed from memory, and what a person remembers is their own phrasing; the agent repeating the same term back
  * three turns later is the weaker evidence of the two even though it usually sits earlier in the scan.
  *
- * Returns undefined when nothing matched. `needle` arrives already lowercased — a filter runs this over the
- * whole fleet on every keystroke, so the query is folded once by the caller rather than per line here.
+ * Returns undefined when nothing matched. `needle` arrives folded to the case rule the caller is searching under
+ * — lowercased for the default, verbatim when the field's Aa switch is on — because a filter runs this over the
+ * whole fleet on every keystroke, so the query is prepared once by the caller rather than per line here.
  */
-export const matchLines = (lines: readonly SpokenLine[], needle: string): MatchSnippet | undefined => {
+export const matchLines = (lines: readonly SpokenLine[], needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
     const said = (speaker: Speaker): MatchSnippet | undefined => {
         for (const line of lines) {
-            const hit = line.speaker === speaker ? windowed(line, needle) : undefined;
+            const hit = line.speaker === speaker ? windowed(line, needle, caseSensitive) : undefined;
             if (hit !== undefined) {
                 return hit;
             }

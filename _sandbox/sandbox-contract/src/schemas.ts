@@ -873,8 +873,12 @@ export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
  * The card TITLE is the first prompt (sanitized), so a title match and a prompt match are one rule, not two.
  *
  * Two chars minimum: below that every agent matches and the scan is pure cost.
+ *
+ * `caseSensitive` is the field's Aa switch — the same name and the same default as the workspace search's, so
+ * one word means one thing across the daemon's search routes. Off is case-INSENSITIVE rather than smart case:
+ * a filter that quietly changed rule when a capital was typed would make the switch beside it a lie.
  */
-export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2) });
+export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2), caseSensitive: z.stringbool().optional() });
 /* WHY a row survived the filter: the matched line, windowed around the hit, and which side of the conversation
  * said it. A result that matches for a reason the reader cannot see is worse than no filter at all.
  *
@@ -3818,7 +3822,13 @@ export type PowersDiff = z.infer<typeof PowersDiffSchema>;
 // What an owner reads before clicking Update: the offered sha's manifest folded to the version story, the
 // engines verdict, and the powers diff against the installed manifest. `ref` optional on the way in — absent
 // means "the update the check recorded", which is the only caller most of the time.
-export const ExtensionUpdateActionSchema = z.object({ id: extensionId, ref: z.string().regex(/^[0-9a-f]{40}$/).optional() });
+export const ExtensionUpdateActionSchema = z.object({
+    id: extensionId,
+    ref: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
+});
 export const ExtensionUpdatePreviewSchema = z.object({
     ref: z.string(),
     version: z.string(),

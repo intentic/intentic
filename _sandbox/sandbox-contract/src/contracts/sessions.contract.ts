@@ -7,10 +7,14 @@ import { SessionIdParamSchema, SessionsListSchema } from "../schemas.js";
 // repo covers its linked worktrees too, so an isolated conversation's transcript is reachable from the
 // workspace root). `list` returns summaries for the history menu (filtered by `query` when the search box is
 // used); `get` restores one transcript for display.
+//
+// `caseSensitive` is the filter's Aa switch, on the same terms as the fleet search's — off means the letters do
+// not matter, and the two routes answer one query together (the board lists these rows under its own cards), so
+// a switch either of them ignored would show as one field returning two different match sets.
 export const sessionsContract = {
     list: oc
         .route({ method: "GET", path: "/sessions" })
-        .input(z.object({ query: z.string().optional() }))
+        .input(z.object({ query: z.string().optional(), caseSensitive: z.stringbool().optional() }))
         .output(SessionsListSchema),
     get: oc.route({ method: "GET", path: "/sessions/{id}" }).input(SessionIdParamSchema).output(SessionTranscriptSchema),
 };

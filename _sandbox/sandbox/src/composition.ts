@@ -569,7 +569,7 @@ export interface Services {
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
-        readonly search: (dir: string, query: string) => Promise<SessionSummary[]>;
+        readonly search: (dir: string, query: string, caseSensitive: boolean) => Promise<SessionSummary[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
     /* A CONVERSATION's transcript, as opposed to a SESSION's — keyed by conversationId, which is the identity

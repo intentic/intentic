@@ -42,8 +42,10 @@ import MatchLine from "./MatchLine.vue";
 
 const props = defineProps<{
     title: string;
-    // The filter's term, lowercased, when the host has one — the title and the snippet are marked with it.
+    // The filter's term, folded the way the filter folded it, when the host has one — the title and the snippet
+    // are marked with it, under the same `Aa` rule the search ran.
     needle?: string;
+    matchCase?: boolean;
     provider?: AgentProvider;
     // The lead for a row that is NOT a session, and so has no identity to tile.
     icon?: IconName;
@@ -72,7 +74,7 @@ const props = defineProps<{
     snippet?: MatchSnippet;
 }>();
 
-const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
+const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 </script>
 
 <template>
@@ -114,7 +116,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``));
 
         <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
             <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-            <MatchLine :snippet="snippet" :needle="needle" class="line-clamp-2 min-w-0 flex-1 leading-4" />
+            <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
         </span>
     </button>
 </template>

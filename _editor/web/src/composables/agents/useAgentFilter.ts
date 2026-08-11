@@ -29,6 +29,13 @@ import { type FleetAgent, useAgents } from "./useAgents";
  *
  * The MINIMUM is two characters, matching the daemon's own floor: below that every agent matches and the
  * filter is pure cost. One typed character therefore leaves the board alone rather than emptying it.
+ *
+ * MATCH CASE (the field's `Aa`) is the one piece of this that is NOT per-surface, and deliberately so: a query
+ * is what one board is being looked at right now, while a case rule is how this person reads a search at all —
+ * the same split useSearchOptions makes for the workspace box, and the same reason it survives a reload. Every
+ * field that mounts this filter draws the switch, so a shared rule is never a rule you cannot see from where it
+ * is acting. Off means case-INSENSITIVE, never smart case: a filter that changed rule by itself the moment a
+ * capital was typed would make the switch beside it a lie.
  */
 
 /* What an OPEN conversation SAID, as this browser holds it — matchable without asking the daemon. Both sides
@@ -54,14 +61,14 @@ const SNIPPET_CHARS = 120;
 
 // The user's own words win when both sides match, exactly as the daemon's matchLines does it: a query is typed
 // from memory, and what a person remembers is their own phrasing.
-const snippetFor = (lines: readonly { text: string; speaker: Speaker }[], needle: string): MatchSnippet | undefined => {
+const snippetFor = (lines: readonly { text: string; speaker: Speaker }[], needle: string, caseSensitive: boolean): MatchSnippet | undefined => {
     const said = (speaker: Speaker): MatchSnippet | undefined => {
         for (const spoken of lines) {
             if (spoken.speaker !== speaker) {
                 continue;
             }
             const line = spoken.text.replace(/\s+/gu, ` `).trim();
-            const at = line.toLowerCase().indexOf(needle);
+            const at = (caseSensitive ? line : line.toLowerCase()).indexOf(needle);
             if (at === -1) {
                 continue;
             }
@@ -87,12 +94,35 @@ interface AgentHit {
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
 
+/* The case rule, shared by every filter field and remembered across reloads — the habit, not the query. Written
+ * through on change so the ref IS the preference and no caller has to remember to save it (useSearchOptions
+ * says the same thing at greater length). Storage may be unavailable (private mode); the ref still holds for
+ * the session. */
+const CASE_KEY = `ui-fleet-filter-case`;
+const readStoredCase = (): boolean => {
+    try {
+        return localStorage.getItem(CASE_KEY) === `1`;
+    } catch {
+        return false;
+    }
+};
+const matchCase = ref(readStoredCase());
+watch(matchCase, (value) => {
+    try {
+        localStorage.setItem(CASE_KEY, value ? `1` : `0`);
+    } catch {
+        // Storage may be unavailable (private mode); the in-memory ref still holds.
+    }
+});
+
 export function useAgentFilter() {
     const { reachable } = useSandbox();
     const { archived } = useAgents();
 
     const query = ref(``);
-    const needle = computed(() => query.value.trim().toLowerCase());
+    // Folded ONCE, here, to whatever case rule is in force — every tier then runs one substring test against a
+    // haystack folded the same way, and the marks on the cards are struck by the same needle.
+    const needle = computed(() => (matchCase.value ? query.value.trim() : query.value.trim().toLowerCase()));
     const active = computed(() => needle.value.length >= MIN_QUERY);
 
     // The daemon tier's input, trailing the typed one so a keystroke burst becomes one request. Watched off
@@ -110,9 +140,15 @@ export function useAgentFilter() {
 
     const enabled = computed(() => reachable.value && settled.value.length >= MIN_QUERY);
 
+    /* The daemon's half of the query string. The MODE is not debounced with the text: flipping `Aa` is one
+     * deliberate press rather than a keystroke burst, so it re-asks at once — and it is in the key as well as
+     * the URL, because the same words under the other rule are a different search whose answer is cached
+     * separately (useWorkspaceSearch keeps its switches in the key for exactly this reason). */
+    const params = computed(() => `query=${encodeURIComponent(settled.value)}${matchCase.value ? `&caseSensitive=true` : ``}`);
+
     const fleetSearch = useQuery({
-        queryKey: computed(() => sandboxKey(`agents`, `search`, settled.value)),
-        queryFn: ({ signal }) => sandboxJson<AgentSearchResult>(`/agents/search?query=${encodeURIComponent(settled.value)}`, { signal }),
+        queryKey: computed(() => sandboxKey(`agents`, `search`, params.value)),
+        queryFn: ({ signal }) => sandboxJson<AgentSearchResult>(`/agents/search?${params.value}`, { signal }),
         enabled,
         placeholderData: keepPreviousData,
     });
@@ -123,8 +159,8 @@ export function useAgentFilter() {
      * what a popover in another corner of the app is showing.
      */
     const sessionSearch = useQuery({
-        queryKey: computed(() => sandboxKey(`sessions`, `search`, settled.value)),
-        queryFn: ({ signal }) => sandboxJson<{ sessions: ChatSession[] }>(`/sessions?query=${encodeURIComponent(settled.value)}`, { signal }),
+        queryKey: computed(() => sandboxKey(`sessions`, `search`, params.value)),
+        queryFn: ({ signal }) => sandboxJson<{ sessions: ChatSession[] }>(`/sessions?${params.value}`, { signal }),
         enabled,
         placeholderData: keepPreviousData,
     });
@@ -145,10 +181,11 @@ export function useAgentFilter() {
         if (!active.value) {
             return undefined;
         }
-        if (agent.title?.toLowerCase().includes(needle.value) === true) {
+        const title = matchCase.value ? agent.title : agent.title?.toLowerCase();
+        if (title?.includes(needle.value) === true) {
             return {};
         }
-        const local = snippetFor(localLinesOf(agent.id), needle.value);
+        const local = snippetFor(localLinesOf(agent.id), needle.value, matchCase.value);
         if (local !== undefined) {
             return { snippet: local };
         }
@@ -187,6 +224,9 @@ export function useAgentFilter() {
     return {
         query,
         needle,
+        // The `Aa` switch itself, for the field to bind and the cards to mark by — one preference, so every
+        // surface showing it shows the same one.
+        matchCase,
         active,
         matches,
         snippetOf,

@@ -99,6 +99,7 @@ const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
 const {
     query: filterQuery,
     needle,
+    matchCase,
     active: filtering,
     matches: agentMatches,
     snippetOf,
@@ -635,8 +636,11 @@ const closeTab = (event: Event, id: string): void => {
     <div class="flex min-h-0 flex-col gap-1.5">
         <!-- Pinned above the list: narrow it (filter) → pick one (the lanes) → and, when the query reaches
              past what is open, the "Not open" group at the foot. -->
+        <!-- `Aa` is here as well as on the board because the two fields run ONE filter and one case rule: a
+             switch visible on only one of them would be a mode acting where it cannot be seen or undone. -->
         <SearchBar
             v-model="filterQuery"
+            v-model:match-case="matchCase"
             variant="field"
             clearable
             :busy="searching"
@@ -721,6 +725,7 @@ const closeTab = (event: Event, id: string): void => {
                             :data-chat-tab="c.conversationId"
                             :title="tabLabel(c)"
                             :needle="needle"
+                            :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
                             :status="statusOf({ conversation: c, agent })"
                             :live="liveOf({ conversation: c, agent })"
@@ -863,6 +868,7 @@ const closeTab = (event: Event, id: string): void => {
                         :key="agent.id"
                         :title="agent.title ?? 'Untitled agent'"
                         :needle="needle"
+                        :match-case="matchCase"
                         :provider="agent.provider"
                         quiet
                         :snippet="snippetOf(agent)"
@@ -883,6 +889,7 @@ const closeTab = (event: Event, id: string): void => {
                         :key="session.id"
                         :title="session.title"
                         :needle="needle"
+                        :match-case="matchCase"
                         icon="comments"
                         quiet
                         :snippet="session.snippet"

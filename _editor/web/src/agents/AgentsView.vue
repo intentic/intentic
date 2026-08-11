@@ -155,8 +155,12 @@ const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
  * The field is always on the header rather than hiding behind a glyph, so nobody has to learn that the board
  * can be searched at all. The cost is a header that WRAPS on a squeezed board — which is exactly what the
  * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap. The field
- * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows. */
-const { query, needle, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
+ * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows.
+ *
+ * `Aa` sits INSIDE the field, where every editor puts its match switches, and it is a preference rather than
+ * part of this query — see useAgentFilter. Its whole visible consequence is on the cards: results, and the
+ * marks explaining them, both follow it. */
+const { query, needle, matchCase, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
@@ -1001,6 +1005,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <SearchBar
                 ref="filterField"
                 v-model="query"
+                v-model:match-case="matchCase"
                 variant="field"
                 clearable
                 :busy="searching"
@@ -1122,8 +1127,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <div v-else class="scrollbar-thin scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- Stacked, the lanes are rows of one grid that is still `h-full` (so a lane keeps a drop target
                  when the board is empty) — `content-start` is what stops those rows from stretching to fill it
-                 and leaving a lane's cards floating a hundred pixels above the next header. -->
-            <div class="grid h-full gap-3 p-3" :class="narrow ? 'content-start' : 'grid-cols-3 items-start'">
+                 and leaving a lane's cards floating a hundred pixels above the next header.
+                 The one exception is a query that matched NOTHING: there is no card left on the board to drag,
+                 so the full height buys nothing and costs the miss its explanation, which would otherwise be
+                 pushed to exactly the fold. -->
+            <div class="grid gap-3 p-3" :class="[narrow ? 'content-start' : 'grid-cols-3 items-start', noMatches ? '' : 'h-full']">
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
@@ -1288,6 +1296,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :selected="agent.id === highlightId || inPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
+                            :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @resolve="resolveNow(agent.id)"
@@ -1316,10 +1325,23 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </div>
             <!-- The filter's own empty state, which is NOT the empty board's: there are agents, just none of
                  them this one. Says what was searched, so a typo is visible without looking back up at the
-                 field, and names the rule — the commonest reason for a miss is searching for something the
-                 AGENT said rather than something you did. -->
+                 field, and names the rule that produced the miss.
+                 Under `Aa` that rule is the switch itself, and the way out is offered here rather than left as
+                 a hunt back up to a control the reader may not connect to the empty board in front of them — a
+                 mode is only fair if the screen it emptied says so and can undo it. It reads directly under the
+                 emptied lanes, which is why the grid above drops its `h-full` for this one state: kept, the
+                 line would start at the fold and the sentence explaining an empty board could only be found by
+                 scrolling for something you don't know is there. -->
             <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
-                No agent of yours mentions “{{ query.trim() }}”. This searches the messages you wrote — not the agents' replies.
+                <template v-if="matchCase">
+                    No agent mentions “{{ query.trim() }}” with those exact capitals.
+                    <button type="button" class="font-medium text-link underline-offset-2 hover:underline" @click="matchCase = false">
+                        Ignore case
+                    </button>
+                </template>
+                <template v-else
+                    >No agent of yours mentions “{{ query.trim() }}”. This searches the titles and what either side said in the chat.</template
+                >
             </p>
         </div>
         <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
@@ -1367,6 +1389,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :selected="agent.id === highlightId || inPane(agent.id)"
                             :match="snippetOf(agent)"
                             :query="needle"
+                            :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @restore="restore([agent.id])"
@@ -1395,6 +1418,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             v-if="session.snippet !== undefined"
                             :snippet="session.snippet"
                             :needle="needle"
+                            :match-case="matchCase"
                             class="line-clamp-2 text-2xs text-muted"
                         />
                         <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>

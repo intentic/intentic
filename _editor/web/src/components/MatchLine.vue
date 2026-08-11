@@ -16,11 +16,15 @@ import { markSegments } from "../composables/agents/markSegments";
 
 const props = defineProps<{
     snippet: MatchSnippet;
-    // The filter's term, lowercased. Absent while nothing is typed, which renders the line unmarked.
+    // The filter's term, folded the way the filter folded it. Absent while nothing is typed, which renders the
+    // line unmarked.
     needle?: string;
+    // The filter's `Aa` switch — the marks obey it, so a lowercase twin of the term is never lit as a hit the
+    // search did not make.
+    matchCase?: boolean;
 }>();
 
-const runs = computed(() => markSegments(props.snippet.text, props.needle ?? ``));
+const runs = computed(() => markSegments(props.snippet.text, props.needle ?? ``, props.matchCase === true));
 </script>
 
 <template>

@@ -241,6 +241,15 @@ test("agents.search matches titles and later lines, across the archive", async (
         matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
     });
 
+    /* THE FIELD'S Aa SWITCH, on the wire. Every assertion above ran with it off, where the letters do not
+     * matter; with it on the query stands exactly as typed — over the transcript and over the title alike,
+     * since a title hit and a prompt hit are one rule. */
+    expect(await client.agents.search({ query: "landAgent", caseSensitive: true })).toMatchObject({
+        matches: [{ id: "conv1", snippet: { text: "landAgent lives in laneDrop.ts", speaker: "agent" } }],
+    });
+    expect(await client.agents.search({ query: "landagent", caseSensitive: true })).toEqual({ matches: [], scanned: 2 });
+    expect(await client.agents.search({ query: "Login", caseSensitive: true })).toEqual({ matches: [], scanned: 2 });
+
     // Archiving takes conv1 off the roster; the filter must still find it.
     await client.agents.archive({ ids: ["conv1"] });
     expect((await client.agents.list()).agents.map((agent) => agent.id)).toEqual(["conv2"]);
