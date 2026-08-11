@@ -158,6 +158,9 @@ const terseArms = computed(() => savings.value?.output?.metrics[0]);
                         <span class="tabular-nums" :class="terseVerdict.tone === `success` ? `text-success` : `text-muted`">{{
                             terseVerdict.value
                         }}</span>
+                        <!-- The space is explicit because the two spans sit on separate lines: Vue strips the
+                             newline between them, which would glue the value straight onto the unit. -->
+                        {{ ` ` }}
                         <span class="text-muted">
                             {{ terseVerdict.unit }} — {{ terseVerdict.detail }}, over {{ terseArms.on.turns }} steered vs
                             {{ terseArms.off.turns }} unsteered turns.
