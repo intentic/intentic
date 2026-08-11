@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { nextTick } from "vue";
+import { nextTick, ref } from "vue";
 
 /* The draft store is a module singleton whose only edge is the active sandbox (it keys the persisted draft), and
  * it reads that id when it is IMPORTED — so both of these have to exist before the imports below, which is what
@@ -25,7 +25,7 @@ vi.stubGlobal(`localStorage`, {
     removeItem: (key: string): void => void stored.delete(key),
 });
 
-import { clearFilledMessage, commitMessage, fillCommitMessage } from "./commitMessage";
+import { clearFilledMessage, commitMessage, fillCommitMessage, followFilledMessage } from "./commitMessage";
 
 describe(`the commit box`, () => {
     beforeEach(() => {
@@ -81,6 +81,57 @@ describe(`the commit box`, () => {
         commitMessage.value = ``;
         fillCommitMessage(`feat: add chat tab icons`);
         expect(commitMessage.value).toBe(`feat: add chat tab icons`);
+    });
+});
+
+/* The chip is lit BEFORE the sentence about that work exists — the drafting starts at the land and answers
+ * seconds later — so what these pin is that the box is still listening when it does. A one-shot fill on the
+ * click passes every test above and none of these. */
+describe(`the box following a lit From chip`, () => {
+    beforeEach(() => {
+        commitMessage.value = ``;
+    });
+
+    test(`a message that arrives after the click still lands`, async () => {
+        const message = ref<string | undefined>(undefined);
+        followFilledMessage(message);
+
+        message.value = `fix: cascading markers`;
+        await nextTick();
+        expect(commitMessage.value).toBe(`fix: cascading markers`);
+    });
+
+    test(`clicking off takes back the line that arrived late`, async () => {
+        const message = ref<string | undefined>(undefined);
+        followFilledMessage(message);
+
+        message.value = `fix: cascading markers`;
+        await nextTick();
+        message.value = undefined;
+        await nextTick();
+        expect(commitMessage.value).toBe(``);
+    });
+
+    // A second land rewrites the sentence about the same session — the chip's own line, replaced by the chip.
+    test(`a rewritten message replaces the line the same chip filed`, async () => {
+        const message = ref<string | undefined>(`fix: cascading markers`);
+        followFilledMessage(message);
+        await nextTick();
+
+        message.value = `fix: cascading markers and their counts`;
+        await nextTick();
+        expect(commitMessage.value).toBe(`fix: cascading markers and their counts`);
+    });
+
+    // The box the user typed in while waiting is still theirs — arriving late buys the fill nothing.
+    test(`a message that arrives late never overwrites what the user typed`, async () => {
+        const message = ref<string | undefined>(undefined);
+        followFilledMessage(message);
+
+        commitMessage.value = `chore: my own subject`;
+        message.value = `fix: cascading markers`;
+        await nextTick();
+        expect(commitMessage.value).toBe(`chore: my own subject`);
     });
 });
 

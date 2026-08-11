@@ -12,7 +12,7 @@ import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
-import { clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
+import { commitMessage, followFilledMessage } from "../../composables/workspace/commitMessage";
 import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
@@ -115,8 +115,8 @@ const layout = useLayout();
 
 const legend = computed(() => summarizeOrigins(scannable.value));
 const originFilter = ref<string | undefined>(undefined);
-// The filter outlives neither the agent's work nor a commit that swept it away — and neither does the subject
-// that agent's chip filed into the commit box.
+// The filter outlives neither the agent's work nor a commit that swept it away. Dropping it takes the subject
+// that agent's chip filed into the commit box with it — the box follows the LIT chip, and there is no longer one.
 watch(legend, ({ agents, yours }) => {
     if (originFilter.value === undefined) {
         return;
@@ -124,7 +124,6 @@ watch(legend, ({ agents, yours }) => {
     const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
     if (!stillHasWork) {
         originFilter.value = undefined;
-        clearFilledMessage();
     }
 });
 
@@ -238,19 +237,26 @@ const originMessage = (id: string): string | undefined => {
  *
  * A session whose work landed with no sentence written for it (nothing connected to write one at the time) files
  * nothing, and the box stays the user's to type in. The filter always applies either way — you can narrow to a
- * session nothing can name. */
+ * session nothing can name.
+ *
+ * The click itself only lights the chip. Naming is the standing rule below, NOT an act of this handler, because
+ * the sentence is routinely a few seconds younger than the click that asks for it. */
 const toggleOrigin = (id: string): void => {
-    const next = originFilter.value === id ? undefined : id;
-    originFilter.value = next;
-    // Toggled off, or moved to "you", or nothing was ever written for this session: the line the legend put
-    // there no longer has a chip behind it. Anything the user has made their own survives this.
-    const stored = next === undefined || next === YOURS ? undefined : originMessage(next);
-    if (stored === undefined) {
-        clearFilledMessage();
-        return;
-    }
-    fillCommitMessage(stored);
+    originFilter.value = originFilter.value === id ? undefined : id;
 };
+
+/* WHAT THE LIT CHIP IS SAYING, AS IT STANDS THIS TICK. Undefined for no filter; for "you", whose edits have no
+ * landing behind them to describe; and for a session whose message does not exist — nothing was connected to
+ * write one when the work landed, or it is still being written, which is the ordinary state in the seconds
+ * after a land.
+ *
+ * Reading it as a computed rather than at the click is the whole fix: this recomputes when the review does, so
+ * the message the daemon publishes the moment it is drafted (runtime-state's `landings`) reaches the box on
+ * arrival instead of waiting for the user to guess that clicking the chip twice would collect it. */
+const filterMessage = computed<string | undefined>(() =>
+    originFilter.value === undefined || originFilter.value === YOURS ? undefined : originMessage(originFilter.value),
+);
+followFilledMessage(filterMessage);
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived

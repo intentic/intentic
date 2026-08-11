@@ -1,4 +1,4 @@
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, type Ref } from "vue";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* WHAT IS IN THE COMMIT BOX — one value, the user's draft, and nothing standing in for it.
@@ -105,6 +105,26 @@ export const clearFilledMessage = (): void => {
         draft.value = ``;
     }
     filled.value = undefined;
+};
+
+/* THE BOX FOLLOWS THE LIT CHIP — including when that chip's message only exists a few seconds later.
+ *
+ * The fill used to be a one-shot fired by the click, and the sentence it wants is not there yet at the moment
+ * most people click. It is drafted FROM THE LANDED DIFF, by a model, starting the instant the work lands
+ * (agents/landed-subject.ts) — so "land in /agents, switch to Changes, click the chip" fits comfortably inside
+ * the drafting. The click found nothing, filed nothing, and nothing ever came back for it: the sentence then
+ * arrived into a panel that had stopped asking, and an empty box is indistinguishable from a feature that has
+ * been removed. Clicking the chip off and on again was the only way to collect it, and nothing said so.
+ *
+ * So the click now only lights the chip, and the box keeps step with whatever that chip is saying: a message
+ * that turns up while its chip is still lit lands the moment it exists. `source` going undefined is the same
+ * event it always was — the chip toggled off, moved to "you", or a session nothing was ever written about — and
+ * takes the filed line back.
+ *
+ * Ownership is untouched, because every write still goes through the two rules above: a box the user has typed
+ * in refuses all of this, and a fill may only ever replace its own last line. */
+export const followFilledMessage = (source: Ref<string | undefined>): void => {
+    watch(source, (message) => (message === undefined ? clearFilledMessage() : fillCommitMessage(message)));
 };
 
 // Switching sandboxes swaps the draft for that sandbox's own — which is also what re-persists it below, under
