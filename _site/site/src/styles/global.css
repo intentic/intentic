@@ -43,6 +43,21 @@
     --text-2xs: 0.6875rem;
     --text-2xs--line-height: 1rem;
 
+    /* ── Reading measure ─────────────────────────────────
+     * Column caps counted in characters rather than rem. A rem cap is a fixed pixel width, so one
+     * `max-w-3xl` box held 41 characters of a 36px heading and 143 of a 14px footnote — the same
+     * column, two and a half times the readable line length apart. `ch` follows the type size, so a
+     * cap means the same line length wherever it is used.
+     *
+     * Inter's "0" is a third wider than its average letter, so the ch numbers overshoot: the counts
+     * in the comments are the real ones, measured in the browser, and they are what to aim at.
+     * Comfortable reading is 45–75 characters.
+     *
+     * Neither is named `prose`: Tailwind ships its own `max-w-prose`, and a token that silently
+     * loses to a built-in is worse than no token at all. */
+    --container-copy: 52ch; /* ~67 characters — body copy, leads, captions, small print */
+    --container-longform: 58ch; /* ~75 characters — docs and legal, denser and read at length */
+
     /* Radius scale (app tokens.css) */
     --radius-xs: 0.25rem;
     --radius-sm: 0.375rem;
@@ -91,6 +106,26 @@
     ::before,
     ::after {
         border-color: var(--color-line);
+    }
+    /* Where the lines break. A heading laid out greedily fills line one and drops whatever is left
+       onto line two, which is how "An agent is only as useful as what it can" ended a line and
+       "reach." got one to itself. `balance` divides a heading evenly instead, and is the right
+       default rather than a class remembered per heading — the site had it on five of forty.
+       Body copy gets `pretty`, which leaves the line lengths alone and only refuses to end a
+       paragraph on a single word. Both are progressive: a browser without them wraps as before. */
+    h1,
+    h2,
+    h3,
+    h4 {
+        text-wrap: balance;
+    }
+    p,
+    li,
+    dd,
+    blockquote,
+    figcaption,
+    summary {
+        text-wrap: pretty;
     }
     ::selection {
         background: color-mix(in srgb, var(--color-primary-500) 30%, transparent);
@@ -223,6 +258,19 @@
     }
 
     /* ── Docs prose (.docs-body) ─────────────────────────── */
+
+    /* The reading column, declared on the article so the page header rules to it too. 46rem was 106
+       characters a line at the prose size — a third past where the eye reliably finds the start of the
+       next one, and the reason a docs page read as a wall. This is `--container-longform` resolved at
+       that size: ~75 characters.
+
+       Spelled in rem rather than ch because every child shares the one cap, and `ch` counts the using
+       element's own size — a 1.5rem heading would take a cap half again as wide and hang its section
+       rule three hundred pixels past the prose it introduces. Tables and code keep the full column:
+       they are scanned, not read line by line, and a cramped table is worse than a long one. */
+    .docs-article {
+        --docs-measure: 34.75rem;
+    }
     .docs-body {
         font-size: 0.95rem;
     }
@@ -232,8 +280,9 @@
     .docs-body h2,
     .docs-body h3,
     .docs-body h4,
+    .docs-body hr,
     .docs-body blockquote {
-        max-width: 46rem;
+        max-width: var(--docs-measure);
     }
     /* A rule above every h2 rather than more space: on pages with a dozen sections, whitespace alone stopped
        reading as a boundary and the page became one undifferentiated column. The line is what makes a section

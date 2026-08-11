@@ -65,7 +65,7 @@ const { section, prev, next } = docsNeighbours(pageId);
     <main class="flex-1">
         {/* Three columns where there is room for three: rail, prose, sections. The prose column is `min-w-0`
             and the outer grid caps at 96rem, so adding the third column widens the page rather than squeezing
-            the reading measure — which .docs-body caps at 46rem regardless. */}
+            the reading measure — which .docs-body caps in characters regardless. */}
         <div
             class="mx-auto grid max-w-6xl gap-10 px-6 pt-28 pb-20 lg:grid-cols-[15rem_1fr] lg:gap-14 lg:pt-32 xl:max-w-[96rem] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]"
         >
@@ -101,7 +101,7 @@ const { section, prev, next } = docsNeighbours(pageId);
                 </div>
             </aside>
 
-            <article class="min-w-0">
+            <article class="docs-article min-w-0">
                 <nav aria-label="Breadcrumb" class="mb-6 text-xs text-subtle">
                     <ol class="flex flex-wrap items-center gap-1.5 p-0">
                         <li><a href="/" class="transition-colors hover:text-link">Home</a></li>
@@ -128,10 +128,13 @@ const { section, prev, next } = docsNeighbours(pageId);
                     </ol>
                 </nav>
 
-                <header class="mb-10 border-b border-line pb-8">
+                {/* Ruled to the reading column, not to the grid cell: the section rules inside .docs-body
+                    stop where the prose stops, and a page-header rule running 250px past them made the two
+                    read as different pages rather than the same one. */}
+                <header class="mb-10 max-w-[var(--docs-measure)] border-b border-line pb-8">
                     <div class="eyebrow">{section?.label ?? "Documentation"}</div>
                     <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{heading}</h1>
-                    <p class="mt-4 max-w-xl text-base leading-relaxed text-muted">{lead}</p>
+                    <p class="mt-4 text-base leading-relaxed text-muted">{lead}</p>
                 </header>
 
                 {/* Inside the article, before the prose: the rail is the grid's third column, so on a narrow

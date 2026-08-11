@@ -29,10 +29,10 @@ npm audit signatures`;
 
 <div class="card p-6 sm:p-8">
     <div class="flex flex-wrap items-start justify-between gap-6">
-        <div class="max-w-xl">
+        <div>
             <div class="eyebrow">Verify it yourself</div>
             <h3 class="mt-3 text-xl font-semibold tracking-tight text-content">Don't trust us. Check.</h3>
-            <p class="mt-3 text-sm leading-relaxed text-muted">
+            <p class="mt-3 max-w-copy text-sm leading-relaxed text-muted">
                 Every installer, binary and container image is built by CI from a tagged commit in the public repository, and each one carries a signature
                 published to a transparency log anyone can read. These commands confirm that what you downloaded came from the source you can read — on your
                 machine, against public infrastructure, with us not involved.
@@ -60,7 +60,7 @@ npm audit signatures`;
 
     <DocsCodeBlock code={commands} lang="bash" title="needs the GitHub CLI — no account" />
 
-    <p class="text-sm leading-relaxed text-muted">
+    <p class="max-w-copy text-sm leading-relaxed text-muted">
         What a signature cannot tell you is whether the source itself is worth trusting. That part is the reading, and it is why
         <a href={githubUrl} target="_blank" rel="noopener" class="text-link hover:underline">all of it is public</a>.
     </p>

@@ -42,7 +42,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                 <div class="max-w-3xl">
                     <div class="eyebrow">{page.navLabel}</div>
                     <h1 class="mt-3 text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
-                    <p class="mt-4 max-w-2xl text-base leading-relaxed text-muted">{page.sub}</p>
+                    <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{page.sub}</p>
                     <div class="mt-7 flex flex-wrap gap-3">
                         <a class="btn btn-primary" href={APP_URL}>Get started free</a>
                         <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
@@ -106,9 +106,12 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                         if (!sideVisual) {
                             return (
                                 <div class="fade-in">
+                                    {/* The cap is on the paragraph, not on this box: the bullets below it are a
+                                        two-column grid that wants the wider column, and a `ch` cap only counts
+                                        characters correctly on the element whose type size it is capping. */}
                                     <div class="max-w-3xl">
                                         <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
-                                        <p class="mt-3 text-base leading-relaxed text-muted">{block.body}</p>
+                                        <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{block.body}</p>
                                         {bullets}
                                     </div>
                                     {wideShot && <ProductShotFigure shot={wideShot} sizes={COLUMN_SIZES} class="mt-8" />}
