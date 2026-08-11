@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { Markdown, Segmented } from "@intentic/ui";
+import { cmp, Icon, Markdown, ResponsiveOverlay, Segmented, useNarrow } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
+import { useLayout } from "../../../composables/useLayout";
 import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";
 import { workspaceAgent } from "../../../composables/workspace/workspaceScope";
 import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
+import MarkdownOutline from "./MarkdownOutline.vue";
+import { useMarkdownOutline } from "./markdownOutline";
 
 /* Markdown preview for the file viewer: renders to prose by default, with a Source toggle that shows the raw
  * markdown highlighted.
@@ -19,7 +22,12 @@ import CodeView from "./CodeView.vue";
  *
  * What stays this app's is where a file mention POINTS: the decorator comes from renderMarkdown, and the click
  * that follows one is delegated on the scroll container, since the anchors live inside the component's v-html
- * and can hold no listener of their own. */
+ * and can hold no listener of their own.
+ *
+ * AND WHERE THE READER IS IN IT. A rendered document is the one surface in this app with no way to move around
+ * inside itself: the code beside it has a minimap, a gutter and a jump-to-line, and prose had a scrollbar. So
+ * the preview carries its own headings (markdownOutline.ts) as a rail, the section you are in, and how far
+ * through you are — see MarkdownOutline.vue for why that is a list of words and not a minimap. */
 
 // `line` = a content-search match landing here: open on (or switch to) the Source view so the hit is visible —
 // rendered prose has no stable line mapping.
@@ -50,11 +58,53 @@ watch(
 // following a link out of an agent's README into the shared tree's ARCHITECTURE.md would be the same
 // same-path-different-file confusion one level down.
 const decorate = computed(() => fileLinkDecorator({ dir: path.slice(0, path.lastIndexOf(`/`) + 1), agent: workspaceAgent.value }));
+
+const layout = useLayout();
+const scroller = ref<HTMLElement>();
+const outline = useMarkdownOutline(scroller);
+
+/* WORTH A RAIL AT THREE SECTIONS. A document with two has a table of contents you can already see, and drawing
+ * one for it spends a column saying what the first screen says. Same threshold the docs site's rail uses. */
+const OUTLINE_MIN = 3;
+const worthIt = computed(() => outline.headings.value.length >= OUTLINE_MIN);
+
+/* ROOM FOR A RAIL, MEASURED OFF THE PANE AND NEVER THE WINDOW — this view renders between the file tree and a
+ * chat panel the reader can drag to half the screen, so a wide monitor routinely hands it 500px. The number is
+ * what the two columns need together: 13rem of rail, the gutter either side, and enough left for prose to keep
+ * a measure worth reading at. Under it the rail does not dock at all — the outline is still one press away in
+ * the toolbar, which is the whole reason that control exists. */
+const RAIL_AT_REM = 52;
+const root = ref<HTMLElement>();
+const narrow = useNarrow(root, RAIL_AT_REM);
+
+const docked = computed(() => view.value === `preview` && worthIt.value && !narrow.value && layout.markdownOutline.value);
+// The rail's own control, so it is absent where it would promise something the pane cannot give.
+const dockable = computed(() => view.value === `preview` && worthIt.value && !narrow.value);
+// "You are here", for when the rail is not saying it. Doubles as the opener for the overlay copy of the outline.
+const current = computed(() =>
+    view.value === `preview` && worthIt.value && !docked.value ? outline.headings.value[outline.active.value]?.text : undefined,
+);
+
+const overlayOpen = ref(false);
+const opener = ref<HTMLElement>();
+const jumpFromOverlay = (index: number): void => {
+    overlayOpen.value = false;
+    outline.jump(index);
+};
+
+/* THE OVERLAY MAY ONLY BE OPEN WHILE ITS OPENER EXISTS. An anchored panel is placed against that button, so
+ * anything that takes the button away mid-open — docking the rail, switching to Source, a pane widening past
+ * the threshold — would leave the panel hanging off an element that is no longer on screen. The same watcher
+ * closes it when the document changes underneath (a tab reused for another file), since a menu of one
+ * document's sections over another document's prose is a menu describing nothing the reader can see. */
+// Watched as "is there an opener at all", not as the section name — that changes on every scroll, and closing
+// the panel because the reader scrolled past a heading is not what this is for.
+watch([() => current.value === undefined, () => path], () => (overlayOpen.value = false));
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
-        <div class="flex shrink-0 items-center border-b border-line px-2 py-1.5">
+    <div ref="root" class="flex h-full min-h-0 flex-col">
+        <div class="relative flex shrink-0 items-center gap-2 border-b border-line px-2 py-1.5">
             <Segmented
                 v-model="view"
                 :options="[
@@ -62,14 +112,69 @@ const decorate = computed(() => fileLinkDecorator({ dir: path.slice(0, path.last
                     { label: `Source`, value: `source` },
                 ]"
             />
+
+            <!-- The section the reader is in. A button rather than a label because the list behind it is what
+                 they want next often enough to be worth the press — and on a pane too narrow to dock the rail,
+                 this is the only way to it. -->
+            <button
+                v-if="current !== undefined"
+                ref="opener"
+                type="button"
+                class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                v-tooltip.bottom="'Outline'"
+                @click="overlayOpen = !overlayOpen"
+            >
+                <Icon name="align-left" class="shrink-0 text-subtle" aria-hidden="true" />
+                <span class="truncate">{{ current }}</span>
+            </button>
+
+            <div class="min-w-0 flex-1"></div>
+
+            <button
+                v-if="dockable"
+                type="button"
+                :class="cmp.iconButton()"
+                :aria-pressed="docked"
+                v-tooltip.bottom="docked ? `Hide outline` : `Show outline`"
+                :aria-label="docked ? `Hide outline` : `Show outline`"
+                @click="layout.toggleMarkdownOutline()"
+            >
+                <Icon name="align-left" />
+            </button>
+
+            <!-- HOW MUCH IS LEFT, drawn over the toolbar's own bottom rule rather than as a bar of its own: a
+                 reading position is a hairline's worth of information and does not deserve a row. Absent while
+                 the document fits its pane — a full-width accent line under the toolbar of a short file reads
+                 as a progress bar that finished, which is a claim about loading, not about reading. -->
+            <div
+                v-if="view === `preview` && outline.scrollable.value"
+                class="pointer-events-none absolute -bottom-px left-0 h-px bg-link/60"
+                :style="{ width: `${outline.progress.value * 100}%` }"
+                aria-hidden="true"
+            ></div>
         </div>
-        <div class="min-h-0 flex-1">
+
+        <div class="flex min-h-0 flex-1">
             <!-- Delegated click: the file links live inside the component's v-html, so they can hold no
                  listener of their own (the copy buttons are <Markdown>'s own business). -->
-            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5" @click="openFileRefFromEvent">
-                <Markdown :source="source" :decorate="decorate" class="mx-auto max-w-3xl" />
-            </div>
-            <CodeView v-else :code="source" lang="markdown" :scroll-to-line="line" />
+            <template v-if="view === `preview`">
+                <div ref="scroller" class="scrollbar-thin h-full min-w-0 flex-1 overflow-auto bg-canvas px-6 py-5" @click="openFileRefFromEvent">
+                    <Markdown :source="source" :decorate="decorate" class="mx-auto max-w-3xl" />
+                </div>
+                <!-- The rail is a SIBLING of the scroller, not a sticky column inside it: its own scrolling is
+                     then independent of the document's, which is what a 60-heading outline beside a nine-screen
+                     file needs. -->
+                <aside v-if="docked" class="flex w-52 shrink-0 flex-col border-l border-line py-5 pl-2 pr-3">
+                    <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="outline.jump" />
+                </aside>
+            </template>
+            <CodeView v-else class="min-w-0 flex-1" :code="source" lang="markdown" :scroll-to-line="line" />
         </div>
+
+        <!-- The same outline, for the pane that cannot dock one (and for a peek at it after the rail is off).
+             Anchored to the section button on a desktop, a sheet on a phone. -->
+        <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" header="Outline" panel-class="max-h-[60vh] w-72 p-2">
+            <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="jumpFromOverlay" />
+        </ResponsiveOverlay>
     </div>
 </template>

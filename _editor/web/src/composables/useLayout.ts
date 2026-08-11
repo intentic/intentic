@@ -96,6 +96,12 @@ const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 // scroll on every file of every review for leaving it off. Persists.
 const SKIP_IMPORTS_KEY = `ui-diff-skip-imports`;
 
+// The markdown preview's outline rail — the heading list beside a rendered document (MarkdownOutline.vue). ON by
+// default: it costs a document nothing (it draws in the gutter the centred prose already leaves, so the reading
+// measure never moves) and a reader who has never seen it cannot ask for it. The reader's habit, like the diff
+// settings above, not a property of the file — so it holds as they walk from README to README. Persists.
+const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
+
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
  * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
  * off it — mirroring how useTheme drives `data-mode`), the chat panel width, the workspace explorer
@@ -172,6 +178,7 @@ const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
 const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
 const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
 const skipImports = ref<boolean>(readBool(SKIP_IMPORTS_KEY, true));
+const markdownOutline = ref<boolean>(readBool(MARKDOWN_OUTLINE_KEY, true));
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -276,6 +283,11 @@ const toggleSkipImports = (): void => {
     write(SKIP_IMPORTS_KEY, skipImports.value ? `1` : `0`);
 };
 
+const toggleMarkdownOutline = (): void => {
+    markdownOutline.value = !markdownOutline.value;
+    write(MARKDOWN_OUTLINE_KEY, markdownOutline.value ? `1` : `0`);
+};
+
 export function useLayout() {
     return {
         position,
@@ -292,6 +304,7 @@ export function useLayout() {
         hideFileComments,
         diffLayout,
         skipImports,
+        markdownOutline,
         set,
         toggle,
         setChatWidth,
@@ -312,5 +325,6 @@ export function useLayout() {
         toggleHideFileComments,
         setDiffLayout,
         toggleSkipImports,
+        toggleMarkdownOutline,
     };
 }
