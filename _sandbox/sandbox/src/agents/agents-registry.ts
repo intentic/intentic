@@ -1,6 +1,7 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
+import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { loopProjection } from "../loops/loop-state.js";
 import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
@@ -16,13 +17,6 @@ import type { LandStandings } from "./standing.js";
 // same last-frame-wins contract as presence), which system.routes relays onto /events.
 
 const MAX_TITLE_LENGTH = 80;
-/* A RELEASE NOTE IS NOT A TITLE, and this limit is what makes that concrete. Both are one bounded line, so the
- * note and its breaking sibling used to ride the title's 80 — which is a CARD'S width, not a sentence's, and 80
- * is where a note stops being cropped and starts being cut mid-word. It published four of the first five
- * changelog entries ending in "…versus addin", and it would have cut a breaking warning before the half that
- * says what to do instead. Long enough for any one-sentence note, short enough that a model which ignored "one
- * plain sentence" cannot put a page of prose onto a published Release. */
-const MAX_NOTE_LENGTH = 300;
 /* Long enough for the provider's own explanation — the entitlement refusal that prompted this field runs to 140
  * characters and names both ways out of it — and short enough that a stack trace or an HTML error page cannot
  * ride into the roster, which every connected browser re-reads in full on every card change. */
@@ -51,16 +45,26 @@ const sanitizeLine = (text: string, limit: number): string | undefined => {
 
 const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
 
-// The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub — these are read as
-// one line in a changelog entry and in the update card — and emphatically NOT the title's ceiling.
+/* The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub — these are read as
+ * one line in a changelog entry and in the update card — and emphatically NOT the title's ceiling: a title is
+ * bounded by a CARD'S width, and sharing that 80 is what published four of the first five changelog entries
+ * ending mid-word ("…versus addin").
+ *
+ * The ceiling itself belongs to the prompt that writes these (git/commit-message.ts), which asks for a sentence
+ * that fits it. One number, so a note is never cut at a length nothing asked it to respect. */
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
 
 /* The same scrub for a drafted commit BODY, which differs from a title in the one way that matters: its
  * newlines are the content. The body arrives as "- " fact lines and is read back as those lines, so collapsing
- * them the way sanitizeTitle does would run four separate facts into one unreadable sentence. Line breaks
+ * them the way sanitizeTitle does would run separate facts into one unreadable sentence. Line breaks
  * survive; every other control character does not, and the whole thing is bounded so a model that ignored the
- * prompt's line count cannot put a page into the commit box. */
-const MAX_BODY_LENGTH = 1_000;
+ * prompt's line count cannot put a page into the commit box.
+ *
+ * The bound has to agree with the line count it backs up, or it is not a bound: at the two lines the prompt now
+ * asks for (git/commit-message.ts), 1,000 characters left room for two paragraphs wearing a bullet each, which
+ * is the shape the shorter ask exists to stop. 400 is three full lines and still several times what a drafted
+ * body actually runs to. */
+const MAX_BODY_LENGTH = 400;
 const sanitizeBody = (body: string): string | undefined => {
     const clean = body
         .replaceAll(/\r\n?/gu, "\n")

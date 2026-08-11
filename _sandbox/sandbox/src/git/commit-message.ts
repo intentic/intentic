@@ -256,6 +256,15 @@ const renderBlocks = (blocks: readonly PatchBlock[], budget: number): string => 
 // counts as a type.
 const TYPES = [`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`, `style`, `revert`] as const;
 
+/* HOW LONG A NOTE MAY BE — one number, read by both halves of the mechanism: the prompt below asks for a
+ * sentence that fits it, and the store cuts anything that does not (agents/agents-registry.ts, sanitizeNote).
+ * Sharing it is the whole point. A ceiling the model is never told about is one it cannot spend well, and the
+ * two numbers disagreeing is what published notes ending mid-word.
+ *
+ * 160 characters is a full sentence in a changelog bullet and on an update card, and roughly half of what the
+ * cheap rung writes when nothing bounds it — which is the shorter, plainer note this is for. */
+export const MAX_NOTE_LENGTH = 160;
+
 // The prompt. Written flat rather than as a system/user pair because the one-shot sends no system prompt at all
 // (see one-shot.ts): the instruction, the style examples and the material are one message, in the order the
 // model should weigh them.
@@ -296,7 +305,11 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         `- NAME THINGS. Use the real identifiers from the diff — function, component, route, setting, package`,
         `  and option names, spelled as the code spells them. These are what someone searching this history`,
         `  later will search for, and a message without them is unfindable.`,
-        `- Then a blank line, then up to 4 body lines starting with "- ". Each states one concrete thing the`,
+        // TWO LINES, not the four this asked for. The body is read back in a commit box the width of a panel and
+        // by whoever runs `git log` later, and a four-line body earned its length by padding: the third and
+        // fourth lines were reliably the first two said again, or a fact the diff makes obvious. Two forces the
+        // choice the "densest first" demand was always making.
+        `- Then a blank line, then up to 2 body lines starting with "- ". Each states one concrete thing the`,
         `  change does, densest first, naming the things it touches. Say what behaviour is different now, and`,
         `  what it was before when the contrast is the point.`,
         // The single largest source of bloat in a drafted message, and the easiest to state as a ban: the file
@@ -317,8 +330,11 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         wantsNote
             ? `- If (and only if) someone USING this software would notice this change, add a last line spelled exactly: Release-Note: <one plain sentence>.`
             : undefined,
+        // The budget, said out loud, because it is enforced either way (MAX_NOTE_LENGTH): a model that does not
+        // know the ceiling writes past it and gets cut mid-word, which is worse than the shorter sentence it
+        // would have written had it been asked for one.
         wantsNote
-            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it.`
+            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it. ONE sentence, at most ${MAX_NOTE_LENGTH} characters — anything past that is cut off.`
             : undefined,
         wantsNote
             ? `- OMIT the Release-Note line entirely for anything a user would never see — refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
@@ -329,7 +345,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
          * — and the "!" demand beside it is what ties the sentence to the major version bump the release
          * tooling derives from the type. */
         wantsNote
-            ? `- If (and only if) this change REMOVES or breaks something users already rely on — a feature gone, a command renamed, a file format no longer read — add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
+            ? `- If (and only if) this change REMOVES or breaks something users already rely on — a feature gone, a command renamed, a file format no longer read — add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
             : undefined,
         // The output contract is stated first and last: this model is the cheap rung, and a preamble ("Sure!
         // Here's a commit message:") pasted into the input is the failure this helper is most likely to have.
@@ -405,15 +421,15 @@ export const cleanCommitSubject = (reply: string): string => {
     return first === undefined ? `` : unwrap(first);
 };
 
-/* A hard ceiling on the body, over the prompt's own "up to 4". The prompt is an instruction and this is a
- * guarantee: a model that ignores the count would otherwise put a page of prose into the commit box, and the
+/* A hard ceiling on the body, one line over the prompt's own "up to 2". The prompt is an instruction and this is
+ * a guarantee: a model that ignores the count would otherwise put a page of prose into the commit box, and the
  * whole point of the body is that it stays cheap to read back. */
-const MAX_BODY_LINES = 6;
+const MAX_BODY_LINES = 3;
 
 /* The body: the message's remaining lines, kept as the model wrote them.
  *
  * Bullets are NOT unwrapped here, unlike the subject. A leading "- " is the shape the prompt asked for and the
- * shape that makes a multi-fact body scannable — stripping it would run four separate facts together into
+ * shape that makes a multi-fact body scannable — stripping it would run separate facts together into
  * something that reads like a paragraph and parses like nothing. */
 export const cleanCommitBody = (reply: string): string =>
     messageLines(reply)

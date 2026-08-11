@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent, AgentSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../agent/subagents.js";
+import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import type { LandedPresence, LandedPresences } from "./landed-presence.js";
@@ -904,9 +905,10 @@ describe("agents registry", () => {
         expect(saved()?.landedBreaking).toBe(breaking);
         expect(saved()?.landedSubject).toHaveLength(80);
 
-        // The ceiling is still a ceiling: a model that ignored "one plain sentence" cannot put a page onto a Release.
+        // The ceiling is still a ceiling: a model that ignored "one plain sentence" cannot put a page onto a
+        // Release. It is the same number the prompt asks a note to fit in (MAX_NOTE_LENGTH), never a second one.
         await registry.setLandedSubject("c1", { subject: "skills panel", note: "n".repeat(500) });
-        expect(saved()?.landedNote).toHaveLength(300);
+        expect(saved()?.landedNote).toHaveLength(MAX_NOTE_LENGTH);
     });
 
     // A card that says "Resolve conflict" but cannot say WHAT blocked is the dead end this report exists to

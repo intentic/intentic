@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { cleanBreakingNote, cleanCommitBody, cleanCommitSubject, cleanReleaseNote, collectRepoDiff, commitMessagePrompt, type RepoDiff } from "./commit-message.js";
+import {
+    cleanBreakingNote,
+    cleanCommitBody,
+    cleanCommitSubject,
+    cleanReleaseNote,
+    collectRepoDiff,
+    commitMessagePrompt,
+    MAX_NOTE_LENGTH,
+    type RepoDiff,
+} from "./commit-message.js";
 
 /* The material an AI-drafted commit message is written from. Run against REAL repos, like the rest of git/,
  * because the whole risk here is describing the wrong side: the index and the worktree disagree constantly, and
@@ -273,8 +282,8 @@ test("keeps the body's facts as separate lines, and bounds a model that runs on"
     expect(cleanCommitBody(reply)).toBe("- adds nameAgentTitle\n- rejects a reply that asks a question");
     // Bullets survive on purpose: stripping them runs separate facts into something that reads like a paragraph.
     expect(cleanCommitBody("fix: x\n\n- one\n- two")).toContain("- one");
-    // The prompt asks for at most four; this is the guarantee under it.
-    expect(cleanCommitBody(`fix: x\n\n${Array.from({ length: 12 }, (_, index) => `- fact ${index}`).join("\n")}`).split("\n")).toHaveLength(6);
+    // The prompt asks for at most two; this is the guarantee under it.
+    expect(cleanCommitBody(`fix: x\n\n${Array.from({ length: 12 }, (_, index) => `- fact ${index}`).join("\n")}`).split("\n")).toHaveLength(3);
     // A subject that said everything is the expected answer for a small commit, not a failure.
     expect(cleanCommitBody("refactor: split the picker component")).toBe("");
 });
@@ -285,6 +294,9 @@ test("asks for a release note only when the repo keeps a changelog", () => {
 
     const wantsNote = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", blocks: [] }], true);
     expect(wantsNote).toContain("Release-Note: <one plain sentence>");
+    // The length the store will cut at, stated in the ask rather than only enforced after it: a model that does
+    // not know the ceiling writes past it, and a sentence cut mid-word reaches the changelog and the update card.
+    expect(wantsNote).toContain(`at most ${MAX_NOTE_LENGTH} characters`);
     // The omission instruction is the load-bearing half: most commits change nothing a user would notice, and a
     // model that writes a note for every one of them refills the changelog with the noise it exists to remove.
     expect(wantsNote).toContain("OMIT the Release-Note line entirely");
@@ -314,7 +326,8 @@ test("a note-first reply still yields the subject, not the note", () => {
 });
 
 test("reads the breaking sentence off the reply, apart from the note", () => {
-    const reply = "feat!: retire the legacy picker\n\nRelease-Note: The model picker is simpler now.\nBreaking-Note: The old picker layout is gone — use the new list.";
+    const reply =
+        "feat!: retire the legacy picker\n\nRelease-Note: The model picker is simpler now.\nBreaking-Note: The old picker layout is gone — use the new list.";
     expect(cleanBreakingNote(reply)).toBe("The old picker layout is gone — use the new list.");
     // Each cleaner reads only its own trailer, whichever order the model wrote them in.
     expect(cleanReleaseNote(reply)).toBe("The model picker is simpler now.");
