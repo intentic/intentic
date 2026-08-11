@@ -129,6 +129,8 @@ const {
     streaming,
     awaitingDecision,
     pendingPlanMessage,
+    resumable,
+    continuation,
     contextUsage,
     mode,
     provider,
@@ -642,11 +644,26 @@ const sendBlock = computed(() => {
     }
     return undefined;
 });
+/* THE LAST TURN STOPPED BEFORE IT FINISHED, and this composer is offering to carry it on.
+ *
+ * The flag itself is the conversation's (Conversation.resumable, which says at length which endings earn it);
+ * what the composer adds is the three states in which the offer would be wrong even though the turn really did
+ * stop. An EMPTY BOX is the whole of the gesture — the offer is "press this instead of typing", so the moment
+ * there are words or files staged, those are what the user means to send. A PENDING PLAN turns the composer
+ * into the revision field, where a continuation would be feedback rather than a continuation. And a QUEUED
+ * message is already the answer to "what happens next", waiting for a send of its own.
+ *
+ * One computed for both affordances deliberately: the strip and the Enter key are the same offer wearing two
+ * shapes, and a user who reaches for the key because the strip is on screen must not find it does something
+ * else. */
+const continueOffer = computed(
+    () => resumable.value && !staged.value && queued.value.length === 0 && pendingPlanMessage.value === undefined && connected.value,
+);
 const canSend = computed(() => {
     if (sendBlock.value !== undefined) {
         return false;
     }
-    return staged.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
+    return staged.value || continueOffer.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
 });
 const sendHint = computed(() => {
     if (sendBlock.value !== undefined) {
@@ -709,6 +726,17 @@ const queuedHint = computed(() => {
 // Resolved per active sandbox rather than held, so switching sandboxes switches rings.
 const history = computed(() => (activeSandboxId.value === undefined ? undefined : inputHistoryFor(activeSandboxId.value)));
 
+/* Send the sentence the press stands for (see continueOffer above). It goes down the ordinary send path — it IS
+ * an ordinary message, typed by the button instead of by hand — so it lands in the recall ring like any other,
+ * and ↑ brings it straight back for anyone who wants to continue with an instruction attached rather than
+ * plain. Down here beside the ring rather than up with the offer, so it reads after the thing it writes to. */
+const continueTurn = (): void => {
+    const text = continuation.value;
+    void send(text);
+    history.value?.record(text);
+    pin();
+};
+
 // A tab or sandbox switch swaps the composer's draft out from under a half-finished recall — drop it on both
 // the outgoing and incoming ring so ↓/Escape can never paste one tab's draft into another's composer.
 watch([() => props.conversation, history], (_current, [, previousHistory]) => {
@@ -745,6 +773,14 @@ const composerHint = computed(() => {
     // A draft that runs as a command sends nothing to the model, so say so before Enter rather than after.
     if (commandRun.value !== undefined) {
         return `Enter runs /${commandRun.value.name}`;
+    }
+    /* The stopped turn's shortcut, in the slot the user is already looking at while they decide what to type.
+     * This is the whole of how anyone learns the key exists: the strip above says a turn is unfinished and
+     * carries the button, and this says the key does the same thing — so the gesture is learned once, at the
+     * only moment it applies, and costs the composer nothing on every other turn. Ahead of the recall hint
+     * because it is the rarer state and the more useful one: ↑ is always there, and this is not. */
+    if (continueOffer.value) {
+        return `Enter to continue`;
     }
     return draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`;
 });
@@ -893,15 +929,25 @@ const submit = (): void => {
      * two can never be armed at once, so the order is a formality kept explicit rather than a precedence.
      *
      * Unlike a workflow's, this send does need a goal — a loop with an empty one has nothing to converge on and
-     * the daemon's own schema refuses it — so the empty-composer gate applies here too, and `canSend` is where
-     * that lives. It is not a turn on this chat, though, so nothing below it applies: a loop drives its own. */
+     * the daemon's own schema refuses it — so it gates on `staged`, the composer actually holding something,
+     * rather than on `canSend`. The two are not the same question: `canSend` is also true for the presses that
+     * send something OTHER than the draft (a queue to flush, a stopped turn to continue), and a loop started off
+     * one of those would go up with no goal at all. It is not a turn on this chat either, so nothing below it
+     * applies: a loop drives its own. */
     const loop = pickedLoop.value;
-    if (loop !== undefined && connected.value && canSend.value && !looping.value) {
+    if (loop !== undefined && connected.value && staged.value && !looping.value) {
         void sendThroughLoop(loop);
         return;
     }
     // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
     if (!connected.value || !canSend.value) {
+        return;
+    }
+    /* NOTHING TYPED AND A TURN LEFT HANGING: the press means Continue (see continueOffer). Below the badges,
+     * which are explicit choices the user armed, and above everything else, because every gate under here reads
+     * the draft — and the whole point of this branch is that there isn't one. */
+    if (continueOffer.value) {
+        continueTurn();
         return;
     }
     const text = draft.value.trim();
@@ -1490,6 +1536,30 @@ watch(
                                 @click="enableOutageResume"
                             >
                                 Enable auto-resume
+                            </button>
+                        </div>
+                        <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on. Under the outage
+                             banner and above the queue, because that is the order the three answer "what is
+                             happening to my work": one is coming back by itself, this one is waiting on a
+                             press, and the queue is what goes next either way. The two can't both be up —
+                             an outage arms its own resume and never this one.
+                             The key is named on the button rather than in a tooltip. A pointer that has
+                             travelled to the button has already spent what the shortcut would have saved,
+                             so the only reader it can still help is the one who hasn't moved yet — and the
+                             composer's hint slot says the same thing one line below, for exactly them. -->
+                        <div
+                            v-if="continueOffer"
+                            class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                        >
+                            <Icon name="pause" class="shrink-0" />
+                            <span class="min-w-0 flex-1">This turn stopped before it finished — the work so far is still here.</span>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                v-tooltip.top="'Pick up where it left off, without retyping'"
+                                @click="continueTurn"
+                            >
+                                Continue<span v-if="!mobile" class="font-normal text-subtle"> · Enter</span>
                             </button>
                         </div>
                         <template v-if="connected">

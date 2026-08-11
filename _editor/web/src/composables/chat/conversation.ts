@@ -87,6 +87,22 @@ export class Conversation {
     readonly watched = this.transcript.watched;
     readonly streaming = ref(false);
     readonly error = ref<string | null>(null);
+    /* THE LAST TURN ENDED BEFORE ITS WORK DID, and picking it up is a press rather than a sentence.
+     *
+     * Two endings share that shape and nothing else does: a turn the user stopped, and a turn that died with no
+     * code anybody can act on — the harness crashing mid-run, an agent that halted after a tool it was refused.
+     * Both leave half-finished work behind a session that is perfectly alive, so the only thing missing is
+     * somebody saying "carry on". That sentence was being typed by hand, into every chat this happened to, which
+     * is the whole reason this flag exists: the offer it arms (ChatPane's continue strip, and Enter on an empty
+     * composer) is the typing, done once.
+     *
+     * DELIBERATELY NOT the failures that name something to fix — a dead credential, a model the provider does
+     * not serve, a spent allowance, a seat nobody enabled. Continuing those re-fails by construction, and an
+     * offer that re-fails teaches the user to stop trusting the offer.
+     *
+     * Cleared by the next turn starting, whichever it is: the continuation itself, or whatever the user decided
+     * to send instead of it. */
+    readonly resumable = ref(false);
     // True while a daemon read that should produce this conversation's transcript is in flight and nothing is
     // painted meanwhile — a history open, or a restored tab whose local mirror came up empty. The panel shows
     // its loading state on it instead of the "Start a conversation" invitation, which over a chat that merely
@@ -329,6 +345,7 @@ export class Conversation {
         account: this.account,
         session: this.session,
         error: this.error,
+        resumable: this.resumable,
         streaming: this.streaming,
         requeue: (userMessageId: number) => this.requeueUndelivered(userMessageId),
         hold: () => {
@@ -858,6 +875,9 @@ export class Conversation {
         // Whatever interrupted the last turn is history, so THIS one's clean end may flush the queue.
         this.interrupted = false;
         this.error.value = null;
+        // A turn is running, so there is nothing left stopped to pick up — this IS the picking up, or the message
+        // the user sent in its place.
+        this.resumable.value = false;
         // A live turn supersedes the waits a failed one opened — THIS turn is the retry, or the send that
         // replaced it, whether the scheduler fired it or another window did.
         this.failures.clear();
@@ -1060,6 +1080,10 @@ export class Conversation {
     private ended(): void {
         this.cancelPendingCards();
         this.transcript.notice(`Stopped.`);
+        // The work stopped mid-flight and the session is untouched, so the way back is one press (see
+        // `resumable`). Armed HERE rather than in abort(), which a closed tab and a sandbox switch also call:
+        // neither of those is the user standing in front of a chat deciding what to do next.
+        this.resumable.value = true;
         this.abort();
         this.persist();
     }

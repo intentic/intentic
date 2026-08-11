@@ -39,7 +39,7 @@ import {
 } from "./providerCatalog";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
-import { type ChatAttachment, type ChatMessage } from "./transcript";
+import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
@@ -397,6 +397,16 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     }),
     awaitingDecision: computed(() => conversation.value.awaitingDecision.value),
     pendingPlanMessage: computed(() => conversation.value.pendingPlanMessage.value),
+    /* This conversation's last turn ended before its work did (Conversation.resumable), and the sentence that
+     * would pick it up. Two values rather than one because the composer needs them at different moments: the
+     * flag arms the offer and the Enter shortcut, and the sentence is only read at the press.
+     *
+     * The offer stands down while a turn is live. A resumable flag outlives the failure it describes until the
+     * next turn STARTS, and the gap between a send leaving the composer and that turn beginning is real — long
+     * enough, on a slow round-trip, for the strip to sit there under a message the user has already sent,
+     * inviting them to send another. */
+    resumable: computed(() => conversation.value.resumable.value && !conversation.value.streaming.value),
+    continuation: computed(() => continuationFor(conversation.value.messages.value)),
     // This conversation's undelivered messages (submitted while its turn was running) and whether its running
     // turn can take one mid-flight — the composer renders the first and words its hints from the second.
     queued: computed(() => conversation.value.queued.value),

@@ -63,6 +63,9 @@ export interface FailureHost {
     readonly session: Ref<SessionRef | undefined>;
     // The red line: this needs the user.
     readonly error: Ref<string | null>;
+    // This turn died with its work half done and nothing to fix first, so the way on is one press — see
+    // Conversation.resumable, and the one branch below that raises it.
+    readonly resumable: Ref<boolean>;
     // A probe stands down while a turn is live — the run it was hunting is already here.
     readonly streaming: Ref<boolean>;
     // Take the user's undelivered message back out of the transcript and hold it in the queue, where it waits
@@ -187,6 +190,21 @@ export class TurnFailures {
                  * honest response. What DOES persist is the refusal the daemon filed against the account, which
                  * is what stops the picker offering it as though it had headroom. */
                 this.host.error.value = message;
+                /* AND, for the UNCODED half of this branch only, the offer to pick the turn back up.
+                 *
+                 * An uncoded failure is one the daemon could not name: the harness died mid-run, the agent
+                 * stopped answering, a turn ended in a subtype nobody has a sentence for ("agent did not
+                 * complete"). Those have one thing in common that every code above them lacks — nothing is
+                 * broken that the user could go and fix, the session is intact, and the only thing between the
+                 * work and its finish is somebody saying carry on. That is exactly what `resumable` offers.
+                 *
+                 * The three NAMED codes here are excluded by hand, because for them the sentence is the point:
+                 * a seat nobody enabled, an agent already running a turn, a subscription that isn't there. A
+                 * Continue button under any of those re-fails on the press, which is worse than no button —
+                 * it converts a clear refusal into one the user now blames themselves for. */
+                if (code === undefined) {
+                    this.host.resumable.value = true;
+                }
                 return;
         }
     }

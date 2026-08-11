@@ -309,12 +309,42 @@ export const recordedRows = (messages: readonly ChatMessage[]): number =>
         return message.text.length > 0 || (message.thinking?.length ?? 0) > 0 || (message.tools?.length ?? 0) > 0;
     }).length;
 
+/* WHAT PRESSING CONTINUE ACTUALLY SAYS — one sentence, picked from two by continuationFor below.
+ *
+ * "Continue" alone is ambiguous at exactly the moment it gets used most. The commonest way a turn ends early is
+ * a tool the user refused: the agent is told to stop and wait, and the next thing it hears is the word
+ * "continue" — which reads as "go on then, run it", so the refused command is the first thing it reaches for
+ * again. That is the failure mode of typing the word by hand, and naming the refusal is what fixes it.
+ *
+ * Plain words, and short, because this lands in the transcript as the user's own message: pressing the button IS
+ * them saying it. (The machine-voiced resume notes on the wire are for turns the daemon re-ran with nobody
+ * asking, where a user bubble would be a lie about who spoke. This is not one of those.) */
+export const CONTINUATIONS = {
+    plain: `Continue from where you left off.`,
+    afterDenial: `Continue from where you left off, without the step I declined.`,
+} as const;
+
+// A message reduced to what the lexicon below is written in: lower case, one space between words, and trailing
+// sentence punctuation gone ("Continue.", "ok!") — but never "?", since "continue?" asks rather than consents.
+const bareText = (text: string): string =>
+    text
+        .trim()
+        .toLowerCase()
+        .replace(/[.!…]+$/u, ``)
+        .trim()
+        .replace(/\s+/gu, ` `);
+
 /* Messages whose ENTIRE content is "keep going". Such a message points at the previous prompt instead of
  * carrying intent of its own — so opening a turn on it would pin "Continue" to the top of the panel while the
  * question it defers to scrolls away. Matched against the whole message, deliberately: "continue, but skip
- * the tests" carries a new instruction and must pin like any prompt. Trailing sentence punctuation is
- * stripped ("Continue.", "ok!"), but never "?" — "continue?" is a question, not consent. */
+ * the tests" carries a new instruction and must pin like any prompt.
+ *
+ * THE APP'S OWN CONTINUATIONS ARE IN HERE, derived rather than spelled out a second time. They are the same
+ * contentless nudge the typed ones are — longer only because they are precise about a refusal the model would
+ * otherwise re-attempt — so a chat where the user pressed the button must fold exactly like one where they
+ * typed the word, and rewording a sentence up there must never quietly turn it into a message that pins. */
 const ACKNOWLEDGMENTS = new Set([
+    ...Object.values(CONTINUATIONS).map(bareText),
     `continue`,
     `please continue`,
     `keep going`,
@@ -350,15 +380,16 @@ export const isAcknowledgment = (message: ChatMessage): boolean => {
     if (message.role !== `user` || (message.attachments?.length ?? 0) > 0) {
         return false;
     }
-    return ACKNOWLEDGMENTS.has(
-        message.text
-            .trim()
-            .toLowerCase()
-            .replace(/[.!…]+$/u, ``)
-            .trim()
-            .replace(/\s+/gu, ` `),
-    );
+    return ACKNOWLEDGMENTS.has(bareText(message.text));
 };
+
+/* WHICH CONTINUATION THIS CHAT'S NEXT PRESS SHOULD SEND. The refusal is read off the last PERMISSION card in
+ * the transcript rather than the last card of any kind: a dismissed question or a rejected plan already carry
+ * the user's own words about what to do instead, so there is nothing for a sentence here to add. */
+export const continuationFor = (messages: readonly ChatMessage[]): string =>
+    messages.findLast((message) => message.permission !== undefined)?.permission?.status === `denied`
+        ? CONTINUATIONS.afterDenial
+        : CONTINUATIONS.plain;
 
 /* A USER MESSAGE THAT DOES NOT OPEN A TURN. It folds into the one above it instead, so the prompt that
  * actually defines the work keeps its pin through everything done in service of it.

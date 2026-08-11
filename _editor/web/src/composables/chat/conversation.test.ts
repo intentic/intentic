@@ -7,7 +7,7 @@ import { providerAccounts } from "./providerAccounts";
 import { transcriptView } from "./transcriptClock";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
-import { type ChatMessage, dayMarksOf, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
+import { type ChatMessage, CONTINUATIONS, continuationFor, dayMarksOf, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
@@ -1047,6 +1047,65 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).toBe(`error`);
         // The unknown frame left no trace: just the user message and the (empty) assistant bubble.
         expect(conversation.messages.value).toHaveLength(2);
+    });
+
+    /* THE OFFER TO PICK A DEAD TURN BACK UP, and the line it is drawn on. An UNCODED failure is the daemon
+     * saying it has no name for what went wrong — the harness died, the agent stopped answering — which is the
+     * one shape where nothing needs fixing first and carrying on is simply the rest of the work. A NAMED code
+     * is the opposite by construction: it says what to go and repair, so an offer under it re-fails on the
+     * press and teaches the user the button lies. */
+    it(`offers to continue after a failure nobody can act on, and never after one that names a fix`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete (error_during_execution)` }]));
+        await conversation.send(`ship the parser`, settings);
+        expect(conversation.resumable.value).toBe(true);
+
+        // The next turn is the answer to the offer, whichever way the user gave it — so the offer stands down
+        // at the START of it rather than at its end, and cannot be pressed twice into two turns.
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+        await conversation.send(CONTINUATIONS.plain, settings);
+        expect(conversation.resumable.value).toBe(false);
+
+        for (const code of [`subscription-required`, `agent-busy`, `claude-not-entitled`] as const) {
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code, message: `nope` }]));
+            await conversation.send(`again`, settings);
+            expect(conversation.error.value, code).toBe(`nope`);
+            expect(conversation.resumable.value, code).toBe(false);
+        }
+    });
+
+    /* THE CASE THE WHOLE THING IS FOR: a tool the user refused, the agent stopped waiting to be told what to do,
+     * and the sentence that tells it. It has to name the refusal — a bare "continue" reads as "go on then, run
+     * it", which is how a declined command gets run on the second press — and it has to FOLD, so that pressing
+     * the button leaves the transcript exactly as pinned as typing the word did. */
+    it(`arms the continue offer when a denied tool stops the turn, with the sentence that names the refusal`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true }));
+
+        const turn = conversation.send(`clean the sandbox`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await conversation.decidePermission(
+            conversation.messages.value.find((message) => message.permission !== undefined)!,
+            `deny`,
+        );
+        await turn;
+
+        expect(conversation.resumable.value).toBe(true);
+        const text = continuationFor(conversation.messages.value);
+        expect(text).toBe(CONTINUATIONS.afterDenial);
+        // Allowing the same tool instead leaves the ordinary sentence — there is no refusal to carry on without.
+        expect(continuationFor([{ id: 1, role: `user`, text: `hi`, permission: { requestId: `p1`, toolName: `Bash`, status: `allowed` } }])).toBe(
+            CONTINUATIONS.plain,
+        );
+
+        // Both sentences are nudges, not new instructions: they fold into the turn they continue, so the prompt
+        // that defines the work keeps the pin.
+        for (const sentence of Object.values(CONTINUATIONS)) {
+            expect(foldsIntoTurn({ id: 1, role: `user`, text: sentence }), sentence).toBe(true);
+        }
+        expect(turnsOf([...conversation.messages.value, { id: 99, role: `user`, text }]).map((group) => group.id)).toEqual([
+            conversation.messages.value[0]!.id,
+        ]);
     });
 
     it(`self-heals a dead session id: drops it on a session-not-found error and notices instead of erroring`, async () => {
