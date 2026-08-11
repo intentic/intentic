@@ -27,6 +27,40 @@ const uiPoints = [
     { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
 ];
 
+/* THE LIFECYCLE, DRAWN — a wave through two swimlanes. The x-axis is time, the lanes are WHO ACTS: the flow
+ * runs along the author's lane, dips into the user's for Discover and Install, and comes back up for Earn —
+ * which is the one fact the old seven-row list buried: publishing is not the end of the story, and the money
+ * arrives only after somebody else's two steps. The dashed arc over the top is Maintain re-entering review,
+ * what makes the figure a cycle rather than a line. Geometry is computed from the shared lifecycle data, so
+ * the diagram cannot show a step the site doesn't have. */
+const LC = { w: 600, h: 212, chipW: 64, chipH: 30 };
+const lcPitch = (LC.w - 20 - LC.chipW) / (extensionLifecycle.length - 1);
+const lcLaneY = { author: 78, user: 174 };
+const lcChips = extensionLifecycle.map((stage, i) => {
+    const left = 10 + i * lcPitch;
+    const cy = stage.audience === "author" ? lcLaneY.author : lcLaneY.user;
+    return { ...stage, left, cx: left + LC.chipW / 2, cy };
+});
+// The flow line through every chip centre: straight along a lane, an S-curve where the lane changes.
+const lcFlow = lcChips
+    .map((chip, i) => {
+        if (i === 0) return `M ${chip.cx} ${chip.cy}`;
+        const prev = lcChips[i - 1];
+        if (prev.cy === chip.cy) return `L ${chip.cx} ${chip.cy}`;
+        return `C ${prev.cx + 40} ${prev.cy} ${chip.cx - 40} ${chip.cy} ${chip.cx} ${chip.cy}`;
+    })
+    .join(" ");
+// A chevron in each same-lane gap, so the wave reads left-to-right without labelling the curves.
+const lcArrows = lcChips
+    .slice(1)
+    .map((chip, i) => ({ prev: lcChips[i], chip }))
+    .filter(({ prev, chip }) => prev.cy === chip.cy)
+    .map(({ prev, chip }) => `M ${(prev.left + LC.chipW + chip.left) / 2 - 4} ${chip.cy} L ${(prev.left + LC.chipW + chip.left) / 2 + 4} ${chip.cy}`);
+const lcFirst = lcChips[1];
+const lcLast = lcChips[lcChips.length - 1];
+// The return arc: Maintain's new sha re-entering review at Publish.
+const lcReturn = `M ${lcLast.cx} ${lcLaneY.author - 15} L ${lcLast.cx} 26 Q ${lcLast.cx} 18 ${lcLast.cx - 8} 18 L ${lcFirst.cx + 8} 18 Q ${lcFirst.cx} 18 ${lcFirst.cx} 26 L ${lcFirst.cx} ${lcLaneY.author - 19}`;
+
 const agentPoints = [
     { name: "agent", what: "A directory of skills, subagents, hooks and MCP servers, loaded into the agent every turn." },
     { name: "bin", what: "Executables prepended to the agent's PATH, which is how you ship it a command-line tool." },
@@ -45,36 +79,107 @@ const agentPoints = [
 >
     <h2>The whole lifecycle</h2>
     <p>
-        Seven steps carry an extension from an empty directory to a payout and around again, and they are not all yours.
-        The author's steps have a page each: the code on this shelf, the process on the Ship shelf, and the money on its
-        own page, because the economy has two audiences. Two steps happen on the other side of the listing, to the person
-        installing, and are documented where that person reads. Worth knowing both halves: what you publish is only ever
-        met as what somebody else installs.
+        Seven steps take an extension from an empty directory to a payout that renews, and not all are yours: Discover and
+        Install happen on the other side of the listing. What you publish is only ever met as what somebody else installs.
     </p>
-    {/* One row per step, and it FOLDS on a narrow screen: below `sm` the description drops to a second line
-        under the step name rather than sharing the row, which at 390px left it a ninety-pixel column wrapping
-        "The gallery, and browse from inside the app" over four lines. Placement is explicit rather than flow,
-        because the two layouts order the same four cells differently. */}
-    <div class="docs-embed mt-6 flex flex-col gap-2">
-        {
-            extensionLifecycle.map((stage, index) => (
-                <a
-                    href={stage.href}
-                    class="group card grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1 p-4 no-underline transition-colors hover:border-primary-600/40 sm:grid-cols-[1.25rem_5rem_minmax(0,1fr)_auto] sm:gap-x-4"
-                >
-                    <span class="font-mono text-xs text-subtle">{index + 1}</span>
-                    <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">{stage.step}</span>
-                    {/* Which side of the listing this step happens on. The two "your user" rows are the reason
-                        the strip exists: without them the book reads as though publishing were the end of it. */}
-                    <span class="col-start-3 row-start-1 text-2xs tracking-wide text-subtle uppercase sm:col-start-4">
-                        {stage.audience === "author" ? "You" : "Your user"}
-                    </span>
-                    <span class="col-start-2 col-end-4 row-start-2 text-sm leading-relaxed text-muted sm:col-start-3 sm:col-end-4 sm:row-start-1">
-                        {stage.what}
-                    </span>
-                </a>
-            ))
-        }
+    <div class="docs-embed mt-6">
+        {/* The wave, on wide screens; every chip is a link to the page that owns its step. */}
+        <figure class="relative hidden overflow-hidden rounded-2xl border border-line bg-canvas/60 sm:block">
+            <div class="grid-overlay"></div>
+            <div
+                class="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 14%, transparent), transparent 70%)"
+                aria-hidden="true"
+            >
+            </div>
+            <svg
+                viewBox={`0 0 ${LC.w} ${LC.h}`}
+                class="relative h-auto w-full text-link"
+                role="img"
+                aria-label="The lifecycle as a cycle: you Build, Publish and Verify; your user Discovers and Installs; you Earn and Maintain — and a maintained release re-enters review."
+            >
+                <defs>
+                    <marker id="lc-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                    </marker>
+                </defs>
+
+                {/* The two lanes: who acts. */}
+                {
+                    [
+                        { label: "YOU", y: lcLaneY.author },
+                        { label: "YOUR USER", y: lcLaneY.user },
+                    ].map((lane) => (
+                        <Fragment>
+                            <rect x="10" y={lane.y - 28} width={LC.w - 20} height="56" rx="14" fill="color-mix(in srgb, var(--color-content) 3%, transparent)" stroke="var(--color-line)" />
+                            <text x="22" y={lane.y - 34} font-size="9.5" font-weight="600" letter-spacing="1.5" style="fill: var(--color-subtle)">
+                                {lane.label}
+                            </text>
+                        </Fragment>
+                    ))
+                }
+
+                {/* The flow, then its direction, then the loop home. */}
+                <path d={lcFlow} fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.5" />
+                {lcArrows.map((d) => <path d={d} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#lc-arrow)" />)}
+                <path d={lcReturn} fill="none" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#lc-arrow)" />
+                <text x={(lcFirst.cx + lcLast.cx) / 2} y="12" text-anchor="middle" font-size="9.5" style="fill: var(--color-subtle)">
+                    a new sha re-enters review
+                </text>
+
+                {
+                    lcChips.map((chip) => (
+                        <a href={chip.href}>
+                            <title>{chip.what}</title>
+                            <rect
+                                x={chip.left}
+                                y={chip.cy - LC.chipH / 2}
+                                width={LC.chipW}
+                                height={LC.chipH}
+                                rx="15"
+                                fill={chip.step === "Earn" ? "color-mix(in srgb, var(--color-primary-500) 14%, var(--color-canvas))" : "var(--color-canvas)"}
+                                stroke={chip.step === "Earn" ? "color-mix(in srgb, var(--color-primary-500) 55%, transparent)" : "var(--color-line-strong)"}
+                                stroke-width="1.25"
+                            />
+                            <text
+                                x={chip.cx}
+                                y={chip.cy + 1}
+                                text-anchor="middle"
+                                dominant-baseline="central"
+                                font-size="12"
+                                font-weight="600"
+                                style={chip.step === "Earn" ? "fill: var(--color-link)" : "fill: var(--color-content)"}
+                            >
+                                {chip.step}
+                            </text>
+                        </a>
+                    ))
+                }
+            </svg>
+        </figure>
+
+        {/* The same cycle as wrapped chips where the wave would render its labels at seven pixels. */}
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-2 sm:hidden">
+            {
+                extensionLifecycle.map((stage, i) => (
+                    <Fragment>
+                        {i > 0 && <span class="text-line-strong" aria-hidden="true">→</span>}
+                        <a
+                            href={stage.href}
+                            title={stage.what}
+                            class={
+                                stage.step === "Earn"
+                                    ? "rounded-full border border-primary-600/40 bg-primary-600/10 px-3 py-1 text-sm font-medium text-link no-underline"
+                                    : "rounded-full border border-line bg-overlay/50 px-3 py-1 text-sm text-content no-underline"
+                            }
+                        >
+                            {stage.step}
+                        </a>
+                    </Fragment>
+                ))
+            }
+            <span class="text-line-strong" aria-hidden="true">↻</span>
+        </div>
     </div>
 
     <h2>What an extension is</h2>

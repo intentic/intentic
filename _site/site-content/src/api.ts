@@ -177,21 +177,24 @@ export function apiHref(id: string): string {
     return bookHref(apiBook, id);
 }
 
-/* THE SEVEN STEPS, in order, with the page that owns each: the strip the API overview and the gallery both
- * draw.
+/* THE SEVEN STEPS, in order, with the page that owns each: the cycle the API overview draws as a diagram and
+ * the gallery draws as a strip of chips.
  *
  * It exists as data because two very different surfaces render it and they were drifting: the gallery drew
  * grey chips that were not links while the docs described a lifecycle with no picture of it anywhere. Three of
  * the seven point OUT of this book: Discover and Install into /docs, because they are what the
  * reader on the other side of the listing does, and Earn to the top-level /earn/, because the economy is a
- * system of its own with two audiences. The last step loops because Update makes the revenue renewable,
- * which is why it comes after Earn rather than before it. */
+ * system of its own with two audiences. The last step loops because Maintain makes the revenue renewable,
+ * which is why it comes after Earn rather than before it.
+ *
+ * EVERY STEP IS NAMED FOR THE PAGE IT LINKS TO — Publish, not "List"; Maintain, not "Update" — because a chip
+ * that says one word and lands on a page titled another teaches the reader that the site has two vocabularies. */
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
     { step: "Build", href: apiHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },
-    { step: "List", href: apiHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
+    { step: "Publish", href: apiHref("publish"), what: "One topic, and a pull request opens itself.", audience: "author" },
     { step: "Verify", href: apiHref("verify"), what: "The pointer is checked; the code may be read.", audience: "author" },
     { step: "Discover", href: "/extensions/", what: "The gallery, and browse from inside the app.", audience: "user" },
     { step: "Install", href: "/docs/extensions/", what: "One commit, approved by its owner.", audience: "user" },
     { step: "Earn", href: "/earn/", what: "Premium listings draw from the creator pool.", audience: "author" },
-    { step: "Update", href: apiHref("maintain"), what: "A new sha, and the cycle above runs again.", audience: "author" },
+    { step: "Maintain", href: apiHref("maintain"), what: "A new sha, and the cycle runs again.", audience: "author" },
 ];
