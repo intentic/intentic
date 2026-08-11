@@ -6,13 +6,16 @@ import { extensionProcessKey } from "../../extensions/extension-processes.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
-import { checkoutInto } from "../git-checkout.js";
+import { checkoutInto, previousDir } from "../git-checkout.js";
 
 // An intentic extension: a git checkout at .intentic/extensions/<id>, sha-pinned by construction (the config
 // schema requires a full commit sha, so the owner approves EXACTLY the code that runs; an update is an explicit
 // re-add at a new sha). Install validates the manifest and the prebuilt entry bundle BEFORE the staged checkout
-// goes live, so a broken extension never replaces a working one. The extensions routes serve the manifest list
-// + bundle; agent contributions ride extensionAgentDirsOf into the SDK's plugin loader.
+// goes live, so a broken extension never replaces a working one; an update stops the outgoing checkout's
+// declared processes at the swap (they'd otherwise keep executing the replaced code until a reboot) and sets
+// that checkout aside one version deep, which is what the extensions revert route swaps back. The extensions
+// routes serve the manifest list + bundle; agent contributions ride extensionAgentDirsOf into the SDK's plugin
+// loader.
 export const extensionHandler: CapabilityHandler = {
     secret: (config) => ((config as ExtensionConfig).token !== undefined ? "token" : undefined),
     echo: (config) => {
@@ -45,6 +48,22 @@ export const extensionHandler: CapabilityHandler = {
             url,
             ref,
             token,
+            // An update keeps the outgoing checkout one version deep (the revert route's subject); on a first
+            // install there is nothing to keep and this is a no-op.
+            keepPrevious: true,
+            /* The quiesce step: stop the OUTGOING checkout's declared processes before its directory is
+             * replaced. Without this an updated extension's gateway keeps executing the previous release until
+             * a reboot — `processes.start` is a no-op against a running session, so the post-apply autoStart
+             * seam alone cannot cycle them. The old manifest is read at the old config's `path` (the update may
+             * move it), via the store because the route upserts the new config only after apply succeeds. */
+            beforeSwap: async () => {
+                const current = await ctx.capabilities.get(id);
+                const livePath = current?.kind === "extension" ? current.config.path : path;
+                const outgoing = await readExtensionManifest(extensionRootOf(extensionDir(ctx.workspace.root, id), livePath));
+                for (const process of outgoing?.contributes?.processes ?? []) {
+                    await ctx.panels.stop(extensionProcessKey(id, process.name));
+                }
+            },
             validate: async (staging) => {
                 const dir = extensionRootOf(staging, path);
                 const raw = await ctx.files.read(join(dir, "intentic-extension.json"));
@@ -94,5 +113,7 @@ export const extensionHandler: CapabilityHandler = {
             ctx.panels.stop(extensionProcessKey(id, process.name));
         }
         await ctx.files.remove(dir);
+        // The kept-aside previous version goes with it — a removed extension has nothing to revert to.
+        await ctx.files.remove(previousDir(extensionsRoot(ctx.workspace.root), id));
     },
 };

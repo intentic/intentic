@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, StatusBadge } from "@intentic/ui";
+import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, StatusBadge, timeAgo } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
@@ -38,7 +38,7 @@ import NewExtensionDialog from "./NewExtensionDialog.vue";
  *     "the CI thing", "whatever talks to Discord". The filter and the switcher moved OUT of a group header
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
-const { entries, invalid, unlisted, setEnabled, create, isLoading, error } = useExtensionList();
+const { entries, invalid, unlisted, setEnabled, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, isLoading, error } = useExtensionList();
 // The list query's own message, in the words of the page that asked for it.
 const listNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's extensions.`, detail: error.value },
@@ -140,6 +140,39 @@ const reload = async (): Promise<void> => {
     }
 };
 
+/* An update landed while this browser kept running the old bundle — applied by the auto rung, another member,
+ * or another tab. The daemon is already wholly on the new version; the prompt's button is the host reload the
+ * tab already owns, which is what finishes the update HERE. A notice rather than an auto-reload: yanking a
+ * view out from under someone mid-use is the one part of "seamless" that isn't. */
+const staleNotice = computed<NoticeModel | undefined>(() => {
+    if (updatedSinceLoaded.value.length === 0) {
+        return undefined;
+    }
+    const names = updatedSinceLoaded.value.map((extension) => extensionIdOf(extension.manifest)).join(`, `);
+    const plural = updatedSinceLoaded.value.length === 1 ? `was` : `were`;
+    return {
+        tone: `info`,
+        title: `Reload to finish updating.`,
+        detail: `${names} ${plural} updated — this browser is still running the previous code until the extensions reload.`,
+        action: { label: `Reload now`, run: () => void reload() },
+    };
+});
+
+// The comparison's honesty line: when it last ran, and the way to run it now — re-rendered with every refetch,
+// which is exactly as fresh as the fact it states.
+const checking = ref(false);
+const checkNow = async (): Promise<void> => {
+    checking.value = true;
+    toggleError.value = undefined;
+    try {
+        await checkUpdates();
+    } catch (failure) {
+        toggleError.value = noticeFrom(failure, `Could not check the registry for updates.`);
+    } finally {
+        checking.value = false;
+    }
+};
+
 const creating = ref(false);
 /* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs again
  * — so creating it ends in the same reload the tab already offers, and the row opens on arrival, naming the
@@ -161,7 +194,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
 
 <template>
     <div class="flex flex-col gap-5">
-        <NoticeStack :of="[listNotice, toggleError]" />
+        <NoticeStack :of="[listNotice, toggleError, staleNotice]" />
 
         <!-- The tab's instrument, not any one section's. This row's layout reasoning became <FilterBar>'s: the
              filter and the state switcher narrow every section below and read as one instrument, while reloading
@@ -219,6 +252,15 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             </RouterLink>
             <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="clearFilters" />
         </div>
+
+        <!-- The registry comparison's honesty line: update badges above are only as fresh as this. Absent
+             until the first check has run — a blank claim is worse than none. -->
+        <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
+            Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
+            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="checking" @click="checkNow">
+                {{ checking ? `Checking…` : `Check now` }}
+            </button>
+        </p>
 
         <!-- Workspace-extension directories the daemon could not enumerate: no manifest, one that does not
              parse, or an id something else already owns. Named per directory because nothing install-shaped

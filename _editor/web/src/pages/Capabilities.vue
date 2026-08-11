@@ -1161,10 +1161,11 @@ const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
             config[field.key] = value;
         }
     }
-    /* No `tier` is set from this form, and that is correct rather than an omission: tier is the REGISTRY's fact
-     * about a listing, not something anybody types, and this form now only ever installs from a URL its user
-     * supplied — whose tier this browser has no way to know. A premium listing carries its tier from the row it
-     * was picked on, which is Discover. */
+    /* No `tier` and no `registry` are set from this form, and that is correct rather than an omission: both
+     * are the REGISTRY's facts about a listing, not something anybody types, and this form now only ever
+     * installs from a URL its user supplied — whose tier this browser has no way to know, and whose updates and
+     * advisories the daemon rightly compares against the official registry when no origin was recorded. A
+     * listing installed from Discover carries both from the row it was picked on. */
     return { id: name.value.trim(), kind: entry.kind, config };
 };
 

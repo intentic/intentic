@@ -60,6 +60,10 @@ const RegistryFileEntrySchema = z.object({
     // Why it is blocked, or what was checked to verify it — shown verbatim wherever the badge is, because a
     // trust state with no stated reason is an opinion the reader can't weigh.
     trustReason: z.string().optional(),
+    // This listing's pinned commit fixes a security problem in earlier commits — the fast lane: an installed
+    // sandbox promotes its "update available" badge from ambient to attention-demanding, because there the OLD
+    // version is the dangerous one. Asserted by the pull request like trust, and worth exactly that review.
+    securityFix: z.boolean().optional(),
     tier: RegistryTierSchema.optional(),
     category: z.string().optional(),
     /* The mark the row is drawn with, copied off the extension's manifest by the scanner exactly like the
@@ -130,6 +134,7 @@ export const RegistryEntrySchema = z.object({
     kind: z.enum(["plugin", "extension"]),
     trust: RegistryTrustSchema,
     trustReason: z.string().optional(),
+    securityFix: z.boolean().optional(),
     tier: RegistryTierSchema,
     category: z.string().optional(),
     // The mark, as the gallery and the app's browse list draw it — see the curated file's fields above.
@@ -161,6 +166,7 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             ...(plugin.description !== undefined ? { description: plugin.description } : {}),
             ...(plugin.version !== undefined ? { version: plugin.version } : {}),
             ...(plugin.trustReason !== undefined ? { trustReason: plugin.trustReason } : {}),
+            ...(plugin.securityFix !== undefined ? { securityFix: plugin.securityFix } : {}),
             ...(plugin.category !== undefined ? { category: plugin.category } : {}),
             ...(plugin.logo !== undefined ? { logo: plugin.logo } : {}),
             ...(plugin.icon !== undefined ? { icon: plugin.icon } : {}),

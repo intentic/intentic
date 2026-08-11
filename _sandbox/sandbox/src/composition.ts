@@ -24,6 +24,7 @@ import {
     gitCheckout,
     gitClone,
     gitCommitAll,
+    gitFullHead,
     gitHead,
     gitInit,
     gitListFiles,
@@ -455,6 +456,8 @@ export interface Services {
         readonly clone: (parentDir: string, name: string, cloneUrl: string, options?: GitCloneOptions) => Promise<void>;
         readonly checkout: (dir: string, ref: string) => Promise<void>;
         readonly head: (dir: string) => Promise<string>;
+        // The unabbreviated HEAD sha — the form a sha-pinned capability config stores (extension revert).
+        readonly fullHead: (dir: string) => Promise<string>;
         readonly sync: (dir: string) => Promise<GitSyncResult>;
         // The Changes review verbs (git/changes.ts): working-tree status split into the index and worktree sides,
         // the index moves, the two whole-repo commit shapes, per-path discard, and the per-side file diffs.
@@ -941,6 +944,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             clone: gitClone,
             checkout: gitCheckout,
             head: gitHead,
+            fullHead: gitFullHead,
             sync: gitSync,
             changedFiles,
             stagePaths,

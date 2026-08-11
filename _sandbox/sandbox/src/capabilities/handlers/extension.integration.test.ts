@@ -12,6 +12,7 @@ import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../../testing.js";
 import { extensionAgentDirsOf } from "../../extensions/installed-extensions.js";
 import { extensionDir, extensionsRoot } from "../extension-dirs.js";
+import { previousDir } from "../git-checkout.js";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
@@ -22,19 +23,22 @@ const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
 // A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.integration.test.ts pattern).
-// `stopped` records ctx.panels.stop calls for the remove test.
-const tempCtx = (premium = false): { ctx: CapabilityCtx; root: string; stopped: string[] } => {
+// `stopped` records ctx.panels.stop calls for the remove/update quiesce tests; `stored` is the capability store
+// the update path reads the OUTGOING config from (empty ⇒ a first install).
+const tempCtx = (premium = false): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability> } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));
     const stopped: string[] = [];
+    const stored = new Map<string, Capability>();
     const ctx = {
         workspace: { root },
         files: { read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath },
         git: { head: gitHead },
         terminalRun: createTerminalRunner(),
         panels: { stop: (key: string) => stopped.push(key) },
+        capabilities: { get: async (id: string) => stored.get(id) },
         premium: async () => (premium ? { premium: true } : { premium: false, detail: "this account has no active intentic membership" }),
     } as unknown as CapabilityCtx;
-    return { ctx, root, stopped };
+    return { ctx, root, stopped, stored };
 };
 
 const MANIFEST = {
@@ -118,6 +122,60 @@ test("remove stops the manifest's declared processes, then deletes the checkout"
     await extensionHandler.remove!(ctx, "demo", config);
     expect(stopped).toEqual(["ext-demo-worker"]);
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "inactive" });
+});
+
+// A second commit on the fixture "remote" — what an author publishing an update looks like to the handler.
+const publishUpdate = async (url: string, manifest: object): Promise<string> => {
+    await writeWorkspaceFile(join(url, "intentic-extension.json"), JSON.stringify(manifest));
+    await git(url, "add", "-A");
+    await git(url, "-c", "user.name=t", "-c", "user.email=t@t.dev", "commit", "-q", "-m", "update");
+    return (await git(url, "rev-parse", "HEAD")).stdout.trim();
+};
+
+test("an update quiesces the outgoing checkout's processes and keeps it one version back", async () => {
+    const { ctx, root, stopped, stored } = tempCtx();
+    const remote = await fixtureRepo(MANIFEST, true);
+    const v1 = { url: remote.url, ref: remote.sha };
+    await drain(extensionHandler.apply(ctx, "demo", v1));
+    stored.set("demo", { id: "demo", kind: "extension", config: v1 });
+    // A first install quiesced nothing — there was nothing running to stop.
+    expect(stopped).toEqual([]);
+
+    const sha2 = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0" });
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: sha2 }));
+
+    // The OLD manifest's declared process was stopped at the swap — the post-apply seam restarts on new code.
+    expect(stopped).toEqual(["ext-demo-worker"]);
+    // The live checkout is the update; the outgoing version is kept one back, revert's whole subject.
+    expect(JSON.parse((await readWorkspaceFile(join(extensionDir(root, "demo"), "intentic-extension.json")))!).version).toBe("1.1.0");
+    expect(JSON.parse((await readWorkspaceFile(join(previousDir(extensionsRoot(root), "demo"), "intentic-extension.json")))!).version).toBe("1.0.0");
+});
+
+test("remove deletes the kept-previous checkout along with the live one", async () => {
+    const { ctx, root, stored } = tempCtx();
+    const remote = await fixtureRepo(MANIFEST, true);
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));
+    stored.set("demo", { id: "demo", kind: "extension", config: { url: remote.url, ref: remote.sha } });
+    const sha2 = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0" });
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: sha2 }));
+
+    await extensionHandler.remove!(ctx, "demo", { url: remote.url, ref: sha2 });
+    expect(await readdir(extensionsRoot(root))).toEqual([]);
+});
+
+test("a broken update never replaces the working install — the old version stays live, still running", async () => {
+    const { ctx, root, stopped, stored } = tempCtx();
+    const remote = await fixtureRepo(MANIFEST, true);
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));
+    stored.set("demo", { id: "demo", kind: "extension", config: { url: remote.url, ref: remote.sha } });
+
+    // The author ships a release whose manifest names an entry that isn't committed.
+    const broken = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0", entry: "dist/missing.js" });
+    await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: broken }))).rejects.toThrow(/prebuilt bundle/);
+
+    // Validation failed BEFORE the quiesce: nothing was stopped, and the working version is untouched.
+    expect(stopped).toEqual([]);
+    expect(JSON.parse((await readWorkspaceFile(join(extensionDir(root, "demo"), "intentic-extension.json")))!).version).toBe("1.0.0");
 });
 
 test("extensionAgentDirsOf maps contributes.agent checkouts (honoring config.path and agent.path)", async () => {

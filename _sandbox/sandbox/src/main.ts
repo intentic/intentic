@@ -34,6 +34,7 @@ import { createServices } from "./composition.js";
 import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
+import { startExtensionUpdateWatch } from "./extensions/extension-updates.js";
 import { runGitMaintenance } from "./git/maintenance.js";
 import { prepushCheck } from "./prepush/prepush.js";
 import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
@@ -825,6 +826,10 @@ const main = async (): Promise<void> => {
     // the notes) and neither may hold up the /info that shows them.
     const releaseNotesCheck = startReleaseNotesCheck();
 
+    // The same courtesy for installed EXTENSIONS: compare each pinned sha against its registry (updates,
+    // advisories) shortly after boot and daily after — the Extensions tab's own reads keep it fresher.
+    const extensionUpdateWatch = startExtensionUpdateWatch(services);
+
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
     startRuntimeHealth(services);
@@ -923,6 +928,7 @@ const main = async (): Promise<void> => {
         ciPoller.stop();
         turnResume.stop();
         versionCheck.stop();
+        extensionUpdateWatch.stop();
         releaseNotesCheck.stop();
         services.announcer.stop();
         poolReporter.stop();

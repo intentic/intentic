@@ -4,6 +4,8 @@ export type { Chore, ChoreContext, ChoreFinding, ChoreKind, ChoreKindSpec, Chore
 export { bucketOf, digestOf } from "./digest.js";
 export { CHORE_INVARIANTS, composeAsk, REFACTOR_INVARIANTS, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 export type { Ask } from "./prompt.js";
+export { updateBrief } from "./extension-update.js";
+export type { UpdateBrief } from "./extension-update.js";
 export { PROBES, probeSpec } from "./probes.js";
 export type { ProbeSpec } from "./probes.js";
 export { componentStem, frameworksOf, IDIOM_RULES, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";

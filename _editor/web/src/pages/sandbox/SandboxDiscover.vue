@@ -143,6 +143,11 @@ const install = async (listing: DiscoverListing): Promise<void> => {
                     // Code inside a private registry repo clones with the same token that read the registry.
                     ...(token.value !== `` && pointer.url === url.value.trim() ? { token: token.value } : {}),
                     ...(listing.entry.tier === `premium` ? { tier: `premium` } : {}),
+                    // Where this listing lives — what the daemon's update check compares the pinned sha
+                    // against afterwards, and where its advisories come from. A hand-typed install on the
+                    // Capabilities form records no origin and is rightly compared against the official
+                    // registry instead.
+                    ...(url.value.trim() !== `` ? { registry: url.value.trim() } : {}),
                 },
             },
             (line) => {

@@ -2991,6 +2991,11 @@ export const ExtensionConfigSchema = z.object({
      * (the daemon is the owner's own machine; the pool pays creators from what members actually use, so a
      * stripped marker cheats nobody but the person stripping it out of their own membership's worth). */
     tier: z.enum(["free", "premium"]).optional(),
+    /* The registry this install's row lives in, copied on by the browse pre-fill like `tier` — what the update
+     * check compares the pinned sha against and reads advisories from. Absent (a hand-typed git install) falls
+     * back to the official registry: if the extension is listed there, its updates and its blocked-markings
+     * concern this owner exactly as much as anyone's. */
+    registry: z.url().optional(),
 });
 // A remote machine the AGENT can reach over SSH. One capability = one machine; the id is its ssh-config Host
 // alias, so the agent runs `ssh <id> "…"`. The handler writes a per-machine config block + a 0600 key/password
@@ -3744,6 +3749,93 @@ const extensionId = z
     .min(1)
     .max(121)
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
+
+// ---- extension updates: what the registry check found, and what the owner decided to do about such findings ----
+
+// The owner's per-extension update posture. `updates` is the ladder: `notify` (badge and wait — the default),
+// `agent` (the discovery also prepares an agent diff-read of the new sha), `auto` (apply unattended, but only
+// a verified listing whose powers didn't grow, health-watched with auto-revert — anything less falls back to
+// notify). `advisories` is separate because its safe direction is the opposite: disabling runs no new code, so
+// `auto-disable` is the default and `notify` is the opt-out.
+export const ExtensionUpdatePolicySchema = z.object({
+    updates: z.enum(["notify", "agent", "auto"]),
+    advisories: z.enum(["auto-disable", "notify"]),
+});
+export type ExtensionUpdatePolicy = z.infer<typeof ExtensionUpdatePolicySchema>;
+
+// A newer sha the registry lists for an installed extension — the "update available" badge's substance. The
+// pointer (url/path) rides along because updating follows the ROW as it stands now, not the install as it was.
+export const ExtensionUpdateSchema = z.object({
+    ref: z.string(),
+    version: z.string().optional(),
+    url: z.string(),
+    path: z.string().optional(),
+    trust: z.enum(["verified", "listed"]),
+    // The listing says this release fixes a security problem in earlier ones — the badge goes loud, because
+    // here the OLD version is the dangerous one.
+    securityFix: z.boolean().optional(),
+    registry: z.string(),
+    at: z.string(),
+    // Why the auto rung refused this one and fell back to notify ("powers grew", "not verified") — the card
+    // leads with it so the owner knows the click is theirs for a reason.
+    needsReview: z.string().optional(),
+    // The agent-prepared rung's work: the conversation where the owner's agent already read the diff between
+    // the installed sha and this one. The card links it instead of offering to start it.
+    review: z.object({ conversationId: z.string(), at: z.string() }).optional(),
+});
+export type ExtensionUpdate = z.infer<typeof ExtensionUpdateSchema>;
+
+// The registry blocked this installed extension's listing. Delisting protects people browsing; this record is
+// for the person already running it — the reason verbatim, and whether the daemon already pulled the switch.
+export const ExtensionAdvisorySchema = z.object({
+    reason: z.string(),
+    registry: z.string(),
+    at: z.string(),
+    autoDisabled: z.boolean(),
+});
+export type ExtensionAdvisory = z.infer<typeof ExtensionAdvisorySchema>;
+
+// The post-update watch: validation catches broken, not wrong, so for a minute after a swap the daemon checks
+// that what the new version declared actually came up (autoStart processes running, backend activated).
+// `fromRef` is the sha the kept-previous checkout holds — what a revert returns to.
+export const ExtensionHealthSchema = z.object({
+    state: z.enum(["watching", "healthy", "unhealthy"]),
+    detail: z.string().optional(),
+    fromRef: z.string().optional(),
+    at: z.string(),
+    // The auto rung's failure path already ran: the update was rolled back unattended, and the record stays to
+    // say so rather than pretending the attempt never happened.
+    autoReverted: z.boolean().optional(),
+});
+export type ExtensionHealth = z.infer<typeof ExtensionHealthSchema>;
+
+// The mechanical comparison of two manifests' declared reach (extension-manifest's diffPowers) — plain
+// sentences, so the update dialog renders exactly what approval is being asked to cover.
+export const PowersDiffSchema = z.object({ added: z.array(z.string()), removed: z.array(z.string()), unchanged: z.array(z.string()) });
+export type PowersDiff = z.infer<typeof PowersDiffSchema>;
+
+// What an owner reads before clicking Update: the offered sha's manifest folded to the version story, the
+// engines verdict, and the powers diff against the installed manifest. `ref` optional on the way in — absent
+// means "the update the check recorded", which is the only caller most of the time.
+export const ExtensionUpdateActionSchema = z.object({ id: extensionId, ref: z.string().regex(/^[0-9a-f]{40}$/).optional() });
+export const ExtensionUpdatePreviewSchema = z.object({
+    ref: z.string(),
+    version: z.string(),
+    installedVersion: z.string(),
+    engines: z.string(),
+    compatible: z.boolean(),
+    powers: PowersDiffSchema,
+});
+// `rebuildNeeded` (update only): the new version's environment fragment changed the composed overlay, so the
+// card must say a one-time image rebuild is pending rather than let the update read as wholly landed.
+export const ExtensionUpdateAppliedSchema = z.object({ ok: z.literal(true), ref: z.string(), rebuildNeeded: z.boolean().optional() });
+export const ExtensionUpdatePolicyInputSchema = z.object({
+    id: extensionId,
+    updates: z.enum(["notify", "agent", "auto"]).optional(),
+    advisories: z.enum(["auto-disable", "notify"]).optional(),
+});
+export const ExtensionUpdatesCheckedSchema = z.object({ ok: z.literal(true), checkedAt: z.string() });
+
 export const ExtensionSummarySchema = z.object({
     id: extensionId,
     manifest: ExtensionManifestSchema,
@@ -3774,6 +3866,15 @@ export const ExtensionSummarySchema = z.object({
             detail: z.string().optional(),
         })
         .optional(),
+    /* The update lifecycle, present only where it can exist — a git-installed extension. `update` is the badge,
+     * `advisory` the alarm, `health` the after-the-click watch, `previous` the way back (the kept one-back
+     * checkout's sha), `updatePolicy` the owner's standing answer. A builtin updates with the image and a
+     * workspace one is live-edited, so all five stay absent for them. */
+    update: ExtensionUpdateSchema.optional(),
+    advisory: ExtensionAdvisorySchema.optional(),
+    health: ExtensionHealthSchema.optional(),
+    previous: z.object({ ref: z.string(), version: z.string().optional() }).optional(),
+    updatePolicy: ExtensionUpdatePolicySchema.optional(),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // A workspace-extension directory that failed to enumerate, and why. Its only feedback channel: there is no
@@ -3781,7 +3882,13 @@ export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 // silently dropping the row — the Extensions tab renders it, and an authoring agent reads it off GET /extensions.
 export const InvalidWorkspaceExtensionSchema = z.object({ dir: z.string(), error: z.string() });
 export type InvalidWorkspaceExtension = z.infer<typeof InvalidWorkspaceExtensionSchema>;
-export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema), invalid: z.array(InvalidWorkspaceExtensionSchema) });
+export const ExtensionsListSchema = z.object({
+    extensions: z.array(ExtensionSummarySchema),
+    invalid: z.array(InvalidWorkspaceExtensionSchema),
+    // When the registry comparison last ran — absent until the first check completes. Serving it on the list is
+    // what lets the tab say "checked an hour ago" instead of presenting staleness as certainty.
+    updatesCheckedAt: z.string().optional(),
+});
 // The extension's contributes.settings values, persisted daemon-side (.intentic/extension-settings.json) keyed
 // by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
 // Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,

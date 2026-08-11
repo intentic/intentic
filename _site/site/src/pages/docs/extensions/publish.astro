@@ -136,20 +136,33 @@ const sources = `// A repo of its own
 
     <h2>Updates</h2>
     <p>
-        Because the installed identity is a commit sha and a registry entry carries one, "update available" is a comparison the app can make
-        for you. The rule that matters is what happens next:
+        Because the installed identity is a commit sha and a registry entry carries one, "update available" is a comparison the sandbox makes
+        for its owner: daily, and whenever the Extensions tab is open. A newer pinned sha badges the row; the rule that matters is what
+        happens next:
     </p>
     <ul>
-        <li><strong>Same contributions, new sha</strong>: one click. The daemon re-clones into staging, validates the manifest and the entry bundle, and swaps only if it's sound. A broken release cannot replace a working install.</li>
-        <li><strong>The manifest grew</strong>, with a new route, a new process, a new PATH entry or a badge it didn't have: the update <strong>re-asks</strong>, showing the diff. Approval never transfers to powers you didn't approve.</li>
+        <li><strong>Same powers, new sha</strong>: one click. The daemon re-clones into staging, validates the manifest and the entry bundle, stops the outgoing version's processes, and swaps only if it's sound — then restarts everything on the new code. A broken release cannot replace a working install, and nothing keeps running the replaced one.</li>
+        <li><strong>The manifest grew</strong>, with a new route, a new process, a new PATH entry or a badge it didn't have: the update <strong>re-asks</strong>, and the dialog computes the powers diff for you — every addition as a plain sentence. Approval never transfers to powers you didn't approve. The owner's own agent can also read the code diff between the two commits before the click.</li>
     </ul>
     <p>
-        Your settings survive all of it. They're stored on the daemon under <code>publisher.name</code>, not in the checkout, so an update,
-        a downgrade, or a remove and re-add keeps them.
+        After a swap the daemon watches for a minute that what the new version declared actually came up; the version it replaced is kept one
+        back, so <strong>revert is one click</strong> — after a failed health check, or simply because the update made things worse. Your
+        settings survive all of it: they're stored on the daemon under <code>publisher.name</code>, not in the checkout, so an update, a
+        revert, or a remove and re-add keeps them.
     </p>
     <p>
-        Nothing auto-updates. On a machine the owner owns, silently changing the code that runs against their repos and credentials is not a
-        convenience.
+        Nothing auto-updates by default. On a machine the owner owns, silently changing the code that runs against their repos and
+        credentials is not a convenience. What the owner can do is opt <em>single extensions</em> up a ladder: <strong>notify</strong> (the
+        badge waits), <strong>agent-prepared</strong> (their agent reads the diff the moment a release is listed, so deciding means opening
+        a finished review), or <strong>auto</strong> — applied unattended only when the listing is human-verified, the powers didn't grow,
+        validation passes and the health watch stays green, with an automatic revert when it doesn't.
+    </p>
+    <p>
+        Delisting protects people browsing; the same daily comparison protects the people who already installed: a listing marked
+        <code>blocked</code> raises an advisory on the installed row with the registry's recorded reason, and by default the extension is
+        switched off automatically — the one automatic action the model permits, because disabling runs no new code and reverses with a
+        click. A listing marked <code>securityFix</code> promotes the update badge from ambient to loud, because there the old version is
+        the dangerous one.
     </p>
 
     <h2>Trust, stated honestly</h2>
@@ -205,12 +218,13 @@ const sources = `// A repo of its own
         Everything in <a href="/docs/extensions/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo
         public or private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
         <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
-        <strong>Capabilities → Add → Extension</strong>, against the official registry or any repo you point the field at.
+        <strong>Capabilities → Add → Extension</strong>, against the official registry or any repo you point the field at. And so does the
+        whole update lifecycle above — the badges, the powers diff, the kept previous version and one-click revert, the health watch,
+        blocked-listing advisories, and the per-extension update policies.
     </p>
     <p>
-        Still to come: update badges driven by registry shas, a published blocklist an installed sandbox checks (delisting protects people
-        browsing, not the people who already installed), and a typed npm artifact for <code>@intentic/extension-ui</code> so out-of-repo
-        authors get the shell's components with full types.
+        Still to come: a typed npm artifact for <code>@intentic/extension-ui</code> so out-of-repo authors get the shell's components with
+        full types.
     </p>
     <p>
         Building something and want it listed? The <a href="/docs/extensions/build/">build guide</a> is the whole prerequisite. Add the topic

@@ -44,8 +44,11 @@ export const startExtensionProcess = async (services: Services, extension: Insta
  * manifests without the trees behind them, and a declared process is started by TYPING its command into a
  * shell in a tmux session. `node dist/gateway.js` with no dist/ prints a module-not-found, the shell returns to
  * its prompt, and the session lives on — so the manager, which tracks the SESSION, would report that gateway
- * running for the life of the container. Not spawning it at all is the only honest answer available here. */
-const processesDesired = async (services: Services, extension: InstalledExtension): Promise<boolean> => {
+ * running for the life of the container. Not spawning it at all is the only honest answer available here.
+ *
+ * Exported for the post-update health watch, which must ask the same question in reverse: a declared process
+ * that is NOT running is only evidence against the new version if this gate would have started it. */
+export const processesDesired = async (services: Services, extension: InstalledExtension): Promise<boolean> => {
     if (await extensionRuntimeAbsent(extension)) {
         return false;
     }

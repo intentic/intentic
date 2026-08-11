@@ -10,6 +10,7 @@ import { errorMessage } from "../../composables/useAsyncAction";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
+import ExtensionUpdateCard from "./ExtensionUpdateCard.vue";
 
 /* ONE EXTENSION, on one line until asked otherwise.
  *
@@ -219,6 +220,15 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 </span>
             </button>
             <div class="flex shrink-0 items-center gap-2.5">
+                <!-- The update badge is AMBIENT unless the listing says the old version is the dangerous one —
+                     a security fix promotes it to the loud tier, because waiting is what needs the eye there.
+                     It yields to any real exception badge: a broken row's problem outranks its update. -->
+                <StatusBadge
+                    v-if="!entry.state.attention && entry.extension.update !== undefined"
+                    :variant="entry.extension.update.securityFix ? `danger` : `info`"
+                    :label="entry.extension.update.securityFix ? `security update` : `update`"
+                    size="xs"
+                />
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />
                 <span v-else-if="entry.state.label !== undefined" class="text-2xs text-subtle">{{ entry.state.label }}</span>
                 <ToggleSwitch
@@ -242,6 +252,10 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <dd class="min-w-0 text-xs text-content">{{ facet.names.join(` · `) }}</dd>
                 </template>
             </dl>
+
+            <!-- The update lifecycle — only a git-installed extension has one (a builtin updates with the
+                 image, a workspace one is live-edited), and the daemon only sends its fields for those. -->
+            <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
             <div v-if="settings.length > 0">
                 <p :class="cmp.sectionLabel(`mb-2 text-2xs`)">Settings</p>

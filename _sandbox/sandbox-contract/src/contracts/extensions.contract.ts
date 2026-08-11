@@ -7,6 +7,11 @@ import {
     ExtensionSettingsInputSchema,
     ExtensionSettingsSchema,
     ExtensionReadinessSchema,
+    ExtensionUpdateActionSchema,
+    ExtensionUpdateAppliedSchema,
+    ExtensionUpdatePolicyInputSchema,
+    ExtensionUpdatePreviewSchema,
+    ExtensionUpdatesCheckedSchema,
     ExtensionUsageInputSchema,
     ExtensionsListSchema,
     OkSchema,
@@ -38,6 +43,21 @@ export const extensionsContract = {
      * on demand rather than carried on the list: it reads the bundle off disk per extension, and it is looked at
      * when an author is about to publish, not every time the tab renders. */
     readiness: oc.route({ method: "GET", path: "/extensions/{id}/readiness" }).input(CapabilityIdParamSchema).output(ExtensionReadinessSchema),
+    /* The update lifecycle for a GIT-INSTALLED extension. The list carries what the periodic registry check
+     * found (update/advisory/health per row); these are the verbs around it. `checkUpdates` runs the comparison
+     * now (the tab's "check now"). `updatePreview` stages the offered sha and answers with the version story +
+     * the mechanical powers diff — the read BEFORE the click, costing one throwaway clone like a registry
+     * browse. `applyUpdate` is the transaction: re-clone, validate, quiesce, swap (keeping the outgoing
+     * checkout one back), restart, health-watch — on the EXISTING capability config, so a private-source token
+     * survives what a bare re-add would lose. `revert` swaps the kept-previous checkout back. Update and revert
+     * change the code that runs, so like install they are owner-only. */
+    checkUpdates: oc.route({ method: "POST", path: "/extensions/updates/check" }).output(ExtensionUpdatesCheckedSchema),
+    updatePreview: oc.route({ method: "POST", path: "/extensions/{id}/update/preview" }).input(ExtensionUpdateActionSchema).output(ExtensionUpdatePreviewSchema),
+    applyUpdate: oc.route({ method: "POST", path: "/extensions/{id}/update" }).input(ExtensionUpdateActionSchema).output(ExtensionUpdateAppliedSchema),
+    revert: oc.route({ method: "POST", path: "/extensions/{id}/revert" }).input(CapabilityIdParamSchema).output(ExtensionUpdateAppliedSchema),
+    // The owner's standing answer per extension (notify / agent / auto, and the advisory opt-out) — see
+    // ExtensionUpdatePolicySchema for what each rung means.
+    setUpdatePolicy: oc.route({ method: "POST", path: "/extensions/{id}/update-policy" }).input(ExtensionUpdatePolicyInputSchema).output(OkSchema),
     // Declared background processes (contributes.processes): tmux-managed through the panel machinery
     // (session `panel-ext-<id>-<name>`, PORT-assigned, optional tunneled preview route).
     processStatus: oc

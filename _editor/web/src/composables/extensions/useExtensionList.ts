@@ -1,7 +1,7 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { extensionStatuses } from "../../extension-host/loader";
+import { extensionStatuses, loadedCommits } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
 import { useCapabilities } from "./useCapabilities";
@@ -30,8 +30,18 @@ export interface ExtensionEntry {
 }
 
 export function useExtensionList() {
-    const { extensions, invalid, setEnabled, create, isLoading, error } = useExtensions();
+    const { extensions, invalid, setEnabled, create, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
     const { capabilities } = useCapabilities();
+
+    /* Rows whose checkout moved on since this browser loaded their code — an update applied by the auto rung,
+     * another member, or another tab. The daemon is already fully on the new version; only THIS browser's
+     * loaded bundle lags, and re-running the host (the tab's ordinary reload) is what finishes it here. */
+    const updatedSinceLoaded = computed(() =>
+        extensions.value.filter((extension) => {
+            const loaded = loadedCommits.value.get(extension.id);
+            return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== extension.commit;
+        }),
+    );
 
     const entries = computed<ExtensionEntry[]>(() => {
         const statuses = new Map(extensionStatuses.value.map((status) => [status.id, status]));
@@ -47,11 +57,27 @@ export function useExtensionList() {
                 const uiState = extensionState(status);
                 const backend = backendState(extension.backend);
                 const escalated = backend !== undefined && !uiState.attention;
+                /* Above BOTH halves sit the registry's verdicts, worst first: an advisory (its registry blocked
+                 * it — the code itself is the problem, whatever state it loaded in) and an unhealthy update (it
+                 * swapped fine and came up wrong). Each pins the row into "Needs attention", because each is a
+                 * fact the owner must act on rather than a state that might resolve itself. */
+                const registryState: ExtensionState | undefined =
+                    extension.advisory !== undefined
+                        ? { label: `blocked`, variant: `danger`, badge: true, attention: true }
+                        : extension.health?.state === `unhealthy`
+                          ? { label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`, variant: `warning`, badge: true, attention: true }
+                          : undefined;
+                const registryDetail =
+                    extension.advisory !== undefined
+                        ? `Blocked by its registry: ${extension.advisory.reason}`
+                        : extension.health?.state === `unhealthy`
+                          ? extension.health.detail
+                          : undefined;
                 return {
                     extension,
                     facets,
-                    state: escalated ? backend : uiState,
-                    detail: (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
+                    state: registryState ?? (escalated ? backend : uiState),
+                    detail: registryDetail ?? (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
                     dependents: capabilities.value.filter(
                         (capability) => capability.kind === `cli` && providers.has(String(capability.config[`provider`] ?? ``)),
                     ),
@@ -71,5 +97,5 @@ export function useExtensionList() {
         return extensionStatuses.value.filter((status) => !listed.has(status.id));
     });
 
-    return { entries, invalid, unlisted, setEnabled, create, isLoading, error };
+    return { entries, invalid, unlisted, setEnabled, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, isLoading, error };
 }

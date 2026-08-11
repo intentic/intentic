@@ -68,6 +68,12 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/agents](src/agents) — **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`, `landed-presence.ts`.
 - [src/git/git.routes.ts](src/git/git.routes.ts) — status/commit/push over the wire; [src/workspace](src/workspace) — the repo layout the daemon serves. [src/workspace/workspace-scope.ts](src/workspace/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only — no write route can name a checkout — and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
+- [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts) — the update lifecycle for git-installed
+  extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
+  staged powers-diff preview, the apply/revert transactions over the handler's quiesce-and-swap (the outgoing checkout
+  is kept one version back), the post-update health watch, and the owner's per-extension policy (notify / agent-prepared
+  / auto). Nothing auto-updates by default; the auto rung is opt-in and gated on a verified listing whose powers didn't
+  grow, health-watched with auto-revert.
 - The two things that keep a busy sandbox from eating itself, both keyed on the fact that a child inherits from
   its parent without anyone propagating anything:
   [src/platform/workload-priority.ts](src/platform/workload-priority.ts) renices every direct child so the

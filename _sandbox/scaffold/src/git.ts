@@ -110,6 +110,11 @@ export const gitCheckout = async (dir: string, ref: string, git: GitRunner = def
 export const gitHead = async (dir: string, git: GitRunner = defaultGit): Promise<string> =>
     (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
 
+// The full 40-character HEAD sha — what an extension revert writes back into the capability's `ref`, whose
+// schema (rightly) refuses the abbreviated form above.
+export const gitFullHead = async (dir: string, git: GitRunner = defaultGit): Promise<string> =>
+    (await git(dir, ["rev-parse", "HEAD"])).stdout.trim();
+
 // The repo's tracked files (git ls-files), so the UI can render the source tree without node_modules/build
 // noise. Untracked-but-present files are intentionally excluded — they surface through status instead.
 export const gitListFiles = async (dir: string, git: GitRunner = defaultGit): Promise<string[]> =>

@@ -4,6 +4,7 @@ import { extensionIdOf, type ProcessContribution } from "@intentic/extension-man
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
+import { bearerFrom } from "../auth/auth.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import { premiumStatus } from "../platform/pool-status.js";
@@ -12,6 +13,18 @@ import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
 import { extensionReadiness, extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "./extension-readiness.js";
+import {
+    applyExtensionUpdate,
+    checkExtensionUpdates,
+    previewExtensionUpdate,
+    previousVersionOf,
+    readExtensionUpdateState,
+    readUpdatePolicies,
+    refreshUpdatesIfStale,
+    resolveUpdatePolicy,
+    revertExtensionUpdate,
+    writeUpdatePolicy,
+} from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
@@ -25,6 +38,19 @@ export const createExtensionsRoutes = (services: Services) => {
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
+    // The same gate the capabilities add route holds over installing an extension, because update, revert and
+    // the unattended-update policy are the same decision: whose code runs here. Loopback mode has no auth and
+    // skips it like every other route.
+    const authorizeOwner = async (context: OrpcContext): Promise<void> => {
+        if (services.auth === undefined) {
+            return;
+        }
+        try {
+            await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+        } catch {
+            throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can do this" });
+        }
+    };
     // Every id-addressed route resolves through here, against the FULL list — a disabled extension still
     // answers for its settings and its process state, which is what lets the tab render its row.
     const find = async (id: string): Promise<InstalledExtension> => {
@@ -64,10 +90,15 @@ export const createExtensionsRoutes = (services: Services) => {
     };
     return {
         list: i.list.handler(async () => {
+            // Reading the tab is what keeps a watched sandbox's registry comparison current: a stale one
+            // refreshes in the background (never on this request's clock) and pushes the list when it lands.
+            refreshUpdatesIfStale(services);
             const inventory = await extensionInventory(services);
             // One read for the whole list: the ledger is a single file keyed by extension id, and the tab wants
-            // every row's figures at once.
+            // every row's figures at once. Same shape for the update records and the policies.
             const usage = await readExtensionUsage(root);
+            const updates = await readExtensionUpdateState(root);
+            const policies = await readUpdatePolicies(root);
             const extensions: ExtensionSummary[] = [];
             for (const extension of inventory.extensions) {
                 // Only a git-installed extension has a code identity to report — its pinned HEAD. A baked one's
@@ -76,7 +107,12 @@ export const createExtensionsRoutes = (services: Services) => {
                 const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
                 // Keyed by publisher.name like the settings and the switch, not by the routing id — the ledger
                 // has to survive a remove/re-add, which is what an update to a git-installed extension IS.
-                const observed = usage[extensionIdOf(extension.manifest)];
+                const identity = extensionIdOf(extension.manifest);
+                const observed = usage[identity];
+                // The update lifecycle exists only for the source that HAS one: a git install. The record, the
+                // kept-previous checkout and the policy all join here so the row renders the whole story.
+                const record = extension.source === "installed" ? updates.extensions[identity] : undefined;
+                const previous = extension.source === "installed" ? await previousVersionOf(services, extension.id, undefined) : undefined;
                 extensions.push({
                     id: extension.id,
                     manifest: extension.manifest,
@@ -87,9 +123,18 @@ export const createExtensionsRoutes = (services: Services) => {
                     // "never exercised" from "exercised and uses none of these".
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                     ...backendStateOf(extension),
+                    ...(record?.update !== undefined ? { update: record.update } : {}),
+                    ...(record?.advisory !== undefined ? { advisory: record.advisory } : {}),
+                    ...(record?.health !== undefined ? { health: record.health } : {}),
+                    ...(previous !== undefined ? { previous } : {}),
+                    ...(extension.source === "installed" ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
                 });
             }
-            return { extensions, invalid: inventory.invalid };
+            return {
+                extensions,
+                invalid: inventory.invalid,
+                ...(updates.checkedAt !== undefined ? { updatesCheckedAt: updates.checkedAt } : {}),
+            };
         }),
         create: i.create.handler(async ({ input }) => {
             const id = `${input.publisher}.${input.name}`;
@@ -186,6 +231,51 @@ export const createExtensionsRoutes = (services: Services) => {
             // git-installed one it is the checkout, which is what a publisher would push.
             const checks = await extensionReadiness(extension, satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion), usage);
             return { checks };
+        }),
+        checkUpdates: i.checkUpdates.handler(async () => {
+            const checkedAt = await checkExtensionUpdates(services);
+            return { ok: true, checkedAt } as const;
+        }),
+        updatePreview: i.updatePreview.handler(async ({ input }) => {
+            try {
+                return await previewExtensionUpdate(services, input.id, input.ref);
+            } catch (error) {
+                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+            }
+        }),
+        // Updating and reverting change the code that runs against the owner's repos and credentials, so like
+        // installing they are the owner's decision alone (mirrors the capabilities add route's gate; loopback
+        // mode has no auth and skips it like every other route).
+        applyUpdate: i.applyUpdate.handler(async ({ input, context }) => {
+            await authorizeOwner(context);
+            try {
+                const applied = await applyExtensionUpdate(services, input.id, input.ref);
+                return { ok: true, ref: applied.ref, ...(applied.rebuildNeeded ? { rebuildNeeded: true } : {}) } as const;
+            } catch (error) {
+                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+            }
+        }),
+        revert: i.revert.handler(async ({ input, context }) => {
+            await authorizeOwner(context);
+            try {
+                const reverted = await revertExtensionUpdate(services, input.id);
+                return { ok: true, ref: reverted.ref } as const;
+            } catch (error) {
+                throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
+            }
+        }),
+        // The policy decides what may happen UNATTENDED — owner-gated for the same reason the verbs above are.
+        setUpdatePolicy: i.setUpdatePolicy.handler(async ({ input, context }) => {
+            await authorizeOwner(context);
+            const extension = await find(input.id);
+            if (extension.source !== "installed") {
+                throw new ORPCError("PRECONDITION_FAILED", { message: "only a git-installed extension has an update lifecycle" });
+            }
+            await writeUpdatePolicy(root, extensionIdOf(extension.manifest), {
+                ...(input.updates !== undefined ? { updates: input.updates } : {}),
+                ...(input.advisories !== undefined ? { advisories: input.advisories } : {}),
+            });
+            return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
             const extension = await find(input.id);

@@ -232,6 +232,13 @@ const STATE_FILES = [
      * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
      * push is what makes one appearing or changing show up on the Extensions tab while the owner watches. */
     { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry" },
+    /* What the registry comparison found per installed extension (update available / advisory / post-update
+     * health), written by the periodic check and by the update/revert transactions — pushed to the tab because
+     * an advisory that auto-disabled something must not wait for a reload to be seen. */
+    { path: ".intentic/extension-updates.json", invalidates: ["extensions"], portability: "carry" },
+    /* The owner's per-extension update posture (notify / agent / auto, and the advisory opt-out). Carried:
+     * it is a decision about the extension, not about this machine. */
+    { path: ".intentic/extension-update-policy.json", invalidates: ["extensions"], portability: "carry", versioned: true },
     /* Carried, because the evidence is about the extension rather than about the machine: an export that dropped
      * it would arrive claiming every permission was unused, which is worse than arriving with no figures at all. */
     {

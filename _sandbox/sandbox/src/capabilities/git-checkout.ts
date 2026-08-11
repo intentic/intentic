@@ -11,10 +11,15 @@ export const gitAuthHeader = (token: string): string => `Authorization: Basic ${
 // with a dot. Cloning lands here first so a reader never sees a half-cloned checkout at the live dir.
 const stagingName = (id: string): string => `.${id}.cloning`;
 
+// Where `keepPrevious` sets the outgoing checkout aside — the one-version-back that makes an update revertible
+// after validation stops being able to help (validation catches broken; it can't catch wrong). Dot-prefixed
+// for the same collision-proofing as the staging name.
+export const previousDir = (root: string, id: string): string => join(root, `.${id}.previous`);
+
 // Clone `url` into `<root>/<id>` through the visible job session: stage → optional pinned detached checkout →
-// optional validate → swap. A pinned ref is checked out detached after a full clone (a shallow clone can't
-// reach an arbitrary sha). A failed clone/checkout/validate leaves no debris, and on an update the previous
-// checkout stays live until the swap. Shared by the plugin and extension handlers.
+// optional validate → quiesce → swap. A pinned ref is checked out detached after a full clone (a shallow clone
+// can't reach an arbitrary sha). A failed clone/checkout/validate leaves no debris, and on an update the
+// previous checkout stays live until the swap. Shared by the plugin and extension handlers.
 export const checkoutInto = async (
     ctx: CapabilityCtx,
     session: string,
@@ -26,6 +31,14 @@ export const checkoutInto = async (
         readonly token?: string | undefined;
         // Inspect the staged checkout before it replaces the live dir; throw to abort the swap.
         readonly validate?: ((staging: string) => Promise<void>) | undefined;
+        /* Runs after validation succeeds and before the live dir is touched — the update transaction's quiesce
+         * step. This is where the extension handler stops the outgoing checkout's declared processes: stopping
+         * them earlier would punish a failed validation (the old version stays live but its processes are
+         * down), and not stopping them at all leaves them executing code whose directory is about to vanish. */
+        readonly beforeSwap?: (() => Promise<void>) | undefined;
+        // Set the outgoing live checkout aside at previousDir() instead of deleting it, so a release that
+        // validates but misbehaves at runtime can be reverted. A first install has nothing to keep.
+        readonly keepPrevious?: boolean | undefined;
     },
 ): Promise<void> => {
     const staging = join(root, stagingName(id));
@@ -48,6 +61,22 @@ export const checkoutInto = async (
         await ctx.files.remove(staging);
         throw error;
     }
-    await ctx.files.remove(join(root, id));
-    await ctx.files.move(staging, join(root, id));
+    await options.beforeSwap?.();
+    const live = join(root, id);
+    if (options.keepPrevious === true) {
+        const previous = previousDir(root, id);
+        await ctx.files.remove(previous);
+        // ENOENT means a first install — there is no outgoing checkout to keep. Anything else is a real
+        // filesystem failure and must abort rather than quietly discard the one copy a revert would need.
+        try {
+            await ctx.files.move(live, previous);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+        }
+    } else {
+        await ctx.files.remove(live);
+    }
+    await ctx.files.move(staging, live);
 };

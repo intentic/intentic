@@ -271,6 +271,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/environment.custom.Dockerfile`,
             `.intentic/environment.d/`,
             `.intentic/extension-enablement.json`,
+            // The owner's per-extension update posture (notify / agent / auto) — a standing decision about
+            // what may run unattended, which is exactly the kind of edit worth a line in `git log`.
+            `.intentic/extension-update-policy.json`,
             `.intentic/loop-designs.json`,
             `.intentic/personas.json`,
             `.intentic/settings.json`,

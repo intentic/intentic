@@ -1,6 +1,12 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import type { CapabilityKind, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
-import { type ExtensionSummary, ExtensionsListSchema, WorkspaceExtensionCreatedSchema } from "@intentic/sandbox-contract";
+import type { CapabilityKind, ExtensionUpdatePolicy, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
+import {
+    ExtensionUpdateAppliedSchema,
+    ExtensionUpdatePreviewSchema,
+    type ExtensionSummary,
+    ExtensionsListSchema,
+    WorkspaceExtensionCreatedSchema,
+} from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
@@ -12,6 +18,13 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * this query exists for reactive rendering, not for loading code. */
 
 const QUERY_KEY = sandboxKey(`extensions`);
+
+// What a click would approve — the version story and the mechanical powers diff, read from a staged clone.
+// Module-scoped (unlike the verbs below) because it reads nothing back into the query.
+const previewUpdate = async (id: string, ref?: string) =>
+    ExtensionUpdatePreviewSchema.parse(
+        await sandboxJson(`/extensions/${encodeURIComponent(id)}/update/preview`, jsonBody(`POST`, ref !== undefined ? { ref } : {})),
+    );
 
 export function useExtensions() {
     const { query, error } = useSandboxQuery({
@@ -49,6 +62,29 @@ export function useExtensions() {
         enabledExtensions.value
             .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
             .find((contribution) => contribution.kind === kind && contribution.id === id);
+    // ---- the update lifecycle's verbs, each re-reading the list because each changes what a row says. The
+    // daemon owns the transaction (stage → validate → quiesce → swap → restart → health-watch); these are its
+    // buttons. Update and revert are owner-gated daemon-side, so a member's press gets the daemon's sentence.
+    const checkUpdates = async (): Promise<void> => {
+        await sandboxJson(`/extensions/updates/check`, jsonBody(`POST`, {}));
+        await query.refetch();
+    };
+    const applyUpdate = async (id: string, ref?: string) => {
+        const applied = ExtensionUpdateAppliedSchema.parse(
+            await sandboxJson(`/extensions/${encodeURIComponent(id)}/update`, jsonBody(`POST`, ref !== undefined ? { ref } : {})),
+        );
+        await query.refetch();
+        return applied;
+    };
+    const revertUpdate = async (id: string) => {
+        const reverted = ExtensionUpdateAppliedSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/revert`, jsonBody(`POST`, {})));
+        await query.refetch();
+        return reverted;
+    };
+    const setUpdatePolicy = async (id: string, patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
+        await sandboxJson(`/extensions/${encodeURIComponent(id)}/update-policy`, jsonBody(`POST`, patch));
+        await query.refetch();
+    };
     return {
         extensions,
         invalid,
@@ -56,6 +92,13 @@ export function useExtensions() {
         setEnabled,
         create,
         contributionOf,
+        checkUpdates,
+        previewUpdate,
+        applyUpdate,
+        revertUpdate,
+        setUpdatePolicy,
+        // When the registry comparison last ran — the honesty line under the tab's update badges.
+        updatesCheckedAt: computed(() => query.data.value?.updatesCheckedAt),
         // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
         // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.
         settled: computed(() => query.isFetched.value || query.isError.value),

@@ -37,6 +37,12 @@ export interface ExtensionHostStatus {
 
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 
+/* The commit each extension's code was loaded at IN THIS BROWSER, keyed by the daemon handle. The extensions
+ * list keeps serving the checkout's CURRENT commit, so these diverging is precisely "an update landed while
+ * this UI kept running the old bundle" — the fact behind the tab's "reload to finish updating" prompt. Written
+ * per load pass, which is why running the host again (reloadExtensions) is what clears the prompt. */
+export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
+
 // Whether a load pass has run to completion — every extension either registered what it contributes or failed
 // trying. It is what tells the rail its own composition is final: until this flips, a tile that is missing may
 // simply be an activate() still in flight, which is the difference between "not there" and "not there yet"
@@ -171,5 +177,6 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
         }
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
+    loadedCommits.value = new Map(summaries.map((summary) => [summary.id, summary.commit]));
     extensionsLoaded.value = true;
 };

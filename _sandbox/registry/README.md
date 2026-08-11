@@ -44,6 +44,12 @@ A blocked entry stays in the file. Deleting the row hides it from people browsin
 already installed it nothing, which is backwards — they are the ones at risk. Absent on a third-party registry
 resolves to `listed`, because a registry that doesn't use the field hasn't asserted anything.
 
+Installed sandboxes read these states back on a daily comparison, so trust reaches the people past the browse
+moment too: a row turned `blocked` raises an advisory on the installed extension (and, by default, switches it
+off), and `securityFix: true` on an entry marks its pinned commit as fixing a security problem in earlier ones
+— the installed side promotes its update badge from ambient to loud, because there the OLD version is the
+dangerous one. Both are asserted by pull request, like `trust`, and are worth exactly that review.
+
 ## Tier, and what premium buys into
 
 `tier` is the listing's price: `free` (the default, and the whole story for most rows) or `premium` — the
