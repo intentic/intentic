@@ -113,7 +113,29 @@ afterEach(() => {
     removeMutate.mockClear();
 });
 
+// A sandbox with a lot of connections: every account somebody signs into ships its own cheatsheet.
+const fromConnections = (count: number): SkillSummary[] =>
+    Array.from({ length: count }, (_, index) =>
+        skill({
+            id: `capability:site-${index}:site-${index}`,
+            name: `site-${index}`,
+            description: `Act as the signed-in user.`,
+            origin: `capability`,
+            owner: `site-${index}`,
+            switchable: false,
+            editable: false,
+            removable: false,
+        }),
+    );
+
 const switches = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)] as HTMLElement[];
+const fold = (host: HTMLElement): HTMLDetailsElement | null => host.querySelector(`details`);
+const filterField = (host: HTMLElement): HTMLInputElement | null => host.querySelector<HTMLInputElement>(`[role="searchbox"]`);
+const type = async (field: HTMLInputElement, value: string): Promise<void> => {
+    field.value = value;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+};
 // The row's own header button — the one gesture that opens a skill.
 const rows = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll(`button[aria-expanded]`)] as HTMLElement[];
 const button = (host: HTMLElement, label: string): HTMLElement | undefined =>
@@ -214,6 +236,57 @@ test(`a skill the owner can't edit opens as its own prose, with the raw file one
     await settle();
     expect(host.querySelector(`.md-prose`)?.innerHTML).toContain(`<h2`);
     expect(button(host, `Source`)).not.toBeUndefined();
+});
+
+/* THE LIST IS AS LONG AS THE CONNECTION LIST, AND THAT IS WHAT THE FOLD IS FOR. Forty-one rows of which twelve
+ * could be tuned meant the act this group exists for — read down it, switch off what you don't recognise —
+ * happened inside a haystack, and the three groups under this one were off the bottom of the page. So what came
+ * with something else collapses behind a line that counts it. */
+test(`what came with something else folds away once it would bury what can be tuned`, () => {
+    skills.value = [skill({ id: `notes`, name: `notes` }), ...fromConnections(20)];
+    const host = mount();
+
+    expect(fold(host)?.open).toBe(false);
+    // Folded, not hidden: the count is on the summary, so the promise of completeness survives the fold.
+    expect(host.textContent).toContain(`20 came with what you installed and connected`);
+    // The row that can actually be switched is the one left in view.
+    expect(host.textContent).toContain(`notes`);
+    expect(switches(host)).toHaveLength(1);
+});
+
+// Few enough to read is few enough to leave alone — a fold over three rows is a click that buys nothing.
+test(`a short list is left open`, () => {
+    skills.value = [skill({ id: `notes`, name: `notes` }), ...fromConnections(3)];
+    expect(fold(mount())?.open).toBe(true);
+});
+
+/* COMPLETENESS IS STILL THE PROMISE. A folded row is one click from being read, and — since its whole reason for
+ * being listed is that nobody remembers adding it — it has to be findable by what it came WITH, not just by a
+ * name the reader has never heard. */
+test(`the filter reaches inside the fold, by name and by origin`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` }), ...fromConnections(20)];
+    const host = mount();
+
+    const field = filterField(host);
+    expect(field).not.toBeNull();
+    await type(field!, `site-7`);
+    expect(fold(host)?.open).toBe(true);
+    expect(host.textContent).toContain(`site-7`);
+    expect(host.textContent).not.toContain(`site-8`);
+
+    // The word on the chip: what somebody accounting for what their agent carries actually types.
+    await type(field!, `connection`);
+    expect(host.textContent).toContain(`site-1`);
+    expect(host.textContent).not.toContain(`notes`);
+
+    await type(field!, `nothing-by-this-name`);
+    expect(host.textContent).toContain(`Nothing matches that filter`);
+});
+
+// Under a handful, the list IS its own overview and a filter box is more chrome than the thing it filters.
+test(`no filter until the list is long enough to need one`, () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    expect(filterField(mount())).toBeNull();
 });
 
 /* DELETE ASKS FIRST, AND ONLY WHERE THE ROW SAID IT COULD. It used to sit one keystroke deep in a menu on the
