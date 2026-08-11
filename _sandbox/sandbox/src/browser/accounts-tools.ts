@@ -6,7 +6,7 @@ import { createRequest, resolveRequest } from "../agent/agent-requests.js";
 import type { OpenAccountInput } from "../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "./browser-sessions.js";
 import { fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
-import { markConnected, profileOwner } from "./session-store.js";
+import { hasSession, markConnected, profileOwner } from "./session-store.js";
 
 /* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself — sign in, sign up, open a NEW
  * account through an identity, and call for the owner when a step needs a person — instead of every login being
@@ -90,6 +90,33 @@ const turnEntry = async (deps: AccountsDeps, id: string): Promise<Capability | u
 
 const NO_ACCOUNT = (id: string): string =>
     `no account "${id}" this turn can act through — the account is a browser entry's (or identity's) capability id; the skill that taught you its tools names it`;
+
+/* THE SITE AN ACCOUNT IS ON, as a person would say it. The `platform` slug is the card, and for an account that
+ * rides the GENERIC session the card is "website" — true and useless. The address it opens at is the fact worth
+ * printing, so the host wins whenever there is one. */
+export const siteLabel = (config: BrowserConfig): string => {
+    const url = config["homeUrl"] ?? config["loginUrl"];
+    if (url === undefined || url === "") {
+        return config.platform;
+    }
+    try {
+        return new URL(url).host;
+    } catch {
+        return config.platform;
+    }
+};
+
+// One account's line in the roster: what it is, where, whether it is signed in, and the two facts that answer
+// "should I reuse this one" — what it was opened for and when.
+export const accountLine = (root: string, capability: Capability): string => {
+    const config = capability.config as BrowserConfig;
+    const notes = [
+        hasSession(root, capability.id) ? "signed in" : "not signed in yet",
+        ...(config.purpose === undefined || config.purpose === "" ? [] : [config.purpose]),
+        ...(config.openedAt === undefined || config.openedAt === "" ? [] : [`opened ${config.openedAt}`]),
+    ];
+    return `  ${capability.id} · ${siteLabel(config)} · ${notes.join(" · ")}`;
+};
 
 // The identity an entry answers mail through: itself, or the one it was born from. Undefined for a standalone
 // account — which is the "no identity" arm of fetch_email_code's error.
@@ -270,26 +297,79 @@ export const accountsServer =
                 ),
                 tool(
                     "open_account",
-                    "Open a NEW platform account through an identity: files a browser account under it (they share the identity's browser), so you can then perform the signup there — prefer the site's \"Continue with\" the identity's provider; fall back to email signup with fetch_email_code for the confirmation. Refused unless the identity's owner turned on \"may open accounts\". Tell the owner what you opened and why.",
+                    "Open a NEW platform account through an identity: files a browser account under it (they share the identity's browser), so you can then perform the signup there — prefer the site's \"Continue with\" the identity's provider; fall back to email signup with fetch_email_code for the confirmation. Works for ANY site: one the sandbox has a card for gets that site's cheatsheet, anything else rides the generic browser session — pass homeUrl and it files fine. This is the only record that the account exists, so file it as part of signing up, never afterwards from memory. Refused unless the identity's owner turned on \"may open accounts\". Tell the owner what you opened and why.",
                     {
                         account: z.string().describe('An id for the new account (e.g. "reddit-main") — becomes the capability id'),
-                        platform: z.string().describe('The platform card to open it on (e.g. "reddit", "x", "website")'),
+                        platform: z
+                            .string()
+                            .describe(
+                                'The site, by name (e.g. "reddit", "x", "producthunt") — a known one brings its own cheatsheet, any other rides the generic session',
+                            ),
                         identity: z.string().describe("The identity (capability id) to open it through"),
+                        purpose: z
+                            .string()
+                            .min(1)
+                            .describe(
+                                "One line on what this account is for — what a later session reads to decide whether to reuse it instead of opening another",
+                            ),
+                        homeUrl: z
+                            .string()
+                            .optional()
+                            .describe(
+                                "The page this account lives on once signed in. Required for a site the sandbox has no card for; ignored for one it does",
+                            ),
+                        loginUrl: z.string().optional().describe("Only when signing in happens somewhere else than the page above"),
                     },
-                    async ({ account, platform, identity }) => {
+                    async ({ account, platform, identity, purpose, homeUrl, loginUrl }) => {
                         // The identity must be one this turn speaks for — the same scope every other tool checks.
                         const holder = await turnEntry(deps, identity);
                         if (holder === undefined || holder.kind !== "identity") {
                             return fail(`no identity "${identity}" this turn can act through — name the identity whose skill you are holding`);
                         }
                         try {
-                            const report = await deps.openAccount({ id: account, platform, identity });
+                            const report = await deps.openAccount({ id: account, platform, identity, purpose, homeUrl, loginUrl });
                             return ok(
                                 `${report}\nNow perform the sign-up in the identity's browser (mcp__${identity}__browser_*), SSO first; call mark_connected("${account}") once you verifiably are the account.`,
                             );
                         } catch (error) {
                             return fail(error instanceof Error ? error.message : String(error));
                         }
+                    },
+                ),
+                tool(
+                    "roster",
+                    "Who this sandbox is online: every identity you can act as, the accounts each already holds (site, what it was opened for, when, and whether it is signed in), and which identities hold nothing yet. Read this BEFORE opening an account anywhere — signing in to one that exists beats minting another, and an identity with no accounts is the one to spend on a site that should not be tied to the others. Derived from the live manifest, so it is never out of date.",
+                    {},
+                    async () => {
+                        /* Scoped to the accounts this turn speaks for, exactly like every other tool here — a
+                         * persona that narrows a turn to two identities must not have the roster hand back the
+                         * other fourteen, which is the whole point of narrowing it. */
+                        const entries = (await Promise.all(deps.accounts.map((id) => deps.capabilities.get(id)))).filter(
+                            (capability): capability is Capability => capability !== undefined,
+                        );
+                        const identities = entries.filter((capability) => capability.kind === "identity");
+                        const accounts = entries.filter((capability) => capability.kind === "browser");
+                        const sections = identities.map((identity) => {
+                            const config = identity.config as IdentityConfig;
+                            const held = accounts.filter((account) => (account.config as BrowserConfig).identity === identity.id);
+                            const head = `${identity.id} · ${config.email} · ${
+                                hasSession(deps.root, identity.id) ? "provider signed in" : "provider NOT signed in yet"
+                            } · ${config.openAccounts === "on" ? "may open accounts" : "may NOT open accounts"}`;
+                            // "no accounts yet" said outright rather than left as an absence: a clean identity is
+                            // the answer to a question this tool gets asked, not a gap in the list.
+                            return held.length === 0
+                                ? `${head}\n  no accounts yet`
+                                : [head, ...held.map((account) => accountLine(deps.root, account))].join("\n");
+                        });
+                        // Accounts with no identity behind them — the owner's own hand-connected logins. Listed
+                        // because "do we already have an account here" does not care how it came to exist.
+                        const standalone = accounts.filter((account) => (account.config as BrowserConfig).identity === undefined);
+                        const tail =
+                            standalone.length === 0
+                                ? []
+                                : [["standalone accounts (no identity)", ...standalone.map((account) => accountLine(deps.root, account))].join("\n")];
+                        const all = [...sections, ...tail];
+                        return ok(all.length === 0 ? "this turn speaks for no identities or accounts" : all.join("\n\n"));
                     },
                 ),
                 ...(deps.attended

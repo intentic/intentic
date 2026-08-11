@@ -32,7 +32,11 @@ export const rebuildStep = (kind: CapabilityKind | undefined, instance: Capabili
 // are deliberately absent — they are the card, which the row already names, so printing them would spend the
 // line on "github · github". Secrets never reach here: the daemon strips them from the config it echoes back.
 // `email` is an identity row's one fact; `identity` is the born-from note on an account row filed under one.
-const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`] as const;
+// `purpose` sits LAST because it is the widest and the least identifying — but for an account under an identity
+// it is usually the only other fact there is (a site card pins its URLs, so the row has no host and no url), and
+// "what did we open this one for" is the question the owner actually has when they see a name they don't
+// recognise. The date it was opened is deliberately not here: it never beats `purpose` for the second slot.
+const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`, `purpose`] as const;
 
 // Two facts at most. A row is a line, and the third fact is the one that pushes the state badge off the end of it.
 export const connectionFacts = (instance: CapabilitySummary): string =>

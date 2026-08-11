@@ -59,6 +59,13 @@ test(`names a connection by what tells it apart, two facts at most`, () => {
     );
     expect(connectionFacts(instance({ state: `active` }, { platform: `reddit` }))).toBe(``);
     expect(connectionFacts(instance({ state: `active` }, { host: `  ` }))).toBe(``);
+    // An account filed under an identity: the card names the site, so who it belongs to and what it is for are
+    // the whole line — and the date it was opened never takes a slot from either.
+    expect(
+        connectionFacts(
+            instance({ state: `active` }, { platform: `reddit`, identity: `radarsuspam2`, purpose: `community research`, openedAt: `2026-08-11` }),
+        ),
+    ).toBe(`radarsuspam2 · community research`);
 });
 
 /* A tunnel's address and what it routes are read off the live link, never off the stored config — and a tunnel

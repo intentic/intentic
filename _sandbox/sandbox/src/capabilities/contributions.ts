@@ -186,8 +186,11 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
     // extension cannot forget them — the form offers them on all browser cards alike. `identity` is core for the
     // same reason: WHICH identity an account is born from is a fact about the sandbox's manifest, not about any
     // site, and it is what files the account into that identity's shared browser.
+    // `purpose` and `openedAt` join them as the account's own history — what it was opened for and when. Same
+    // argument: a fact about this sandbox's account, not about the site, and every pinned-URL card declares no
+    // fields at all, so a per-card declaration would mean no site card could ever carry them.
     if (spec.kind === "browser") {
-        declared.add("username").add("password").add("identity");
+        declared.add("username").add("password").add("identity").add("purpose").add("openedAt");
     }
     const unknown = Object.keys(config).filter((key) => !declared.has(key));
     if (unknown.length > 0) {

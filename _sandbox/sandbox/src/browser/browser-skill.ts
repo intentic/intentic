@@ -113,10 +113,16 @@ holding the identity's email session and every account born from it — sites se
 ${
     openAccounts
         ? `
-OPENING ACCOUNTS: the owner allows this identity to open platform accounts on its own. When a task needs a
-platform it has no account on yet, call \`mcp__accounts__open_account\` (a new account id plus the platform) —
-it files the account under this identity — then perform the signup in this browser, SSO first, and tell the
-owner what you opened and why. Prefer joining over creating: sign IN wherever an account already exists.`
+OPENING ACCOUNTS: the owner allows this identity to open platform accounts on its own. Check
+\`mcp__accounts__roster\` FIRST — it says which accounts this identity (and every other one you speak for)
+already holds, so "prefer joining over creating" is a decision you can actually make rather than a hope. When
+the site is genuinely new, call \`mcp__accounts__open_account\` (an account id, the site, and one line on what
+it is for) — it files the account under this identity, and works for any site, carded or not — then perform the
+signup in this browser, SSO first, and tell the owner what you opened and why.
+
+FILING IS PART OF SIGNING UP. That entry is the only record the account exists: nothing else knows, and a
+session months from now asking "do we already have one here" is asking the roster. So open the account before
+you fill the form, never from memory afterwards, and never write the fact down anywhere else.`
         : `
 OPENING ACCOUNTS: the owner has NOT allowed this identity to open accounts on its own — the switch on its card
 is off. Connect only accounts the owner explicitly asked for, and ask before any signup.`

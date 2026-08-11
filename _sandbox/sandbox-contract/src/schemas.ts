@@ -3212,12 +3212,22 @@ export const DockerConfigSchema = z.object({
 // lives INSIDE that identity's browser — one profile, one set of cookies — which is what makes "Continue with
 // Google" one click instead of a second Google login the platform would block. Absent ⇒ the account keeps its
 // own private profile, exactly as every hand-connected account always has.
+//
+// `purpose` and `openedAt` are the ACCOUNT's own history, core for the same reason `identity` is: what this
+// account was opened for and when are facts about the sandbox's own past, not about any site, and a site card
+// that declared no fields (every one of them — a pinned-URL card declares none) could not carry them otherwise.
+// They are what makes the roster answerable months later, when "do we already have an account here" is asked by
+// a session that was not the one that signed up. Both optional: an account the owner connected by hand has no
+// signup story to tell, and an empty purpose is better than a fabricated one.
 export const BrowserConfigSchema = z
     .object({
         platform: z.string().min(1),
         username: z.string().optional(),
         password: z.string().optional(),
         identity: z.string().optional(),
+        purpose: z.string().optional(),
+        // ISO-8601 date, stamped when the agent opens the account — absent for one connected by hand.
+        openedAt: z.string().optional(),
     })
     .catchall(z.string());
 /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the container platform accounts are born from, and the answer
@@ -3635,7 +3645,14 @@ export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.s
  * the same rule the add form enforces, spelled here because the daemon is the gate: letters and digits to start,
  * then hyphens and underscores. Which KINDS may be renamed at all is the handler's own answer (capability.ts
  * `rename`), not something a schema can say. */
-export const CapabilityRenameSchema = z.object({ id: z.string(), to: z.string().min(1).max(60).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/) });
+export const CapabilityRenameSchema = z.object({
+    id: z.string(),
+    to: z
+        .string()
+        .min(1)
+        .max(60)
+        .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/),
+});
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });
