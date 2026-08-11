@@ -1,4 +1,4 @@
-import type { TurnNote } from "@intentic/sandbox-contract";
+import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { RepoSync } from "../agents/sync.js";
 import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
@@ -210,4 +210,33 @@ export const splitTurnNotes = (preamble: string): TurnNote[] => {
 export const preambleNotes = (text: string): TurnNote[] => {
     const end = preambleEnd(text);
     return end === undefined ? [] : splitTurnNotes(text.slice(0, end));
+};
+
+/* WHAT A STORED PROMPT ACTUALLY SAID — the user's words with every layer the daemon wrapped them in taken back
+ * off, and each layer handed over instead of dropped.
+ *
+ * There are two layers and they nest in EITHER ORDER, which is the whole reason this is one function rather
+ * than two calls at each of the three call sites. A turn the daemon re-ran carries its interruption note around
+ * the prompt it re-sends (events.ts), and the preamble is then built around THAT — so the daemon's own record,
+ * which stores the turn's prompt, has the note outermost, while a provider's session store keeps the prompt as
+ * it was SENT and has the preamble outermost. A reader that assumes one order silently hands the other layer
+ * back as the user's own words, which is the exact failure both strippers exist to prevent. */
+export interface StoredPrompt {
+    // The user's words alone. Their attachment note (a Claude-path trailer) is the caller's to strip.
+    readonly text: string;
+    // The notes the daemon put in front of them, titled for the row the chat draws.
+    readonly notes: readonly TurnNote[];
+    // How the interruption that re-ran this turn should read, when it was one — see resumeDisclosure.
+    readonly resume?: ResumeDisclosure;
+}
+
+export const unwrapStoredPrompt = (stored: string): StoredPrompt => {
+    // The note OUTSIDE the preamble: peel it first, or the preamble below it never finds its own anchor.
+    const outer = resumeDisclosure(stored);
+    const body = outer === undefined ? stored : withoutResumeNote(stored);
+    const notes = preambleNotes(body);
+    const inner = stripTurnPreamble(body);
+    // …or INSIDE it, which is what is left once the preamble is off. A no-op for either half that wasn't there.
+    const resume = outer ?? resumeDisclosure(inner);
+    return { text: withoutResumeNote(inner), notes, ...(resume !== undefined ? { resume } : {}) };
 };

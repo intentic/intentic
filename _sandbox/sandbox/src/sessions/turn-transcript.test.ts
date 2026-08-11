@@ -1,7 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
+import { LITERAL_SLASH_NOTE, withTurnPreamble } from "../agent/turn-preamble.js";
 import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 // When the turn started — what its user row is stamped with (RestoredMessage.sentAt).
@@ -36,6 +37,42 @@ describe("restoredTurn", () => {
             { role: "assistant", text: "sure" },
         ]);
         expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([{ role: "user", text: "second", sentAt: SENT_AT }]);
+    });
+
+    /* A TURN THE DAEMON RE-RAN ITSELF. Its prompt is the user's words again behind a note explaining what killed
+     * the first attempt — and recording that verbatim was two wrongs at once: a paragraph of machine prose filed
+     * as something the user typed, directly under the copy of the message they really did type. What the record
+     * wants there is the one thing neither copy says, which is why the answer below carries on at all. */
+    it("records a re-run as the interruption that caused it, not as the message said twice", () => {
+        const prompt = withResumeNote("ship the parser", RESUME_NOTES.auth);
+        const events: AgentEvent[] = [{ kind: "delta", text: "picking back up" }];
+        expect(restoredTurn({ prompt }, events, "/work", SENT_AT)).toEqual([
+            { role: "notice", text: expect.stringContaining("sign-in renewed") },
+            { role: "assistant", text: "picking back up" },
+        ]);
+    });
+
+    /* The resume that carries NEW words: the daemon came back to a conversation parked on a card and this turn is
+     * the answer. Nothing is dropped — it is the only copy of that answer there is — and the restart rides it as
+     * the same collapsed note every other thing the daemon told a turn is disclosed as. */
+    it("keeps a restored card's answer and carries the restart on it as a note", () => {
+        const prompt = withResumeNote("the second option", RESUME_NOTES.answered);
+        expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([
+            {
+                role: "user",
+                text: "the second option",
+                sentAt: SENT_AT,
+                notes: [{ title: expect.any(String), text: RESUME_NOTES.answered }],
+            },
+        ]);
+    });
+
+    /* The note is the OUTERMOST wrapper — the daemon adds its preamble in front of a prompt that already carries
+     * it — so a strip that runs in the wrong order finds no anchor and hands back the lot. Which it did: a
+     * resumed turn recorded the dependency notice and the rebase paragraph as the user's words too. */
+    it("still finds the turn's preamble underneath a re-run's note", () => {
+        const prompt = withResumeNote(withTurnPreamble([LITERAL_SLASH_NOTE], "/work is where it lives"), RESUME_NOTES.restart);
+        expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([{ role: "notice", text: expect.stringContaining("sandbox came back") }]);
     });
 
     /* The live bubble boundary, matched to turnReducer's: `text_end` retires the block that WROTE something, so

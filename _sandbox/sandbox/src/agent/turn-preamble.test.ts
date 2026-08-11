@@ -1,3 +1,4 @@
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { RepoSync } from "../agents/sync.js";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
@@ -9,6 +10,7 @@ import {
     stripTurnPreamble,
     SYNC_NOTE_HEADER,
     syncNote,
+    unwrapStoredPrompt,
     withTurnPreamble,
 } from "./turn-preamble.js";
 
@@ -136,6 +138,28 @@ test("the split stays silent exactly where the strip declines to cut", () => {
     expect(preambleNotes("fix the bug")).toEqual([]);
     expect(preambleNotes(`My sessions get appended:\n\n${notice}\n\n---\n\nDespite dependencies being installed!`)).toEqual([]);
     expect(preambleNotes(notice)).toEqual([]);
+});
+
+/* THE TWO WRAPPERS NEST IN EITHER ORDER, which is the one thing a reader of a stored prompt cannot assume. The
+ * daemon's own record keeps the turn's prompt, where a re-run's note is outermost; a provider's session store
+ * keeps the prompt as it was SENT, where the preamble is. Both come back as the same three answers, or one of
+ * the two stores hands a paragraph of machine prose back as something the user typed. */
+test("a re-run unwraps the same whichever way its note and the preamble are nested", () => {
+    const sent = withTurnPreamble([notice], withResumeNote("fix the bug", RESUME_NOTES.auth));
+    const recorded = withResumeNote(withTurnPreamble([notice], "fix the bug"), RESUME_NOTES.auth);
+
+    for (const stored of [sent, recorded]) {
+        const unwrapped = unwrapStoredPrompt(stored);
+        expect(unwrapped.text).toBe("fix the bug");
+        expect(unwrapped.notes).toMatchObject([{ title: "Dependencies aren't installed yet" }]);
+        expect(unwrapped.resume).toMatchObject({ kind: "notice" });
+    }
+});
+
+// An ordinary prompt is neither, and unwrapping is what every reader runs on every message — so it has to hand
+// back exactly what it was given rather than finding structure that is not there.
+test("an ordinary prompt unwraps to itself", () => {
+    expect(unwrapStoredPrompt("fix the bug")).toEqual({ text: "fix the bug", notes: [] });
 });
 
 const behind = (overrides: Partial<RepoSync> = {}): RepoSync => ({

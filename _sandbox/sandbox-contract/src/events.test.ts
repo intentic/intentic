@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { RESUME_NOTES, withResumeNote, withoutResumeNote } from "./events.js";
+import { RESUME_NOTES, resumeDisclosure, withResumeNote, withoutResumeNote } from "./events.js";
 
 /* The resume note is a round trip across the wire: the daemon wraps a prompt to tell the model what interrupted
  * it, and the client unwraps the SAME prompt off an attach head to tell whether it already has that bubble. A
@@ -29,4 +29,23 @@ test("wrapping an already-wrapped prompt adds nothing", () => {
     const once = withResumeNote("retry me", RESUME_NOTES.restart);
     expect(withResumeNote(once, RESUME_NOTES.restart)).toBe(once);
     expect(withResumeNote(once, RESUME_NOTES.auth)).toBe(once);
+});
+
+/* THE OTHER HALF OF THE ROUND TRIP: taking the note off is what keeps it out of the user's words, and this is
+ * what puts it back on screen as something that happened instead. Every reader of a stored prompt asks the same
+ * question here, so a note nobody could disclose is a note that silently reads as the user's own sentence. */
+test("a re-run discloses as a notice, and the answered case as a note on the message", () => {
+    for (const reason of ["auth", "outage", "restart"] as const) {
+        const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES[reason]));
+        expect(disclosure?.kind).toBe("notice");
+    }
+    // The answer is new words the user really did type, so nothing is dropped — the interruption rides them.
+    const answered = resumeDisclosure(withResumeNote("option two", RESUME_NOTES.answered));
+    expect(answered).toEqual({ kind: "note", note: { title: expect.any(String), text: RESUME_NOTES.answered } });
+});
+
+// Same guarantee withoutResumeNote gives: an ordinary prompt is not a resume of anything.
+test("a prompt that is not a resume discloses nothing", () => {
+    expect(resumeDisclosure("just a question")).toBeUndefined();
+    expect(resumeDisclosure("")).toBeUndefined();
 });

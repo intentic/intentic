@@ -185,6 +185,12 @@ export interface ChatMessage {
      * pairs the kind with the live state that answers it (credentialRenewal), so a transcript replayed an hour
      * later shows the line settled instead of spinning forever over a turn that came back long ago. */
     readonly noticeWait?: "credentialRenewal";
+    /* Set on a notice that came out of the DAEMON'S RECORD rather than being drawn here (notices only) — a turn
+     * the provider refused, a turn the daemon resumed by itself. It is the one thing that tells the two kinds
+     * apart once they are side by side in the same list, and what it decides is arithmetic: a recorded notice
+     * occupies a row of the record and a local one does not, so a fork that counts them the same way cuts the
+     * copied prefix in the wrong place (see recordedRows). */
+    readonly recorded?: boolean;
     /* WHAT THE DAEMON TOLD THIS TURN and the user did not — each note with the title its row is drawn as and the
      * text that opening it reveals.
      *
@@ -279,9 +285,15 @@ export interface ChatTurn {
 /* HOW MANY ROWS THE DAEMON'S RECORD HOLDS FOR THESE BUBBLES — the one place the two numberings are converted,
  * and the count a fork hands the daemon so it can copy that prefix of the source conversation.
  *
- * The record and the bubble list are deliberately not the same list: notices are drawn by this client and never
- * recorded, and a bubble that produced nothing at all is not a row. Everything else is 1:1, because both sides
- * fold a turn the same way (one user row, then one assistant row per prose block with its cards beneath it).
+ * The record and the bubble list are deliberately not the same list: a bubble that produced nothing at all is
+ * not a row, and most notices are this client's own writing (a rewind, a provider switch, a control action) with
+ * nothing behind them in the record. Everything else is 1:1, because both sides fold a turn the same way (one
+ * user row, then one assistant row per prose block with its cards beneath it).
+ *
+ * The notices that DO count are the ones the daemon wrote down — a refused turn, a turn it resumed by itself —
+ * which arrive here only through a restore and say so (ChatMessage.recorded). Counting those out was silently
+ * wrong for every conversation that had ever seen a provider error: the fork asked for fewer rows than it meant
+ * and lost the tail of the transcript it was copying.
  *
  * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking or
  * tools makes a row, and nothing makes none. The two have to agree — a fork that counts one row too many
@@ -289,7 +301,7 @@ export interface ChatTurn {
 export const recordedRows = (messages: readonly ChatMessage[]): number =>
     messages.filter((message) => {
         if (message.role === `notice`) {
-            return false;
+            return message.recorded === true;
         }
         if (message.role === `user`) {
             return true;

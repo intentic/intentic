@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { displayNameOf, toolCategoryOf } from "../agent/tool-calls.js";
-import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
+import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
 
 // Codex persists each thread as a rollout under <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-<ISO8601>-<threadId>.jsonl
 // (the id is the app-server `thread/start` result). Readiness and transcript backfill must answer without
@@ -127,12 +127,21 @@ export const readCodexSession = async (home: string, threadId: string, root: str
 
         if (entry.type === "event_msg" && payload.type === "user_message" && payload.message !== undefined) {
             // The daemon folds its own notes into a Codex prompt exactly as it does a Claude one, and the
-            // rollout stores the combined text — so the same unwrapping applies (see turn-transcript.ts).
-            const stripped = stripAttachmentNote(stripTurnPreamble(payload.message));
+            // rollout stores the combined text — so the same unwrapping applies (see turn-transcript.ts),
+            // including a re-run's note: a Codex thread is resumed by the same daemon on the same terms, so the
+            // interruption reads here as the muted line it reads everywhere else rather than as the user's words.
+            const unwrapped = unwrapStoredPrompt(payload.message);
+            const resume = unwrapped.resume;
+            if (resume?.kind === "notice") {
+                out.push({ role: "notice", text: resume.text });
+                bubble = undefined;
+                continue;
+            }
+            const stripped = stripAttachmentNote(unwrapped.text);
             const attachments = stripped.attachments.map((file) => (file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file));
             // And what was folded in, disclosed rather than merely removed — carried on the message exactly as
             // the other two readers carry it, because a Codex turn is told the same things a Claude one is.
-            const notes = preambleNotes(payload.message);
+            const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
             if (stripped.text.length > 0 || attachments.length > 0) {
                 out.push({
                     role: "user",

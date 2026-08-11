@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentTurn, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
+import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -32,11 +32,13 @@ export const restoredTurn = (
     sentAt: number,
 ): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
-    // The same unwrapping readWorkspaceSession does, for the same reason: the daemon's own injections (an
-    // opening turn preamble, the trailing attachment note) are not what the user typed and must not redraw as
-    // their words. `turn.attachments` is the authoritative list when the client sent one — the note is only the
-    // Claude path's way of carrying it, and the other adapters word it differently.
-    const stripped = stripAttachmentNote(stripTurnPreamble(turn.prompt));
+    // The same unwrapping readWorkspaceSession does, for the same reason: the daemon's own injections (a turn
+    // preamble, the note saying what interrupted a turn it re-ran, the trailing attachment note) are not what
+    // the user typed and must not redraw as their words. `turn.attachments` is the authoritative list when the
+    // client sent one — the note is only the Claude path's way of carrying it, and the other adapters word it
+    // differently.
+    const unwrapped = unwrapStoredPrompt(turn.prompt);
+    const stripped = stripAttachmentNote(unwrapped.text);
     const attachments = (turn.attachments ?? stripped.attachments).map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
     /* Taken OUT of the user's words and kept, rather than taken out and dropped. What a turn was told is part of
      * what happened to it, so a tab that reopens tomorrow shows the same collapsed row the tab that watched it
@@ -45,13 +47,18 @@ export const restoredTurn = (
      * Carried ON the user's row, never as a row of its own: the record's positions are what a rewind addresses
      * and a branch copies a prefix of, so a turn that happened to be told something must not record one row more
      * than a turn that wasn't. */
-    const notes = preambleNotes(turn.prompt);
+    const resume = unwrapped.resume;
+    const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
     /* A handoff turn's prompt opens with the transcript the daemon folded into it (runtime-history.ts). Unwrap
      * that and keep only what the user actually typed: the rows inside the envelope are this conversation's OWN
      * earlier messages, which this record already holds. Re-emitting them appended a second — and, being
      * budget-capped, truncated — copy of the conversation every time a provider or account was switched. */
     const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
-    if (text.length > 0 || attachments.length > 0) {
+    if (resume?.kind === "notice") {
+        // A re-run of words this record already holds: the interruption goes down INSTEAD of them, one row for
+        // one row, so the reader sees why the answer below carries on rather than the same message twice.
+        out.push({ role: "notice", text: resume.text });
+    } else if (text.length > 0 || attachments.length > 0) {
         out.push({ role: "user", text, sentAt, ...(attachments.length > 0 ? { attachments } : {}), ...(notes.length > 0 ? { notes } : {}) });
     }
 

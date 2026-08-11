@@ -611,6 +611,42 @@ export const withoutResumeNote = (prompt: string): string => {
     return note === undefined ? prompt : prompt.slice(prompt.indexOf("\n\n") + 2);
 };
 
+export type ResumeReason = keyof typeof RESUME_NOTES;
+
+/* HOW A RESUMED TURN READS TO THE PERSON — the same interruption the note above tells the model, said in the
+ * transcript's own voice instead.
+ *
+ * Stripping the note out of the user's words is only half the job, and for years it was the only half anyone
+ * did: what a reopened conversation showed was a paragraph of machine prose stapled to the front of a message
+ * the user had already sent once, directly under their own copy of it. Both halves of that are wrong — it was
+ * never their sentence, and the words under it are a REPEAT rather than something new they said.
+ *
+ * So the two shapes below, which is the whole of what a reader has to be told:
+ *
+ * `notice` — the three whole-turn re-runs. The words under the note are already in the transcript one turn up,
+ * so the repeat is dropped entirely and the interruption takes its place as a muted line, sitting with the
+ * failure line it resolves ("Failed to authenticate…") and reading like every other thing that HAPPENED to a
+ * turn rather than like something anybody typed.
+ *
+ * `note` — the answered case, where what rides under the note is the user's actual answer to a card and belongs
+ * in the transcript as their words. Nothing is dropped; the explanation rides that message as a collapsed row,
+ * the same disclosure every other daemon-written note gets (TurnNote). */
+export type ResumeDisclosure = { readonly kind: "notice"; readonly text: string } | { readonly kind: "note"; readonly note: TurnNote };
+
+const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
+    auth: { kind: "notice", text: "Claude sign-in renewed — this turn picked up where it left off." },
+    outage: { kind: "notice", text: "The model provider came back — this turn picked up where it left off." },
+    restart: { kind: "notice", text: "The sandbox came back — this turn picked up where it left off." },
+    answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
+};
+
+// What a stored prompt's resume note should be SHOWN as; undefined when the prompt is not a resume at all, so
+// every reader of a stored prompt can ask without first testing whether it is one.
+export const resumeDisclosure = (prompt: string): ResumeDisclosure | undefined => {
+    const reason = (Object.keys(RESUME_NOTES) as ResumeReason[]).find((key) => prompt.startsWith(RESUME_NOTES[key]));
+    return reason === undefined ? undefined : RESUME_DISCLOSURES[reason];
+};
+
 // One parsed line from `intentic … --output ndjson` (engine events, provider `log`, the terminal `result`).
 // Open-ended by design — the sandbox consumes the wire shape, not @intentic/engine's types — so a string
 // `kind` plus arbitrary extra fields pass through. The apply-events tail (intentic.contract `applyEvents`) rides

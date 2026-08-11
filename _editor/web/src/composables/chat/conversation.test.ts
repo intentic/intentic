@@ -1565,6 +1565,32 @@ describe(`Conversation`, () => {
         expect(`history` in body).toBe(false);
     });
 
+    /* THE TWO KINDS OF NOTICE, and why a fork has to tell them apart. A notice this window drew (a provider
+     * switch, a rewind) exists nowhere in the daemon's record. One the daemon WROTE DOWN — a refused turn, a
+     * turn it resumed by itself — is a row of that record like any other, and counting it out told the daemon
+     * to copy fewer rows than the user had selected: the tail of the branch went missing, silently, for every
+     * conversation that had ever seen a provider error. */
+    it(`a fork counts the notices the daemon recorded and skips the ones drawn locally`, async () => {
+        const source = new Conversation(`c1`);
+        source.restoreMessages([
+            { role: `user`, text: `ship the parser` },
+            { role: `assistant`, text: `on it` },
+            { role: `notice`, text: `Failed to authenticate. API Error: 401.` },
+            { role: `notice`, text: `Claude sign-in renewed — this turn picked up where it left off.` },
+            { role: `assistant`, text: `picking back up` },
+        ]);
+        // …and one this window wrote itself, which the record knows nothing about.
+        source.selectProvider(`codex`);
+        expect(source.messages.value.at(-1)!.role).toBe(`notice`);
+
+        const fork = new Conversation(`c2`);
+        fork.forkFrom(source, source.messages.value.length, `now`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
+        await fork.send(`carry on`, { ...settings, agent: `codex`, model: `` });
+        // Five recorded rows: the switch notice at the end is this window's own and is not one of them.
+        expect(turnBodies()[0]![`forkOf`]).toEqual({ conversationId: `c1`, keep: 5, files: `now` });
+    });
+
     it(`a fork carries the source's provider selection and drops its pending switch notice`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

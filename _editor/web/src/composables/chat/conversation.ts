@@ -671,6 +671,9 @@ export class Conversation {
             messages.map((message, index) => ({
                 role: message.role,
                 text: message.text,
+                // Every row here IS a row of the daemon's record, which for a notice is the only way to know: a
+                // fork counts the recorded ones and skips the ones this client drew locally (see recordedRows).
+                ...(message.role === `notice` ? { recorded: true } : {}),
                 // When the turn was sent, as the daemon wrote it down — so a bubble reopened tomorrow shows the
                 // hour it was actually typed rather than nothing at all.
                 ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),

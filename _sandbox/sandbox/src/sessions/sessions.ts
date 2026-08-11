@@ -4,7 +4,7 @@ import type { MatchSnippet, RestoredMessage, RestoredToolCall } from "@intentic/
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
-import { preambleNotes, stripTurnPreamble } from "../agent/turn-preamble.js";
+import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
 import { matchLines, readSessionLines } from "./transcript-search.js";
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
@@ -41,13 +41,14 @@ interface AnthropicMessageLike {
 // conversations (those are the board's, and read back through /agents/:id/transcript whatever served them).
 // Merge Codex threads here with a provider tag when users ask for Codex history.
 // The list title a stored first prompt yields: the user's words with the daemon's injections removed — an
-// opening turn preamble ("Dependencies are NOT installed…") and the trailing attachment note. An
-// attachment-only opener is titled by what was dropped in, matching what the send derived locally.
+// opening turn preamble ("Dependencies are NOT installed…"), a re-run's interruption note, and the trailing
+// attachment note. An attachment-only opener is titled by what was dropped in, matching what the send derived
+// locally.
 const promptTitle = (firstPrompt: string | undefined): string | undefined => {
     if (firstPrompt === undefined) {
         return undefined;
     }
-    const { text, attachments } = stripAttachmentNote(stripTurnPreamble(firstPrompt));
+    const { text, attachments } = stripAttachmentNote(unwrapStoredPrompt(firstPrompt).text);
     const runtime = parseRuntimeHistory(text);
     const title = runtime?.history.find((message) => message.role === "user")?.text ?? runtime?.prompt ?? text;
     return title.length > 0 ? title : attachments.map((path) => basename(path)).join(", ") || undefined;
@@ -174,12 +175,23 @@ export const restoredSessionMessages = (
             // them against the main root even for worktree turns, so `dir` — always the root here — is the
             // right base). An attachment-only message strips to empty text but still redraws its chips.
             if (text.length > 0) {
-                const stripped = stripAttachmentNote(stripTurnPreamble(text));
+                const unwrapped = unwrapStoredPrompt(text);
+                /* A turn the daemon re-ran after an interruption stores the original prompt behind a note saying
+                 * why (RESUME_NOTES) — read exactly as the daemon's own record reads it (turn-transcript.ts): a
+                 * re-run of words this transcript already holds becomes the muted line explaining the gap, in
+                 * place of a second copy of the message; a restored card's answer keeps its words and carries the
+                 * explanation as a note. */
+                const resume = unwrapped.resume;
+                if (resume?.kind === "notice") {
+                    out.push({ role: "notice", text: resume.text });
+                    continue;
+                }
+                const stripped = stripAttachmentNote(unwrapped.text);
                 const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
                 // …and the preamble that was just stripped, kept on the message it was added to. Removing it from
                 // the user's words is only half of being honest about it; carrying it is the other half, and it
                 // reads the same here as on the daemon's own record.
-                const notes = preambleNotes(text);
+                const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
                 const added = notes.length > 0 ? { notes } : {};
                 const runtime = parseRuntimeHistory(stripped.text);
                 if (runtime !== undefined) {

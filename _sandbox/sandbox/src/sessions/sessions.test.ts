@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
 import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
@@ -180,6 +181,23 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
     expect(messages[1]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
     // Each stored assistant message is its own bubble, so the closing prose does not merge into the first.
     expect(messages[2]).toEqual({ role: "assistant", text: "Done." });
+});
+
+/* The provider's own store keeps the prompt the daemon SENT, note and all — so a conversation the daemon
+ * re-ran read back here as the user saying the same thing twice, the second time behind a paragraph of machine
+ * prose. It has to read exactly as the daemon's own record does (turn-transcript.ts): the repeat drops out and
+ * the interruption stands in its place, because a conversation cannot mean two different things depending on
+ * which store happened to answer for it. */
+test("a re-run in the provider's store reads as the interruption, not as the message twice", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "ship the parser" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "on it" }] } },
+        { type: "user", message: { content: withResumeNote("ship the parser", RESUME_NOTES.auth) } },
+        { type: "assistant", message: { content: [{ type: "text", text: "picking back up" }] } },
+    ]);
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "notice", "assistant"]);
+    expect(messages[2]?.text).toContain("sign-in renewed");
 });
 
 test("a call whose result never arrived stays in progress rather than claiming it finished", async () => {
