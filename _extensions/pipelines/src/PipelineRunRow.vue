@@ -146,7 +146,10 @@ const fixHint = computed<string | undefined>(() => {
                      wrap and break a row that had room for it, and with no floor at all it would be squeezed to
                      a sliver by two buttons that never shrink. So it asks for three circles, takes its natural
                      width when the line has it (`max-w-max`), and scrolls when a twelve-stage run has more. -->
-                <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
+                <!-- The padding is the hover scale's headroom: a transformed element counts toward the
+                     container's scrollable overflow, and the box is otherwise exactly the circles' size, so
+                     `hover:scale-110` poked a pixel past it on both axes and flashed both scrollbars. -->
+                <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
                     <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
                     <!-- Same circles-and-connectors geometry as the real graph, so the row does not re-flow around
                          it when the jobs land. Three is the guess; the count is what we are waiting to learn. -->
