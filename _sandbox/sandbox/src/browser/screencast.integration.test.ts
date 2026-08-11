@@ -1,5 +1,26 @@
+import { existsSync } from "node:fs";
+import type { Browser } from "playwright";
 import { expect, test } from "vitest";
-import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
+import { dispatchInput, readSelection, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
+
+/* THE CHROMIUM ON DISK IS THE HEADED ONE. The image installs the browser the agent's tools and the profile
+ * windows need, and `chromium.launch()` on its own reaches instead for a headless-SHELL build that was never
+ * downloaded — so every test in this file used to skip itself, silently, on a machine that had a perfectly good
+ * browser sitting right there. Naming the executable is the same thing browser-tools.ts tells @playwright/mcp
+ * to do, for the same reason. Absent for real, they still skip: a box with no browser can't answer these. */
+const launch = async (): Promise<Browser | undefined> => {
+    let playwright: typeof import("playwright");
+    try {
+        playwright = await import("playwright");
+    } catch {
+        return undefined; // the package isn't installed
+    }
+    const executablePath = playwright.chromium.executablePath();
+    if (!existsSync(executablePath)) {
+        return undefined; // installed, but the binary isn't on disk
+    }
+    return playwright.chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage"] }).catch(() => undefined);
+};
 
 /* THE STILL HAS TO PHOTOGRAPH WHAT IS ON SCREEN. Everything the screencast does is arranged around one high
  * resolution capture 400ms after the page settles, and that capture takes a CLIP — which CDP measures from the
@@ -34,15 +55,9 @@ const bandPage = `<body style="margin:0">${Array.from(
 ).join("")}</body>`;
 
 test("the settle still photographs the page where it is now, not the top of the document", { timeout: 120_000 }, async () => {
-    let playwright: typeof import("playwright");
-    try {
-        playwright = await import("playwright");
-    } catch {
-        return; // no Chromium on disk — nothing to photograph
-    }
-    const browser = await playwright.chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] }).catch(() => undefined);
+    const browser = await launch();
     if (browser === undefined) {
-        return; // the package is installed but the binary isn't
+        return; // no browser on this box
     }
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
@@ -102,15 +117,9 @@ test("the settle still photographs the page where it is now, not the top of the 
  * The assertion is a COUNT over an interval rather than a look at any one frame, because the bug was never in a
  * frame — every one of them was a fine picture of the right page. It was in there being an endless supply. */
 test("a page where nothing is happening settles into silence", { timeout: 120_000 }, async () => {
-    let playwright: typeof import("playwright");
-    try {
-        playwright = await import("playwright");
-    } catch {
-        return; // no Chromium on disk
-    }
-    const browser = await playwright.chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] }).catch(() => undefined);
+    const browser = await launch();
     if (browser === undefined) {
-        return;
+        return; // no browser on this box
     }
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
@@ -144,15 +153,9 @@ test("a page where nothing is happening settles into silence", { timeout: 120_00
  * person clicked, in one insert rather than as a string of synthetic keystrokes. Worth a real page because the
  * question is whether the FOCUSED element receives it, which is a fact about Chromium rather than about our JSON. */
 test("a text frame lands in whatever field the page has focused", { timeout: 120_000 }, async () => {
-    let playwright: typeof import("playwright");
-    try {
-        playwright = await import("playwright");
-    } catch {
-        return; // no Chromium on disk
-    }
-    const browser = await playwright.chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] }).catch(() => undefined);
+    const browser = await launch();
     if (browser === undefined) {
-        return;
+        return; // no browser on this box
     }
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
@@ -167,6 +170,112 @@ test("a text frame lands in whatever field the page has focused", { timeout: 120
         // And it composes with typing, so a pasted password can still be finished by hand.
         await dispatchInput(session, { type: "text", text: "!" });
         expect(await page.inputValue("#password")).toBe(`${pasted}!`);
+    } finally {
+        await browser.close();
+    }
+});
+
+/* A CHORD HAS TO ARRIVE AS AN EDITING COMMAND, not as a keystroke the page shrugs off.
+ *
+ * Ctrl+A used to be unsendable — the wire carried no modifiers and the key table held no letters — so it fell
+ * through to the app AROUND the picture, where it selected the whole of Intentic instead of the field the
+ * person was looking at. What makes the fix work is not the flag but the SHAPE of the event: Chromium's
+ * renderer derives select-all, cut, undo and the rest from a raw key event's code and virtual key code, and
+ * quietly does nothing at all if the chord arrives carrying text. Only real Chromium can tell those apart,
+ * which is why this is an integration test and not an assertion about the JSON we emitted. */
+test("editing chords land as editing commands in the page", { timeout: 120_000 }, async () => {
+    const browser = await launch();
+    if (browser === undefined) {
+        return; // no browser on this box
+    }
+    try {
+        const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
+        const page = await context.newPage();
+        await page.goto(`data:text/html,${encodeURIComponent(`<input id="a" value="hello world" autofocus><input id="b">`)}`);
+        const session = await context.newCDPSession(page);
+        const selection = async (): Promise<{ start: number | null; end: number | null }> =>
+            page.evaluate(() => {
+                const field = document.querySelector<HTMLInputElement>("#a")!;
+                return { start: field.selectionStart, end: field.selectionEnd };
+            });
+
+        // Select all — the one that sent the user here.
+        await dispatchInput(session, { type: "key", key: "a", ctrl: true });
+        expect(await selection()).toEqual({ start: 0, end: "hello world".length });
+
+        // Cut empties the field, and what it took is really on that browser's clipboard: pasting it into the
+        // second field is the proof, and the round trip a person expects of a cut.
+        await dispatchInput(session, { type: "key", key: "x", ctrl: true });
+        expect(await page.inputValue("#a")).toBe("");
+        await page.focus("#b");
+        await dispatchInput(session, { type: "key", key: "v", ctrl: true });
+        expect(await page.inputValue("#b")).toBe("hello world");
+
+        // Undo, against text typed the way this wire types it.
+        await page.focus("#a");
+        await dispatchInput(session, { type: "text", text: "typed by hand" });
+        await dispatchInput(session, { type: "key", key: "z", ctrl: true });
+        expect(await page.inputValue("#a")).not.toBe("typed by hand");
+
+        /* SHIFT IS A MODIFIER TOO, and its absence was the quieter half of the same bug: the arrow keys were
+         * already forwarded, so Shift+ArrowLeft reached the page — stripped of the Shift, where it moved the
+         * caret instead of extending a selection. Silently doing the wrong thing rather than nothing. */
+        await page.fill("#a", "hello world");
+        await dispatchInput(session, { type: "key", key: "End" });
+        for (let press = 0; press < "world".length; press += 1) {
+            await dispatchInput(session, { type: "key", key: "ArrowLeft", shift: true });
+        }
+        expect(await selection()).toEqual({ start: "hello ".length, end: "hello world".length });
+    } finally {
+        await browser.close();
+    }
+});
+
+/* THE SELECTION HAS TO COME BACK OUT, because the clipboard it was copied to is the sandbox's and the person
+ * is not sitting in the sandbox. Both places it can hide are pinned here: a focused field, whose selection
+ * window.getSelection() cannot see, and an embedded frame — which is not an exotic case but the ordinary one,
+ * since what people copy out of these windows is usually inside a sign-in the site embedded. */
+test("the selection is read back out of a field, and out of an embedded frame", { timeout: 120_000 }, async () => {
+    const browser = await launch();
+    if (browser === undefined) {
+        return; // no browser on this box
+    }
+    try {
+        const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
+        const page = await context.newPage();
+        await page.goto(`data:text/html,${encodeURIComponent(`<input id="code" value="one-time 314159" autofocus><p>page prose</p>`)}`);
+        const session = await context.newCDPSession(page);
+
+        // Nothing selected yet, and an empty answer is an answer — the client must not put stale text on a
+        // clipboard because a keystroke found no selection.
+        expect(await readSelection(page)).toBe("");
+
+        await dispatchInput(session, { type: "key", key: "a", ctrl: true });
+        expect(await readSelection(page)).toBe("one-time 314159");
+
+        // The same page's own prose, selected outside any field: the other half of the read.
+        await page.evaluate(() => {
+            document.querySelector<HTMLInputElement>("#code")!.blur();
+            const range = document.createRange();
+            range.selectNodeContents(document.querySelector("p")!);
+            const selected = window.getSelection()!;
+            selected.removeAllRanges();
+            selected.addRange(range);
+        });
+        expect(await readSelection(page)).toBe("page prose");
+
+        // And inside an embedded frame, where the top document has nothing to report.
+        const embedded = await context.newPage();
+        await embedded.goto(`data:text/html,${encodeURIComponent(`<iframe srcdoc="<p id='inner'>signed in as someone@example.com</p>"></iframe>`)}`);
+        const inner = await embedded.waitForSelector("iframe").then((handle) => handle.contentFrame());
+        await inner!.evaluate(() => {
+            const range = document.createRange();
+            range.selectNodeContents(document.querySelector("#inner")!);
+            const selected = window.getSelection()!;
+            selected.removeAllRanges();
+            selected.addRange(range);
+        });
+        expect(await readSelection(embedded)).toBe("signed in as someone@example.com");
     } finally {
         await browser.close();
     }

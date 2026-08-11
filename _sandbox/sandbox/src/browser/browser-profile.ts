@@ -2,7 +2,15 @@ import { upgradeWebSocket } from "@hono/node-server";
 import type { BrowserContext, Page } from "playwright";
 import { ensureXvfb } from "./display.js";
 import { armPasskeys } from "./passkeys.js";
-import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
+import {
+    dispatchInput,
+    readSelection,
+    startScreencast,
+    VIEW_HEIGHT,
+    VIEW_WIDTH,
+    type Screencast,
+    type ScreencastClientMessage,
+} from "./screencast.js";
 import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
 import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
@@ -244,6 +252,14 @@ export const createBrowserProfileRoute = (services: Services) =>
                               ? page.goBack({ waitUntil: "domcontentloaded" })
                               : page.reload({ waitUntil: "domcontentloaded" });
                     await navigation.catch((err: unknown) => services.logger.warn({ err }, "browser-profile navigation failed"));
+                    return;
+                }
+                if (message.type === "selection") {
+                    // Ctrl+C over the picture: hand back what the page has selected so the client can put it on
+                    // the clipboard of the machine the person is actually sitting at. Answered even when empty,
+                    // because the client is waiting on it before it lets the keystroke go.
+                    const page = view.page();
+                    ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
                     return;
                 }
                 try {

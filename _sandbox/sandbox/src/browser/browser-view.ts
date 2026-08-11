@@ -1,6 +1,14 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { browserSessionContext, browserSessionPage } from "./browser-sessions.js";
-import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencast, type ScreencastClientMessage } from "./screencast.js";
+import {
+    dispatchInput,
+    readSelection,
+    startScreencast,
+    VIEW_HEIGHT,
+    VIEW_WIDTH,
+    type Screencast,
+    type ScreencastClientMessage,
+} from "./screencast.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 
@@ -112,6 +120,14 @@ export const createBrowserViewRoute = (services: Services) =>
                         return;
                     }
                     await screencast?.bind(page, true);
+                    return;
+                }
+                if (message.type === "selection") {
+                    // Ctrl+C over the picture: hand back what the page has selected so the client can put it on
+                    // the clipboard of the machine the person is actually sitting at. Answered even when empty,
+                    // because the client is waiting on it before it lets the keystroke go.
+                    const page = screencast?.page();
+                    ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
                     return;
                 }
                 // Everything left is a pointer or a keystroke, and needs somewhere to land.

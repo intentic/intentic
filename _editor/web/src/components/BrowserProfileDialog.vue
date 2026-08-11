@@ -4,6 +4,7 @@ import { noticeOf } from "../composables/useAsyncAction";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { keyIntent, type KeyFrame } from "../composables/browser/keyIntent";
 import { viewportCoords } from "../composables/browser/viewportCoords";
 import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 
@@ -27,9 +28,10 @@ import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 const props = defineProps<{ visible: boolean; capability: string; label: string; mode: "login" | "browse" }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "done"): void }>();
 
-// Keys forwarded as key events; everything printable rides as an insertText `text` frame instead.
-const SPECIAL_KEYS = new Set(["Enter", "Backspace", "Tab", "Delete", "Escape", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"]);
 const MOVE_THROTTLE_MS = 40;
+// How long a Ctrl+C waits for the remote page to answer with its selection before the keystroke goes on
+// without it. Long enough for a round trip through the tunnel, short enough not to strand the keyboard.
+const SELECTION_TIMEOUT_MS = 1500;
 
 const frame = ref<string>();
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
@@ -44,6 +46,9 @@ const address = ref("");
 const editingAddress = ref(false);
 let socket: WebSocket | undefined;
 let lastMove = 0;
+// The Ctrl+C in flight, waiting on the page's answer. One at a time: a second press before the first came back
+// is the same question asked twice.
+let pendingSelection: ((text: string) => void) | undefined;
 
 const browsing = computed(() => props.mode === "browse");
 
@@ -54,6 +59,9 @@ const sendMsg = (message: object): void => {
 };
 
 const close = (): void => {
+    // A copy waiting on a socket that is going away answers empty rather than hanging until its timeout.
+    pendingSelection?.("");
+    pendingSelection = undefined;
     socket?.close();
     socket = undefined;
 };
@@ -81,6 +89,7 @@ const connect = async (): Promise<void> => {
             height?: number;
             message?: string;
             url?: string;
+            text?: string;
         };
         // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles — so the
         // frame says which it is rather than the client assuming (screencast.ts).
@@ -95,6 +104,9 @@ const connect = async (): Promise<void> => {
             if (!editingAddress.value) {
                 address.value = message.url;
             }
+        } else if (message.type === "selection") {
+            pendingSelection?.(message.text ?? "");
+            pendingSelection = undefined;
         } else if (message.type === "saved") {
             emit("done");
             close();
@@ -145,25 +157,55 @@ const onWheel = (event: WheelEvent): void => {
     const { x, y } = coords(event);
     sendMsg({ type: "mouse", action: "wheel", x, y, deltaX: event.deltaX, deltaY: event.deltaY });
 };
+// Ask the page what it has selected. Answered by the daemon's `selection` frame; the timeout is what keeps a
+// slow tunnel from stranding the keystroke that asked.
+const askSelection = (): Promise<string> =>
+    new Promise((resolve) => {
+        pendingSelection?.("");
+        pendingSelection = resolve;
+        sendMsg({ type: "selection" });
+        window.setTimeout(() => {
+            if (pendingSelection === resolve) {
+                pendingSelection = undefined;
+                resolve("");
+            }
+        }, SELECTION_TIMEOUT_MS);
+    });
+
+/* COPY AND CUT, ACROSS THE GAP. Copying inside that Chromium puts text on the SANDBOX's clipboard, which the
+ * user's machine can't read — so the selection is fetched and written to their own clipboard here. The chord
+ * still goes to the page afterwards (its own handlers may care), and only afterwards: a cut that ran first
+ * would have deleted the very text being read. */
+const copyOut = async (chord: KeyFrame): Promise<void> => {
+    const text = await askSelection();
+    if (text !== "") {
+        // Unavailable outside a secure context, and refusable — a failed write must not eat the keystroke.
+        await navigator.clipboard?.writeText(text).catch(() => undefined);
+    }
+    sendMsg(chord);
+};
+
+// Which half of the keyboard this keystroke belongs to is keyIntent's decision — see that module for why a
+// paste is left to the host and a select-all is not.
 const onKeyDown = (event: KeyboardEvent): void => {
-    // Let real shortcuts (copy/paste/devtools) through; we only forward plain typing + a few control keys.
-    // Paste is the reason that matters here — see onPaste.
-    if (event.ctrlKey || event.metaKey || event.altKey) {
+    const intent = keyIntent(event);
+    if (intent.kind === "host") {
         return;
     }
-    if (event.key.length === 1) {
-        sendMsg({ type: "text", text: event.key });
-        event.preventDefault();
-    } else if (SPECIAL_KEYS.has(event.key)) {
-        sendMsg({ type: "key", key: event.key });
-        event.preventDefault();
+    event.preventDefault();
+    if (intent.kind === "text") {
+        sendMsg({ type: "text", text: intent.text });
+    } else if (intent.kind === "key") {
+        sendMsg(intent.frame);
+    } else {
+        void copyOut(intent.frame);
     }
 };
 
 // A PASSWORD IS PASTED, NOT TYPED, which makes this the one input a sign-in cannot do without. The Chromium
 // being screencast has its own clipboard inside the sandbox and nothing on the user's machine can write to it,
-// so the chord is left to the host browser (onKeyDown above) and the text it hands us rides the same
-// insertText path as a keystroke. Same rule in useBrowserView for the agent's browser.
+// so the chord is left to the host browser (keyIntent's one deliberate exemption) and the text it hands us
+// rides the same insertText path as a keystroke. Same rule in useBrowserView for the agent's browser.
 const onPaste = (event: ClipboardEvent): void => {
     const text = event.clipboardData?.getData("text/plain");
     if (text === undefined || text === "") {

@@ -1,4 +1,5 @@
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
+import { keyIntent, type KeyFrame } from "./keyIntent";
 import { viewportCoords } from "./viewportCoords";
 import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 
@@ -28,9 +29,9 @@ export const VIEW_WIDTH = 1280;
 export const VIEW_HEIGHT = 800;
 // Pointer moves are throttled to roughly a frame — CDP dispatches each one synchronously in the page.
 const MOVE_THROTTLE_MS = 40;
-// Keys forwarded as key events; everything printable rides as an insertText `text` frame instead (the daemon's
-// SPECIAL_KEYS is the other half of this list).
-const SPECIAL_KEYS = new Set([`Enter`, `Backspace`, `Tab`, `Delete`, `Escape`, `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Home`, `End`]);
+// How long a Ctrl+C waits for the remote page to answer with its selection before the keystroke goes on
+// without it. Long enough for a round trip through the tunnel, short enough not to strand the keyboard.
+const SELECTION_TIMEOUT_MS = 1500;
 
 export interface BrowserView {
     // The current frame as a data URL. Undefined until the first one lands — the view shows `status` instead.
@@ -53,7 +54,7 @@ export interface BrowserView {
     readonly onKeyDown: (event: KeyboardEvent) => void;
     // THE ONE THING TYPING CANNOT DO. The remote Chromium has a clipboard of its own, inside the sandbox, that
     // nothing on the user's machine can write to — so Ctrl/Cmd+V arriving at the page would paste whatever that
-    // browser last copied, not what the user meant. onKeyDown deliberately lets the chord through to the host
+    // browser last copied, not what the user meant. keyIntent deliberately lets the chord through to the host
     // browser instead, which turns it into a `paste` event carrying the real clipboard, and the text travels
     // down the same insertText path a keystroke does.
     readonly onPaste: (event: ClipboardEvent) => void;
@@ -77,11 +78,42 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     let retryDelay = RETRY_MS;
     let reconnect: number | undefined;
     let closing = false;
+    // The Ctrl+C in flight, waiting on the page's answer. One at a time: a second press before the first came
+    // back is the same question asked twice.
+    let pendingSelection: ((text: string) => void) | undefined;
 
     const send = (message: object): void => {
         if (socket.value?.readyState === WebSocket.OPEN) {
             socket.value.send(JSON.stringify(message));
         }
+    };
+
+    // Ask the page what it has selected. Answered by the daemon's `selection` frame; the timeout is what keeps a
+    // slow tunnel from stranding the keystroke that asked.
+    const askSelection = (): Promise<string> =>
+        new Promise((resolve) => {
+            pendingSelection?.(``);
+            pendingSelection = resolve;
+            send({ type: `selection` });
+            window.setTimeout(() => {
+                if (pendingSelection === resolve) {
+                    pendingSelection = undefined;
+                    resolve(``);
+                }
+            }, SELECTION_TIMEOUT_MS);
+        });
+
+    /* COPY AND CUT, ACROSS THE GAP. Copying inside the agent's Chromium puts text on the SANDBOX's clipboard,
+     * which the user's machine can't read — so the selection is fetched and written to their own clipboard here.
+     * The chord still goes to the page afterwards (its own handlers may care), and only afterwards: a cut that
+     * ran first would have deleted the very text being read. */
+    const copyOut = async (chord: KeyFrame): Promise<void> => {
+        const text = await askSelection();
+        if (text !== ``) {
+            // Unavailable outside a secure context, and refusable — a failed write must not eat the keystroke.
+            await navigator.clipboard?.writeText(text).catch(() => undefined);
+        }
+        send(chord);
     };
 
     /* NOBODY LOOKING, NOTHING SENT. A browsing agent paints constantly, and a view left open on a background tab
@@ -138,7 +170,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         });
         ws.addEventListener(`message`, (event) => {
             lastFrameAt = Date.now();
-            let message: { type?: string; data?: string; format?: string; message?: string; pageId?: string };
+            let message: { type?: string; data?: string; format?: string; message?: string; pageId?: string; text?: string };
             try {
                 message = JSON.parse(String(event.data)) as typeof message;
             } catch {
@@ -151,6 +183,11 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             }
             if (message.type === `ready`) {
                 status.value = frame.value === undefined ? `Waiting for the first frame…` : undefined;
+                return;
+            }
+            if (message.type === `selection`) {
+                pendingSelection?.(message.text ?? ``);
+                pendingSelection = undefined;
                 return;
             }
             if (message.type === `gone`) {
@@ -182,6 +219,9 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     const teardown = (): void => {
         window.clearTimeout(reconnect);
+        // A copy waiting on a socket that is going away answers empty rather than hanging until its timeout.
+        pendingSelection?.(``);
+        pendingSelection = undefined;
         socket.value?.close();
         socket.value = undefined;
     };
@@ -250,18 +290,24 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 deltaY: event.deltaY,
             });
         },
+        // Which half of the keyboard a keystroke belongs to is keyIntent's decision — see that module for why a
+        // paste is left to the host and a select-all is not. Nothing at all happens unless the user took the
+        // wheel: watching must not put keys into the page the agent is working in.
         onKeyDown: (event) => {
-            // Let real shortcuts (copy/paste/devtools, and the shell's own chords) through; only plain typing
-            // and a few control keys are the page's.
-            if (!driving.value || event.ctrlKey || event.metaKey || event.altKey) {
+            if (!driving.value) {
                 return;
             }
-            if (event.key.length === 1) {
-                send({ type: `text`, text: event.key });
-                event.preventDefault();
-            } else if (SPECIAL_KEYS.has(event.key)) {
-                send({ type: `key`, key: event.key });
-                event.preventDefault();
+            const intent = keyIntent(event);
+            if (intent.kind === `host`) {
+                return;
+            }
+            event.preventDefault();
+            if (intent.kind === `text`) {
+                send({ type: `text`, text: intent.text });
+            } else if (intent.kind === `key`) {
+                send(intent.frame);
+            } else {
+                void copyOut(intent.frame);
             }
         },
         onPaste: (event) => {

@@ -13,18 +13,36 @@ vi.mock(`../sandbox/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.te
 
 const { useBrowserView } = await import(`./useBrowserView`);
 
-// A socket that records what the view puts on the wire. Open from the start: this suite is about the handlers,
-// not about the connect dance.
+// A socket that records what the view puts on the wire, and can answer back. Open from the start: this suite is
+// about the handlers, not about the connect dance.
 class FakeSocket {
     static readonly OPEN = 1;
     readonly readyState = FakeSocket.OPEN;
     readonly sent: string[] = [];
+    private readonly listeners = new Map<string, (event: { data: string }) => void>();
     send(data: string): void {
         this.sent.push(data);
     }
     close(): void {}
-    addEventListener(): void {}
+    addEventListener(type: string, handler: (event: { data: string }) => void): void {
+        this.listeners.set(type, handler);
+    }
+    // A frame from the daemon, delivered the way the real socket delivers one.
+    deliver(message: object): void {
+        this.listeners.get(`message`)?.({ data: JSON.stringify(message) });
+    }
 }
+
+// A keydown as the host browser reports it — only the fields the view reads.
+const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): KeyboardEvent =>
+    ({
+        key,
+        ctrlKey: held.ctrl === true,
+        metaKey: false,
+        shiftKey: held.shift === true,
+        altKey: false,
+        preventDefault: vi.fn(),
+    }) as unknown as KeyboardEvent;
 
 // A paste as the host browser delivers it — the clipboard answers by MIME type, and only text is asked for.
 const pasteOf = (text: string): ClipboardEvent =>
@@ -33,7 +51,11 @@ const pasteOf = (text: string): ClipboardEvent =>
         preventDefault: () => {},
     }) as unknown as ClipboardEvent;
 
-const connected = async (): Promise<{ view: ReturnType<typeof useBrowserView>; wire: () => unknown[] }> => {
+const connected = async (): Promise<{
+    view: ReturnType<typeof useBrowserView>;
+    wire: () => unknown[];
+    socket: () => FakeSocket;
+}> => {
     const sockets: FakeSocket[] = [];
     vi.stubGlobal(
         `WebSocket`,
@@ -47,7 +69,7 @@ const connected = async (): Promise<{ view: ReturnType<typeof useBrowserView>; w
     const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
     // connect() awaits the ticket before it constructs anything.
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
-    return { view, wire: () => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown) };
+    return { view, wire: () => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown), socket: () => sockets[0]! };
 };
 
 test("a paste from the user's own machine arrives as text the remote page can receive", async () => {
@@ -76,4 +98,60 @@ test("a clipboard with no text in it sends no keystroke at all", async () => {
     // An image or a file: real paste events, with nothing this wire can carry.
     view.onPaste(pasteOf(``));
     expect(wire().filter((message) => (message as { type?: string }).type === `text`)).toHaveLength(0);
+});
+
+/* THE CHORD THAT USED TO ESCAPE. Ctrl+A reached the app AROUND the picture, where it selected the whole of
+ * Intentic rather than the field being looked at — the giveaway that the view had the user's attention and not
+ * their keyboard. Both halves are asserted: it goes on the wire WITH its modifier, and the host never sees it. */
+test("select-all reaches the page instead of the app around it", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+
+    const chord = press(`a`, { ctrl: true });
+    view.onKeyDown(chord);
+    expect(wire()).toContainEqual({ type: `key`, key: `a`, ctrl: true });
+    expect(chord.preventDefault).toHaveBeenCalled();
+});
+
+test("nothing is typed into a browser the user is only watching", async () => {
+    const { view, wire } = await connected();
+    const chord = press(`a`, { ctrl: true });
+    view.onKeyDown(chord);
+    expect(wire()).toHaveLength(0);
+    // And it stays the host's, so a watcher's own select-all still works the way it always did.
+    expect(chord.preventDefault).not.toHaveBeenCalled();
+});
+
+/* COPY HAS TO CROSS THE GAP. The remote Chromium's clipboard lives in the sandbox, so a copy that only reached
+ * it is one the user can never paste anywhere. The ORDER is the load-bearing part: the selection is read back
+ * before the chord is allowed through, because the same path carries Ctrl+X — which would otherwise delete the
+ * text on its way to being read. */
+test("copying puts the remote page's selection on the user's own clipboard, then lets the chord through", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
+    const { view, wire, socket } = await connected();
+    view.driving.value = true;
+
+    view.onKeyDown(press(`x`, { ctrl: true }));
+    expect(wire()).toContainEqual({ type: `selection` });
+    // Nothing has been cut yet — the page is still holding the text this is about to read.
+    expect(wire()).not.toContainEqual({ type: `key`, key: `x`, ctrl: true });
+
+    socket().deliver({ type: `selection`, text: `one-time 314159` });
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`one-time 314159`));
+    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `x`, ctrl: true }));
+});
+
+// A copy over a page with nothing selected must not leave stale text on the clipboard — and must still let the
+// page have its chord, in case the site binds Ctrl+C itself.
+test("copying an empty selection writes nothing", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
+    const { view, wire, socket } = await connected();
+    view.driving.value = true;
+
+    view.onKeyDown(press(`c`, { ctrl: true }));
+    socket().deliver({ type: `selection`, text: `` });
+    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `c`, ctrl: true }));
+    expect(writeText).not.toHaveBeenCalled();
 });

@@ -49,7 +49,16 @@ export type ScreencastClientMessage =
           readonly deltaY?: number;
       }
     | { readonly type: "text"; readonly text: string }
-    | { readonly type: "key"; readonly key: string }
+    /* A KEYSTROKE, AND THE CHORD IT MAY BE PART OF. Plain typing never comes through here — it rides `text`
+     * above — so a key frame is either one of the control keys a form needs or a shortcut the owner pressed:
+     * Ctrl+A, Ctrl+Z, Shift+End. There is no `meta`: the Chromium at the far end is a Linux one, where Cmd
+     * means nothing, so a Mac's ⌘ arrives here already translated into `ctrl` by the client that read it. */
+    | { readonly type: "key"; readonly key: string; readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean }
+    /* WHAT THE OWNER JUST SELECTED, asked for so it can be put on their own clipboard — answered by the routes
+     * with a `selection` frame going the other way. Ctrl+C inside this picture would otherwise copy to the
+     * SANDBOX's clipboard, which nothing on their machine can read: the exact mirror of the paste problem the
+     * clients solve by bridging their own clipboard in as a `text` frame. */
+    | { readonly type: "selection" }
     // Stream a specific page instead of whichever the agent opened last — the browser view's tab strip. Pins,
     // so the agent opening a tab no longer moves the picture out from under the user (see `pinned` below).
     | { readonly type: "bind"; readonly pageId: string }
@@ -83,6 +92,41 @@ const SPECIAL_KEYS: Record<string, { code: string; vk: number; text?: string }> 
     End: { code: "End", vk: 35 },
 };
 
+// CDP's Input domain packs the held modifiers into one integer. Meta is 4 and deliberately never set — see the
+// note on the `key` frame.
+const CDP_ALT = 1;
+const CDP_CTRL = 2;
+const CDP_SHIFT = 8;
+
+/* WHY A CHORD HAS TO ARRIVE AS A REAL KEY EVENT, when ordinary typing does not.
+ *
+ * Select-all, copy, cut, undo, bold — Chromium calls these editing commands, and the renderer derives them
+ * ITSELF from a key event's `code` and virtual key code, not from the character it would have produced. So the
+ * table above holds no letters (a letter is text, and text is faster and layout-proof through insertText) while
+ * a chord needs one synthesized: Ctrl+A is the KeyA key with the control bit set, and nothing else will do.
+ *
+ * The rest of the shape is Playwright's own keyboard, copied on purpose — the same `rawKeyDown`, the same
+ * fields — because that is the shape Chromium is known to read as a command rather than as a lost keypress. */
+interface KeyDescriptor {
+    readonly key: string;
+    readonly code: string;
+    readonly vk: number;
+    readonly text?: string;
+}
+
+const keyDescriptor = (message: { readonly key: string; readonly shift?: boolean }): KeyDescriptor | undefined => {
+    if (/^[a-z]$/i.test(message.key)) {
+        const upper = message.key.toUpperCase();
+        // Shift decides the CHARACTER the page reports (Ctrl+Shift+Z redoes; its key is "Z"), never the code.
+        return { key: message.shift === true ? upper : message.key.toLowerCase(), code: `Key${upper}`, vk: upper.charCodeAt(0) };
+    }
+    const spec = SPECIAL_KEYS[message.key];
+    if (spec === undefined) {
+        return undefined;
+    }
+    return { key: message.key, code: spec.code, vk: spec.vk, ...(spec.text !== undefined ? { text: spec.text } : {}) };
+};
+
 // Forward one input frame to the page the CDP session is attached to. `bind`/`pause`/`resume`/`done`/`ping` are
 // conversation-level and belong to the route; everything else is a pointer or a keystroke and lands here.
 export const dispatchInput = async (session: CDPSession, message: ScreencastClientMessage): Promise<void> => {
@@ -112,19 +156,56 @@ export const dispatchInput = async (session: CDPSession, message: ScreencastClie
         return;
     }
     if (message.type === "key") {
-        const spec = SPECIAL_KEYS[message.key];
-        if (spec === undefined) {
+        const descriptor = keyDescriptor(message);
+        if (descriptor === undefined) {
             return;
         }
+        const modifiers = (message.alt === true ? CDP_ALT : 0) | (message.ctrl === true ? CDP_CTRL : 0) | (message.shift === true ? CDP_SHIFT : 0);
+        // Shift is the modifier that still produces a character; Ctrl and Alt turn the keystroke into a command,
+        // and Chromium only reads it as one when the event carries NO text — hence rawKeyDown for every chord.
+        const text = (modifiers & (CDP_CTRL | CDP_ALT)) !== 0 ? undefined : descriptor.text;
+        const stroke = { modifiers, key: descriptor.key, code: descriptor.code, windowsVirtualKeyCode: descriptor.vk };
         await session.send("Input.dispatchKeyEvent", {
-            type: spec.text !== undefined ? "keyDown" : "rawKeyDown",
-            key: message.key,
-            code: spec.code,
-            windowsVirtualKeyCode: spec.vk,
-            ...(spec.text !== undefined ? { text: spec.text } : {}),
+            ...stroke,
+            type: text !== undefined ? "keyDown" : "rawKeyDown",
+            ...(text !== undefined ? { text } : {}),
         });
-        await session.send("Input.dispatchKeyEvent", { type: "keyUp", key: message.key, code: spec.code, windowsVirtualKeyCode: spec.vk });
+        await session.send("Input.dispatchKeyEvent", { ...stroke, type: "keyUp" });
     }
+};
+
+/* THE SELECTION, READ OUT OF WHATEVER PART OF THE PAGE HOLDS IT.
+ *
+ * The far half of the `selection` frame: the owner pressed Ctrl+C over the picture, and the text has to come
+ * back here to reach the clipboard on their own machine. Two places have to be asked, and both matter:
+ *
+ *   - EVERY FRAME, not just the top document. What a person copies out of one of these windows is most often
+ *     inside an embedded sign-in — the account name Google shows in its iframe — and a top-frame-only read
+ *     would hand back an empty string exactly there.
+ *   - THE FOCUSED FIELD, whose selection window.getSelection() cannot see. An <input> keeps its own, which is
+ *     where a one-time code or an email address being copied out of a form actually lives.
+ *
+ * First non-empty answer wins, and a frame that detached mid-read is skipped rather than fatal: the owner is
+ * mid-keystroke, and a page that navigated under it has no selection to report anyway. */
+export const readSelection = async (page: Page): Promise<string> => {
+    for (const frame of page.frames()) {
+        const selected = await frame
+            .evaluate(() => {
+                const active = document.activeElement;
+                if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+                    const { selectionStart: start, selectionEnd: end } = active;
+                    if (typeof start === "number" && typeof end === "number" && start !== end) {
+                        return active.value.slice(start, end);
+                    }
+                }
+                return window.getSelection()?.toString() ?? "";
+            })
+            .catch(() => "");
+        if (selected !== "") {
+            return selected;
+        }
+    }
+    return "";
 };
 
 // A live view of ONE browser context: the CDP session currently streaming, rebound as pages come and go.
