@@ -1,18 +1,8 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import type { RepoSync } from "../agents/sync.js";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
-import {
-    LITERAL_SLASH_NOTE,
-    preambleNotes,
-    splitTurnNotes,
-    stripTurnPreamble,
-    SYNC_NOTE_HEADER,
-    syncNote,
-    unwrapStoredPrompt,
-    withTurnPreamble,
-} from "./turn-preamble.js";
+import { LITERAL_SLASH_NOTE, preambleNotes, stripTurnPreamble, unwrapStoredPrompt, withTurnPreamble } from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${DELEGATION_NOTE_HEADER}\n\nThe user's connected agent accounts are runnable from your shell.`;
@@ -126,12 +116,6 @@ test("the dependency notice's two halves come back as two rows", () => {
     ]);
 });
 
-// The mid-turn rebase is handed the note directly rather than a built prompt — there is no user message for it
-// to sit in front of — so the splitter has to title a bare note on its own.
-test("a bare note titles itself, which is what the mid-turn rebase discloses", () => {
-    expect(splitTurnNotes(syncNote([behind()], "parked") ?? "")).toMatchObject([{ title: "Your workspace moved on underneath this agent" }]);
-});
-
 // The disclosure obeys the same anchor the strip does. A user who quoted the notice themselves is not owed a
 // row claiming the daemon sent it, and a header with no separator behind it is a boundary nobody can locate.
 test("the split stays silent exactly where the strip declines to cut", () => {
@@ -160,76 +144,4 @@ test("a re-run unwraps the same whichever way its note and the preamble are nest
 // back exactly what it was given rather than finding structure that is not there.
 test("an ordinary prompt unwraps to itself", () => {
     expect(unwrapStoredPrompt("fix the bug")).toEqual({ text: "fix the bug", notes: [] });
-});
-
-const behind = (overrides: Partial<RepoSync> = {}): RepoSync => ({
-    repo: "root",
-    onto: "abc1234",
-    commits: 3,
-    moved: ["src/app.ts", "src/other.ts"],
-    overlap: ["src/app.ts"],
-    ...overrides,
-});
-
-test("an up-to-date branch has nothing to say", () => {
-    expect(syncNote([], "start")).toBeUndefined();
-});
-
-// The overlap is the note's reason to exist: what the agent had also edited is the re-check instruction, and
-// the rest of main's movement is a count so it doesn't drown that out.
-test("the sync note names what the agent had also changed and counts the rest", () => {
-    const text = syncNote([behind()], "start") ?? "";
-
-    expect(text.startsWith(SYNC_NOTE_HEADER)).toBe(true);
-    expect(text).toContain("3 commits now sit underneath your work");
-    expect(text).toContain("- src/app.ts");
-    expect(text).not.toContain("- src/other.ts");
-    expect(text).toContain("1 other file moved too");
-    expect(text).toContain("does not mean the result still builds");
-});
-
-// A nested repo's paths are ambiguous on their own — the same qualification the review rows use.
-test("a nested repo's paths carry the repo that disambiguates them", () => {
-    expect(syncNote([behind({ repo: "intentic", overlap: ["src/app.ts"] })], "start")).toContain("- intentic/src/app.ts");
-});
-
-test("a rolled-back rebase tells the agent the land will refuse, and why it is not its doing", () => {
-    const text = syncNote([behind({ blocked: true })], "start") ?? "";
-
-    expect(text).toContain("would NOT apply in root");
-    expect(text).toContain("still on its old base");
-    expect(text).toContain("not something you did");
-    // Nothing moved, so nothing claims to have been replayed.
-    expect(text).not.toContain("now sit underneath your work");
-});
-
-test("a composition can be half synced and half blocked, and says both", () => {
-    const text = syncNote([behind(), behind({ repo: "intentic", blocked: true, commits: 2 })], "start") ?? "";
-
-    expect(text).toContain("3 commits now sit underneath your work");
-    expect(text).toContain("would NOT apply in intentic");
-});
-
-/* The parked note addresses an agent whose reads are MINUTES old rather than turns old, so the instruction is
- * the sharper one: what you read before you asked will now be rejected as a stale anchor. Same three facts,
- * different standing — a note that told a mid-turn agent to "check what you remember about this tree" would be
- * describing the wrong problem. */
-test("the note taken while parked on a card says the reads just went stale, not that memory might be", () => {
-    const text = syncNote([behind()], "parked") ?? "";
-
-    expect(text).toContain("while you were waiting for their answer");
-    expect(text).toContain("just rebased");
-    expect(text).toContain("stale read");
-    expect(text).toContain("REJECTED");
-    // The overlap instruction is the note's point at either moment, so it survives the change of address.
-    expect(text).toContain("- src/app.ts");
-});
-
-// Both moments carry the same three facts; only the sentence that places them in time differs.
-test("either moment reports the same movement, blocks and counts", () => {
-    const parked = syncNote([behind(), behind({ repo: "intentic", blocked: true, commits: 2 })], "parked") ?? "";
-
-    expect(parked).toContain("3 commits now sit underneath your work");
-    expect(parked).toContain("would NOT apply in intentic");
-    expect(parked).toContain("1 other file moved too");
 });

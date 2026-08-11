@@ -30,7 +30,7 @@ import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
-import type { AgentRequest, ParkedSync } from "./agent.js";
+import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -113,9 +113,6 @@ export interface TurnContext {
     // The workspace root as the AGENT sees it — what a session id is looked up against.
     readonly effectiveCwd: string;
     readonly cliEnv: Record<string, string>;
-    // What the pre-turn rebase moved under this branch, already written out (turn-preamble.ts syncNote).
-    // Undefined on a main-tree turn and on the ordinary isolated turn whose branch was already up to date.
-    readonly syncNote: string | undefined;
     // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
     // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
@@ -135,7 +132,7 @@ export interface TurnContext {
      * Harness-only, like steering and for the same reason: the cards that park a turn long enough for the
      * main line to move are the harness's own (the `ask` tool, the plan gate). A native codex/grok/ACP turn
      * has no seam to call it from, so handing it one would be a field nothing reads. */
-    readonly resync?: () => Promise<ParkedSync | undefined>;
+    readonly resync?: () => Promise<AgentEvent | undefined>;
 }
 
 /* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another.
@@ -298,7 +295,6 @@ const honoured = (
     const isolated = context.localCwd !== services.workspace.root;
     const notes = [
         ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
-        ...(isolated && context.syncNote !== undefined ? [context.syncNote] : []),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.
          *

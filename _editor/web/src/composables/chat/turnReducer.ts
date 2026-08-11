@@ -512,19 +512,15 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `preamble`:
             /* WHAT THE DAEMON PUT IN FRONT OF THE MODEL, as one collapsed row carrying the exact words.
              *
-             * Two placements, because there are two moments. The ordinary one went in front of the message the
-             * user typed, so it belongs TO that message — hung off the user bubble, where someone re-reading
-             * their own prompt finds it, and where the daemon's record keeps it for a tab that reopens tomorrow.
-             * A mid-turn note (the rebase taken while a card sat parked) was added to no message of theirs, so
-             * it reads where it happened: appended under the answer that triggered it.
+             * It went in front of the message the user typed, so it belongs TO that message — hung off the user
+             * bubble, where someone re-reading their own prompt finds it, and where the daemon's record keeps it
+             * for a tab that reopens tomorrow. There is no second placement: nothing is injected into a running
+             * turn any more (the mid-turn rebase was the only one, and it is silent now).
              *
              * A frame with nothing in it is not a row. The daemon sends only notes it actually injected, but a
              * turn that injected none must not draw an empty disclosure inviting a click on nothing. */
             if (event.notes.length === 0) {
                 return step(state);
-            }
-            if (event.duringTurn === true) {
-                return step(appendNotice(state, ``, { notes: event.notes }));
             }
             return step(mapMessage(state, context.userMessageId, (message) => ({ ...message, notes: event.notes })));
         case `compact`:

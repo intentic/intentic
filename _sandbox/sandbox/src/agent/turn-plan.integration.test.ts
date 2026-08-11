@@ -62,7 +62,6 @@ const contextIn = (root: string, localCwd = root): TurnContext => ({
     localCwd,
     effectiveCwd: localCwd,
     cliEnv: {},
-    syncNote: undefined,
     steering: undefined,
 });
 

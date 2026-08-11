@@ -35,11 +35,12 @@ import type { AgentWorktrees } from "./worktrees.js";
  *     lands in this conversation's own worktree and its own refs/heads/agent/<id>.
  *
  * The one thing it cannot promise is that the result still WORKS: a rebase that applies cleanly line-by-line
- * can still leave the agent calling something main just renamed. That is why the outcome is reported rather
- * than swallowed — the turn tells the agent what moved under it (agent/turn-preamble.ts) and the transcript
- * tells the human (the `worktree` frame). Announce, don't ask: at the moment the user is answering their
- * agent's question they have nothing to decide this with, and the alternative to rebasing is not "stay safe",
- * it is "conflict later", which interrupts them harder.
+ * can still leave the agent calling something main just renamed. The HUMAN is told (the `worktree` frame) and
+ * the AGENT is not — telling it only ever bought a verification sweep that came back green, and the case the
+ * warning was written for is caught by the land at the end of the turn instead (agent/turn-preamble.ts has the
+ * whole argument). Announce, don't ask: at the moment the user is answering their agent's question they have
+ * nothing to decide this with, and the alternative to rebasing is not "stay safe", it is "conflict later",
+ * which interrupts them harder.
  *
  * NO REPO LOCK, on purpose — the same call worktrees.ts's linkComposition makes and for the same reason. The
  * lock guards a repo's shared worktree ADMIN area and the main index; this reads main's HEAD (a ref) and writes

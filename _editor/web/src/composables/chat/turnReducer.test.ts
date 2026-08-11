@@ -426,7 +426,7 @@ describe(`effects`, () => {
      * these notes; this frame carries every note's exact text, and the two are deliberately both present — a
      * summary that reads well and the words behind it, rather than a summary standing in for them. */
     it(`hangs the turn's notes off the message they were added to`, () => {
-        const notes = [{ title: `Your workspace moved on underneath this agent`, text: `## Your branch moved onto newer main\n\n4 commits.` }];
+        const notes = [{ title: `Dependencies are behind`, text: `## Dependencies are behind\n\nRun \`pnpm install\` in intentic.` }];
         const { state, effects } = run(started(), { kind: `preamble`, notes }, { kind: `delta`, text: `on it` });
 
         // Not a transcript row of its own: it belongs to the prompt, and a row per preamble would put the
@@ -437,17 +437,6 @@ describe(`effects`, () => {
         ]);
         expect(settled(state).messages[0]?.notes).toEqual(notes);
         expect(effects).toEqual([]);
-    });
-
-    // A note injected into a RUNNING turn was added to no message of theirs, so it reads where it happened —
-    // under the answer that triggered it — rather than being back-dated onto the prompt.
-    it(`lands a mid-turn note where it happened, not on the prompt`, () => {
-        const notes = [{ title: `Your workspace moved on underneath this agent`, text: `## Your branch moved onto newer main\n\n2 commits.` }];
-        const { state } = run(started(), { kind: `delta`, text: `working` }, { kind: `preamble`, notes, duringTurn: true });
-
-        expect(settled(state).messages.map((message) => message.role)).toEqual([`user`, `assistant`, `notice`]);
-        expect(settled(state).messages[0]?.notes).toBeUndefined();
-        expect(settled(state).messages[2]?.notes).toEqual(notes);
     });
 
     // A turn that was told nothing must not draw a disclosure inviting a click on an empty list.

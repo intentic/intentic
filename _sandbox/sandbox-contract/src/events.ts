@@ -291,13 +291,11 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * `title` is the note's own opening header, which is what the stripper already anchors on — so the two
      * cannot drift, and a note nobody thought to title cannot reach the wire unlabelled.
      *
-     * `duringTurn` separates the two moments a turn is told something, because they belong in different places
-     * on screen. Absent is the ordinary one: the notes went in front of the user's own message before the turn
-     * started, so they hang off that message — and are stored on it, which is how a reopened tab still has them.
-     * Set means the turn was already running when this arrived (the rebase taken while a question or a plan sat
-     * waiting for an answer), so it reads where it happened, under the answer that triggered it, and is drawn by
-     * the client alone like every other mid-turn notice. */
-    z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema), duringTurn: z.boolean().optional() }),
+     * ONE MOMENT, always: the notes went in front of the user's own message before the turn started, so they hang
+     * off that message and are stored on it, which is how a reopened tab still has them. Nothing is injected into
+     * a RUNNING turn — the rebase taken while a card sat waiting was the only thing that ever was, and it no
+     * longer says anything to the model at all (agent/turn-preamble.ts). */
+    z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema) }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the

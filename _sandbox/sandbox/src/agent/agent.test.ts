@@ -457,19 +457,11 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
  * a tree it planned from. The route owns the git; these cases own WHEN it is asked for, which is the part that
  * can quietly go wrong: fire on a rejection and the daemon rewrites a branch whose turn the user just stopped;
  * fire under a running command and the ground moves beneath a build nobody is watching. */
-const parkedSyncFrame = { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } };
-const parkedSyncNote = "## Your branch moved onto newer main\n\nmoved under you";
-// Both frames the route hands back: the summary line the reader gets, and the note itself so the words the
-// model is about to act on are reachable rather than merely paraphrased.
-const parkedSync = {
-    frames: [
-        parkedSyncFrame,
-        { kind: "preamble" as const, notes: [{ title: "Your workspace moved on underneath this agent", text: parkedSyncNote }], duringTurn: true },
-    ],
-    note: parkedSyncNote,
-};
+// The one thing the route hands back: the summary line the reader gets. The model is told nothing — a rebase it
+// hears about is a rebase it goes and verifies, and a clean one never had anything to find (turn-preamble.ts).
+const parkedSync = { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } };
 
-test("an approved plan rebases the branch, announces it, and hands the agent the note", async () => {
+test("an approved plan rebases the branch and announces it to the transcript alone", async () => {
     withoutTmux();
     const steering = new SteeringQueue();
     let calls = 0;
@@ -488,24 +480,12 @@ test("an approved plan rebases the branch, announces it, and hands the agent the
 
     expect(calls).toBe(1);
     // The transcript hears it where it happened — after the card it settles, not at the top of the turn.
-    expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSyncFrame]);
+    expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSync]);
     expect(frames.findIndex((frame) => frame.kind === "worktree")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "resolved"));
-    // And the reader gets the same words the model does: what the branch was told, verbatim, marked as
-    // mid-turn so it reads under the card rather than being back-dated onto the prompt.
-    expect(frames.filter((frame) => frame.kind === "preamble")).toEqual([
-        { kind: "preamble", notes: [{ title: "Your workspace moved on underneath this agent", text: parkedSyncNote }], duringTurn: true },
-    ]);
-    // `allow` carries a decision and no sentence, so the model hears it as an injected message — wrapped as a
-    // preamble over an empty prompt, which is what makes a restored transcript drop it instead of redrawing it
-    // as the user's own words.
-    const steered: string[] = [];
-    steering.close();
-    for await (const message of steering) {
-        steered.push(message);
-    }
-    expect(steered).toHaveLength(1);
-    expect(steered[0]).toContain("## Your branch moved onto newer main");
-    expect(steered[0]?.endsWith("\n\n---\n\n")).toBe(true);
+    // Nothing is disclosed to the reader as words the model was given, because it was given none...
+    expect(frames.some((frame) => frame.kind === "preamble")).toBe(false);
+    // ...and the steering queue, the only channel an approved plan has back to the model, stays empty.
+    expect(steering.delivered).toBe(0);
 });
 
 // A rejected plan stops the turn. Rewriting the branch there moves work the user just declined to continue.

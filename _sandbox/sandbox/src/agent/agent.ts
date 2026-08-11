@@ -234,10 +234,10 @@ export interface AgentRequest {
      * the gap between turns, nothing reconciles it before the work resumes. The answer arrives, the model
      * carries on against a dead base, and the auto-land at the end of the turn is where that surfaces.
      *
-     * Answers with the pair the two audiences need — a frame for the transcript, a note for the model — and
-     * with undefined on the ordinary settle where the branch was already current. Absent on a main-tree turn
-     * (no branch to move) and on every runtime but the harness. */
-    readonly resync?: () => Promise<ParkedSync | undefined>;
+     * Answers with the frame the transcript needs, and with undefined on the ordinary settle where the branch
+     * was already current. The MODEL is told nothing — the rebase is a mechanism, not news it has to act on
+     * (turn-preamble.ts). Absent on a main-tree turn (no branch to move) and on every runtime but the harness. */
+    readonly resync?: () => Promise<AgentEvent | undefined>;
     // Nobody is watching this turn: it was started by a benchmark, a schedule or another program rather than
     // by someone sitting in front of the chat. The interactive surface is then not merely useless but a
     // DEADLOCK — a plan approval or a question card parks the turn on an answer that can never arrive, and the
@@ -265,18 +265,6 @@ export const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentRepl
     return `The user answered:\n${lines.join("\n")}`;
 };
 
-/* What a rebase taken under a parked card produces: the frames that say where the turn is standing and what it
- * was just told, and the note that tells the model its reads went stale. Built by the route, which owns the git —
- * this module only decides when to ask for it and where the halves go.
- *
- * `frames` rather than one, because the news has two audiences and telling only the model is what this used to
- * do. The worktree frame gives the reader a summary line; the preamble frame carries the note itself, so the
- * words the model is acting on are a click away instead of nowhere. */
-export interface ParkedSync {
-    readonly frames: readonly AgentEvent[];
-    readonly note: string;
-}
-
 /* THE REBASE A SETTLED CARD EARNS, and the two conditions on taking it.
  *
  * ANSWERED, not merely settled: a dismissed question and a rejected plan both stop the turn, and moving the
@@ -293,23 +281,22 @@ export interface ParkedSync {
  * one skips the sync: the branch stays where it is, which is exactly where it would have stayed if the agent
  * had never asked.
  *
- * The frame goes to the transcript at the point it happened; the note is returned for the caller to fold into
- * whatever text the model reads next, so the news arrives in the same breath as the answer rather than as a
- * separate turn nobody prompted. */
+ * The frame goes to the transcript at the point it happened, and that is the whole output: the model is not
+ * told, because a rebase it is told about is a rebase it goes and verifies. */
 const syncOnAnswer = async (
     request: AgentRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
     answered: boolean,
-): Promise<string | undefined> => {
+): Promise<void> => {
     if (!answered || request.resync === undefined) {
-        return undefined;
+        return;
     }
     if (request.conversationId !== undefined && subagentCountsOf(request.conversationId).running > 0) {
-        return undefined;
+        return;
     }
     if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
-        return undefined;
+        return;
     }
     /* THE ANSWER OUTRANKS THE REBASE, so a fault in it cannot reach the card. The user has already clicked;
      * a throw from here would come back to them as a failed question or a plan approval that did not take —
@@ -318,14 +305,10 @@ const syncOnAnswer = async (
      * Silent because it is not silent where it happens: the implementation this calls owns the git and logs
      * its own faults (agent.routes.ts). This is the harness refusing to let a side channel it does not own
      * take down the card, not a swallowed error nobody will ever see. */
-    const synced = await request.resync().catch(() => undefined);
-    if (synced === undefined) {
-        return undefined;
-    }
-    for (const frame of synced.frames) {
+    const frame = await request.resync().catch(() => undefined);
+    if (frame !== undefined) {
         push(frame);
     }
-    return synced.note;
 };
 
 // Cap the stderr tail folded into an error message so a chatty failure can't flood the UI.
@@ -644,12 +627,11 @@ const askServer = (
                     // The picks belong in the frame log, not just in this tool result: they are what a replayed
                     // or second-window transcript freezes the card with (see the `resolved` frame).
                     push(resolved);
-                    // Then the ground, before the model acts on what it just heard. The note rides the same
-                    // tool result as the answer — one thing to read, at the one moment the model is re-deciding
-                    // what to do, instead of a second frame it has no reason to look for.
-                    const moved = await syncOnAnswer(request, push, shell, !reply.cancelled && reply.answers !== undefined);
-                    const text = formatAnswers(questions, reply);
-                    return { content: [{ type: "text", text: moved === undefined ? text : `${text}\n\n${moved}` }] };
+                    // Then the ground, before the model acts on what it just heard. The tool result carries the
+                    // user's answer and nothing else — the rebase is announced to the transcript, not folded
+                    // into the words the model reads next.
+                    await syncOnAnswer(request, push, shell, !reply.cancelled && reply.answers !== undefined);
+                    return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
             ),
         ],
@@ -746,18 +728,9 @@ const permissionGate =
             // Setting the mode on the session is what actually moves the SDK out of plan mode.
             push({ kind: "mode", mode: POST_PLAN_MODE });
             /* Then the ground, before the agent starts building on a plan it wrote against an older tree —
-             * the longest park of the three cards, and the one followed by the most writing.
-             *
-             * An approved plan has no text channel back to the model: `allow` carries a decision, not a
-             * sentence. So the note rides the steering queue, the same road /agent/steer uses to tell a
-             * running turn something, wrapped as a preamble over an empty message — that is what makes a
-             * restored transcript DROP it rather than redraw the daemon's words as the user's
-             * (turn-preamble.ts, and both restore paths already skip a message that strips to nothing). The
-             * cost is the one grace window a delivered steer arms at the end of the turn. */
-            const moved = await syncOnAnswer(request, push, shell, true);
-            if (moved !== undefined) {
-                request.steering?.push(withTurnPreamble([moved], ""));
-            }
+             * the longest park of the three cards, and the one followed by the most writing. The move itself
+             * is the point; the agent is not told it happened (turn-preamble.ts). */
+            await syncOnAnswer(request, push, shell, true);
             return {
                 behavior: "allow",
                 updatedInput: input,

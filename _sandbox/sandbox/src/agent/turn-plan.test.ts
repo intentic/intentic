@@ -34,7 +34,6 @@ const context: TurnContext = {
     localCwd: ROOT,
     effectiveCwd: ROOT,
     cliEnv: {},
-    syncNote: undefined,
     steering: undefined,
 };
 
@@ -365,24 +364,19 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
     expect((plan as { request: AgentRequest }).request.prompt).toBe("do the thing");
 });
 
-/* The pre-turn rebase moved the files under whichever model is about to read them, so the note cannot live in
- * one arm — honoured() is the only point all four pass through, and this is what proves it. */
-test("every runtime hears that its branch was rebased; a main-tree turn has no branch to rebase", async () => {
+/* The pre-turn rebase is SILENT to the model — it moved the tree, and telling the agent so only ever bought a
+ * verification sweep it then reported as green (turn-preamble.ts). The human still sees it in the transcript's
+ * worktree frame; this is what keeps it out of the words any of the four runtimes read. */
+test("a rebased branch says nothing to any runtime", async () => {
     const isolated: TurnContext = {
         ...context,
         localCwd: `${HISTORY_ROOT}/worktrees/abc/work`,
         effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work`,
-        syncNote: "## Your branch moved onto newer main\n\nrebased onto 3 commits",
     };
 
     for (const plan of [await planTurn(harnessServices(), turn(), isolated), await planTurn(codexServices(), turn({ agent: "codex" }), isolated)]) {
-        const prompt = (plan as { request: AgentRequest }).request.prompt;
-        expect(prompt).toContain("Your branch moved onto newer main");
-        expect(prompt).toContain("do the thing");
+        expect((plan as { request: AgentRequest }).request.prompt).not.toContain("rebased");
     }
-
-    const main = await planTurn(codexServices(), turn({ agent: "codex" }), { ...context, syncNote: "should never be sent" });
-    expect((main as { request: AgentRequest }).request.prompt).toBe("do the thing");
 });
 
 /* WHAT THE PRE-INJECTION SEARCHES FOR, and when it searches at all. The queries this records are the whole

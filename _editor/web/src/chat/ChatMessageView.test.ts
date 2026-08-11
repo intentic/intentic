@@ -294,7 +294,7 @@ describe(`ChatMessageView errand row`, () => {
  * openable because an agent visibly acting on instructions the reader cannot reach is the thing this replaces. */
 describe(`ChatMessageView added-notes row`, () => {
     const notes = [
-        { title: `Your workspace moved on underneath this agent`, text: `## Your branch moved onto newer main\n\nRe-read src/auth/session.ts.` },
+        { title: `How to read this message`, text: `## Reading the message below\n\nIt opens with a slash but names no command.` },
         { title: `Dependencies are behind`, text: `Some dependencies declared under /work are not installed.` },
     ];
 
@@ -302,27 +302,19 @@ describe(`ChatMessageView added-notes row`, () => {
         const element = mount({ id: 3, role: `user`, text: `fix the bug`, notes });
 
         // Titles up front, so the reader knows what the turn was told without opening anything…
-        expect(element.textContent).toContain(`Your workspace moved on underneath this agent`);
+        expect(element.textContent).toContain(`How to read this message`);
         expect(element.textContent).toContain(`Dependencies are behind`);
         // …and their words are collapsed, not absent.
-        expect(element.textContent).not.toContain(`Re-read src/auth/session.ts.`);
+        expect(element.textContent).not.toContain(`It opens with a slash but names no command.`);
 
         element.querySelector(`[aria-expanded]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
-        expect(element.textContent).toContain(`Re-read src/auth/session.ts.`);
+        expect(element.textContent).toContain(`It opens with a slash but names no command.`);
         expect(element.textContent).toContain(`Some dependencies declared under /work are not installed.`);
         // The note's own `##` heading is written for a model reading markdown. Under a row that already names
         // the note it is raw syntax and a duplicate title, so it is the one line not drawn.
         expect(element.textContent).not.toContain(`##`);
-        expect(element.textContent).not.toContain(`Your branch moved onto newer main`);
-    });
-
-    // The mid-turn note rides a notice with nothing of its own to say. The empty line must not draw.
-    it(`draws a note-only notice as the row alone, with no empty line above it`, () => {
-        const element = mount({ id: 4, role: `notice`, text: ``, notes: notes.slice(0, 1) });
-
-        expect(element.textContent).toContain(`Sent with your message`);
-        expect(element.querySelectorAll(`[aria-expanded]`)).toHaveLength(1);
+        expect(element.textContent).not.toContain(`Reading the message below`);
     });
 
     // A turn nobody added anything to says nothing — no row, no chevron, nothing to click.

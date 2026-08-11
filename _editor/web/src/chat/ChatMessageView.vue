@@ -752,8 +752,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 >{{ sentClock }}</span
             >
         </div>
-        <!-- A mid-turn preamble is a notice with nothing to say on its own line: its whole content is the notes
-             row below, and drawing the empty line too would put a bare info glyph above it. -->
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
@@ -1107,10 +1105,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         >
 
         <!-- WHAT THE DAEMON ADDED TO WHAT THE AGENT READ (see `notesOpen`): one line naming each note, opening
-             to exactly the words it was given. Outside the branches above because it hangs off two different
-             kinds of row — the user's own message for the notes prepended to it, and a bare notice for the ones
-             injected mid-turn — and reads the same on both. Full width and left-aligned even under a user
-             bubble: this is machine prose to be read, not something they said.
+             to exactly the words it was given. Outside the branches above because it hangs off the user's own
+             message rather than replacing it. Full width and left-aligned even under a user bubble: this is
+             machine prose to be read, not something they said.
              Open, it is capped and scrolls, for the reason .chat-prompt-open caps the bubble's own expansion at
              45dvh: on a user message this row IS the sticky pinned prompt, so an unbounded panel would take the
              panel over for as long as the turn runs. -->

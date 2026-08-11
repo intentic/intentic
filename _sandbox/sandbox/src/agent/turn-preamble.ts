@@ -1,5 +1,4 @@
 import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
-import type { RepoSync } from "../agents/sync.js";
 import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
@@ -58,76 +57,23 @@ export const worktreeNote = (worktree: string, root: string): string =>
     `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
     `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;
 
-/* WHAT MOVED UNDERNEATH THIS BRANCH while the conversation was waiting (agents/sync.ts took the rebase; this
- * is how the agent hears about it).
+/* THE REBASE IS NOT NEWS THE MODEL NEEDS, which is why there is no note here and this comment stands where one
+ * used to.
  *
- * Three things earn their place and nothing else does. The ground MOVED, so a file the agent remembers from
- * three turns ago is not the file on disk. The rebase applied by TEXT, which is not the same as still working —
- * main renaming something the branch calls merges perfectly and compiles into nothing. And a rebase that was
- * rolled back leaves the branch on a stale base, so the land at the end of this turn will refuse: saying so
- * up front is the difference between an agent that expects it and one that treats it as its own bug.
+ * agents/sync.ts rebases a conversation's branch onto today's main line before the turn reads a line of it, and
+ * for most of this module's life that came with a note telling the agent what had moved. The note was read
+ * exactly as it was written — as a task. It said the rebase "does not mean the result still builds", and turn
+ * after turn the model went and PROVED it: a full typecheck and test sweep, a paragraph reporting everything
+ * green, and a turn's worth of tokens spent before the user's actual question was touched. Across the sessions
+ * that produced it, a clean rebase never once turned out to have broken anything.
  *
- * The OVERLAP is the note's point. "main moved 200 files" is noise a model will dutifully go and read; the two
- * of them this agent had also edited are the re-check instruction, and they are named.
+ * So the rebase is silent to the model now. What it cost to say was certain and what it bought was not.
  *
- * TWO MOMENTS, one note. `start` is the pre-turn rebase, where the agent is reading a tree it last saw turns
- * ago and its memory of it is already suspect. `parked` is the rebase taken while the turn sat on a question
- * or a plan approval, and there the staleness is SHARPER, not milder: the reads are minutes old and the model
- * is holding line numbers and hunk context it is about to edit against. Same three facts, addressed to an
- * agent that has to be told its fresh knowledge just went stale. */
-export const SYNC_NOTE_HEADER = "## Your branch moved onto newer main";
-
-// How many overlapping paths are worth naming before the list stops being read. The rest survive as a count —
-// the agent has git, and a number is enough to make it look.
-const NAMED_PATHS = 10;
-
-const repoPaths = (repos: readonly RepoSync[], of: (repo: RepoSync) => readonly string[]): string[] =>
-    repos.flatMap((repo) => of(repo).map((path) => (repo.repo === "root" ? path : `${repo.repo}/${path}`)));
-
-export const syncNote = (repos: readonly RepoSync[], when: "start" | "parked"): string | undefined => {
-    if (repos.length === 0) {
-        return undefined;
-    }
-    const moved = repos.filter((repo) => repo.blocked !== true);
-    const blocked = repos.filter((repo) => repo.blocked === true);
-    const overlap = repoPaths(moved, (repo) => repo.overlap);
-    const rest = repoPaths(moved, (repo) => repo.moved).length - overlap.length;
-    const commits = moved.reduce((total, repo) => total + repo.commits, 0);
-    const lines = [SYNC_NOTE_HEADER, ""];
-    if (moved.length > 0) {
-        lines.push(
-            (when === "start"
-                ? `The user's main line moved while this conversation was idle, so your branch was rebased onto it before this turn — `
-                : `The user's main line moved while you were waiting for their answer, so your branch was just rebased onto it — `) +
-                `${commits} commit${commits === 1 ? "" : "s"} now sit underneath your work.`,
-        );
-        if (overlap.length > 0) {
-            lines.push(
-                "",
-                "Your own changes to these were replayed on top of someone else's, so re-read them before you build on them:",
-                ...overlap.slice(0, NAMED_PATHS).map((path) => `  - ${path}`),
-                ...(overlap.length > NAMED_PATHS ? [`  …and ${overlap.length - NAMED_PATHS} more`] : []),
-            );
-        }
-        lines.push(
-            "",
-            `It applied cleanly line by line, which does not mean the result still builds${rest > 0 ? ` (${rest} other file${rest === 1 ? "" : "s"} moved too)` : ""}. ` +
-                (when === "start"
-                    ? `Check before you trust what you remember about this tree.`
-                    : `Anything you read before you asked is now a stale read: line numbers have shifted and an edit anchored to them ` +
-                      `will be REJECTED rather than applied. Re-read what you are about to touch.`),
-        );
-    }
-    if (blocked.length > 0) {
-        lines.push(
-            "",
-            `The rebase would NOT apply in ${blocked.map((repo) => repo.repo).join(", ")} and was rolled back — that branch is still on its old base, ` +
-                `${blocked.reduce((total, repo) => total + repo.commits, 0)} commits behind. Expect the land at the end of this turn to refuse those paths ` +
-                `and ask for a resolve; that is the state you inherited, not something you did.`,
-        );
-    }
-    return lines.join("\n");
-};
+ * The two audiences that remain are unchanged. The HUMAN still sees it: the `worktree` frame carries the commit
+ * count and any repo that would not move, at the point in the transcript where it happened. And a rebase that
+ * would not apply is still caught where it always was — the land at the end of the turn refuses and raises the
+ * conflict errand (agents/land.ts, web conflictResolution.ts), which is a mechanism rather than a sentence a
+ * model has to be trusted to act on. */
 
 /* Every note this module knows how to put in front of a user message — the builder's flatten check, the
  * stripper's anchor and the chat's disclosure all read this one list, which is what keeps the three from
@@ -148,7 +94,6 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
-    { header: SYNC_NOTE_HEADER, title: "Your workspace moved on underneath this agent" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
 ];
 
@@ -197,8 +142,11 @@ export const stripTurnPreamble = (text: string): string => {
  *
  * A header only counts where it OPENS A LINE. Two of these notes are prose rather than `##` headings, and a
  * model-facing paragraph is free to mention "some dependencies declared under /work are not installed" mid
- * sentence — matching that would cut a note in half and title the remainder as a note of its own. */
-export const splitTurnNotes = (preamble: string): TurnNote[] => {
+ * sentence — matching that would cut a note in half and title the remainder as a note of its own.
+ *
+ * Internal: every preamble there is now arrives attached to a user message, so preambleNotes below is the only
+ * way in. The mid-turn rebase used to hand a bare note straight here; it no longer says anything at all. */
+const splitTurnNotes = (preamble: string): TurnNote[] => {
     const marks = INJECTED.flatMap(({ header, title }) => {
         const at = preamble.indexOf(header);
         return at === -1 || (at > 0 && preamble[at - 1] !== "\n") ? [] : [{ at, title }];

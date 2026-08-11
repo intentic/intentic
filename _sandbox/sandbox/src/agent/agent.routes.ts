@@ -33,10 +33,10 @@ import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
-import type { AgentRequest, ParkedSync } from "./agent.js";
+import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { withAttachmentNote } from "./attachment-note.js";
-import { preambleNotes, splitTurnNotes, syncNote, withTurnPreamble } from "./turn-preamble.js";
+import { preambleNotes, withTurnPreamble } from "./turn-preamble.js";
 import { conversationOf, resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
@@ -394,14 +394,15 @@ async function* runConversationTurn(
                 .record(turn.conversationId, turn.index, { kind: "worktree", repos: anchored })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
         }
-        /* The rebase the harness takes back whenever a card settles (agent.ts). It answers with the pair the
-         * two audiences need — the frame for the transcript, the note for the model — and with undefined on
-         * the ordinary answer, where the branch was already on today's main line and nothing needs saying.
+        /* The rebase the harness takes back whenever a card settles (agent.ts). It answers with the frame the
+         * transcript needs, and with undefined on the ordinary answer, where the branch was already on today's
+         * main line and there is nothing to report. The MODEL is told nothing either way — see turn-preamble.ts
+         * on why the note this used to carry is gone.
          *
          * Only the moments where the model re-derives what to do next get this: a question's picks and an
          * approved plan. NOT a permission card, whose tool call was already computed against the tree as it
          * was — moving the file under an approved Edit is how a "yes" turns into a failure the user authored. */
-        const resync = async (): Promise<ParkedSync | undefined> => {
+        const resync = async (): Promise<AgentEvent | undefined> => {
             // A rebase must never cost the user their answer. At turn start a failing sync IS a failing turn —
             // nothing has happened yet and the fault is worth surfacing — but here the person has already
             // clicked, and a git fault that propagated would come back to them as a failed tool call in place
@@ -409,16 +410,8 @@ async function* runConversationTurn(
             // turn carries on, and the land-time conflict flow is still behind it.
             try {
                 const moved = await syncOnto();
-                // The note is absent on exactly the repos-empty answer, so it is the whole test: no movement,
-                // no frame and nothing to tell the model.
-                const note = syncNote(moved, "parked");
-                // The summary line for the reader, the note itself behind it, and the same note to the model.
-                // Split out because they are read at different depths, not because they are different news.
-                // `duringTurn`: this one was not added to anything the user typed — it arrived mid-answer, and
-                // reads under the card that had been holding the turn open.
-                return note === undefined
-                    ? undefined
-                    : { frames: [worktreeFrame(moved), { kind: "preamble", notes: splitTurnNotes(note), duringTurn: true }], note };
+                // An empty answer is a branch that was already current: no movement, so no frame either.
+                return moved.length === 0 ? undefined : worktreeFrame(moved);
             } catch (error) {
                 services.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");
                 return undefined;
@@ -639,7 +632,7 @@ async function* runTurn(
     input: AgentTurn,
     signal: AbortSignal | undefined,
     worktree:
-        | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<ParkedSync | undefined> }
+        | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<AgentEvent | undefined> }
         | undefined,
     steering: SteeringQueue | undefined,
     // Which conversation message this turn answers, for its end-of-turn checkpoint. Undefined on a turn with no
@@ -794,7 +787,6 @@ async function* runTurn(
         localCwd,
         effectiveCwd,
         cliEnv,
-        syncNote: syncNote(worktree?.synced ?? [], "start"),
         steering,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
     });
