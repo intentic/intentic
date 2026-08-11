@@ -76,7 +76,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
     <main class="flex-1">
         {/* Three columns where there is room for three: rail, prose, sections. The prose column is `min-w-0`
             and the outer grid caps at 96rem, so adding the third column widens the page rather than squeezing
-            the reading measure, which .docs-body caps in characters regardless. */}
+            the column the prose sits in. */}
         <div
             class="mx-auto grid max-w-6xl gap-10 px-6 pt-28 pb-20 lg:grid-cols-[15rem_1fr] lg:gap-14 lg:pt-32 xl:max-w-[96rem] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]"
         >
@@ -139,10 +139,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     </ol>
                 </nav>
 
-                {/* Ruled to the reading column, not to the grid cell: the section rules inside .docs-body
-                    stop where the prose stops, and a page-header rule running 250px past them made the two
-                    read as different pages rather than the same one. */}
-                <header class="mb-10 max-w-[var(--docs-measure)] border-b border-line pb-8">
+                <header class="mb-10 border-b border-line pb-8">
                     {/* The book's own name is the fallback, so a page outside every shelf says "Docs" or "API"
                         rather than a generic word that belongs to neither. */}
                     <div class="eyebrow">{section?.label ?? book.label}</div>

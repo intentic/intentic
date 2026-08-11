@@ -259,30 +259,11 @@
 
     /* ── Docs prose (.docs-body) ─────────────────────────── */
 
-    /* The reading column, declared on the article so the page header rules to it too. 46rem was 106
-       characters a line at the prose size : a third past where the eye reliably finds the start of the
-       next one, and the reason a docs page read as a wall. This is `--container-longform` resolved at
-       that size: ~75 characters.
-
-       Spelled in rem rather than ch because every child shares the one cap, and `ch` counts the using
-       element's own size : a 1.5rem heading would take a cap half again as wide and hang its section
-       rule three hundred pixels past the prose it introduces. Tables and code keep the full column:
-       they are scanned, not read line by line, and a cramped table is worse than a long one. */
-    .docs-article {
-        --docs-measure: 34.75rem;
-    }
+    /* Prose spans the full column, the same as tables and code: capping paragraphs at a reading measure
+       while code ran edge to edge split one page into two columns of unequal width, and the seam between
+       them read as a layout bug rather than a choice. */
     .docs-body {
         font-size: 0.95rem;
-    }
-    .docs-body p,
-    .docs-body ul,
-    .docs-body ol,
-    .docs-body h2,
-    .docs-body h3,
-    .docs-body h4,
-    .docs-body hr,
-    .docs-body blockquote {
-        max-width: var(--docs-measure);
     }
     /* A rule above every h2 rather than more space: on pages with a dozen sections, whitespace alone stopped
        reading as a boundary and the page became one undifferentiated column. The line is what makes a section
