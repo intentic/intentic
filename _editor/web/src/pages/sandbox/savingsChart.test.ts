@@ -124,6 +124,13 @@ describe(`verdictsOf`, () => {
         expect(verdict.detail).toBe(`needs 30 turns per arm — 16 more on the shorter one`);
     });
 
+    it(`names conversations when the teaching experiment randomizes sessions rather than turns`, () => {
+        const verdict = headlineOf([reading({ on: { turns: 18, mean: 3 }, off: { turns: 11, mean: 4 } })], {
+            sampleUnit: `conversations`,
+        });
+        expect(verdict.detail).toBe(`needs 30 conversations per arm — 19 more on the shorter one`);
+    });
+
     /* MEASURED, NO EFFECT — its own verdict, because the reader's next move differs from "Measuring". The steer
      * crossed thirty control turns and published +31.2% ± 35.1pp: an interval from −3.4% to +66.7%, rendered as
      * an alarming number pointing the wrong way. The daemon now withholds the delta and sends the margin alone. */
@@ -156,21 +163,23 @@ describe(`dilutionOf`, () => {
         expect(dilutionOf(experiment([reading()], { deliveredPct: 19 }))).toBe(`The note actually landed on 19% of the treated arm.`);
     });
 
-    /* …and names what took the rest, with the turns behind it, because 19% delivered reads as a broken mechanism
-     * until you can see that most of the shortfall is the eligibility gate declining on prompts that named their
-     * own file. Same number, opposite response from whoever is reading the card. */
-    it(`names the largest reason the treated arm went untreated`, () => {
+    /* Assigned and eligible delivery are separate denominators. The former qualifies the experiment; the latter
+     * diagnoses the mechanism. Real sessions looked mostly ineligible overall while deadlines ate most eligible
+     * attempts, and naming only the largest bucket hid the actionable failure. */
+    it(`separates by-design ineligibility from losses among eligible retrievals`, () => {
         const dilution = dilutionOf(
             experiment([reading()], {
-                deliveredPct: 19,
+                deliveredPct: 17.9,
                 outcomes: [
-                    { outcome: `ineligible`, turns: 227 },
-                    { outcome: `note`, turns: 72 },
-                    { outcome: `no-hits`, turns: 40 },
+                    { outcome: `ineligible`, turns: 230 },
+                    { outcome: `deadline`, turns: 159 },
+                    { outcome: `note`, turns: 85 },
                 ],
             }),
         );
-        expect(dilution).toContain(`Most of the rest was ineligible (227 turns).`);
+        expect(dilution).toBe(
+            `85/474 assigned turns received a note. 230 were ineligible by design. Of 244 eligible turns, 159 missed the deadline.`,
+        );
     });
 
     it(`is empty for an experiment whose treatment always lands, so no card prints an empty clause`, () => {

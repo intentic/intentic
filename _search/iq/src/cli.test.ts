@@ -107,7 +107,7 @@ test("index status reports counts", async () => {
     expect(out).toMatch(/iq index: generation \d+ · \d+ files/);
 });
 
-test("normalizeArgv absorbs the grep dialect: search verb and --include/--path/--max-results flags", () => {
+test("normalizeArgv absorbs common inferred verbs and result-limit flags", () => {
     expect(normalizeArgv(["search", "auth flow", "--max-results", "20"])).toEqual({
         argv: ["q", "auth flow", "--limit", "20"],
         notes: ["search → q", "--max-results → --limit"],
@@ -115,9 +115,28 @@ test("normalizeArgv absorbs the grep dialect: search verb and --include/--path/-
     });
     expect(normalizeArgv(["find", "x", "--include", "*.ts", "--path", "src"]).argv).toEqual(["find", "x", "--glob", "*.ts", "--in", "src"]);
     expect(normalizeArgv(["find", "x", "--include=*.ts"]).argv).toEqual(["find", "x", "--glob=*.ts"]);
+    expect(normalizeArgv(["skeleton", "src/app.ts"]).argv).toEqual(["outline", "src/app.ts"]);
+    expect(normalizeArgv(["find", "x", "--max", "5", "--top=4", "-k", "3"]).argv).toEqual(["find", "x", "--limit", "5", "--limit=4", "--limit", "3"]);
     // log's --path is a real git pathspec — never rewritten.
     expect(normalizeArgv(["log", "MAX", "--path", "src"]).argv).toEqual(["log", "MAX", "--path", "src"]);
     expect(normalizeArgv(["find", "createWidget"]).notes).toEqual([]);
+});
+
+test("normalizeArgv recovers former engine names, path-shaped repos, and glob-only file searches", () => {
+    expect(normalizeArgv(["q", "widget", "--mode", "lexical"]).argv).toEqual(["q", "widget", "--mode", "find"]);
+    expect(normalizeArgv(["q", "widget", "--mode=lexical"]).argv).toEqual(["q", "widget", "--mode=find"]);
+    expect(normalizeArgv(["find", "widget", "--repo", "/tmp/workspace"]).argv).toEqual(["find", "widget", "--in", "/tmp/workspace"]);
+    expect(normalizeArgv(["find", "widget", "--repo=./packages/one"]).argv).toEqual(["find", "widget", "--in=./packages/one"]);
+    // A repo name is still a repo name, including a nested workspace-relative name.
+    expect(normalizeArgv(["find", "widget", "--repo", "packages/one"]).argv).toEqual(["find", "widget", "--repo", "packages/one"]);
+    expect(normalizeArgv(["files", "--glob", "*.ts", "--limit", "5"]).argv).toEqual(["files", "--glob", "*.ts", "--limit", "5", "*.ts", "--exact"]);
+});
+
+test("a glob-only file search reaches the engine with that glob as its exact pattern", async () => {
+    const normalized = normalizeArgv(["files", "--glob", "**/*.ts", "--limit", "5"]);
+    const result = await invoke(normalized.argv);
+    expect(result.exitCode).toBe(0);
+    expect(result.out).toContain("alpha/src/widget.ts");
 });
 
 // Shell `find` means filenames, iq `find` means content — the collision cost a session a turn.
@@ -223,17 +242,17 @@ test("zero hits always carry a diagnostic hint", async () => {
     expect(def.out).toContain("iq sym 'zz_never_zz*'");
 });
 
-// The most repeated zero-hit shape in the transcripts: a question typed at a verb that matches literally. The
-// hint has to name the verb that reads intent, because the reader's next move is otherwise grep.
-test("a phrase given to an exact verb is diagnosed as the wrong verb, not as bad wording", async () => {
-    const phrase = await invoke(["find", "widget tree explorer sidebar"]);
-    expect(phrase.exitCode).toBe(1);
-    expect(phrase.out).toContain("that query is a phrase");
-    expect(phrase.out).toContain('iq "widget tree explorer sidebar"');
+// The most repeated zero-hit shape in the transcripts: prose typed at a verb that matches literally. Recover in
+// the same call; explicit --literal remains the way to ask for a real exact-string miss.
+test("a zero-hit phrase given to find is answered semantically unless literal intent is explicit", async () => {
+    const phrase = await invoke(["find", "how are widgets built for the registry?"]);
+    expect(phrase.exitCode).toBe(0);
+    expect(phrase.out).toContain("answered semantically");
+    expect(phrase.out).toContain("notes.md");
 
-    // Scope is the weaker diagnosis when both are true — widening cannot rescue a phrase given to `find`.
-    const alsoScoped = await invoke(["find", "widget tree explorer sidebar", "--lang", "py"]);
-    expect(alsoScoped.out).toContain("that query is a phrase");
+    const literal = await invoke(["find", "how are widgets built for the registry?", "--literal"]);
+    expect(literal.exitCode).toBe(1);
+    expect(literal.out).toContain("that query is a phrase");
 
     // A deliberate regex is a pattern however many words it spans, and keeps the older diagnosis.
     const regex = await invoke(["find", "zz_never_zz|zz_also_never_zz", "--lang", "py"]);

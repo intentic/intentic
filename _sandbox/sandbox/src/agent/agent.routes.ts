@@ -40,7 +40,7 @@ import { preambleNotes, splitTurnNotes, syncNote, withTurnPreamble } from "./tur
 import { conversationOf, resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
-import { isSearchCall } from "./tool-calls.js";
+import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
@@ -1034,12 +1034,16 @@ async function* runTurn(
                 // Subagents' calls included, on the same rule as the prose above: a turn that sends an Explore
                 // agent looking still went looking, and the retrieval it was handed is what it would have used.
                 // `tool_call` only — an update is a later state of a call already counted.
+                // A compound Bash call may both search and open a file. Count its search against the state at
+                // call entry, then independently close orientation after it; making these branches exclusive
+                // hid most real file reads (`cat`/`sed`/`head`/`tail`) and inflated openingSearches.
                 if (isSearchCall(event)) {
                     searchCalls += 1;
-                    if (!reachedTheWork) {
+                    if (!reachedTheWork && searchPrecedesFileWork(event)) {
                         openingSearches += 1;
                     }
-                } else if (event.category === "read" || event.category === "edit") {
+                }
+                if (isFileWorkCall(event)) {
                     reachedTheWork = true;
                 }
             }
@@ -1220,6 +1224,9 @@ async function* runTurn(
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
                     ...(plan.contextArm !== undefined ? { iqContext: plan.contextArm } : {}),
                     ...(plan.contextOutcome !== undefined ? { iqContextOutcome: plan.contextOutcome } : {}),
+                    ...(plan.contextDurationMs !== undefined ? { iqContextDurationMs: plan.contextDurationMs } : {}),
+                    ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
+                    ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
                 })
                 .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         }

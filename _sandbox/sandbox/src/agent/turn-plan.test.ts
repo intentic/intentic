@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
-import { planTurn, type TurnContext } from "./turn-plan.js";
+import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-plan.js";
 
 /* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
  * only through app.test.ts booting the whole daemon, which is why the four provider arms drifted apart in the
@@ -25,6 +25,7 @@ vi.mock("./harness-credentials.js", () => ({ resolveHarnessCredentials: () => cr
  * nothing in it discovers no projects and therefore earns no notice. That the notice DOES reach every arm is
  * asserted where a real tree can be built — turn-plan.integration.test.ts. */
 const ROOT = "/nowhere/turn-plan";
+const IQ_PLUGIN_DIR = new URL("../../../../_search/iq/plugin/", import.meta.url).pathname;
 
 const base: AgentRequest = { prompt: "do the thing", cwd: ROOT, signal: new AbortController().signal };
 const context: TurnContext = {
@@ -169,6 +170,49 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     expect((offered as { request: AgentRequest }).request.model).toBe("grok-4-fast");
     // OpenCode holds one xAI auth, so every Grok turn attributes to the same account.
     expect(offered).toMatchObject({ account: "xai" });
+});
+
+test("iq search teaching reaches native Codex and OpenCode from the same shipped skill as Claude", async () => {
+    const settings = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+        get: async () => SandboxSettingsSchema.parse({ iqSearch: true }),
+    });
+    const agents = unstubbed<Services["agents"]>("agents", { entry: () => undefined });
+    const codex = await planTurn(
+        codexServices({
+            config: { ...testConfig, iqPluginDir: IQ_PLUGIN_DIR, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+            sandboxSettings: settings,
+            agents,
+        }),
+        turn({ agent: "codex", conversationId: "codex-iq" }),
+        context,
+    );
+    expect((codex as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
+    expect((codex as { request: AgentRequest }).request.prompt).toContain("iq def createIgnoreScope");
+
+    const grok = await planTurn(
+        servicesWith({
+            config: { ...testConfig, iqPluginDir: IQ_PLUGIN_DIR },
+            sandboxSettings: settings,
+            agents,
+            openCode: unstubbed<Services["openCode"]>("openCode", {
+                connected: async () => true,
+                xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+            }),
+        }),
+        turn({ agent: "grok", conversationId: "grok-iq" }),
+        context,
+    );
+    expect((grok as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
+    expect((grok as { request: AgentRequest }).request.prompt).toContain("iq def createIgnoreScope");
+});
+
+test("iq search holdout assigns one balanced arm deterministically per conversation", () => {
+    for (let index = 0; index < 20; index += 1) {
+        const id = `conversation-${index}`;
+        expect(conversationExperimentArm(id, 0.5)).toBe(conversationExperimentArm(id, 0.5));
+    }
+    const arms = new Set(Array.from({ length: 100 }, (_, index) => conversationExperimentArm(`conversation-${index}`, 0.5)));
+    expect(arms).toEqual(new Set([true, false]));
 });
 
 // The harness arm is the deep one — it reaches settings, plugins, browser profiles and the workspace probe —

@@ -138,6 +138,12 @@ export const toolCategoryOf = (name: string): ToolKind => {
  * reports whichever spelling the model happened to reach for. */
 const SEARCH_COMMANDS = new Set(["iq", "grep", "rg", "ag", "ack", "find", "fd", "fdfind", "locate", "ls", "tree"]);
 
+/* Shell programs that directly open file contents. They arrive as `execute`, even though they mark the same
+ * transition as the native Read/Edit tools: the model has stopped orienting and reached the work. Pipes are
+ * deliberately not split by commandHeads, so `rg needle | head` remains a search and does not pretend that
+ * truncating its stdout opened a file. */
+const FILE_WORK_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "bat", "awk"]);
+
 /* Each statement's leading program, past an env prefix and a path — `cd /work && iq q "…"` runs two and the
  * second is the one that matters, and `/usr/bin/rg` is `rg`.
  *
@@ -168,6 +174,36 @@ export const isSearchCall = (call: { readonly category: ToolKind; readonly targe
         return false;
     }
     return commandHeads(call.target).some((head) => SEARCH_COMMANDS.has(head));
+};
+
+/* DID THIS CALL REACH FILE CONTENT. Search counting and this transition are independent: one compound Bash
+ * call can do both (`rg …; sed -n …`). The route counts that call's search as opening work first, then closes
+ * orientation for later calls. That preserves the tool-call granularity of the ledger without losing the read
+ * just because the same shell invocation also searched. */
+export const isFileWorkCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
+    if (call.category === "read" || call.category === "edit") {
+        return true;
+    }
+    if (call.category !== "execute" || call.target === undefined) {
+        return false;
+    }
+    return commandHeads(call.target).some((head) => FILE_WORK_COMMANDS.has(head));
+};
+
+/* If a compound shell call both searches and reaches a file, which happened first? The turn ledger counts tool
+ * calls, but ordering inside one call still decides whether its search was orientation. A search-only native
+ * tool is opening by definition; `cat file; rg term` is not, while `rg term; sed -n …` is. */
+export const searchPrecedesFileWork = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
+    if (call.category === "search") {
+        return true;
+    }
+    if (call.category !== "execute" || call.target === undefined) {
+        return false;
+    }
+    const heads = commandHeads(call.target);
+    const searchAt = heads.findIndex((head) => SEARCH_COMMANDS.has(head));
+    const workAt = heads.findIndex((head) => FILE_WORK_COMMANDS.has(head));
+    return searchAt !== -1 && (workAt === -1 || searchAt < workAt);
 };
 
 // The file path / command / query a tool acts on, for the tool_call frame's target (the raw mono string on

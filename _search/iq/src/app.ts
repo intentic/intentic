@@ -59,8 +59,9 @@ Output fits --budget (default 1500 tokens). Scope: --in <dir|file> --repo <name>
 Exit codes: 0 hits, 1 none, 2 error. The index self-manages — iq index rebuild only if stale.
 
 Paths may be cwd-relative, absolute, or workspace-relative; one that matches nothing is an error,
-not an empty result. grep habits are absorbed (search→q, --include/--path/--max-results), and find
-reruns a pattern rust regex rejects as literal text — the header names what actually ran.`;
+not an empty result. Inferred/grep habits are absorbed (search→q, skeleton→outline,
+--include/--path/--max/--top/-k), and find reruns invalid patterns or zero-hit prose in the mode that can
+answer them — the header names what actually ran.`;
 
 export const app = buildApplication(
     buildRouteMap({

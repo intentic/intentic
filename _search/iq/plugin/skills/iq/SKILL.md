@@ -68,12 +68,15 @@ Don't work around the interface — it bends toward you:
 - **Paths in any frame.** `--in` and `outline`/`context`/`who` take cwd-relative, absolute, or workspace-relative
   paths, and `--in` accepts a single file. A path that matches nothing is a loud error naming what was tried,
   never a silent zero.
-- **grep vocabulary is absorbed.** `iq search …` and `iq ask …` both run `q`; `--include`/`--path`/`--max-results`
-  map to `--glob`/`--in`/`--limit`. A note on stderr names the canonical form — use it next time, don't retry.
+- **inferred/grep vocabulary is absorbed.** `iq search …` / `iq ask …` run `q`, and `iq skeleton …` runs
+  `outline`; `--include`/`--path` map to `--glob`/`--in`, while `--max`/`--top`/`-k` and the longer result-count
+  spellings map to `--limit`. A note names the canonical form — use it next time, don't retry.
 - **`find` recovers bad patterns.** A pattern rust regex rejects (`foo({`) reruns as literal text; grep-style
   escapes (`a\|b`) rerun rewritten. The header says which ran, so a wrong pattern costs no extra turn.
 - **A name that isn't there still gets answered.** When an identifier, path or pattern matches nothing exactly,
   the query is re-run semantically and the header says so — a miss is not a wasted turn, so don't fall back to grep.
+- **Prose sent to `find` recovers too.** A zero-hit multi-word phrase is answered semantically in the same call;
+  add `--literal` when an absent exact phrase is itself the answer you need.
 
 ## Session recall
 

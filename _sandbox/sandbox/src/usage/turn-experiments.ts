@@ -7,9 +7,9 @@ import type { UsageStore } from "./usage-store.js";
  * A cleaned command carries its own baseline — the raw capture and the emitted result come out of the same
  * event — so the input-side report can be exact. A turn cannot: there is no second run of the same turn to see
  * what it would have cost unsteered, or without the context it opened with. The only honest number therefore
- * comes from a turn-level holdout (settings.terseHoldout, settings.iqContextHoldout), which flips a fraction of
- * eligible turns to the control arm and stamps which arm ran onto the ledger (UsageTurn.terse,
- * UsageTurn.iqContext). This reads those two populations back.
+ * comes from a holdout, which flips a fraction of eligible work to the control arm and stamps which arm ran
+ * onto the ledger. Terse output and pre-injection flip turns; iq search teaching flips whole conversations so
+ * a session that already learned the skill can never be relabelled as cold on its next turn.
  *
  * BOTH EXPERIMENTS SHARE EVERY LINE OF THE STATISTICS and differ only in which field carries the arm and what
  * the turns are judged on — so the metric is a parameter, not a second copy of Welch. A turn can sit in both at
@@ -91,11 +91,10 @@ interface Arm {
     readonly variance: number;
 }
 
-const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => {
+const armOfValues = (values: readonly number[]): Arm => {
     // A turn the metric was never recorded on is not a turn worth zero — it is a turn from before the metric
     // existed, and averaging it in would pull both arms toward nothing at whatever rate the ledger happens to
     // hold old rows.
-    const values = turns.map(metric.of).filter((value) => value !== undefined);
     if (values.length === 0) {
         return { turns: 0, mean: 0, variance: 0 };
     }
@@ -103,6 +102,8 @@ const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => {
     const variance = values.length < 2 ? 0 : values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
     return { turns: values.length, mean, variance };
 };
+
+const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => armOfValues(turns.map(metric.of).filter((value) => value !== undefined));
 
 /* WHAT REACHED THE TREATMENT ARM, and what took away the rest. Both come off the same field, because a rate
  * without its reasons is a number nobody can act on: 81% of an assigned arm delivering nothing reads as a
@@ -155,8 +156,10 @@ const controlTurnsNeededFor = (offTurns: number, marginPct: number): number | un
 // One metric over one experiment's two populations. The arms arrive already split, because every reading of an
 // experiment reads the SAME split — the coin flip happened once, and only the counting differs.
 const readingOf = (onTurns: readonly UsageTurn[], offTurns: readonly UsageTurn[], metric: Metric): TurnMetricReading => {
-    const on = armOf(onTurns, metric);
-    const off = armOf(offTurns, metric);
+    return readingOfArms(armOf(onTurns, metric), armOf(offTurns, metric), metric);
+};
+
+const readingOfArms = (on: Arm, off: Arm, metric: Metric, claimRealizedSaving = true): TurnMetricReading => {
     const arms = {
         metric: metric.name,
         on: { turns: on.turns, mean: metric.round(on.mean) },
@@ -188,7 +191,66 @@ const readingOf = (onTurns: readonly UsageTurn[], offTurns: readonly UsageTurn[]
         deltaPct,
         // What the mechanism was worth over the turns that actually ran with it — the window's realized saving,
         // not an extrapolation over turns it never touched.
-        saved: metric.round((off.mean - on.mean) * on.turns),
+        ...(claimRealizedSaving ? { saved: metric.round((off.mean - on.mean) * on.turns) } : {}),
+    };
+};
+
+interface ConversationSample {
+    readonly arm: boolean;
+    readonly turns: readonly UsageTurn[];
+}
+
+/* iq search teaching lives in the provider session, so its randomized and analyzed unit is the conversation.
+ * Each conversation contributes one mean-per-turn reading. Treating its repeated turns as independent samples
+ * would manufacture confidence from a long chat without adding another coin flip. */
+const conversationExperimentOf = (turns: readonly UsageTurn[], metrics: readonly [Metric, ...Metric[]]): TurnExperiment | undefined => {
+    // Once versioned rows exist, one incompletely stamped row must not send the whole report back to the
+    // unversioned population. Pick the newest cohort we can actually identify; use legacy rows only when the
+    // ledger contains no cohort stamp at all.
+    const cohort = turns
+        .filter((turn) => turn.iqSearchArm !== undefined && turn.iqSearchCohort !== undefined)
+        .toSorted((left, right) => right.at - left.at)[0]?.iqSearchCohort;
+    const cohortTurns =
+        cohort === undefined ? turns.filter((turn) => turn.iqSearchCohort === undefined) : turns.filter((turn) => turn.iqSearchCohort === cohort);
+    const grouped = new Map<string, { arm: boolean; valid: boolean; turns: UsageTurn[] }>();
+    for (const turn of cohortTurns) {
+        if (turn.conversationId === undefined || turn.iqSearchArm === undefined) {
+            continue;
+        }
+        const current = grouped.get(turn.conversationId);
+        if (current === undefined) {
+            grouped.set(turn.conversationId, { arm: turn.iqSearchArm, valid: true, turns: [turn] });
+        } else {
+            current.valid &&= current.arm === turn.iqSearchArm;
+            current.turns.push(turn);
+        }
+    }
+    const samples: ConversationSample[] = [...grouped.values()]
+        .filter((entry) => entry.valid)
+        .map((entry) => ({ arm: entry.arm, turns: entry.turns }));
+    if (samples.length === 0) {
+        return undefined;
+    }
+    const reading = (metric: Metric): TurnMetricReading => {
+        const values = (arm: boolean): number[] =>
+            samples.flatMap((sample) => {
+                if (sample.arm !== arm) {
+                    return [];
+                }
+                const measured = sample.turns.map(metric.of).filter((value) => value !== undefined);
+                return measured.length === 0 ? [] : [measured.reduce((sum, value) => sum + value, 0) / measured.length];
+            });
+        // The unit here is a conversation's mean per turn. Multiplying that effect by the number of
+        // conversations is not a realized search count, so publish the effect and margin without inventing a
+        // `saved` total in incompatible units.
+        return readingOfArms(armOfValues(values(true)), armOfValues(values(false)), metric, false);
+    };
+    const [headline, ...rest] = metrics;
+    return {
+        metrics: [reading(headline), ...rest.map(reading)],
+        minTurns: MIN_ARM_TURNS,
+        sampleUnit: "conversations",
+        ...(cohort !== undefined ? { cohort } : {}),
     };
 };
 
@@ -227,9 +289,14 @@ const experimentOf = (
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<{ readonly output?: TurnExperiment; readonly context?: TurnExperiment }> => {
+): Promise<{ readonly output?: TurnExperiment; readonly search?: TurnExperiment; readonly context?: TurnExperiment }> => {
     const turns = await usage.turns(window);
     const output = experimentOf(turns, (turn) => turn.terse, [PROSE_CHARS]);
+    const search = conversationExperimentOf(turns, [SEARCH_CALLS, OPENING_SEARCHES]);
     const context = experimentOf(turns, (turn) => turn.iqContext, [SEARCH_CALLS, OPENING_SEARCHES], true);
-    return { ...(output !== undefined ? { output } : {}), ...(context !== undefined ? { context } : {}) };
+    return {
+        ...(output !== undefined ? { output } : {}),
+        ...(search !== undefined ? { search } : {}),
+        ...(context !== undefined ? { context } : {}),
+    };
 };

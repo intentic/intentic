@@ -161,7 +161,8 @@ export type TurnContextSkip = Exclude<IqContextOutcome, "note">;
 
 // The note, or the reason there isn't one. A union rather than an optional pair: exactly one of the two is
 // always the answer, and the ledger's delivery rate is only honest if a caller cannot read both as absent.
-export type TurnContextOutcome = { readonly note: string } | { readonly skipped: TurnContextSkip };
+export type TurnContextOutcome =
+    { readonly note: string; readonly durationMs: number } | { readonly skipped: TurnContextSkip; readonly durationMs: number };
 
 /* The note for this turn, or the reason there is none.
  *
@@ -176,9 +177,11 @@ export type TurnContextOutcome = { readonly note: string } | { readonly skipped:
  * died must cost the note and nothing else. Killing the user's turn over a failed search would make the feature
  * strictly worse than not having it — the same reasoning the resident engine's onIndexError already runs on. */
 export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string): Promise<TurnContextOutcome> => {
+    const startedAt = Date.now();
+    const durationMs = (): number => Date.now() - startedAt;
     const query = retrievalQueryOf(prompt);
     if (query === undefined) {
-        return { skipped: "ineligible" };
+        return { skipped: "ineligible", durationMs: durationMs() };
     }
     const controller = new AbortController();
     let failed = false;
@@ -224,7 +227,7 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
     // treatment arm actually get treated, and what took the rest of it away".
     const skip = (skipped: TurnContextSkip): TurnContextOutcome => {
         deps.logger.debug({ skipped, query }, "turn context: nothing prepended");
-        return { skipped };
+        return { skipped, durationMs: durationMs() };
     };
     if (outcome === undefined) {
         return skip(failed ? "failed" : "deadline");
@@ -235,5 +238,5 @@ export const retrieveTurnContext = async (deps: TurnContextDeps, prompt: string)
     if (outcome.exitCode !== 0 || outcome.result.groups.length === 0) {
         return skip("no-hits");
     }
-    return { note: turnContextNote(query, outcome.text) };
+    return { note: turnContextNote(query, outcome.text), durationMs: durationMs() };
 };

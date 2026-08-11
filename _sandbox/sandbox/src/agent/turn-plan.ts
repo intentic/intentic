@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
     type AgentCapabilities,
     type AgentEvent,
@@ -5,6 +6,7 @@ import {
     type Capability,
     type IqContextOutcome,
     type Rule,
+    type SandboxSettings,
     PI_PROVIDER,
     SandboxSettingsSchema,
     capabilitiesOf,
@@ -42,6 +44,7 @@ import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-pream
 import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
 import { setupNoticeFor } from "../workspace/workspace-setup.js";
+import { iqSearchInstruction } from "./iq-search-instruction.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED — the one question every turn has to answer before it can
  * stream anything, and the one the turn route used to answer inline as a four-arm if/else chain wrapped around
@@ -90,6 +93,11 @@ export type TurnPlan =
           // treatment reached and what took away the rest — the difference between a small effect and a diluted
           // one, and then between a dilution worth fixing and one that is the gate doing its job.
           readonly contextOutcome?: IqContextOutcome;
+          readonly contextDurationMs?: number;
+          // The iq-search teaching experiment's CONVERSATION-level arm. It cannot flip per turn: once a skill
+          // has entered a provider session, a later control turn in that session is already contaminated.
+          readonly searchArm?: boolean;
+          readonly searchCohort?: string;
           readonly request: AgentRequest;
       };
 
@@ -111,6 +119,12 @@ export interface TurnContext {
     // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering — the Claude
     // Code loop's streaming input, and Pi's own steer queue).
     readonly steering: SteeringQueue | undefined;
+    // Resolved once above the provider split. Optional only for focused callers that invoke an arm directly.
+    readonly settings?: SandboxSettings;
+    readonly conversationTurns?: number;
+    readonly iqSearchEnabled?: boolean;
+    readonly iqSearchNote?: string;
+    readonly iqSearchCohort?: string;
     /* Who the turn is and what it may do, resolved once by planTurn and handed down (personas/personas.ts).
      * Set only on the context the arms receive — the route builds this object before a card has been read, so
      * it is absent there and present everywhere it is used. */
@@ -134,6 +148,14 @@ export interface TurnContext {
  * turn names the step instead of the phase — and because they overlap, the turn pays the SLOWEST rather than
  * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
  */
+export const conversationExperimentArm = (conversationId: string | undefined, holdout: number): boolean => {
+    if (conversationId === undefined) {
+        return Math.random() >= holdout;
+    }
+    const bucket = createHash("sha256").update(`iq-search:${conversationId}`).digest().readUInt32BE(0) / 0x1_0000_0000;
+    return bucket >= holdout;
+};
+
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
     // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then fall through to the
@@ -143,7 +165,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    const [installed, setup, cast] = await Promise.all([
+    const [installed, setup, cast, settings] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
         // the record above — these are what the OWNER installed, that is what the runtime can DO.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -170,6 +192,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
         // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
+        services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
     ]);
     /* WHO THIS TURN IS AND WHAT IT MAY DO — resolved ABOVE the provider split, which is the whole reason this
      * moved here from the harness arm.
@@ -192,11 +215,41 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * Filtering here rather than in each arm is what makes a shelf mean the same thing on every runtime, and
      * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
     const granted = personaCapabilities(installed, persona);
-    const planned: TurnContext = { ...context, base: honoured(services, context, capabilities, setupNoticeFor(setup), persona, installed), persona };
+    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
+    const searchArm =
+        settings.iqSearch && settings.iqSearchHoldout > 0 && input.conversationId !== undefined
+            ? conversationExperimentArm(input.conversationId, settings.iqSearchHoldout)
+            : undefined;
+    const iqSearchEnabled = searchArm ?? settings.iqSearch;
+    // Claude Code loads the source as a plugin. Runtimes without that seam receive the same source text once,
+    // on the conversation's opening request; their provider session carries it through later turns.
+    const teaching =
+        services.config.iqPluginDir !== "" &&
+        (searchArm !== undefined || (capabilities.runtime !== "claude-code" && iqSearchEnabled && conversationTurns === 0))
+            ? await iqSearchInstruction(services.config.iqPluginDir).catch((error: unknown) => {
+                  services.logger.warn({ err: error }, "iq search: could not load the cross-harness instruction");
+                  return undefined;
+              })
+            : undefined;
+    const iqSearchNote = capabilities.runtime !== "claude-code" && iqSearchEnabled && conversationTurns === 0 ? teaching?.note : undefined;
+    const shared: TurnContext = {
+        ...context,
+        settings,
+        conversationTurns,
+        iqSearchEnabled,
+        ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
+        ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
+    };
+    const planned: TurnContext = {
+        ...shared,
+        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed),
+        persona,
+    };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).
-    return adapterFor(provider, harness).preflight(services, input, planned, granted);
+    const plan = await adapterFor(provider, harness).preflight(services, input, planned, granted);
+    return plan.ok && searchArm !== undefined ? { ...plan, searchArm, ...(teaching !== undefined ? { searchCohort: teaching.cohort } : {}) } : plan;
 };
 
 /* THE REQUEST EVERY ARM BUILDS ON, with the controls this runtime does not honour already gone.
@@ -259,6 +312,7 @@ const honoured = (
          * for those the paragraph is still the only thing standing between a model and a wall of true-looking
          * unresolved-import errors. It stays where it is, unchanged, for exactly as long as that is true. */
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [setupNotice] : []),
+        ...(context.iqSearchNote !== undefined ? [context.iqSearchNote] : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
@@ -452,7 +506,9 @@ export const planHarnessTurn = async (
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
         // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
         // message instead of the system prompt.
-        services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
+        context.settings === undefined
+            ? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get())
+            : Promise.resolve(context.settings),
     ]);
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
@@ -522,7 +578,8 @@ export const planHarnessTurn = async (
      * conversation cut from another, whose opening message continues a transcript it was handed rather than
      * starting one; and a turn count of zero is what makes it once per conversation rather than once per
      * message — the registry counts every turn that ran, however it ended. */
-    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
+    const conversationTurns =
+        context.conversationTurns ?? (input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0));
     const contextEligible = iqContext && input.unattended !== true && input.forkOf === undefined && conversationTurns === 0;
     /* PRE-INJECTION'S OWN COIN FLIP, on the same terms as the terse steer's — a fraction of otherwise-eligible
      * turns run without the retrieved context so the two arms are populations of the same command stream.
@@ -573,7 +630,7 @@ export const planHarnessTurn = async (
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a
     // contributes.agent manifest entry ride the same SDK plugin loader.
     const plugins = [
-        ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
+        ...(services.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? iqSearch) ? [services.config.iqPluginDir] : []),
         ...pluginDirsOf(granted, services.workspace.root),
         ...extensionAgentDirs,
     ];
@@ -640,6 +697,7 @@ export const planHarnessTurn = async (
     // responses. A boolean could not tell them apart, so the loss stayed unattributable for as long as it existed.
     const retrieved = await contextNote;
     const contextOutcome = retrieved === undefined ? undefined : "note" in retrieved ? "note" : retrieved.skipped;
+    const contextDurationMs = retrieved?.durationMs;
     const prompt = withTurnPreamble(
         [
             ...(placement.userNote !== undefined ? [placement.userNote] : []),
@@ -664,6 +722,7 @@ export const planHarnessTurn = async (
         ...(terseArm !== undefined ? { terseArm } : {}),
         ...(contextArm !== undefined ? { contextArm } : {}),
         ...(contextOutcome !== undefined ? { contextOutcome } : {}),
+        ...(contextDurationMs !== undefined ? { contextDurationMs } : {}),
         request: {
             ...routable,
             prompt,

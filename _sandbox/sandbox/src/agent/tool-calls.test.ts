@@ -1,6 +1,15 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
-import { displayNameOf, editDiffContent, isSearchCall, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import {
+    displayNameOf,
+    editDiffContent,
+    isFileWorkCall,
+    isSearchCall,
+    searchPrecedesFileWork,
+    toolCategoryOf,
+    toolLocations,
+    toolTarget,
+} from "./tool-calls.js";
 
 const CWD = WORKSPACE_ROOT;
 
@@ -41,6 +50,21 @@ test("isSearchCall counts the CLI searches the category misses, and leaves shell
     // A tool with no command to read — a browser click is `execute` too.
     expect(isSearchCall({ category: "execute" })).toBe(false);
     expect(isSearchCall({ category: "read", target: "src/index.ts" })).toBe(false);
+});
+
+test("isFileWorkCall recognizes direct shell reads but not output-truncation pipes", () => {
+    expect(isFileWorkCall({ category: "read", target: "src/index.ts" })).toBe(true);
+    expect(isFileWorkCall({ category: "edit", target: "src/index.ts" })).toBe(true);
+    expect(isFileWorkCall({ category: "execute", target: "sed -n '1,80p' src/index.ts" })).toBe(true);
+    expect(isFileWorkCall({ category: "execute", target: "cd repo && /usr/bin/cat src/index.ts" })).toBe(true);
+    expect(isFileWorkCall({ category: "execute", target: "rg needle src | head -20" })).toBe(false);
+    expect(isFileWorkCall({ category: "execute", target: "git log | sed -n '1,20p'" })).toBe(false);
+    // A compound call can both search and reach a file; callers must not make the classifications exclusive.
+    const compound = { category: "execute" as const, target: "rg needle src; sed -n '1,80p' src/index.ts" };
+    expect(isSearchCall(compound)).toBe(true);
+    expect(isFileWorkCall(compound)).toBe(true);
+    expect(searchPrecedesFileWork(compound)).toBe(true);
+    expect(searchPrecedesFileWork({ category: "execute", target: "cat src/index.ts; rg needle src" })).toBe(false);
 });
 
 test("toolCategoryOf categorizes MCP names by their tool segment's trailing verb", () => {

@@ -57,7 +57,15 @@ export interface ToolEvent {
 }
 
 const classifyBash = (command: string): { category: Category; iqCall?: string } => {
-    const heads = command
+    /* A command to the right of `||` is a fallback, not evidence it ran. Transcript mining found nine calls
+     * where iq appeared only there; crediting all nine as adoption made a grep-first policy look like iq use.
+     * Keep every unconditional statement, but within each `;`/newline statement classify only the path that is
+     * always attempted. This is deliberately conservative: shell text alone cannot prove a fallback executed. */
+    const attempted = command
+        .split(/;|\n/)
+        .map((statement) => statement.split("||", 1)[0] ?? "")
+        .join(";");
+    const heads = attempted
         .split(/&&|\|\||;|\|/)
         .map((segment) => segment.trim().split(/\s+/)[0] ?? "")
         .map((head) => head.split("/").pop() ?? "");
@@ -69,7 +77,7 @@ const classifyBash = (command: string): { category: Category; iqCall?: string } 
             continue;
         }
         if (RUNNER_HEADS.has(head)) {
-            categories.add(/\b(vitest|pytest|jest|test)\b/.test(command) ? "test" : "probe");
+            categories.add(/\b(vitest|pytest|jest|test)\b/.test(attempted) ? "test" : "probe");
         }
     }
     for (const category of ["iq", "test", "search", "probe", "git", "read"] as const) {
@@ -79,7 +87,7 @@ const classifyBash = (command: string): { category: Category; iqCall?: string } 
         if (category !== "iq") {
             return { category };
         }
-        const match = /(?:^|[\s;&|(])iq\s+(.{1,80})/.exec(command);
+        const match = /(?:^|[\s;&|(])iq\s+(.{1,80})/.exec(attempted);
         return { category, ...(match?.[1] !== undefined ? { iqCall: match[1].replaceAll("\n", " ").trim() } : {}) };
     }
     return { category: "other" };
@@ -147,7 +155,11 @@ export const toolEvents = (transcript: string): ToolEvent[] => {
             {},
             event,
             / 0 \w+ in 0 files/.test(text) ? { iqZeroHit: true } : {},
-            /No alias registered|usage error|error: unknown flag|unknown --lang|needs a value/i.test(text) ? { iqUsageError: true } : {},
+            /No alias registered|No flag registered|Too many arguments|usage error|error: unknown flag|unknown --lang|needs a value|Failed to parse|Expected argument|path not found in the workspace/i.test(
+                text,
+            )
+                ? { iqUsageError: true }
+                : {},
         );
     });
 };

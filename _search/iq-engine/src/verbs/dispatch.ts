@@ -340,7 +340,12 @@ const REGEX_INTENT = /[|()[\]*+?^$\\]/;
 // A phrase, not a name: two or more whitespace-separated words. `iq find 'exact text'` is a legitimate way to
 // spell a literal string, and it lands here too — but that only happens once the literal already missed, and
 // asking semantically is the right next move either way.
-const isPhrase = (query: string): boolean => !REGEX_INTENT.test(query) && query.trim().split(/\s+/).length > 1;
+const isPhrase = (query: string): boolean => {
+    // A terminal question mark is punctuation on the most obvious prose shape, not the regex quantifier. Keep
+    // metacharacters inside the phrase as explicit pattern intent (`foo? bar`, `a|b label`).
+    const candidate = query.trim().replace(/[?!.]+$/, "");
+    return !REGEX_INTENT.test(candidate) && candidate.split(/\s+/).length > 1;
+};
 
 // Zero hits must never be a dead end — benchmarked at a 31% zero-hit rate, each one a wasted agent turn.
 // Diagnose the probable cause in priority order: grep-dialect regex, wrong verb, over-narrow scope, rephrasing.
@@ -551,8 +556,16 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         if (note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             note = GREP_DIALECT_NOTE;
         }
+        const exactGroups = toGroups([{ engine: "lexical", hits: found.hits, capped: found.capped }], request.query, entries, context.features);
+        // A prose phrase sent to `find` is almost always a caller asking the lexical engine to understand intent.
+        // Six of ten recent organic zero-results had exactly this shape. Recover in this call; --literal remains
+        // the explicit escape hatch for callers that need a true zero from an exact multi-word string.
+        if (exactGroups.length === 0 && !request.options.literal && isPhrase(request.query)) {
+            const escalated = await naturalPlan(context, request, entries, allowed);
+            return { ...escalated, headerNote: "no exact phrase match — answered semantically" };
+        }
         return {
-            groups: toGroups([{ engine: "lexical", hits: found.hits, capped: found.capped }], request.query, entries, context.features),
+            groups: exactGroups,
             unit: "matches",
             style: "hits",
             showTags: false,

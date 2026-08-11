@@ -135,7 +135,7 @@ test("the pre-injected query holds no stage back — the engine runs its full pi
 
 test("an ineligible prompt never reaches the engine", async () => {
     const run = vi.fn();
-    expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toEqual({ skipped: "ineligible" });
+    expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toMatchObject({ skipped: "ineligible" });
     expect(run).not.toHaveBeenCalled();
 });
 
@@ -145,16 +145,16 @@ test("an ineligible prompt never reaches the engine", async () => {
  * fifths untreated. */
 test("a weak answer is no answer, and says which kind of weak", async () => {
     const question = "how does the daemon decide which runtime serves a turn?";
-    expect(await retrieveTurnContext(answering(outcome({ exitCode: 1 })), question)).toEqual({ skipped: "no-hits" });
+    expect(await retrieveTurnContext(answering(outcome({ exitCode: 1 })), question)).toMatchObject({ skipped: "no-hits" });
     const empty = outcome();
-    expect(await retrieveTurnContext(answering({ ...empty, result: { ...empty.result, groups: [] } }), question)).toEqual({
+    expect(await retrieveTurnContext(answering({ ...empty, result: { ...empty.result, groups: [] } }), question)).toMatchObject({
         skipped: "no-hits",
     });
     // `building` means the index holds a fraction of the workspace, so its answer would be confidently partial.
     const building = outcome();
-    expect(await retrieveTurnContext(answering({ ...building, result: { ...building.result, freshness: { state: "building" } } }), question)).toEqual(
-        { skipped: "indexing" },
-    );
+    expect(
+        await retrieveTurnContext(answering({ ...building, result: { ...building.result, freshness: { state: "building" } } }), question),
+    ).toMatchObject({ skipped: "indexing" });
 });
 
 test("a failed retrieval costs the note and nothing else", async () => {
@@ -165,7 +165,7 @@ test("a failed retrieval costs the note and nothing else", async () => {
     );
     // The turn goes on. Killing it over a search this user never asked for would make the feature strictly
     // worse than not having it.
-    expect(result).toEqual({ skipped: "failed" });
+    expect(result).toMatchObject({ skipped: "failed" });
     expect(warn).toHaveBeenCalledOnce();
 });
 
@@ -184,7 +184,7 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
         );
         const pending = retrieveTurnContext(deps, "how does the daemon decide which runtime serves a turn?");
         await vi.advanceTimersByTimeAsync(3_000);
-        expect(await pending).toEqual({ skipped: "deadline" });
+        expect(await pending).toEqual({ skipped: "deadline", durationMs: 3_000 });
         // The abort still goes out — it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);
         // An abort is this deadline firing, which is a decision, not a failure worth logging.

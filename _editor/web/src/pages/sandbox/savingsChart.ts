@@ -164,14 +164,18 @@ export interface ExperimentVerdict {
 /* ONE READING'S verdict, and only what that reading can answer for. The clause about how much of the arm the
  * treatment reached is NOT in here: it is a fact about the coin flip, equally true of every reading over it,
  * and folding it into each one would print it as many times as there are metrics — see dilutionOf. */
-export const readingVerdict = (reading: TurnMetricReading, minTurns: number): ExperimentVerdict => {
+export const readingVerdict = (
+    reading: TurnMetricReading,
+    minTurns: number,
+    sampleUnit: NonNullable<TurnExperiment["sampleUnit"]> = `turns`,
+): ExperimentVerdict => {
     const unit = METRIC_UNITS[reading.metric];
 
     // The margin arrives as soon as both arms clear minTurns; the delta waits for the margin to exclude zero.
     // Two states, two shortfalls, and neither is allowed to borrow the other's headline.
     if (reading.marginPct === undefined) {
         const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
-        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} turns per arm — ${shortfall} more on the shorter one` };
+        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} ${sampleUnit} per arm — ${shortfall} more on the shorter one` };
     }
     /* MEASURED, AND THE ANSWER IS "NOT YET DISTINGUISHABLE FROM NOTHING". A separate verdict from "Measuring"
      * because it is a different fact — the arms are big enough, the spread is simply wider than the effect —
@@ -185,7 +189,7 @@ export const readingVerdict = (reading: TurnMetricReading, minTurns: number): Ex
         const wait =
             reading.controlTurnsNeeded === undefined
                 ? `keep collecting`
-                : `~${formatCompact(reading.controlTurnsNeeded)} more control turns would settle it`;
+                : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
         return {
             value: `No effect`,
             unit: `measurable in ${unit}`,
@@ -209,17 +213,40 @@ export const readingVerdict = (reading: TurnMetricReading, minTurns: number): Ex
  * nothing worth prepending). A delta over a four-fifths-untreated arm is a fifth of the delta over the treated
  * ones, and a reader has no way to know that from the number.
  *
- * …and WHERE THE REST WENT, when the ledger knows, with the turns behind it. "19% delivered" reads as a broken
- * mechanism; "19% delivered, the rest ineligible" reads as a gate doing its job, and the two want opposite
- * responses from whoever is looking at the card. Only the largest non-delivery is named — the tail is for the
- * ledger. Empty ⇒ delivery is not a separate question here (the terse steer always lands). */
+ * …and WHERE THE REST WENT, when the ledger knows, with the turns behind it. Assigned delivery answers whether
+ * the measured arm was diluted; eligible delivery answers whether retrieval itself works. Collapsing those into
+ * one percentage hid the live failure: ineligibility was the largest overall bucket, while deadlines consumed
+ * most attempts that actually ran. Empty ⇒ delivery is not a separate question here (the terse steer lands). */
 export const dilutionOf = (experiment: TurnExperiment): string => {
     if (experiment.deliveredPct === undefined) {
         return ``;
     }
-    const lost = experiment.outcomes?.find((row) => row.outcome !== `note`);
-    const rest = lost === undefined ? `` : ` Most of the rest was ${lost.outcome} (${lost.turns} turns).`;
-    return `The note actually landed on ${experiment.deliveredPct}% of the treated arm.${rest}`;
+    if (experiment.outcomes === undefined || experiment.outcomes.length === 0) {
+        return `The note actually landed on ${experiment.deliveredPct}% of the treated arm.`;
+    }
+    const turns = (outcome: NonNullable<TurnExperiment[`outcomes`]>[number][`outcome`]): number =>
+        experiment.outcomes?.find((row) => row.outcome === outcome)?.turns ?? 0;
+    const notes = turns(`note`);
+    const ineligible = turns(`ineligible`);
+    const assigned = experiment.outcomes.reduce((sum, row) => sum + row.turns, 0);
+    const eligible = assigned - ineligible;
+    const losses = [
+        { outcome: `deadline` as const, text: `missed the deadline` },
+        { outcome: `indexing` as const, text: `found the index still building` },
+        { outcome: `no-hits` as const, text: `found no hits` },
+        { outcome: `failed` as const, text: `failed` },
+    ]
+        .map(({ outcome, text }) => ({ turns: turns(outcome), text }))
+        .filter((row) => row.turns > 0)
+        .map((row) => `${row.turns} ${row.text}`);
+    const eligibility = ineligible > 0 ? ` ${ineligible} were ineligible by design.` : ``;
+    const attempted =
+        eligible === 0
+            ? ``
+            : losses.length === 0
+              ? ` All ${eligible} eligible turns received it.`
+              : ` Of ${eligible} eligible turns, ${losses.join(`; `)}.`;
+    return `${notes}/${assigned} assigned turns received a note.${eligibility}${attempted}`;
 };
 
 /* Every reading an experiment carries, split the way a card reads it: the `headline` fills the verdict slot at
@@ -236,8 +263,8 @@ export const verdictsOf = (experiment: TurnExperiment | undefined): { headline: 
     }
     const [first, ...rest] = experiment.metrics;
     return {
-        headline: readingVerdict(first, experiment.minTurns),
-        also: rest.map((reading) => readingVerdict(reading, experiment.minTurns)),
+        headline: readingVerdict(first, experiment.minTurns, experiment.sampleUnit),
+        also: rest.map((reading) => readingVerdict(reading, experiment.minTurns, experiment.sampleUnit)),
     };
 };
 

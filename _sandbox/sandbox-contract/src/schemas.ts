@@ -1508,6 +1508,8 @@ export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 //   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
 //                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
+//   iqSearchHoldout   — conversation-level measurement control for iqSearch (UsageTurn.iqSearchArm). The arm
+//                        stays fixed because teaching already loaded into a session cannot be removed next turn.
 //   iqContext         — retrieves for the user's message BEFORE the turn starts and prepends the ranked answer
 //                        to it, so the model opens with the anchors instead of paying a search round-trip to
 //                        find them. Independent of iqSearch: that one teaches the agent to search, this one
@@ -1574,6 +1576,11 @@ export const SandboxSettingsSchema = z.object({
      * Cap is roomy — the bases it stands in for are ~6.8k characters — but finite, because every turn pays it. */
     systemPrompt: z.string().max(20000).default(""),
     iqSearch: z.boolean().default(false),
+    /* Measurement control for the iq search teaching, at CONVERSATION level. A fraction [0,1] of conversations
+     * run without the plugin/instruction and stamp that stable arm on every turn. Per-turn randomization is not
+     * a valid control here: once the teaching enters a provider session, withholding it from the next request
+     * does not make the model forget it. 0 ⇒ no measurement and every conversation receives the teaching. */
+    iqSearchHoldout: z.number().min(0).max(1).default(0),
     /* RETRIEVE BEFORE THE TURN, don't wait to be asked. The daemon runs the user's message through the resident
      * iq engine and prepends the ranked answer to it, so a turn that would have opened with two or three search
      * calls opens with the anchors already in hand. Independent of `iqSearch`, which only teaches the agent to
@@ -1890,6 +1897,12 @@ export const TurnExperimentSchema = z.object({
     // counts toward the daemon's real threshold instead of a number the browser guessed. Shared by every
     // reading: they are the same turns counted differently, so they clear it together.
     minTurns: z.number(),
+    // The randomized unit behind the arm counts. Turn mechanisms default to turns; teaching loaded into a
+    // provider session randomizes and analyzes whole conversations so repeated turns are not false replicas.
+    sampleUnit: z.enum(["turns", "conversations"]).optional(),
+    // Content-addressed treatment version. Present where mixing rows from two instruction revisions would turn
+    // one experiment into two unnamed ones; the reader filters to this (latest) cohort.
+    cohort: z.string().optional(),
     /* How much of the treatment arm the treatment actually REACHED, when that is knowable and less than all of
      * it — pre-injection's arm is the coin flip (intention-to-treat, deliberately), and a turn can be assigned
      * the retrieval and still have nothing to prepend. Measured at four turns in five, which is the difference
@@ -1914,6 +1927,7 @@ export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     output: TurnExperimentSchema.optional(),
+    search: TurnExperimentSchema.optional(),
     context: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
@@ -5785,6 +5799,18 @@ export const UsageTurnSchema = z.object({
      * `note` is delivery; every other value is a turn that ran exactly as the control arm would have, labelled
      * with what took the treatment away. Absent ⇒ outside the experiment, exactly as for the arm. */
     iqContextOutcome: IqContextOutcomeSchema.optional(),
+    /* Which arm of the iq SEARCH-TEACHING experiment this conversation runs on
+     * (settings.iqSearchHoldout). Stable for every turn in one conversation: the treatment is instruction
+     * loaded into a provider session, so flipping it per turn would call a remembered treatment a control.
+     * Absent ⇒ measurement is off; true/false ⇒ taught/cold. */
+    iqSearchArm: z.boolean().optional(),
+    // Hash of the plugin nudge + skill body used for this arm. Control turns carry it too, so a report can keep
+    // both sides of one treatment revision together and exclude older wording after an upgrade.
+    iqSearchCohort: z.string().optional(),
+    /* Wall time spent deciding the pre-turn retrieval outcome, including the full deadline on a timeout.
+     * Absent on rows written before latency was recorded or turns outside the retrieval experiment. Keeping it
+     * per outcome is what lets the report distinguish a slow engine from an eligibility gate. */
+    iqContextDurationMs: z.number().nonnegative().optional(),
     /* Characters of the model's own PROSE this turn — the `delta` frames only, so no tool-call arguments and no
      * thinking. What the terse steer is judged on, and the reason it can be judged at all.
      *

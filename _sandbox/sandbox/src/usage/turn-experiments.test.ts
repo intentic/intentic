@@ -85,6 +85,53 @@ test("the pre-injection experiment is judged on searches, to the tenth", async (
     expect(context?.metrics[0].saved).toBeCloseTo((6.4 - 3.2) * 40, 1);
 });
 
+test("iq search teaching is measured separately on its conversation-stable arm", async () => {
+    const arms = [
+        ...Array.from({ length: 40 }, (_, index) => turn({ conversationId: `on-${index}`, iqSearchArm: true, searchCalls: 2, openingSearches: 1 })),
+        ...Array.from({ length: 30 }, (_, index) => turn({ conversationId: `off-${index}`, iqSearchArm: false, searchCalls: 5, openingSearches: 3 })),
+    ];
+    const { search, context } = await readTurnExperiments(storeOf(arms), {});
+    expect(context).toBeUndefined();
+    expect(search?.metrics.map((reading) => reading.metric)).toEqual(["searchCalls", "openingSearches"]);
+    expect(search?.sampleUnit).toBe("conversations");
+    expect(search?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 2 }, off: { turns: 30, mean: 5 } });
+    expect(search?.metrics[0].saved).toBeUndefined();
+    expect(search?.deliveredPct).toBeUndefined();
+});
+
+test("iq search results do not mix instruction revisions into one unnamed experiment", async () => {
+    const rows = [
+        turn({ at: 1, conversationId: "old-on", iqSearchArm: true, iqSearchCohort: "old", searchCalls: 20 }),
+        turn({ at: 1, conversationId: "old-off", iqSearchArm: false, iqSearchCohort: "old", searchCalls: 20 }),
+        turn({ at: 2, conversationId: "new-on", iqSearchArm: true, iqSearchCohort: "new", searchCalls: 2 }),
+        turn({ at: 2, conversationId: "new-off", iqSearchArm: false, iqSearchCohort: "new", searchCalls: 5 }),
+    ];
+    const { search } = await readTurnExperiments(storeOf(rows), {});
+    expect(search?.cohort).toBe("new");
+    expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
+});
+
+test("an unstamped newest row cannot revert iq search reporting to the legacy cohort", async () => {
+    const rows = [
+        turn({ at: 1, conversationId: "legacy", iqSearchArm: true, searchCalls: 20 }),
+        turn({ at: 2, conversationId: "versioned-on", iqSearchArm: true, iqSearchCohort: "current", searchCalls: 2 }),
+        turn({ at: 2, conversationId: "versioned-off", iqSearchArm: false, iqSearchCohort: "current", searchCalls: 5 }),
+        turn({ at: 3, conversationId: "missing-stamp", iqSearchArm: true, searchCalls: 30 }),
+    ];
+    const { search } = await readTurnExperiments(storeOf(rows), {});
+    expect(search?.cohort).toBe("current");
+    expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
+});
+
+test("a long iq-search conversation contributes one sample rather than manufacturing independent turns", async () => {
+    const arms = [
+        ...Array.from({ length: 20 }, () => turn({ conversationId: "one-long-chat", iqSearchArm: true, searchCalls: 2 })),
+        turn({ conversationId: "one-control", iqSearchArm: false, searchCalls: 5 }),
+    ];
+    const { search } = await readTurnExperiments(storeOf(arms), {});
+    expect(search?.metrics[0]).toMatchObject({ on: { turns: 1, mean: 2 }, off: { turns: 1, mean: 5 } });
+});
+
 /* AND ON TWO READINGS OF THE SAME COIN FLIP. Every search a turn ran is the whole of what retrieval displaces,
  * and it still grows with the size of the job; the searches before the turn first touched a file are the
  * orientation the mechanism is actually aimed at, and are roughly the same act whatever the job turns out to be.

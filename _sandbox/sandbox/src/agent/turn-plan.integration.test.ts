@@ -77,6 +77,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
             issueAt: async () => undefined,
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // Every turn resolves a persona now, above the provider split, so every arm below reaches this — a
         // workspace with no cards is the open attended posture these tests already assume.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),

@@ -3,6 +3,7 @@ import type { RepoSync } from "../agents/sync.js";
 import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
+import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 
 // Turn preambles: notes the daemon prepends to a user message before it reaches the model — the delegation
@@ -143,6 +144,7 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // nor anything else this list knew — so the anchor never matched, nothing was stripped, and the notice came
     // back out of every restore as the user's own words. It is the shape this repo's own sandbox produces.
     { header: STALE_NOTICE_HEADER, title: "Dependencies are behind" },
+    { header: IQ_SEARCH_INSTRUCTION_HEADER, title: "Using iq for workspace search" },
     { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },

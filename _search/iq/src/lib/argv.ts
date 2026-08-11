@@ -5,6 +5,9 @@
 const VERB_REWRITES: Record<string, string> = {
     search: "q",
     grep: "find",
+    // `skeleton` is the word agents infer from outline's own description. Keep the public vocabulary small,
+    // but do not charge a retry for guessing the descriptive noun instead of the route name.
+    skeleton: "outline",
     // `ask` shipped as its own verb before the natural-language pipeline became what a bare query does. Removing
     // it must not turn a habit into an exit-2: the rewrite is the same trade as `search` — free here, one wasted
     // turn otherwise — and the note teaches the spelling that survives.
@@ -13,10 +16,52 @@ const VERB_REWRITES: Record<string, string> = {
 
 const FLAG_REWRITES: Record<string, string> = {
     "--include": "--glob",
+    "--max": "--limit",
     "--max-results": "--limit",
     "--num-results": "--limit",
     "--max-count": "--limit",
+    "--top": "--limit",
+    "-k": "--limit",
 };
+
+const VALUE_FLAGS = new Set([
+    "--in",
+    "--repo",
+    "--lang",
+    "--glob",
+    "--not-glob",
+    "--only",
+    "--budget",
+    "--limit",
+    "--context-lines",
+    "-C",
+    "--after",
+    "--features",
+    "--kind",
+    "--since",
+    "--author",
+    "--path",
+    "--mode",
+]);
+
+const positionalArgs = (argv: readonly string[]): string[] => {
+    const positional: string[] = [];
+    for (let i = 1; i < argv.length; i += 1) {
+        const token = argv[i]!;
+        if (token.startsWith("-") && !token.includes("=")) {
+            if (VALUE_FLAGS.has(token)) {
+                i += 1;
+            }
+            continue;
+        }
+        if (!token.startsWith("-")) {
+            positional.push(token);
+        }
+    }
+    return positional;
+};
+
+const pathLikeRepo = (value: string): boolean => value.startsWith("/") || value.startsWith("./") || value.startsWith("../");
 
 export interface NormalizedArgv {
     readonly argv: string[];
@@ -52,6 +97,46 @@ export const normalizeArgv = (argv: readonly string[]): NormalizedArgv => {
         if (target !== undefined) {
             out[i] = `${target}${value}`;
             notes.push(`${name} → ${target}`);
+        }
+    }
+
+    // Auto mode used to expose an engine named "lexical" in experiments, so it remains a plausible spelling
+    // even though the stable public verb is `find`.
+    for (let i = 1; i < out.length; i += 1) {
+        if (out[i] === "--mode" && out[i + 1] === "lexical") {
+            out[i + 1] = "find";
+            notes.push("--mode lexical → --mode find");
+        } else if (out[i] === "--mode=lexical") {
+            out[i] = "--mode=find";
+            notes.push("--mode lexical → --mode find");
+        }
+    }
+
+    // --repo takes a workspace repo NAME. An absolute/cwd-relative filesystem path is unambiguously --in;
+    // leaving it as --repo produces a convincing but false zero-result answer.
+    for (let i = 1; i < out.length; i += 1) {
+        const token = out[i]!;
+        if (token === "--repo" && out[i + 1] !== undefined && pathLikeRepo(out[i + 1]!)) {
+            out[i] = "--in";
+            notes.push("--repo <path> → --in <path>");
+        } else if (token.startsWith("--repo=") && pathLikeRepo(token.slice("--repo=".length))) {
+            out[i] = `--in=${token.slice("--repo=".length)}`;
+            notes.push("--repo=<path> → --in=<path>");
+        }
+    }
+
+    // `files --glob '*.ts'` states a complete filename-search intent but omits the required positional. When
+    // there is exactly one glob and no other positional, use it as the exact file pattern as well as the scope.
+    if (out[0] === "files" && positionalArgs(out).length === 0) {
+        const globs = out.flatMap((token, index) => {
+            if (token === "--glob" && out[index + 1] !== undefined) {
+                return [out[index + 1]!];
+            }
+            return token.startsWith("--glob=") ? [token.slice("--glob=".length)] : [];
+        });
+        if (globs.length === 1) {
+            out.push(globs[0]!, "--exact");
+            notes.push("files --glob <pattern> → files <pattern> --exact --glob <pattern>");
         }
     }
     const hint = filenameHint(

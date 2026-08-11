@@ -53,6 +53,36 @@ describe("toolEvents", () => {
         );
         expect(events.map((event) => event.category)).toEqual(["probe", "test"]);
     });
+
+    it("does not credit an unproven conditional iq fallback as adoption", () => {
+        const events = toolEvents(
+            [
+                assistant([{ name: "Bash", command: "rg needle src || iq find needle" }]),
+                assistant([{ name: "Bash", command: "iq find needle || rg needle src" }]),
+                assistant([{ name: "Bash", command: "rg needle src || iq find needle; iq files widget" }]),
+            ].join("\n"),
+        );
+        expect(events.map((entry) => entry.category)).toEqual(["search", "iq", "iq"]);
+        expect(events.map((entry) => entry.iqCall)).toEqual([undefined, "find needle", "files widget"]);
+    });
+
+    it.each([
+        "No flag registered for --top",
+        'Too many arguments starting with "--max"',
+        "Failed to parse value for --mode",
+        "Expected argument for --limit",
+        'path not found in the workspace: "/outside"',
+    ])("recognizes current iq usage errors: %s", (message) => {
+        const use = JSON.stringify({
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: "bad", name: "Bash", input: { command: "iq find foo --top 3" } }] },
+        });
+        const result = JSON.stringify({
+            type: "user",
+            message: { content: [{ type: "tool_result", tool_use_id: "bad", content: message }] },
+        });
+        expect(toolEvents(`${use}\n${result}`)[0]?.iqUsageError).toBe(true);
+    });
 });
 
 const event = (category: "iq" | "search" | "read" | "probe" | "test" | "git" | "edit" | "other"): { tool: string; category: typeof category } => ({

@@ -40,6 +40,17 @@ test("find: zero hits exit 1", async () => {
     expect(outcome.result.total).toBe(0);
 });
 
+test("find: a zero-hit prose phrase escalates semantically unless literal intent is explicit", async () => {
+    const recovered = await engine.run(request({ verb: "find", query: "how are widgets built for the registry?" }));
+    expect(recovered.exitCode).toBe(0);
+    expect(recovered.result.note).toContain("answered semantically");
+    expect(recovered.result.groups.some((group) => group.path === "notes.md")).toBe(true);
+
+    const literal = await engine.run(request({ verb: "find", query: "how are widgets built for the registry?", options: { literal: true } }));
+    expect(literal.exitCode).toBe(1);
+    expect(literal.result.total).toBe(0);
+});
+
 test("files: fuzzy filename search, ranked", async () => {
     const outcome = await engine.run(request({ verb: "files", query: "widget" }));
     expect(outcome.exitCode).toBe(0);
