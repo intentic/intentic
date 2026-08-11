@@ -26,8 +26,11 @@ are the contract; everything here is the machinery that keeps them true.
 - **The wire contract** — every schema `@intentic/sandbox-contract` exports, snapshotted in its
   `contract.lock.json`. The lock regenerates with `pnpm --filter @intentic/sandbox-contract lock` and must be
   committed with the change (its test fails otherwise); prepass invariant 6 refuses a push whose lock **lost or
-  changed** an existing surface with no declared break in the range. Additions pass freely — every persisted
-  reader parses loosely.
+  changed** an existing surface with no declared break in the range, and prints the exact declaring commit to
+  paste. Additions pass freely — every persisted reader parses loosely. Declarations normally never reach the
+  push gate at all: the landing drafter detects a shrinking lock mechanically
+  (`_sandbox/sandbox/src/git/contract-shrink.ts`) and forces the `!` marker and a `Breaking-Note:` into the
+  drafted message the commit box files.
 - **User-persisted state under `.intentic/`** — never read strictly, never migrated. An unreadable file falls
   back, is reported (`manifest-problems.ts`), and after a rollback is explained as "written by a newer
   intentic" via the forward-only stamp (`store/newest-run.ts`) rather than as damage. Per the repo's own rules:

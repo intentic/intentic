@@ -268,7 +268,7 @@ export const MAX_NOTE_LENGTH = 160;
 // The prompt. Written flat rather than as a system/user pair because the one-shot sends no system prompt at all
 // (see one-shot.ts): the instruction, the style examples and the material are one message, in the order the
 // model should weigh them.
-export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = false): string => {
+export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = false, removedSurfaces: readonly string[] = []): string => {
     const budget = Math.floor(MAX_PATCH_BYTES / Math.max(1, diffs.length));
     const repos = diffs.map((diff) =>
         [
@@ -341,9 +341,22 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
          * the sentence the update card will show as a warning, so it must say what stops working and what to do
          * — and the "!" demand beside it is what ties the sentence to the major version bump the release
          * tooling derives from the type. */
-        wantsNote
+        wantsNote && removedSurfaces.length === 0
             ? `- If (and only if) this change REMOVES or breaks something users already rely on — a feature gone, a command renamed, a file format no longer read — add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
             : undefined,
+        /* THE FORCED CASE, replacing the judgment call above whenever the detector already knows the answer
+         * (git/contract-shrink.ts): this commit removes named wire surfaces, so whether it breaks something is
+         * not the model's to weigh — only what the warning sentence should say. Stated with the removed paths
+         * in front of it because the sentence has to be ABOUT them, and a model told only "this is breaking"
+         * writes a warning about whatever the diff's largest file was. Independent of wantsNote: the note is a
+         * changelog courtesy, the declaration is what lets the change ship at all (COMPATIBILITY.md). */
+        ...(removedSurfaces.length > 0
+            ? [
+                  `- This commit REMOVES these surfaces from the machine-read wire contract (the schemas other software parses):`,
+                  ...removedSurfaces.slice(0, 10).map((surface) => `    ${surface}`),
+                  `- Because of that, two things are REQUIRED, not optional: mark the type with "!" (e.g. feat!:), and add a line spelled exactly: Breaking-Note: <what stops working for a user of the software and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>. Write the sentence about the removals listed above.`,
+              ]
+            : []),
         // The output contract is stated first and last: this model is the cheap rung, and a preamble ("Sure!
         // Here's a commit message:") pasted into the input is the failure this helper is most likely to have.
         `- Reply with the message itself. No preamble, no explanation, no quotes, no code fences.`,
@@ -443,4 +456,24 @@ export const cleanReleaseNote = (reply: string): string => {
 export const cleanBreakingNote = (reply: string): string => {
     const line = replyLines(reply).find((candidate) => startsWithTrailer(candidate, BREAKING_NOTE_TRAILER));
     return line === undefined ? `` : unwrap(line.slice(BREAKING_NOTE_TRAILER.length));
+};
+
+/* THE TWO ENFORCERS BEHIND THE FORCED CASE — what turns "the prompt demanded it" into "the draft carries it".
+ * A model that ignores the demand (the cheap rung sometimes does) would otherwise hand a detected shrink back
+ * undeclared, and the whole point of detecting mechanically is that the declaration cannot depend on the model
+ * having a good day. The subject marker is pure transformation; the note has a truthful floor. */
+
+// The `!` on a conventional subject, added when the type carries none. A subject that is not conventional is
+// returned untouched — the commit-msg hook rejects it before the marker could matter.
+const TYPE_HEAD = new RegExp(String.raw`^(${TYPES.join(`|`)})(\([^)]*\))?:`, `i`);
+export const markSubjectBreaking = (subject: string): string => subject.replace(TYPE_HEAD, `$1$2!:`);
+
+/* The sentence used when the model wrote none: the removed surfaces' schema names, stated plainly. Weaker than
+ * a written warning — it names what shrank without saying what to do instead — but it is TRUE, it reaches the
+ * release's "Breaking changes" section instead of nothing reaching it, and the user sees it in the commit box
+ * before filing, where it can still be reworded. Clipped to the same ceiling every note answers to. */
+export const fallbackBreakingNote = (removedSurfaces: readonly string[]): string => {
+    const names = [...new Set(removedSurfaces.map((surface) => surface.split(`.`)[0]))].join(`, `);
+    const sentence = `The wire contract no longer offers what it did under ${names} — anything reading those surfaces must stop relying on them.`;
+    return sentence.length <= MAX_NOTE_LENGTH ? sentence : `${sentence.slice(0, MAX_NOTE_LENGTH - 1)}…`;
 };

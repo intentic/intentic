@@ -1,7 +1,8 @@
 import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanBreakingNote, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, type RepoDiff } from "../git/commit-message.js";
+import { cleanBreakingNote, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, fallbackBreakingNote, markSubjectBreaking, type RepoDiff } from "../git/commit-message.js";
+import { claimedContractShrink } from "../git/contract-shrink.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* WHAT THE WORK DID, WRITTEN WHEN IT ARRIVES — the sentence the Changes panel's "From" chip files into the
@@ -39,9 +40,10 @@ import { publishRuntimeChange } from "../system/runtime-watch.js";
 const MAX_REPOS = 12;
 
 // One repo's contribution: the paths this agent still claims there, described exactly as the commit that
-// records them would be. Undefined when it claims nothing — the land put nothing here, or history has already
-// absorbed all of it.
-const claimedDiff = async (services: Services, id: string, repo: string): Promise<RepoDiff | undefined> => {
+// records them would be, plus what those paths would REMOVE from the wire contract (git/contract-shrink.ts —
+// read here, beside the diff, so the two describe the same claim). Undefined when it claims nothing — the
+// land put nothing here, or history has already absorbed all of it.
+const claimedDiff = async (services: Services, id: string, repo: string): Promise<{ diff: RepoDiff; removed: string[] } | undefined> => {
     const dir = services.agentWorktrees.mainDir(repo);
     const origins = await services.agentOrigins.forRepo(repo, dir);
     const paths = Object.entries(origins)
@@ -52,7 +54,7 @@ const claimedDiff = async (services: Services, id: string, repo: string): Promis
     }
     // `paths`, never `all`: this describes ONE agent's landed work sitting in a tree that may hold several
     // agents' — and the user's own edits besides.
-    return services.git.collectRepoDiff(repo, dir, { paths });
+    return { diff: await services.git.collectRepoDiff(repo, dir, { paths }), removed: await claimedContractShrink(dir, paths) };
 };
 
 /* Draft and store the subject for what this agent has landed. Resolves without effect whenever there is
@@ -66,12 +68,16 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     if (entry === undefined) {
         return;
     }
-    const diffs = (await Promise.all(entry.repos.slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
-        (diff) => diff !== undefined,
+    const claims = (await Promise.all(entry.repos.slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
+        (claim) => claim !== undefined,
     );
-    if (diffs.length === 0) {
+    if (claims.length === 0) {
         return;
     }
+    const diffs = claims.map((claim) => claim.diff);
+    // What this landing removes from the wire contract, across every repo it spans. Non-empty is what flips
+    // the draft from "consider a Breaking-Note" to "carry one" — see the forced block in commitMessagePrompt.
+    const removed = claims.flatMap((claim) => claim.removed);
     /* A note is asked for when any repo this landing touched keeps a changelog — the same "any, not all" rule
      * the commit box's own draft follows (git.routes.ts), and for the same reason: one message covers every
      * repo the commit spans, so it is written for the audience that has one. */
@@ -96,10 +102,13 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     await services.agents.setDraftingSubject(id, true);
     const { text } = await services.perf
         .track("landing.subject", { agent: id, repos: diffs.length }, () =>
-            askQuickModel(services, commitMessagePrompt(diffs, wantsNote), new AbortController().signal),
+            askQuickModel(services, commitMessagePrompt(diffs, wantsNote, removed), new AbortController().signal),
         )
         .finally(() => services.agents.setDraftingSubject(id, false));
-    const subject = cleanCommitSubject(text);
+    // The `!` is enforced rather than trusted whenever the detector saw a shrink: the marker is what the
+    // release tooling majors on, and a model that dropped it would ship the removal as a minor bump.
+    const drafted = cleanCommitSubject(text);
+    const subject = removed.length > 0 ? markSubjectBreaking(drafted) : drafted;
     // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so it
     // is checked here rather than left to the throw above — and a model that asked a question back instead of
     // describing the diff has not written a subject either. The same pair of guards, for the same reasons, as
@@ -109,14 +118,17 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     }
     /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
      * trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
-     * sentence rides the same gate — a repo with no changelog has no update card quoting it either.
+     * sentence rides the same gate ONLY while nothing was detected — a detected shrink keeps its sentence on
+     * every repo, changelog or not, because the declaration is what the push gate reads from the range
+     * (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none.
      *
      * These two and the subject are now the WHOLE of a drafted message. The body that used to sit between them
      * is gone (git/commit-message.ts says why it is not read back): a subject naming what changed, and — for a
      * repo that publishes one — a sentence for the people who will read the release, is everything the box
      * needs to be filled with. */
     const note = wantsNote ? cleanReleaseNote(text) : ``;
-    const breaking = wantsNote ? cleanBreakingNote(text) : ``;
+    const written = cleanBreakingNote(text);
+    const breaking = removed.length > 0 ? (written === `` ? fallbackBreakingNote(removed) : written) : wantsNote ? written : ``;
     await services.agents.setLandedSubject(id, {
         subject,
         ...(note === `` ? {} : { note }),

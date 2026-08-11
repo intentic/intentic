@@ -10,6 +10,8 @@ import {
     cleanReleaseNote,
     collectRepoDiff,
     commitMessagePrompt,
+    fallbackBreakingNote,
+    markSubjectBreaking,
     MAX_NOTE_LENGTH,
     type RepoDiff,
 } from "./commit-message.js";
@@ -309,6 +311,38 @@ test("asks for a release note only when the repo keeps a changelog", () => {
     expect(wantsNote).toContain("Breaking-Note:");
     // …and the instruction ties the sentence to the "!" type marker the release tooling majors on.
     expect(wantsNote).toContain(`mark the type with "!"`);
+});
+
+test("a detected wire-contract shrink turns the breaking ask from a judgment call into a requirement", () => {
+    const removed = [`OriginAgentSchema.properties.body`, `AgentEventSchema.oneOf[3]`];
+    const forced = commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", blocks: [] }], false, removed);
+    // The removed surfaces are in front of the model, because the sentence has to be about THEM.
+    expect(forced).toContain("OriginAgentSchema.properties.body");
+    expect(forced).toContain("REQUIRED, not optional");
+    // Forced even with no changelog: the declaration is what the push gate reads, not a changelog courtesy.
+    expect(forced).toContain("Breaking-Note:");
+    // …and the judgment-call spelling is gone, so the prompt never says both "when in doubt, omit" and "required".
+    expect(forced).not.toContain("when in doubt, omit it");
+    expect(commitMessagePrompt([{ repo: "root", subjects: [], summary: "M\ta.txt", blocks: [] }], true)).toContain("when in doubt, omit it");
+});
+
+test("markSubjectBreaking adds the marker the release tooling majors on, and only when it is missing", () => {
+    expect(markSubjectBreaking("feat: retire the legacy picker")).toBe("feat!: retire the legacy picker");
+    expect(markSubjectBreaking("fix(contract): recut the lock")).toBe("fix(contract)!: recut the lock");
+    // Already marked: nothing to add, and no second "!".
+    expect(markSubjectBreaking("feat!: retire the legacy picker")).toBe("feat!: retire the legacy picker");
+    // Not conventional: left for the commit-msg hook to reject rather than half-fixed here.
+    expect(markSubjectBreaking("retire the legacy picker")).toBe("retire the legacy picker");
+});
+
+test("fallbackBreakingNote names the shrunk schemas once each and respects the note ceiling", () => {
+    const note = fallbackBreakingNote([`OriginAgentSchema.properties.body`, `OriginAgentSchema.properties.title`, `AgentEventSchema.oneOf[3]`]);
+    expect(note).toContain("OriginAgentSchema");
+    expect(note).toContain("AgentEventSchema");
+    // Two removals under one schema name it once — the sentence is for a human, not a path listing.
+    expect(note.split("OriginAgentSchema").length).toBe(2);
+    const flooded = fallbackBreakingNote(Array.from({ length: 40 }, (_, index) => `Schema${index}.properties.x`));
+    expect(flooded.length).toBeLessThanOrEqual(MAX_NOTE_LENGTH);
 });
 
 test("reads the note off the reply, and says so when there isn't one", () => {

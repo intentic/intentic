@@ -567,11 +567,20 @@ if (existsSync(join(root, LOCK_FILE))) {
         const messages = git("log", "--format=%B", `${mergeBase}..HEAD`) ?? "";
         const declared = /^[a-z]+(\([^)]*\))?!:/m.test(messages) || /^Breaking-Note:/m.test(messages);
         if (gone.length > 0 && !declared) {
+            /* The remedy, PASTEABLE, because five sessions in a row proved what happens without it: agents
+             * asked to "fix the failing test" each wrote the declaring commit on their own conversation branch,
+             * where landing (which applies patches, not commits) can never carry it to the range this check
+             * reads. The declaration has to be a commit on THIS checkout, made by whoever is about to push —
+             * so the check hands over the exact command and leaves only the sentence to write. (The landing
+             * drafter now also declares detected shrinks by itself — _sandbox/sandbox/src/git/contract-shrink.ts
+             * — so reaching this report at all means a commit slipped past that draft, or predates it.) */
             undeclaredBreaks.push(
                 ...gone.slice(0, 10).map((path) => `${LOCK_FILE}: ${path.replace(/^\./, "")}`),
                 ...(gone.length > 10 ? [`…and ${gone.length - 10} more`] : []),
-                `something users could rely on was removed or changed — land it as a \`type!:\` commit with a ` +
-                    `\`Breaking-Note: <what stops working and what to do instead>\` trailer, or make the change compatible`,
+                `something users could rely on was removed or changed — declare it, or make the change compatible`,
+                `to declare it, run this ON THIS CHECKOUT (fill in the sentence) and re-run the push:`,
+                `    git commit --allow-empty -m 'feat!: declare the wire-contract removals in this range' ` +
+                    `-m 'Breaking-Note: <what stops working and what to do instead, one plain sentence>'`,
             );
         }
     }
