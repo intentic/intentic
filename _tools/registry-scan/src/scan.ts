@@ -1,4 +1,4 @@
-import { bundleProblem, ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
+import { bundleProblem, type ExtensionManifest, ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
 import { githubRepoOf, type RegistryChecks, type RegistryFacts, type RegistryFile, REGISTRY_TOPIC, resolveSource } from "@intentic/registry";
 import type { GithubReader, GithubRepo } from "./github.js";
 
@@ -9,7 +9,8 @@ import type { GithubReader, GithubRepo } from "./github.js";
  * join, so a live scan publishes the first malicious repo to push one; a form is a login, a moderation queue
  * and an admin panel, which is a strictly worse pull request. So the scan is the INBOX and the registry repo
  * is the RECORD: an author publishes by adding a topic, this job writes their pull request for them, and a
- * human merging that diff is the only thing that ever lists anything. Nobody logs in anywhere.
+ * protected admission check plus a human merging that diff are the only things that ever list anything.
+ * Nobody logs in anywhere.
  *
  * The output is deliberately split. `facts` is derived data that overwrites its file every night and needs no
  * review; `proposals` are listings, one pull request each, so a reviewer merges or closes them one at a time
@@ -66,6 +67,49 @@ const listedRepos = (file: RegistryFile): Map<string, ListedEntry> => {
     return byRepo;
 };
 
+interface CommitInspection {
+    readonly checks: RegistryChecks;
+    readonly manifest?: ExtensionManifest;
+}
+
+/* One cold inspection for both an existing listing and a proposal. Sharing this is what keeps discovery from
+ * parsing the branch while facts parse the commit: every fact used to create or keep a listing now comes from
+ * the exact immutable object the source pointer names. */
+const inspectAtSha = async (fullName: string, sha: string, path: string, github: GithubReader): Promise<CommitInspection> => {
+    const prefix = path === "" ? "" : `${path.replace(/\/$/u, "")}/`;
+    const raw = await github.readFile(fullName, sha, `${prefix}${MANIFEST_PATH}`);
+    if (raw === undefined) {
+        return { checks: { sha, manifest: `no ${MANIFEST_PATH} at the pinned commit`, bundle: "unchecked" } };
+    }
+    let parsed;
+    try {
+        parsed = ExtensionManifestSchema.safeParse(JSON.parse(raw));
+    } catch {
+        return { checks: { sha, manifest: `${MANIFEST_PATH} is not JSON at the pinned commit`, bundle: "unchecked" } };
+    }
+    if (!parsed.success) {
+        return {
+            checks: {
+                sha,
+                manifest: `does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
+                bundle: "unchecked",
+            },
+        };
+    }
+    const engines = parsed.data.engines.intentic;
+    if (parsed.data.entry === undefined) {
+        return { manifest: parsed.data, checks: { sha, manifest: "ok", bundle: "none", engines } };
+    }
+    const source = await github.readFile(fullName, sha, `${prefix}${parsed.data.entry}`);
+    if (source === undefined) {
+        return {
+            manifest: parsed.data,
+            checks: { sha, manifest: "ok", bundle: `the manifest promises ${parsed.data.entry}, which is not at the pinned commit`, engines },
+        };
+    }
+    return { manifest: parsed.data, checks: { sha, manifest: "ok", bundle: bundleProblem(source) ?? "ok", engines } };
+};
+
 /* Read one candidate's manifest and turn it into a proposal, or into the reason it isn't one.
  *
  * The listing key is extensionIdOf(manifest) — `publisher.name`, the same identity the app installs under.
@@ -76,24 +120,23 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
     if (repo.archived) {
         return `${repo.fullName}: archived`;
     }
-    const raw = await github.readFile(repo.fullName, repo.defaultBranch, MANIFEST_PATH);
-    if (raw === undefined) {
-        return `${repo.fullName}: topic is set but there is no ${MANIFEST_PATH} at the root of ${repo.defaultBranch}`;
-    }
-    const parsed = ExtensionManifestSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
-        return `${repo.fullName}: ${MANIFEST_PATH} does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`;
-    }
-    const id = extensionIdOf(parsed.data);
-    const claimedBy = [...listed.entries()].find(([, entry]) => entry.name === id);
-    if (claimedBy !== undefined) {
-        return `${repo.fullName}: claims ${id}, which is already listed from ${claimedBy[0]}`;
-    }
     // Pin the proposal to a real commit. Without one the entry can't be a one-click install, and a listing
     // that can't be installed is not worth a reviewer's time.
     const sha = await github.headSha(repo.fullName, repo.defaultBranch);
     if (sha === undefined) {
         return `${repo.fullName}: no commit found on ${repo.defaultBranch}`;
+    }
+    const { checks, manifest } = await inspectAtSha(repo.fullName, sha, "", github);
+    if (manifest === undefined) {
+        return `${repo.fullName}@${sha}: ${checks.manifest}`;
+    }
+    if (checks.bundle !== "ok" && checks.bundle !== "none") {
+        return `${repo.fullName}@${sha}: the bundle ${checks.bundle}`;
+    }
+    const id = extensionIdOf(manifest);
+    const claimedBy = [...listed.entries()].find(([, entry]) => entry.name === id);
+    if (claimedBy !== undefined) {
+        return `${repo.fullName}: claims ${id}, which is already listed from ${claimedBy[0]}`;
     }
     return {
         repo: repo.fullName,
@@ -102,52 +145,26 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
             kind: "extension",
             trust: "listed",
             ...(repo.description !== undefined ? { description: repo.description } : {}),
-            version: parsed.data.version,
+            version: manifest.version,
             /* Off the manifest, like the version — an author who has said how their extension should look has
              * said it once, in the file they own, and re-typing it into somebody else's registry repo is how
              * the two would end up disagreeing. Proposed, not enforced: it lands in a pull request a human
              * merges, so a listing can still have its mark struck out or corrected there. */
-            ...(parsed.data.logo !== undefined ? { logo: parsed.data.logo } : {}),
-            ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
+            ...(manifest.logo !== undefined ? { logo: manifest.logo } : {}),
+            ...(manifest.icon !== undefined ? { icon: manifest.icon } : {}),
             source: { source: "github", repo: repo.fullName, sha },
         },
     };
 };
 
-/* Re-derive, at the PINNED sha, what an installer would find there — the same questions the daemon's readiness
+/* Reuse the cold inspection at the PINNED sha to answer what an installer would find there — the same questions the daemon's readiness
  * check answers for an author before publishing, asked cold by a stranger holding nothing but the pointer. The
  * bundle rule is shared code (@intentic/extension-manifest), so the two judges cannot drift; what differs is
  * the vantage: the author's check describes the directory they ran it in, this describes the commit installs
  * actually follow. Nothing here is a verdict on trust — it is whether the thing at the pointer can load. */
 const checkAtSha = async (fullName: string, entry: ListedEntry, github: GithubReader): Promise<RegistryChecks | undefined> => {
     const sha = entry.ref ?? "";
-    const prefix = entry.path === "" ? "" : `${entry.path.replace(/\/$/u, "")}/`;
-    const raw = await github.readFile(fullName, sha, `${prefix}${MANIFEST_PATH}`);
-    if (raw === undefined) {
-        return { sha, manifest: `no ${MANIFEST_PATH} at the pinned commit`, bundle: "unchecked" };
-    }
-    let parsed;
-    try {
-        parsed = ExtensionManifestSchema.safeParse(JSON.parse(raw));
-    } catch {
-        return { sha, manifest: `${MANIFEST_PATH} is not JSON at the pinned commit`, bundle: "unchecked" };
-    }
-    if (!parsed.success) {
-        return {
-            sha,
-            manifest: `does not parse — ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
-            bundle: "unchecked",
-        };
-    }
-    const engines = parsed.data.engines.intentic;
-    if (parsed.data.entry === undefined) {
-        return { sha, manifest: "ok", bundle: "none", engines };
-    }
-    const source = await github.readFile(fullName, sha, `${prefix}${parsed.data.entry}`);
-    if (source === undefined) {
-        return { sha, manifest: "ok", bundle: `the manifest promises ${parsed.data.entry}, which is not at the pinned commit`, engines };
-    }
-    return { sha, manifest: "ok", bundle: bundleProblem(source) ?? "ok", engines };
+    return (await inspectAtSha(fullName, sha, entry.path, github)).checks;
 };
 
 export const scanRegistry = async (file: RegistryFile, github: GithubReader, scannedAt: string): Promise<ScanResult> => {

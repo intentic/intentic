@@ -22,8 +22,18 @@ const verified = entries.filter((entry) => entry.trust === "verified");
 const listed = entries.filter((entry) => entry.trust !== "verified");
 
 const groups = [
-    { key: "verified", heading: "Verified", blurb: "Somebody here read the source at the listed commit.", entries: verified },
-    { key: "listed", heading: "Everything the community has published", blurb: "The pointer resolves and the manifest parses. Nobody has read the code.", entries: listed },
+    {
+        key: "verified",
+        heading: "Verified",
+        blurb: "The deterministic scan and agent audit passed, and somebody here also read the source at the listed commit.",
+        entries: verified,
+    },
+    {
+        key: "listed",
+        heading: "Everything the community has published",
+        blurb: "The exact source passed the deterministic scan and agent audit. No human source review is claimed.",
+        entries: listed,
+    },
 ].filter((group) => group.entries.length > 0);
 
 /* The nightly scan's cold answer at the pinned commit, folded to a browser's one question: will it load?

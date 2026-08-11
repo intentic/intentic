@@ -26,6 +26,10 @@ The dependency runs one way and only one way: this package depends on `@intentic
 through the `./main` export, its compiled-in extension registry through `./builtins`, and shares its Vite setup
 through `./vite-shared`. Web knows nothing about this.
 
+The registry fixture carries the same source-bound deterministic and agent evidence as the real official browse
+shape, so Discover demonstrates both automated checks separately from the human `verified` tier; its deliberately
+blocked and unpinned rows remain non-admitted.
+
 ## Layout
 
 | File | What it is |

@@ -71,6 +71,7 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - [src/composition.ts](src/composition.ts) — what is wired to what; [src/main.ts](src/main.ts) — the entrypoint that builds it and serves.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts) — the update lifecycle for git-installed
   extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
+  official-registry admission check (an unaudited sha never becomes an install or update offer),
   staged powers-diff preview, the apply/revert transactions over the handler's quiesce-and-swap (the outgoing checkout
   is kept one version back), the post-update health watch, and the owner's per-extension policy (notify / agent-prepared
   / auto). Nothing auto-updates by default; the auto rung is opt-in and gated on a verified listing whose powers didn't

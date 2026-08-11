@@ -49,7 +49,10 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                         v-if="listing.entry.trust === `verified`"
                         name="shield"
                         class="shrink-0 text-success"
-                        v-tooltip.top="listing.entry.trustReason ?? `Someone here read the source at the listed commit`"
+                        v-tooltip.top="
+                            listing.entry.trustReason ??
+                            `The deterministic scan and agent audit passed, and someone also read the source at the listed commit`
+                        "
                         aria-label="Verified"
                     />
                     <!-- The price, before the click. -->

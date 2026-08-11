@@ -12,8 +12,7 @@ on:
 # General → "Allow GitHub Actions to create and approve pull requests" must be ON, and a `listing` label must
 # exist (gh pr create --label errors on a label that doesn't).
 permissions:
-    contents: write
-    pull-requests: write
+    contents: read
 
 concurrency:
     group: scan
@@ -23,8 +22,20 @@ jobs:
     scan:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v7
-            - uses: actions/setup-node@v7
+            # App-created commits and pull requests trigger the protected admission workflow; GITHUB_TOKEN-
+            # created events deliberately do not. The installation token is short-lived and scoped by the App.
+            - name: Mint the registry bot token
+              id: registry-token
+              uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+              with:
+                  app-id: ${{ vars.REGISTRY_APP_ID }}
+                  private-key: ${{ secrets.REGISTRY_APP_PRIVATE_KEY }}
+                  permission-contents: write
+                  permission-pull-requests: write
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  token: ${{ steps.registry-token.outputs.token }}
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version: "22"
 
@@ -34,8 +45,16 @@ jobs:
             # ever move whole files around.
             - name: Scan
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: npx --yes @intentic/registry-scan
+                  GITHUB_TOKEN: ${{ steps.registry-token.outputs.token }}
+                  REGISTRY_SCAN_VERSION: ${{ vars.REGISTRY_SCAN_VERSION }}
+                  NPM_CONFIG_IGNORE_SCRIPTS: "true"
+              run: |
+                  set -euo pipefail
+                  [[ "$REGISTRY_SCAN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+                      echo "REGISTRY_SCAN_VERSION must be an exact published version" >&2
+                      exit 1
+                  }
+                  npm exec --yes --package="@intentic/registry-scan@$REGISTRY_SCAN_VERSION" -- intentic-registry-scan scan
 
             - name: Publish the run summary
               run: cat .scan/summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -54,7 +73,8 @@ jobs:
             # instead, and the collision check then keeps it out for good.
             - name: Open a pull request per proposal
               env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+                  GH_TOKEN: ${{ steps.registry-token.outputs.token }}
               run: |
                   set -euo pipefail
                   shopt -s nullglob
@@ -65,11 +85,11 @@ jobs:
                           echo "· $id already has an open pull request"
                           continue
                       fi
-                      git checkout -B "$branch" origin/${{ github.event.repository.default_branch }}
+                      git checkout -B "$branch" "origin/$DEFAULT_BRANCH"
                       cp "$dir/marketplace.json" .claude-plugin/marketplace.json
                       git add .claude-plugin/marketplace.json
                       git commit -m "$(cat "$dir/title.txt")"
                       git push --force-with-lease -u origin "$branch"
-                      gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" \
+                      gh pr create --base "$DEFAULT_BRANCH" --head "$branch" \
                           --title "$(cat "$dir/title.txt")" --body-file "$dir/body.md" --label listing
                   done

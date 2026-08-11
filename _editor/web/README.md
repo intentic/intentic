@@ -31,6 +31,7 @@ The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user sign
 - **[src/sandbox-gates/](src/sandbox-gates)** — the sandbox connect/authorize gates and switcher wrapping the workspace surface.
 - **[src/presence/](src/presence)** — collaborator presence avatars/stack.
 - **[src/pages/](src/pages)** — lazy-loaded areas: `Login`, `Setup`, `Sandbox`, `Infra` (topology + config/provision), `workspace/` (VSCode-like explorer + file viewer), `Capabilities.vue` (the rail's "+": static core cards merged with cards derived from ENABLED extensions' `contributes.capabilities`, a config form with a live "This will add to your sandbox" effects panel), `Secrets.vue` (the capability-secret inventory), and the `*Dialog.vue` overlays.
+- **[src/pages/sandbox/SandboxDiscover.vue](src/pages/sandbox/SandboxDiscover.vue)** — registry discovery. Official rows are actionable only with current deterministic-scan and agent-audit evidence bound to the full source identity; detail separates those checks from optional human review and states that manifest permissions do not confine browser code.
 - **[src/router/index.ts](src/router/index.ts)** — `/login` + `/setup` → guarded shell (`/`) with child areas; `beforeEnter` guards (`requireAuth`, `requireSetup`) replace the old route guards.
 
 The capability model itself — the fifteen kinds, which four of them take extension-contributed cards, the effects taxonomy (skills, secrets, image fragments,

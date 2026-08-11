@@ -59,7 +59,7 @@ const sources = `// A repo of its own
         your git host. Three consequences worth stating plainly:
     </p>
     <ul>
-        <li><strong>Publishing is a pull request.</strong> No account, no upload, no packaging step, no review queue for your code.</li>
+        <li><strong>Publishing is a pull request.</strong> No account, no upload or packaging step; the official registry runs both deterministic scanning and an adversarial agent audit against the exact source in that pull request.</li>
         <li><strong>You keep the code.</strong> Your repo is the artifact. Delisting doesn't delete anything; it only removes a pointer.</li>
         <li><strong>Registries are plural.</strong> The official one is a default, not a gate. A company can run a private registry of internal extensions and never touch ours.</li>
     </ul>
@@ -102,6 +102,11 @@ const sources = `// A repo of its own
         Give a <code>sha</code>. A branch name is accepted for plugins, but an extension install requires a full 40-character commit sha, so a
         registry entry without one can't be installed in a click; it makes the user go and find the sha themselves.
     </p>
+    <p>
+        A registry you run can point wherever its users can clone. Admission to the official registry is narrower: executable sources must be
+        public HTTPS repositories on GitHub, GitLab, Codeberg or Bitbucket. That keeps both automated reviewers on one inspectable object
+        without placing private credentials in the admission workflow.
+    </p>
 
     <h2>Getting listed</h2>
     <p>
@@ -111,19 +116,21 @@ const sources = `// A repo of its own
     <ol>
         <li>
             <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an
-            <code>intentic-extension.json</code> at its root. A nightly job finds it, checks the manifest parses, resolves your latest commit,
-            and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or
+            <code>intentic-extension.json</code> at its root. A nightly job resolves your latest commit first, checks the manifest and shipped
+            bundle at that exact sha, and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or
             <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared — a listing
             that declares neither shows its initials.
         </li>
         <li>
-            <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or isn't on GitHub, because there is nowhere for
-            the scan to look.
+            <strong>Or open it yourself.</strong> Required if your extension lives in a subdirectory or is hosted on one of the other supported
+            public git hosts, because GitHub topic discovery cannot propose it automatically.
         </li>
         <li>
-            <strong>Review checks the pointer, not the code.</strong> The manifest parses, the entry bundle exists at that sha, the description
-            matches what the manifest actually contributes, the publisher is yours. We do not audit your source, and we don't pretend to —
-            <a href="/api/verify/">Verification &amp; trust</a> is precise about what that review does and does not claim.
+            <strong>Two independent automated checks read the exact source.</strong> Trivy deterministically checks dependencies, committed secrets
+            and deployment configuration. Then an intentic agent inspects the complete tree without executing author code: browser globals and
+            egress, server/process/agent/bin/build surfaces, dependencies and shipped artifacts against source. A finding, blocked or unjudged
+            audit, or missing evidence keeps the pull request unmergeable. A pass records both run identities against the repository, commit and
+            optional subdirectory.
         </li>
     </ol>
     <p>
@@ -142,8 +149,8 @@ const sources = `// A repo of its own
         <li>
             <strong>A release that grows your manifest re-asks.</strong> A new route in <code>permissions.sandbox</code>, a new process, a new
             PATH entry or a badge you didn't have before turns a one-click update into a dialog that spells out every addition. Approval never
-            transfers to powers the owner didn't approve, so adding one is a real event for your users — batch them rather than trickling one
-            out per release.
+            transfers to powers the owner didn't approve. A manifest-identical code change still points at a new sha, so the registry's
+            security gate reruns before that update appears in official discovery.
         </li>
         <li>
             <strong>Nothing auto-updates by default</strong>, and the one policy that does apply updates unattended requires your listing to be
@@ -179,7 +186,7 @@ const sources = `// A repo of its own
         Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
         private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
         <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
-        <strong>Capabilities → Add → Extension</strong>, against the official registry or any repo you point the field at. And so does the
+        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the
         whole update lifecycle — the badges, the powers diff, the kept previous version and one-click revert, the health watch,
         blocked-listing advisories, and the per-extension update policies.
     </p>

@@ -153,7 +153,11 @@ const installedTargets = async (services: Services): Promise<InstalledTarget[]> 
 };
 
 // The kept one-back checkout's identity, for the list row's "Revert to previous version" affordance.
-export const previousVersionOf = async (services: Services, id: string, path: string | undefined): Promise<{ ref: string; version?: string } | undefined> => {
+export const previousVersionOf = async (
+    services: Services,
+    id: string,
+    path: string | undefined,
+): Promise<{ ref: string; version?: string } | undefined> => {
     const dir = previousDir(extensionsRoot(services.workspace.root), id);
     const manifest = await readExtensionManifest(extensionRootOf(dir, path));
     if (manifest === undefined) {
@@ -180,7 +184,11 @@ export interface UpdatePreview {
 // Which sha/pointer an update verb targets: an explicit ref wins; otherwise the recorded update. The recorded
 // row's url/path are used when they answer for that exact ref — updating follows the LISTING as it stands now
 // (a listing may repoint its source repo), and anything else falls back to the install's own pointer.
-const resolveTarget = (config: ExtensionConfig, recorded: ExtensionUpdate | undefined, refOverride: string | undefined): { ref: string; url: string; path: string | undefined } => {
+const resolveTarget = (
+    config: ExtensionConfig,
+    recorded: ExtensionUpdate | undefined,
+    refOverride: string | undefined,
+): { ref: string; url: string; path: string | undefined } => {
     const ref = refOverride ?? recorded?.ref;
     if (ref === undefined) {
         throw new Error("no update is recorded for this extension — pass the commit sha to update to");
@@ -522,7 +530,10 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             try {
                 const market = await browseMarketplace(services, registryUrl, undefined, ".update-check.tmp");
                 for (const target of group) {
-                    rows.set(target.identity, market.plugins.find((entry) => entry.kind === "extension" && entry.name === target.identity));
+                    rows.set(
+                        target.identity,
+                        market.plugins.find((entry) => entry.kind === "extension" && entry.name === target.identity),
+                    );
                 }
             } catch (error) {
                 services.logger.warn({ err: error, registry: registryUrl }, "extension update check: registry unreachable");
@@ -558,7 +569,12 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
                     if (resolveUpdatePolicy(policies[target.identity]).advisories === "auto-disable" && enablement[target.identity] !== false) {
                         advisoriesToEnforce.push(target);
                     }
-                } else if (row !== undefined && isShaPinned(row.install) && row.install?.ref !== undefined && row.install.ref !== target.config.ref) {
+                } else if (
+                    row?.admitted === true &&
+                    isShaPinned(row.install) &&
+                    row.install?.ref !== undefined &&
+                    row.install.ref !== target.config.ref
+                ) {
                     const known = previous.update?.ref === row.install.ref ? previous.update : undefined;
                     const update: ExtensionUpdate = {
                         ref: row.install.ref,

@@ -88,9 +88,9 @@ const policies = [
 
     <h2>What the install dialog is telling you</h2>
     <p>
-        Extension code runs in your browser and on your machine, so the install is built to be understood <em>before</em> it's approved rather
-        than audited after. The dialog is the extension's manifest rendered as plain English — one line per thing it declared, with the exact
-        daemon routes it may call spelled out underneath:
+        Extension code runs in your browser and on your machine, so the install makes its declared host integrations legible
+        <em>before</em> approval. The dialog is the extension's manifest rendered as plain English — one line per thing it declared, with the
+        exact daemon routes it may call through the extension API spelled out underneath:
     </p>
     <table>
         <thead>
@@ -100,16 +100,16 @@ const policies = [
             {contributions.map((row) => (<tr><td>{row.line}</td><td>{row.means}</td></tr>))}
         </tbody>
     </table>
-    <p>Nothing about the install is ambient or implied, and the three sentences worth remembering are all negative ones:</p>
+    <p>The host enforces those declarations, and the three sentences worth remembering are:</p>
     <ul>
-        <li>An extension that declared no routes <strong>cannot call the daemon at all</strong>.</li>
+        <li>An extension that declared no routes <strong>cannot call the daemon through the extension API</strong>.</li>
         <li>An extension that declared no badge <strong>cannot interrupt you</strong> from a screen you aren't looking at.</li>
         <li>An extension that registers a view its manifest never declared is <strong>refused at runtime</strong>, not warned about.</li>
     </ul>
     <p>
-        Credentials are never part of that surface. Authorization is attached on the host side, so the extension's code never receives a token,
-        and a secret you type into its settings reads back as "still set" rather than as its value — to the extension as much as to anyone
-        looking over your shoulder.
+        The extension API injects transport authorization, and a secret setting reads back as "still set" rather than as its value. That
+        reduces routine credential handling; it is not a secrecy or confinement boundary. A browser bundle shares the app's JavaScript realm
+        and can reach its DOM, storage, browser globals and ordinary network APIs, while process code runs on the sandbox machine.
     </p>
 
     <h3>You approve a commit, not a project</h3>
@@ -129,9 +129,9 @@ const policies = [
         other signal on the card:
     </p>
     <ul>
-        <li><strong>Listed</strong> — the pointer resolves and the publisher is real. <em>Nobody read the code.</em> This is the honest default, and most listings are here.</li>
+        <li><strong>Listed</strong> — in the official registry, the exact source passed the deterministic scan and adversarial agent audit. No human source review is claimed.</li>
         <li><strong>Verified</strong> — somebody read the source at that exact commit. A newer commit is unverified again until re-read.</li>
-        <li><strong>Blocked</strong> — known-malicious or known-broken, with the reason recorded. Blocked rows stay visible on purpose.</li>
+        <li><strong>Blocked</strong> — known-malicious or known-broken, with the reason recorded for installed-extension advisories.</li>
     </ul>
     <p>
         A separate <strong>✓ loads</strong> mark means a nightly job re-checked the pinned commit and it would install. That is evidence, not
@@ -141,8 +141,8 @@ const policies = [
     <p>
         <a href="/api/verify/">Verification &amp; trust</a> is precise about what each of those words guarantees and, more usefully, what none
         of them do. The short version: installing an extension is trusting its author, the same as installing an editor plugin. What you get
-        here is that the trust is bounded and legible — you can read what it may touch before saying yes, and it can't grow past that without
-        asking you again.
+        here is source-bound automated review plus a declaration of cooperative host access. Those reduce risk; they do not isolate extension
+        code from the app or sandbox.
     </p>
 
     <h2>Living with one</h2>

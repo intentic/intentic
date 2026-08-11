@@ -164,9 +164,9 @@ const agentPoints = [
 
     <h2>What bounds an extension</h2>
     <p>
-        Extension code runs in somebody's browser and somebody's sandbox, so the install is built to be understood before it's approved, not
-        audited after. Three mechanics do that work, and all three are constraints on you as the author — worth knowing before you design
-        anything:
+        Extension code runs in somebody's browser and somebody's sandbox. Official discovery adds exact-sha security review, while the
+        install makes declared host integrations legible before approval. These are layered controls, not runtime isolation, and all of them
+        constrain what you design as an author:
     </p>
     <ul>
         <li>
@@ -176,20 +176,26 @@ const agentPoints = [
             there is no upstream that could change it behind your back, only files you can read.
         </li>
         <li>
-            <strong>The manifest is the approval surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
+            <strong>The manifest is the host-integration surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
             the host <em>enforces</em> them: a view, command, viewer, setting or process the approved manifest never declared is refused at
-            runtime. An extension cannot grow new powers after you said yes.
+            runtime. That enforcement applies to host APIs, not ordinary browser globals.
         </li>
         <li>
-            <strong>Daemon reach is an allowlist — for both halves.</strong> Neither the UI bundle nor the backend has an ambient client to
-            your daemon. Each declares the routes it calls as <code>"GET /logs"</code>-style entries, in two separate lists because they run
-            as different principals, and everything undeclared is refused. So "what can this thing actually touch" is a list you can read in
-            the diff.
+            <strong>Cooperative daemon calls are allowlisted.</strong> Each half declares the routes it calls through the extension API as
+            <code>"GET /logs"</code>-style entries, in two lists because they run as different principals. Undeclared API calls are refused;
+            this is not a claim that arbitrary browser or process code is confined to that list.
+        </li>
+        <li>
+            <strong>Official listings pass two automated security checks.</strong> Trivy checks the exact source for known dependency flaws,
+            committed secrets and dangerous deployment configuration. An intentic agent then reads the complete tree without running author
+            code, including browser egress, server/process/agent/bin/build surfaces, dependencies and source versus shipped artifacts. A
+            finding, blocked or uninspectable audit fails closed, and both run identities are recorded against the repository, commit and
+            optional subdirectory.
         </li>
     </ul>
     <p>
-        Credentials are never part of that surface. The transport injects auth host-side; an extension bundle never sees a token, and secret
-        settings round-trip as "still set" rather than as their value.
+        The extension API injects transport auth and secret settings round-trip as "still set" rather than their value. That reduces routine
+        credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the exact source is audited.
     </p>
     <p>
         What those mechanics <em>guarantee</em> — and the three words a listing can carry, <strong>listed</strong>, <strong>verified</strong>

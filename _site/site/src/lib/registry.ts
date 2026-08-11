@@ -35,7 +35,7 @@ const fromFiles = (rawFile: string, rawFacts: string | undefined): Omit<Gallery,
     return {
         // Blocked rows exist so an installed sandbox can be warned; a shop window is not where that belongs.
         entries: resolveRegistry(file, facts, OFFICIAL_REGISTRY_URL)
-            .filter((entry) => entry.kind === "extension" && entry.trust !== "blocked")
+            .filter((entry) => entry.kind === "extension" && entry.trust !== "blocked" && entry.admitted)
             .toSorted(compareEntries),
         scannedAt: facts?.scannedAt,
     };

@@ -115,6 +115,15 @@ describe(`the brief for reading before installing`, () => {
         expect(audit).toContain(`quoting file and line`);
     });
 
+    test(`does not mistake the manifest for browser confinement`, () => {
+        expect(audit).toContain(`shares the app's DOM, storage and network access`);
+        expect(audit).toContain(`not confinement`);
+        expect(audit).toContain(`server and process entry`);
+        expect(audit).toContain(`plugin/MCP`);
+        expect(audit).toContain(`account for executed artifacts from readable source`);
+        expect(audit).toContain(`install dependencies`);
+    });
+
     test(`ends on a recommendation, not a summary`, () => {
         expect(audit).toContain(`install it, install it and keep an eye on something named, or do not`);
     });

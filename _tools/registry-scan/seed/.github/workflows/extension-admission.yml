@@ -1,0 +1,231 @@
+name: extension admission
+
+# Runs in the base repository's trusted workflow context so the intentic gate URL is available even when an
+# author opens a fork pull request. The pull request branch is never checked out or executed: its registry JSON
+# is fetched through the API. Exact extension source is checked out only in the separate no-secrets scan job;
+# author code is never run on any runner.
+on:
+    pull_request_target:
+        # `edited` closes the base-branch swap hole: a check computed against another base must not remain the
+        # required check after the pull request is retargeted without changing its head commit.
+        types: [opened, synchronize, reopened, edited]
+        paths:
+            - .claude-plugin/marketplace.json
+
+permissions:
+    contents: read
+    pull-requests: read
+
+concurrency:
+    group: extension-admission-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    prepare:
+        runs-on: ubuntu-latest
+        outputs:
+            needs-attestation: ${{ steps.audit.outputs['needs-attestation'] }}
+            request: ${{ steps.audit.outputs.request }}
+            targets: ${{ steps.audit.outputs.targets }}
+            targets-json: ${{ steps.audit.outputs['targets-json'] }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.base.sha }}
+                  path: base
+                  persist-credentials: false
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: "22"
+
+            - name: Read the candidate registry file without checking out its code
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p candidate
+                  gh api -H "Accept: application/vnd.github.raw+json" \
+                      "repos/$HEAD_REPO/contents/.claude-plugin/marketplace.json?ref=$HEAD_SHA" \
+                      > candidate/marketplace.json
+
+            - name: Validate the registry diff and compose the security request
+              id: audit
+              env:
+                  # Set this repository variable to one EXACT published version, never `latest` or a range.
+                  # npm versions are immutable; bumping the scanner then becomes an explicit registry decision.
+                  REGISTRY_SCAN_VERSION: ${{ vars.REGISTRY_SCAN_VERSION }}
+                  NPM_CONFIG_IGNORE_SCRIPTS: "true"
+              run: |
+                  set -euo pipefail
+                  [[ "$REGISTRY_SCAN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+                      echo "REGISTRY_SCAN_VERSION must be an exact published version" >&2
+                      exit 1
+                  }
+                  cd "$RUNNER_TEMP"
+                  npm exec --yes --package="@intentic/registry-scan@$REGISTRY_SCAN_VERSION" -- \
+                      intentic-registry-scan audit \
+                      --base "$GITHUB_WORKSPACE/base/.claude-plugin/marketplace.json" \
+                      --candidate "$GITHUB_WORKSPACE/candidate/marketplace.json"
+
+    # Deterministic scanners parse attacker-controlled files, so this job gets neither repository write access
+    # nor registry secrets. It fetches one public HTTPS source at the exact audited commit, never runs its code,
+    # and fails closed on known high/critical dependency flaws, leaked secrets, or dangerous IaC configuration.
+    deterministic:
+        needs: prepare
+        runs-on: ubuntu-latest
+        permissions: {}
+        steps:
+            - name: Fetch the exact extension source without running it
+              if: needs.prepare.outputs.targets != '0'
+              env:
+                  GIT_LFS_SKIP_SMUDGE: "1"
+                  GIT_TERMINAL_PROMPT: "0"
+                  TARGETS_JSON: ${{ needs.prepare.outputs['targets-json'] }}
+              run: |
+                  set -euo pipefail
+                  [[ "$(jq 'length' <<<"$TARGETS_JSON")" == "1" ]] || {
+                      echo "deterministic admission requires exactly one target" >&2
+                      exit 1
+                  }
+                  url="$(jq -r '.[0].url' <<<"$TARGETS_JSON")"
+                  sha="$(jq -r '.[0].sha' <<<"$TARGETS_JSON")"
+                  name="$(jq -r '.[0].name' <<<"$TARGETS_JSON")"
+                  [[ "$url" =~ ^https:// ]] || {
+                      echo "the deterministic runner accepts public HTTPS sources only" >&2
+                      exit 1
+                  }
+
+                  mkdir -p sources/0
+                  git -C sources/0 init --quiet
+                  git -C sources/0 remote add origin "$url"
+                  timeout 5m git -C sources/0 \
+                      -c protocol.allow=never \
+                      -c protocol.https.allow=always \
+                      -c core.hooksPath=/dev/null \
+                      fetch --quiet --depth=1 origin "$sha"
+                  git -C sources/0 -c core.hooksPath=/dev/null checkout --quiet --detach FETCH_HEAD
+                  [[ "$(git -C sources/0 rev-parse HEAD)" == "$sha" ]] || {
+                      echo "the fetched commit does not match the audited sha" >&2
+                      exit 1
+                  }
+                  printf 'Fetched %s at %s for read-only deterministic scanning.\n' "$name" "$sha"
+
+            # Pinned after Aqua's 2026 credential incident, exact scanner version, no cache shared with trusted
+            # jobs. Even a future parser exploit lands in this disposable job with no registry credentials.
+            - name: Scan dependencies, secrets, and configuration with Trivy
+              if: needs.prepare.outputs.targets != '0'
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+              with:
+                  version: v0.72.0
+                  scan-type: fs
+                  scan-ref: sources
+                  scanners: vuln,secret,misconfig
+                  severity: HIGH,CRITICAL
+                  ignore-unfixed: true
+                  exit-code: "1"
+                  timeout: 10m
+                  cache: "false"
+                  skip-dirs: sources/0/.git
+
+    admission:
+        needs: [prepare, deterministic]
+        if: always()
+        runs-on: ubuntu-latest
+        steps:
+            - name: Require the static validation and deterministic scan
+              if: needs.prepare.result != 'success' || needs.deterministic.result != 'success'
+              run: |
+                  echo "Static registry validation or deterministic security scanning did not pass." >&2
+                  exit 1
+
+            # Exact action commit: this is the only third-party step that receives the gate credential. Moving
+            # tags cannot replace code in that trust boundary without a reviewed workflow change.
+            - name: Read every changed executable sha in the intentic security gate
+              if: needs.prepare.outputs.targets != '0'
+              id: gate
+              uses: intentic/gate-action@74e174eadde804d32c90ab21e61231aeea351f86 # v1.192.1
+              with:
+                  url: ${{ secrets.INTENTIC_EXTENSION_GATE_URL }}
+                  request: ${{ needs.prepare.outputs.request }}
+                  blocked-as: failure
+
+            # The first passing run writes its run id against the exact source sha. That push creates a new PR
+            # head, so branch protection evaluates the gate again on the attested commit before it can merge.
+            # A GitHub App token, not GITHUB_TOKEN: commits made by the workflow token deliberately do not
+            # trigger another workflow run. The short-lived App token makes the attested head receive its own
+            # required admission check, while avoiding a long-lived PAT.
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              if: needs.prepare.outputs['needs-attestation'] == 'true' && steps.gate.outputs.outcome == 'pass'
+              with:
+                  ref: ${{ github.event.pull_request.base.sha }}
+                  path: base
+                  persist-credentials: false
+
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              if: needs.prepare.outputs['needs-attestation'] == 'true' && steps.gate.outputs.outcome == 'pass'
+              with:
+                  node-version: "22"
+
+            - name: Re-read the candidate registry file at the audited head
+              if: needs.prepare.outputs['needs-attestation'] == 'true' && steps.gate.outputs.outcome == 'pass'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p candidate
+                  gh api -H "Accept: application/vnd.github.raw+json" \
+                      "repos/$HEAD_REPO/contents/.claude-plugin/marketplace.json?ref=$HEAD_SHA" \
+                      > candidate/marketplace.json
+
+            - name: Mint the registry bot token
+              if: needs.prepare.outputs['needs-attestation'] == 'true' && steps.gate.outputs.outcome == 'pass'
+              id: registry-token
+              uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+              with:
+                  app-id: ${{ vars.REGISTRY_APP_ID }}
+                  private-key: ${{ secrets.REGISTRY_APP_PRIVATE_KEY }}
+                  permission-contents: write
+                  permission-pull-requests: read
+
+            - name: Bind the passing run to the candidate sha
+              if: needs.prepare.outputs['needs-attestation'] == 'true' && steps.gate.outputs.outcome == 'pass'
+              env:
+                  GH_TOKEN: ${{ steps.registry-token.outputs.token }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+                  HEAD_REF: ${{ github.event.pull_request.head.ref }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  REGISTRY_SCAN_VERSION: ${{ vars.REGISTRY_SCAN_VERSION }}
+                  NPM_CONFIG_IGNORE_SCRIPTS: "true"
+                  RUN_ID: ${{ steps.gate.outputs['run-id'] }}
+                  SCAN_RUN_ID: ${{ github.run_id }}
+              run: |
+                  set -euo pipefail
+                  if [[ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+                      echo "A passing fork PR cannot be amended with the gate record. A maintainer must move it to a branch in $GITHUB_REPOSITORY." >&2
+                      exit 1
+                  fi
+                  cd "$RUNNER_TEMP"
+                  npm exec --yes --package="@intentic/registry-scan@$REGISTRY_SCAN_VERSION" -- \
+                      intentic-registry-scan attest \
+                      --base "$GITHUB_WORKSPACE/base/.claude-plugin/marketplace.json" \
+                      --candidate "$GITHUB_WORKSPACE/candidate/marketplace.json" \
+                      --run-id "$RUN_ID" \
+                      --scan-run-id "$SCAN_RUN_ID"
+
+                  current="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+                  [[ "$current" == "$HEAD_SHA" ]] || {
+                      echo "The pull request moved while it was being audited; leaving the newer head untouched." >&2
+                      exit 1
+                  }
+                  blob="$(gh api "repos/$GITHUB_REPOSITORY/contents/.claude-plugin/marketplace.json?ref=$HEAD_SHA" --jq .sha)"
+                  content="$(base64 -w0 "$GITHUB_WORKSPACE/candidate/marketplace.json")"
+                  gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/.claude-plugin/marketplace.json" \
+                      --raw-field message="chore: record intentic security gate $RUN_ID" \
+                      --raw-field content="$content" \
+                      --raw-field sha="$blob" \
+                      --raw-field branch="$HEAD_REF" >/dev/null

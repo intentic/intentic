@@ -71,6 +71,12 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
         // install, because extension code runs trusted in this browser and a branch is not a promise.
         return { kind: `unavailable`, reason: `The listing names no exact commit, so it can't be installed in one click.` };
     }
+    if (!entry.admitted) {
+        return {
+            kind: `unavailable`,
+            reason: `This exact commit has not passed the official registry's current security audit, so it cannot be installed from discovery.`,
+        };
+    }
     if (here === undefined) {
         return { kind: `installable`, action: `Install` };
     }
@@ -87,7 +93,10 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
 // the extension whose description says so, and somebody looking for a publisher should find everything of
 // theirs. The category rides along because it is a word people search with even where nothing displays it.
 const searchTextOf = (entry: RegistryEntry): string =>
-    [entry.name, entry.description, entry.category, entry.version].filter((part) => part !== undefined && part !== ``).join(` `).toLowerCase();
+    [entry.name, entry.description, entry.category, entry.version]
+        .filter((part) => part !== undefined && part !== ``)
+        .join(` `)
+        .toLowerCase();
 
 export const toListing = (entry: RegistryEntry, installed: readonly ExtensionSummary[]): DiscoverListing => ({
     entry,
@@ -124,13 +133,13 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
         {
             id: `verified`,
             label: `Verified`,
-            caption: `someone here read the source at the listed commit`,
+            caption: `the deterministic scan and agent audit passed, and someone read the source at the listed commit`,
             listings: listings.filter((listing) => listing.entry.trust === `verified`),
         },
         {
             id: `listed`,
             label: `Everything published`,
-            caption: `the pointer resolves and the manifest parses — nobody has read the code`,
+            caption: `no human source review — open an entry to see both automated checks`,
             listings: listings.filter((listing) => listing.entry.trust !== `verified`),
         },
     ].filter((section) => section.listings.length > 0);

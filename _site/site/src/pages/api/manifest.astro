@@ -123,14 +123,15 @@ const processes = `"processes": [
         <li>
             <code>sandbox</code> — the routes the <strong>UI half</strong> may call. Every door in <code>api.sandbox</code> is checked against
             it, so a call to anything not covered throws. That includes the typed <code>rpc</code> client, which resolves to a method and a
-            concrete path and is gated on that exactly as <code>request</code> and <code>json</code> are. An extension has no ambient client
-            to your daemon.
+            concrete path and is gated on that exactly as <code>request</code> and <code>json</code> are. This constrains use of the published
+            extension API; a browser bundle still shares the app's DOM, storage, globals and network access.
         </li>
         <li><code>daemon</code> — the routes the <strong>backend half</strong> may call through <code>api.daemon</code>, enforced daemon-side against its minted token.</li>
     </ul>
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
     <p>
-        Keep both as narrow as the feature needs. These lists are what a reviewer reads to decide what your extension can reach. The
+        Keep both as narrow as the feature needs. These lists are what a reviewer reads to understand declared daemon API use, not a complete
+        confinement boundary for browser or process code. The
         <a href="/api/http/">HTTP API</a> page is what the routes are. An extension's <em>own</em> namespace, <code>/x/&lt;id&gt;/…</code>,
         needs no entry on either list: its backend is its own code from the same approved checkout.
     </p>
@@ -142,7 +143,7 @@ const processes = `"processes": [
         bundle can't carry — a client library for somebody else's API, work that must outlive the tab, state assembled from workspace files.
     </p>
     <ul>
-        <li><strong>Its own route namespace.</strong> The backend serves <code>/x/&lt;id&gt;/…</code>, proxied by the daemon through its ordinary auth — the backend never sees an unauthenticated request and never sees a credential. The extension's UI calls its own namespace freely; no <code>permissions.sandbox</code> entry is needed for it, because the backend is the extension's own code from the same approved checkout.</li>
+        <li><strong>Its own route namespace.</strong> The backend serves <code>/x/&lt;id&gt;/…</code>, proxied by the daemon through its ordinary auth, so it does not receive the caller's session credential. It does receive its own extension token and workspace root for daemon work; that reach is part of the source audit. The extension's UI calls its own namespace freely because both halves are code from the same approved checkout.</li>
         <li><strong>One supervised host process.</strong> Every enabled backend runs in the daemon's single backend-host process, not in the daemon itself. Loaded code can't be unloaded, so the off switch, an update and a live edit all work the same way: the host restarts. The restart <em>is</em> the reload.</li>
         <li><strong>Declared reach back into the daemon.</strong> The backend's calls into the daemon's own routes go through <code>api.daemon</code> and are gated by <code>permissions.daemon</code>, with a per-extension token — the same honesty rule as the UI half, enforced against a different principal.</li>
         <li><strong>Self-contained by construction.</strong> The installed checkout has no <code>node_modules</code> and the host provides no import map, so everything except node builtins must be bundled in.</li>
@@ -199,8 +200,8 @@ const processes = `"processes": [
                     How the host hands you the file. <code>"text"</code> is decoded utf8, as a <code>text</code> prop.
                     <code>"blob"</code> is the whole file's bytes, as <code>blob</code>, for a format that must be parsed end to end.
                     <code>"url"</code> is a streaming URL to point an element at, as <code>src</code>, for audio and video, which
-                    range-read gigabytes and should never be held in memory. The host mints the credential on that URL, so your
-                    component never sees one.
+                    range-read gigabytes and should never be held in memory. The host mints a credentialed URL and hands the URL to your
+                    component; treat it as a short-lived bearer value and never log or persist it.
                 </td>
             </tr>
         </tbody>

@@ -18,10 +18,9 @@ const repo = (fullName: string, over: Partial<GithubRepo> = {}): GithubRepo => (
 const manifest = (publisher: string, name: string, version = "1.0.0"): string =>
     JSON.stringify({ publisher, name, version, engines: { intentic: "^1.0.0" }, entry: "dist/extension.js" });
 
-/* A reader over in-memory fixtures. `manifests` is each repo's manifest AT ITS DEFAULT BRANCH (what discovery
- * reads); `files` is exact content at `${fullName}@${ref}:${path}` (what the pinned-sha checks read). The fake
- * distinguishes them because the scan now genuinely reads at two different refs, and a fake that answered any
- * ref with the branch's file would hide exactly the staleness the checks exist to notice. */
+/* A reader over in-memory fixtures. `manifests` models a branch copy only for tests proving it is ignored;
+ * `files` is exact content at `${fullName}@${ref}:${path}`. Proposals and existing-listing checks both read the
+ * latter now, because the source commit is resolved before a single manifest byte is trusted. */
 const fakeGithub = (config: {
     found?: GithubRepo[];
     repos?: Record<string, GithubRepo>;
@@ -49,8 +48,11 @@ describe(`scanRegistry`, () => {
             file([]),
             fakeGithub({
                 found: [repo(`acme/incidents`, { description: `Incident triage in the rail`, stars: 12 })],
-                manifests: { "acme/incidents": manifest(`acme`, `incidents`, `1.2.0`) },
                 shas: { "acme/incidents": sha(`a`) },
+                files: {
+                    [`acme/incidents@${sha(`a`)}:intentic-extension.json`]: manifest(`acme`, `incidents`, `1.2.0`),
+                    [`acme/incidents@${sha(`a`)}:dist/extension.js`]: `export const activate = () => {};`,
+                },
             }),
             SCANNED_AT,
         );
@@ -119,8 +121,11 @@ describe(`scanRegistry`, () => {
             fakeGithub({
                 found: [repo(`typo/incidents`)],
                 repos: { "acme/incidents": repo(`acme/incidents`) },
-                manifests: { "typo/incidents": manifest(`acme`, `incidents`) },
                 shas: { "typo/incidents": sha(`c`) },
+                files: {
+                    [`typo/incidents@${sha(`c`)}:intentic-extension.json`]: manifest(`acme`, `incidents`),
+                    [`typo/incidents@${sha(`c`)}:dist/extension.js`]: `export const activate = () => {};`,
+                },
             }),
             SCANNED_AT,
         );
@@ -134,19 +139,57 @@ describe(`scanRegistry`, () => {
             file([]),
             fakeGithub({
                 found: [repo(`x/none`), repo(`x/broken`), repo(`x/old`, { archived: true }), repo(`x/empty`)],
-                manifests: { "x/broken": JSON.stringify({ publisher: `x` }), "x/empty": manifest(`x`, `empty`) },
-                shas: {},
+                shas: { "x/none": sha(`a`), "x/broken": sha(`b`) },
+                files: { [`x/broken@${sha(`b`)}:intentic-extension.json`]: JSON.stringify({ publisher: `x` }) },
             }),
             SCANNED_AT,
         );
 
         expect(result.proposals).toEqual([]);
         expect(result.warnings).toEqual([
-            expect.stringContaining(`x/none: topic is set but there is no intentic-extension.json`),
-            expect.stringContaining(`x/broken: intentic-extension.json does not parse`),
+            expect.stringContaining(`x/none@${sha(`a`)}: no intentic-extension.json`),
+            expect.stringContaining(`x/broken@${sha(`b`)}: does not parse`),
             expect.stringContaining(`x/old: archived`),
             expect.stringContaining(`x/empty: no commit found on main`),
         ]);
+    });
+
+    it(`resolves the sha before reading a proposal and catches invalid JSON without aborting the scan`, async () => {
+        const result = await scanRegistry(
+            file([]),
+            fakeGithub({
+                found: [repo(`x/moved`), repo(`x/not-json`)],
+                manifests: { "x/moved": manifest(`x`, `branch-copy`) },
+                shas: { "x/moved": sha(`a`), "x/not-json": sha(`b`) },
+                files: {
+                    [`x/moved@${sha(`a`)}:intentic-extension.json`]: manifest(`x`, `pinned-copy`),
+                    [`x/moved@${sha(`a`)}:dist/extension.js`]: `export const activate = () => {};`,
+                    [`x/not-json@${sha(`b`)}:intentic-extension.json`]: `{ broken`,
+                },
+            }),
+            SCANNED_AT,
+        );
+
+        expect(result.proposals[0]?.entry.name).toBe(`x.pinned-copy`);
+        expect(result.warnings).toContainEqual(expect.stringContaining(`x/not-json@${sha(`b`)}: intentic-extension.json is not JSON`));
+    });
+
+    it(`does not propose a commit whose shipped bundle cannot load`, async () => {
+        const result = await scanRegistry(
+            file([]),
+            fakeGithub({
+                found: [repo(`x/chunked`)],
+                shas: { "x/chunked": sha(`a`) },
+                files: {
+                    [`x/chunked@${sha(`a`)}:intentic-extension.json`]: manifest(`x`, `chunked`),
+                    [`x/chunked@${sha(`a`)}:dist/extension.js`]: `import "./chunk.js";`,
+                },
+            }),
+            SCANNED_AT,
+        );
+
+        expect(result.proposals).toEqual([]);
+        expect(result.warnings[0]).toContain(`./chunk.js`);
     });
 
     it(`re-derives the publishability checks at the PINNED sha, not at the branch`, async () => {

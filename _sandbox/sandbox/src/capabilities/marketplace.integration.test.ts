@@ -63,12 +63,42 @@ test("resolves every clonable source shape onto capability configs; npm stays un
     expect(marketplace).toEqual({
         name: "acme",
         plugins: [
-            { name: "alpha", kind: "plugin", trust: "listed", tier: "free", description: "Alpha tools", version: "1.0.0", install: { url, path: "plugins/alpha" } },
-            { name: "gh", kind: "plugin", trust: "listed", tier: "free", install: { url: "https://github.com/owner/gh-plugin.git", ref: "v2" } },
-            { name: "npm-only", kind: "plugin", trust: "listed", tier: "free" },
+            {
+                name: "alpha",
+                kind: "plugin",
+                trust: "listed",
+                admitted: true,
+                tier: "free",
+                description: "Alpha tools",
+                version: "1.0.0",
+                install: { url, path: "plugins/alpha" },
+            },
+            {
+                name: "gh",
+                kind: "plugin",
+                trust: "listed",
+                admitted: true,
+                tier: "free",
+                install: { url: "https://github.com/owner/gh-plugin.git", ref: "v2" },
+            },
+            { name: "npm-only", kind: "plugin", trust: "listed", admitted: true, tier: "free" },
             // An exact sha pins harder than a ref when both are present.
-            { name: "pinned", kind: "plugin", trust: "listed", tier: "free", install: { url: "https://example.com/p.git", ref: "abc123" } },
-            { name: "sub", kind: "plugin", trust: "listed", tier: "free", install: { url: "https://example.com/mono.git", path: "tools/plugin", ref: "v1" } },
+            {
+                name: "pinned",
+                kind: "plugin",
+                trust: "listed",
+                admitted: true,
+                tier: "free",
+                install: { url: "https://example.com/p.git", ref: "abc123" },
+            },
+            {
+                name: "sub",
+                kind: "plugin",
+                trust: "listed",
+                admitted: true,
+                tier: "free",
+                install: { url: "https://example.com/mono.git", path: "tools/plugin", ref: "v1" },
+            },
         ],
     });
     // The throwaway checkout is gone after the browse.
@@ -82,7 +112,21 @@ test("joins the scanner's facts file onto the curated entries and sorts verified
             name: "intentic",
             plugins: [
                 { name: "popular", kind: "extension", source: { source: "github", repo: "acme/popular", sha: "a".repeat(40) } },
-                { name: "checked", kind: "extension", trust: "verified", source: { source: "github", repo: "acme/checked", sha: "b".repeat(40) } },
+                {
+                    name: "checked",
+                    kind: "extension",
+                    trust: "verified",
+                    securityReview: {
+                        sha: "b".repeat(40),
+                        url: "https://github.com/acme/checked.git",
+                        policy: "team-policy",
+                        reviewer: "team-reviewer",
+                        reviewedAt: "2026-08-01T00:00:00.000Z",
+                        runId: "run-1",
+                        deterministic: { policy: "team-scan", scanner: "scanner", version: "1", runId: "scan-1" },
+                    },
+                    source: { source: "github", repo: "acme/checked", sha: "b".repeat(40) },
+                },
                 {
                     name: "evil",
                     kind: "extension",
@@ -113,7 +157,9 @@ test("a registry with no generated facts file resolves fine — most registries 
     const { ctx } = tempCtx();
     const url = await fixtureMarketplace(JSON.stringify({ name: "team", plugins: [{ name: "internal", kind: "extension", source: "./internal" }] }));
     const marketplace = await browseMarketplace(ctx, url);
-    expect(marketplace.plugins).toEqual([{ name: "internal", kind: "extension", trust: "listed", tier: "free", install: { url, path: "internal" } }]);
+    expect(marketplace.plugins).toEqual([
+        { name: "internal", kind: "extension", trust: "listed", admitted: true, tier: "free", install: { url, path: "internal" } },
+    ]);
 });
 
 test("a repo without .claude-plugin/marketplace.json throws and still cleans up its checkout", async () => {

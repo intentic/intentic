@@ -10,6 +10,7 @@ const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
     name: `radarsu.paperwork`,
     kind: `extension`,
     trust: `listed`,
+    admitted: true,
     tier: `free`,
     install: { url: `https://github.com/radarsu/intentic-paperwork.git`, ref: SHA },
     ...over,
@@ -56,6 +57,12 @@ describe(`what a registry row becomes against this sandbox`, () => {
 
     test(`a blocked row with no stated reason still says something`, () => {
         expect(listingState(entry({ trust: `blocked` }), []).reason).toBeTruthy();
+    });
+
+    test(`an official row with no current security admission cannot be installed`, () => {
+        const state = listingState(entry({ admitted: false }), []);
+        expect(state.kind).toBe(`unavailable`);
+        expect(state.reason).toContain(`has not passed`);
     });
 
     test(`a pointer with no exact commit reads, but cannot be installed in one click`, () => {
@@ -109,7 +116,7 @@ describe(`how the list is grouped and searched`, () => {
         const sections = listingSections(listings);
         expect(sections.map((section) => section.id)).toEqual([`verified`, `listed`]);
         expect(sections[0]?.listings).toHaveLength(1);
-        expect(sections[1]?.caption).toContain(`nobody has read the code`);
+        expect(sections[1]?.caption).toContain(`no human source review`);
     });
 
     test(`a group nothing landed in is not a heading over nothing`, () => {

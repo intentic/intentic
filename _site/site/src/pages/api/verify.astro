@@ -9,16 +9,16 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * two people who never open that guide: an author deciding whether "verified" is worth pursuing, and a user
  * deciding whether to install. Searching the docs for "verified" returned the gallery and nothing else.
  *
- * THE PAGE'S ONE JOB is to be exact about who is claiming what. Three different parties make three different
- * promises here — a commit sha, the manifest gate, and a human reviewer — and the failure mode this page exists
- * to prevent is a reader collapsing them into one feeling of safety. So every row below says what it does NOT
- * guarantee, in the same breath. */
+ * THE PAGE'S ONE JOB is to be exact about who is claiming what. Pinning, host enforcement, deterministic
+ * scanning, agent review and human review make different promises; the failure mode this page exists to prevent
+ * is a reader collapsing them into one feeling of safety. So every row below says what it does NOT guarantee,
+ * in the same breath. */
 
 const states = [
     {
         state: `listed`,
-        claim: `The pointer resolves, the manifest parses, the publisher owns the source repo.`,
-        read: `Nobody read the code.`,
+        claim: `In the official registry, the exact source passed both automated admission checks.`,
+        read: `No human source review is claimed. A third-party registry defines its own admission boundary.`,
     },
     {
         state: `verified`,
@@ -40,13 +40,23 @@ const layers = [
     },
     {
         layer: `The manifest gate`,
-        guarantees: `Blast radius. Undeclared registrations are refused; undeclared routes throw; secrets never reach the bundle.`,
-        doesnt: `That declared powers are used well.`,
+        guarantees: `Declared host integration. Undeclared registrations are refused and cooperative daemon calls are checked.`,
+        doesnt: `Browser or process confinement. Extension code can use capabilities outside the extension API.`,
     },
     {
-        layer: `Registry review`,
-        guarantees: `The pointer resolves, the publisher is real, the description matches what the manifest contributes.`,
-        doesnt: `A code audit. It is not one.`,
+        layer: `Deterministic security scan`,
+        guarantees: `Trivy fails admission on known high or critical dependency flaws with fixes, committed secrets, and dangerous deployment configuration.`,
+        doesnt: `That unfamiliar behavior is benign, or that vulnerability data and detection rules are complete.`,
+    },
+    {
+        layer: `Adversarial agent audit`,
+        guarantees: `An intentic agent reads every executable surface and shipped artifact in the exact source; blocked or unjudged fails closed.`,
+        doesnt: `A proof of safety or runtime isolation. It is a fallible semantic review control.`,
+    },
+    {
+        layer: `Human verification`,
+        guarantees: `Somebody here independently read the source at that same commit.`,
+        doesnt: `An ongoing audit of later commits.`,
     },
 ];
 
@@ -65,8 +75,8 @@ const checks = [
 >
     <h2>The three words a listing can carry</h2>
     <p>
-        Every entry in a registry has a <code>trust</code> state. It is asserted by the pull request that lists you, which means a human wrote
-        it down and another human reviewed it — there is no automated promotion, in either direction.
+        Every entry in a registry has a <code>trust</code> state. That editorial claim is asserted by pull request. In the official registry it
+        is separate from the source-bound admission record that the automated workflow writes after both security checks pass.
     </p>
     <table>
         <thead>
@@ -85,9 +95,10 @@ const checks = [
         </tbody>
     </table>
     <p>
-        <strong>Listed is the honest default</strong>, and most rows will always be listed. An entry that states no trust level at all — on a
-        third-party registry that never adopted the field — resolves to listed, because a registry that doesn't use it hasn't asserted
-        anything and shouldn't be read as though it had.
+        <strong>Listed is the honest default</strong>, and most rows will always be listed. Official discovery only enables a listed or
+        verified extension while its <code>securityReview</code> matches the repository, commit, optional subdirectory, current policies and
+        scanner version. An entry that states no trust level on a third-party registry still resolves to listed, but that does not imply it
+        passed intentic's admission checks.
     </p>
     <p>
         A blocked entry <em>stays in the file</em>. Removing the row would hide it from people browsing and tell the people who already
@@ -97,9 +108,9 @@ const checks = [
 
     <h2>What the nightly scan checks</h2>
     <p>
-        Separate from all of that, and colder: a job re-derives a handful of facts from your pinned commit, as a stranger holding nothing but
-        the pointer. It answers the browser's one question — <em>will this thing load?</em> — and it is why a gallery card can show a
-        <strong>✓ loads</strong> mark that nobody typed.
+        Separate from admission, a nightly job re-derives a handful of compatibility facts from your pinned commit, as a stranger holding
+        nothing but the pointer. It answers the browser's narrower question — <em>will this thing load?</em> — and it is why a gallery card
+        can show a <strong>✓ loads</strong> mark that nobody typed.
     </p>
     <table>
         <thead>
@@ -119,9 +130,9 @@ const checks = [
         keeps them visually apart for that reason.
     </p>
 
-    <h2>Three layers, and precisely what each guarantees</h2>
+    <h2>Five layers, and precisely what each guarantees</h2>
     <p>
-        Trust in an extension is not one thing. Three separate mechanisms protect the person installing yours, they fail in different ways, and
+        Trust in an extension is not one thing. Five separate mechanisms protect the person installing yours, they fail in different ways, and
         the reason to lay them out in a table is that the middle column is easy to over-read:
     </p>
     <table>
@@ -142,8 +153,8 @@ const checks = [
     </table>
     <p>
         The honest summary: installing an extension is trusting its author, the same way installing an editor plugin is. What intentic
-        contributes is that the trust is <em>bounded and legible</em> — the owner can read what your extension may touch before saying yes, and
-        it cannot grow past that without asking them again.
+        contributes is source-bound deterministic scanning and adversarial review, optional human verification, and a legible declaration of
+        cooperative host access. Those reduce risk; they do not turn code sharing the app and sandbox into confined code.
     </p>
 
     <h2>Getting verified</h2>

@@ -9,18 +9,16 @@ import { checksOk, checksProblem, type DiscoverListing, splitListingName } from 
 /* ONE LISTING, READ BEFORE IT IS RUN — and the surface where this product's actual argument about trust gets
  * made instead of implied.
  *
- * Three layers protect somebody installing an extension, and until now the app stated none of them at the
- * moment of the decision: the sha pins what runs, the manifest bounds what it may reach, and the registry may
- * or may not have had a human read the code. They guarantee genuinely different things, so they are three
- * lines here rather than one badge — and the third one is allowed to say NO. "Nobody has read this code" is
- * the honest default for most listings and printing it plainly is the point; a surface that only ever showed
- * the green states would be selling, not informing.
+ * The source identity pins what runs, a deterministic scanner and the registry's agent gate inspect that exact
+ * object, and a verified row additionally had a human read it. The manifest is NOT a browser sandbox: it gates
+ * cooperative daemon API calls while the bundle shares the app's JavaScript realm. These are different
+ * guarantees, so they are separate lines rather than one safety badge.
  *
  * THE STRONGEST MOVE IS OFFERED WHERE IT IS MOST NEEDED. The owner's own agent can read the exact commit cold
  * and report back before anything is installed, which is the only thing on this screen that can answer "does
  * the code do what the description says". On a reviewed listing that is a secondary offer beside Install. On an
- * unreviewed one it is the PRIMARY button and Install steps back to a plain one — not to discourage installing,
- * but because "nobody read it" and "here is how to have it read" belong in the same breath. */
+ * listing with no human review it is the PRIMARY button and Install steps back to a plain one: the registry's
+ * automated gate is baseline admission, while the owner's own agent is an independent second read. */
 
 const { listing, canInstall, installing } = defineProps<{
     listing: DiscoverListing;
@@ -87,7 +85,9 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                  is. Everything that is a CLAIM about safety is below, where it can be stated in full. -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                 <span v-if="listing.entry.version">{{ listing.entry.version }}</span>
-                <span v-if="listing.entry.stars !== undefined" class="inline-flex items-center gap-0.5"><Icon name="star" />{{ listing.entry.stars }}</span>
+                <span v-if="listing.entry.stars !== undefined" class="inline-flex items-center gap-0.5"
+                    ><Icon name="star" />{{ listing.entry.stars }}</span
+                >
                 <span v-if="listing.entry.category">{{ listing.entry.category }}</span>
                 <span :class="listing.entry.tier === `premium` ? `text-primary-500` : ``">
                     {{ listing.entry.tier === "premium" ? "Premium — needs an intentic membership" : "Free" }}
@@ -106,8 +106,8 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             <!-- Where the state of this row is not "here it is to install", it is said before anything else on
                  the panel: a reader looking at a blocked listing must not have to reach the button to find out. -->
             <div v-if="listing.state.kind === `blocked`" :class="cmp.alertDanger()">
-                <b>Blocked.</b> {{ listing.state.reason }} It stays listed rather than disappearing, because
-                anyone who already installed it is the person this most concerns.
+                <b>Blocked.</b> {{ listing.state.reason }} It stays listed rather than disappearing, because anyone who already installed it is the
+                person this most concerns.
             </div>
             <div v-else-if="listing.state.kind === `unavailable`" :class="cmp.alertInfo()">{{ listing.state.reason }}</div>
             <div v-else-if="listing.state.kind === `installed`" :class="cmp.alertInfo()">
@@ -116,7 +116,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             <div v-else-if="listing.state.kind === `update`" :class="cmp.alertInfo()">
                 You have this installed at <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
                 >. The listing points at <code class="ui-code">{{ shortRef }}</code
-                >. Updating replaces the code wholesale, and re-asks if it wants more than you approved.
+                >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
             </div>
 
             <!-- THE TRUST BLOCK. Three different parties guarantee three different things; a single badge
@@ -124,19 +124,41 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
                 <div :class="cmp.sectionLabel()">What you'd be trusting</div>
 
+                <template v-if="listing.entry.securityReview">
+                    <div class="flex items-start gap-2 text-xs">
+                        <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
+                        <span class="text-content">
+                            <b>Deterministic scan</b> — {{ listing.entry.securityReview.deterministic.scanner }}
+                            {{ listing.entry.securityReview.deterministic.version }} found no blocking dependency, secret, or configuration issue.
+                            <span class="text-muted">Workflow run {{ listing.entry.securityReview.deterministic.runId }}.</span>
+                        </span>
+                    </div>
+                    <div class="flex items-start gap-2 text-xs">
+                        <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
+                        <span class="text-content">
+                            <b>Agent security audit</b> — {{ listing.entry.securityReview.reviewer }} passed this exact source under
+                            <code class="ui-code">{{ listing.entry.securityReview.policy }}</code
+                            >. <span class="text-muted">Gate run {{ listing.entry.securityReview.runId }}.</span>
+                        </span>
+                    </div>
+                </template>
+                <div v-else class="flex items-start gap-2 text-xs">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
+                    <span class="text-content">
+                        <b>No security audit record</b> — this registry has not bound both automated checks to the source.
+                    </span>
+                </div>
+
                 <div v-if="verified" class="flex items-start gap-2 text-xs">
                     <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-content">
-                        <b>Reviewed</b> — someone here read the source at this commit.
+                        <b>Human reviewed</b> — someone here also read the source at this commit.
                         <span v-if="listing.entry.trustReason" class="text-muted">{{ listing.entry.trustReason }}</span>
                     </span>
                 </div>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
-                    <span class="text-content">
-                        <b>Not reviewed</b> — the pointer resolves and the manifest parses.
-                        <span class="text-muted">Nobody here has read this code.</span>
-                    </span>
+                    <span class="text-content"><b>No human source review</b> — use your own agent read if you want an independent account.</span>
                 </div>
 
                 <div v-if="ref40" class="flex items-start gap-2 text-xs">
@@ -148,12 +170,12 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 </div>
 
                 <div class="flex items-start gap-2 text-xs">
-                    <Icon name="check" class="mt-0.5 shrink-0 text-success" />
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
-                        <b>Bounded</b> —
+                        <b>Not browser-isolated</b> —
                         <span class="text-muted">
-                            it can only do what it declares, you'll see that list before you approve, and it can't grow past it without asking you
-                            again.
+                            its bundle shares this app's page, browser storage and network access. The manifest gates daemon calls made through the
+                            extension API; it does not confine browser code.
                         </span>
                     </span>
                 </div>
@@ -172,7 +194,12 @@ const auditLeads = computed(() => auditable.value && !verified.value);
 
             <div v-if="sourceHref" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
                 <span class="text-subtle">Source</span>
-                <a :href="sourceHref" target="_blank" rel="noreferrer noopener" class="inline-flex items-center gap-1 font-mono text-link hover:underline">
+                <a
+                    :href="sourceHref"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    class="inline-flex items-center gap-1 font-mono text-link hover:underline"
+                >
                     {{ repo ?? listing.entry.install?.url }}<span v-if="shortRef"> @ {{ shortRef }}</span> <Icon name="external-link" />
                 </a>
             </div>

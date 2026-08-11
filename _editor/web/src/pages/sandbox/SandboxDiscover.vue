@@ -28,11 +28,9 @@ import { type DiscoverListing, listingSections, toListing } from "./discoverList
  *     them. Here the list is already on screen (the official registry is the default read, not a default
  *     value in a box), the search box is the first control, and the registry is a source LINE with a way to
  *     change it. "Registries are plural" stays exactly as true; it stops being a toll.
- *  2. VERIFICATION WAS A GLYPH IN A SCROLLBOX. Somebody reading an author's source at a specific commit is the
- *     most expensive thing anyone does per listing, and it was rendered as a 12px shield between a version
- *     string and a star count. It is now the first section, with its claim written out — and the claim the
- *     OTHER section makes ("nobody read this") is written out too, because a page that only prints the good
- *     news is an advertisement.
+ *  2. VERIFICATION WAS A GLYPH IN A SCROLLBOX. The automated gate and optional human source read are distinct
+ *     claims about one exact commit. The first is now required for official admission; the second still leads
+ *     the catalogue and is stated without dressing an agent verdict up as human review.
  *  3. THERE WAS NOWHERE TO LEARN ANYTHING. A row was a truncated line and a click filled in a form. A stranger's
  *     extension needs a panel: what it is, whose it is, what is guaranteed and by whom, and the one thing this
  *     product can offer that a marketplace cannot — the reader's own agent, reading that exact commit before a
@@ -238,7 +236,13 @@ const emptyNote = computed<string | undefined>(() => {
              single most useful narrowing this list has. The switcher is suppressed while nothing is verified:
              a filter that can only ever empty the page is a control that lies about the catalogue. -->
         <div class="flex flex-wrap items-center gap-2">
-            <FilterBar v-if="listings.length >= FILTERABLE_FROM" v-model="query" placeholder="Name, publisher, what it does…" :count="matches.length" class="flex-1">
+            <FilterBar
+                v-if="listings.length >= FILTERABLE_FROM"
+                v-model="query"
+                placeholder="Name, publisher, what it does…"
+                :count="matches.length"
+                class="flex-1"
+            >
                 <template v-if="verifiedCount > 0" #controls>
                     <Segmented
                         v-model="mode"
@@ -250,13 +254,7 @@ const emptyNote = computed<string | undefined>(() => {
                 </template>
             </FilterBar>
             <div v-else class="flex-1"></div>
-            <button
-                type="button"
-                :class="cmp.iconButton(`h-8 w-8`)"
-                :disabled="isFetching"
-                v-tooltip.top="`Re-read the registry`"
-                @click="refetch"
-            >
+            <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="isFetching" v-tooltip.top="`Re-read the registry`" @click="refetch">
                 <Icon name="refresh" :spin="isFetching" />
             </button>
         </div>
@@ -265,7 +263,7 @@ const emptyNote = computed<string | undefined>(() => {
              point somewhere else that costs a click instead of standing in front of the catalogue. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
             <span class="text-subtle">Source</span>
-            <span class="font-medium text-content">{{ isOfficial ? registryName ?? `Official registry` : registryName ?? url }}</span>
+            <span class="font-medium text-content">{{ isOfficial ? (registryName ?? `Official registry`) : (registryName ?? url) }}</span>
             <span v-if="!isOfficial" class="truncate font-mono text-subtle">{{ url }}</span>
             <button v-if="!changing" type="button" class="text-link hover:underline" @click="openChange">change</button>
             <button v-if="!isOfficial && !changing" type="button" class="text-link hover:underline" @click="backToOfficial">
@@ -310,12 +308,7 @@ const emptyNote = computed<string | undefined>(() => {
                  hub's index column and the shell with a chat panel the user drags. -->
             <div class="@container">
                 <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-                    <DiscoverCard
-                        v-for="listing in section.listings"
-                        :key="listing.entry.name"
-                        :listing="listing"
-                        @open="openListing(listing)"
-                    />
+                    <DiscoverCard v-for="listing in section.listings" :key="listing.entry.name" :listing="listing" @open="openListing(listing)" />
                 </div>
             </div>
         </div>

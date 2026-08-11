@@ -23,7 +23,7 @@ lists a team's agent plugins and its intentic extensions together.
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `.claude-plugin/marketplace.json` | humans, via pull request | every decision — what is listed, and at which commit and trust level |
+| `.claude-plugin/marketplace.json` | humans + protected admission workflow | every decision — what is listed, the exact source, trust level, and source-bound security record |
 | `.claude-plugin/registry.generated.json` | the nightly scanner | only facts read back off the source host: stars, last push |
 
 Keeping the derived data out of the curated file is load-bearing, not tidiness. Star counts in the hand-edited
@@ -36,13 +36,22 @@ browse wire shape, so the app's list and the website's gallery are the same rows
 
 ## Trust, and what each state claims
 
-`listed` is the honest default: the pointer resolves, the manifest parses, the publisher owns the source repo,
-and **nobody read the code**. `verified` means a human read the source at that commit. `blocked` means
-known-malicious or known-broken, with the reason alongside.
+In the official registry, `listed` means the exact source passed the deterministic scan and intentic agent audit,
+but no human source review is claimed. `verified` means a human also read that same source. `blocked` means
+known-malicious or known-broken, with the required reason alongside. A `verified` row without a
+`securityReview`, a review copied from another repository/sha/subdirectory, or a blocked row without a reason does not parse.
+
+`securityReview` records the repository, commit, subdirectory, both versioned policies, scanner and version,
+timestamp, Trivy workflow run and agent-gate run. The official resolver accepts only current Trivy and Intentic
+policies with that complete subject equal to the install pointer. A row missing either stays visible in the app
+with install disabled and is omitted from the public gallery; it cannot become an update offer either. This is
+the runtime backstop behind the registry's required PR check.
 
 A blocked entry stays in the file. Deleting the row hides it from people browsing and tells the people who
 already installed it nothing, which is backwards — they are the ones at risk. Absent on a third-party registry
 resolves to `listed`, because a registry that doesn't use the field hasn't asserted anything.
+Third-party registries are their own admission boundary: their non-blocked rows remain installable without
+adopting intentic's gate or policy, and the app states when they carry no audit record.
 
 Installed sandboxes read these states back on a daily comparison, so trust reaches the people past the browse
 moment too: a row turned `blocked` raises an advisory on the installed extension (and, by default, switches it
@@ -89,6 +98,12 @@ listing instead of shadowing it.
 because extension code runs trusted in the owner's browser and a branch name is a promise the upstream can
 break with a force-push. A registry entry without one still lists and still reads; it just can't be installed
 in a click.
+
+The sha is necessary but does not confine the code. A browser entry runs in the app's JavaScript realm with
+page, browser-storage and network access; server/process/agent/bin/environment contributions have their own
+execution surfaces. The manifest gates cooperative calls through the extension API, not arbitrary browser
+behavior. Deterministic scanning catches known dependency, secret and configuration findings; the agent audit
+exists because neither those signatures nor manifest validation can answer malicious intent.
 
 ## Key files
 

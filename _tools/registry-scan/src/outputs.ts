@@ -20,7 +20,7 @@ const writeJson = async (path: string, value: unknown): Promise<void> => {
 
 const prBody = (proposal: ListingProposal): string =>
     [
-        `Found by the nightly scan: [\`${proposal.repo}\`](https://github.com/${proposal.repo}) carries the \`intentic-extension\` topic and a manifest that parses.`,
+        `Found by the nightly scan: [\`${proposal.repo}\`](https://github.com/${proposal.repo}) carries the \`intentic-extension\` topic.`,
         ``,
         `| | |`,
         `| --- | --- |`,
@@ -28,15 +28,15 @@ const prBody = (proposal: ListingProposal): string =>
         `| Version | \`${proposal.entry.version}\` |`,
         `| Pinned commit | \`${proposal.entry.source.sha}\` |`,
         ``,
-        `**What to check before merging.** The manifest parses and the publisher does not collide with an`,
-        `existing listing — the scan verified both, and nothing else. Review checks the pointer, not the code:`,
+        `**Mechanical checks complete.** At that exact commit the manifest parses, the declared browser bundle`,
+        `exists and is loadable, and the publisher does not collide with an existing listing. No author code ran.`,
         ``,
-        `- [ ] The commit resolves and the entry bundle exists at it.`,
-        `- [ ] The description matches what the manifest actually contributes.`,
-        `- [ ] The publisher slug belongs to whoever owns this repository.`,
+        `**Security admission is still required.** The protected \`extension admission\` check scans the exact`,
+        `source with Trivy, then gives it to the intentic agent gate. A pass binds both runs back to this branch;`,
+        `blocked, unjudged, missing evidence, or a later source change keeps the pull request unmergeable.`,
         ``,
-        `Merging lists it as \`trust: "listed"\` — the pointer resolves, and that is the whole claim. Promoting`,
-        `to \`verified\` is a separate edit by somebody who has read the source at this sha.`,
+        `Merging lists it as \`trust: "listed"\`: both automated checks passed, but no human source review`,
+        `is claimed. Promoting it to \`verified\` is a separate edit by somebody who read this exact sha.`,
     ].join("\n");
 
 export const scanSummary = ({ facts, proposals, warnings }: ScanResult): string =>

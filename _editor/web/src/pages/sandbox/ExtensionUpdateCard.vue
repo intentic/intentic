@@ -28,12 +28,7 @@ import { updateBrief } from "./extensionBrief";
 
 const { extension } = defineProps<{ extension: ExtensionSummary }>();
 
-const {
-    previewUpdate,
-    applyUpdate,
-    revertUpdate,
-    setUpdatePolicy,
-} = useExtensions();
+const { previewUpdate, applyUpdate, revertUpdate, setUpdatePolicy } = useExtensions();
 
 const update = computed(() => extension.update);
 const identity = computed(() => extensionIdOf(extension.manifest));
@@ -172,7 +167,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                 <StatusBadge v-if="update.securityFix" variant="danger" label="security fix" size="xs" />
                 <StatusBadge
                     :variant="update.trust === `verified` ? `success` : `neutral`"
-                    :label="update.trust === `verified` ? `verified` : `listed — nobody read the code`"
+                    :label="update.trust === `verified` ? `verified` : `listed — no human review`"
                     size="xs"
                 />
                 <span class="text-2xs text-subtle">listed {{ timeAgo(Date.parse(update.at)) }}</span>
@@ -200,7 +195,14 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">
                 <Button v-if="!preview" size="small" outlined :loading="busy" label="See what changed…" @click="stage" />
-                <Button v-else size="small" :severity="preview.powers.added.length > 0 ? `warn` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
+                <Button
+                    v-else
+                    size="small"
+                    :severity="preview.powers.added.length > 0 ? `warn` : undefined"
+                    :loading="busy"
+                    :label="confirmLabel"
+                    @click="apply"
+                />
                 <button v-if="update.review" type="button" :class="cmp.linkButton(`text-2xs`)" @click="openReview(update.review.conversationId)">
                     Your agent already read this diff — open its review
                 </button>
@@ -215,7 +217,9 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
         <!-- The way back, ordinary and visible: "the last update made it worse" needs no failing probe. -->
         <p v-if="extension.previous && extension.health?.state !== `unhealthy`" class="text-2xs text-subtle">
             The previous version is kept{{ extension.previous.version !== undefined ? ` (v${extension.previous.version})` : `` }}.
-            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="busy" @click="revert">Revert to {{ short(extension.previous.ref) }}</button>
+            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="busy" @click="revert">
+                Revert to {{ short(extension.previous.ref) }}
+            </button>
         </p>
 
         <!-- The standing answer: what happens the next time the registry lists a release of THIS extension. -->

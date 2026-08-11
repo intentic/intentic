@@ -75,9 +75,7 @@ const installedWorkspace = async (author: { url: string; v1: string }, registry:
     await git(extensionDir(workspace.root, "demo"), "checkout", "--detach", "-q", author.v1);
     const svc = services({
         workspace,
-        capabilities: memoryCapabilitiesStore([
-            { id: "demo", kind: "extension", config: { url: author.url, ref: author.v1, registry } },
-        ]),
+        capabilities: memoryCapabilitiesStore([{ id: "demo", kind: "extension", config: { url: author.url, ref: author.v1, registry } }]),
         // The harness stubs git and files (the worktree suites cover their mechanics); this suite IS about
         // clones, swaps and heads, so the verbs the update lifecycle uses run real against the fixtures above.
         git: { clone: gitClone, checkout: gitCheckout, head: gitHead, fullHead: gitFullHead },
@@ -167,7 +165,19 @@ test("the auto rung refuses an unverified listing and says so — the click stay
 
 test("a verified release whose powers grew still falls back to notify, naming the new power", async () => {
     const author = await authorRepo();
-    const registry = await registryRepo(author, author.v2, { trust: "verified", trustReason: "read at this sha" });
+    const registry = await registryRepo(author, author.v2, {
+        trust: "verified",
+        trustReason: "read at this sha",
+        securityReview: {
+            sha: author.v2,
+            url: author.url,
+            policy: "team-policy",
+            reviewer: "team-reviewer",
+            reviewedAt: "2026-08-01T00:00:00.000Z",
+            runId: "run-1",
+            deterministic: { policy: "team-scan", scanner: "scanner", version: "1", runId: "scan-1" },
+        },
+    });
     const { workspace, svc } = await installedWorkspace(author, registry);
     await writeUpdatePolicy(workspace.root, "acme.demo", { updates: "auto" });
 

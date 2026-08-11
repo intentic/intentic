@@ -44,10 +44,10 @@ mismatch is a type error rather than a runtime surprise.
 ## How it fits
 
 Depended on by `_sandbox/sandbox` (the daemon) and `_editor/web` (the browser), by `@intentic/extension-api` (so
-`api.sandbox.rpc` can be typed), and by every extension that talks to any of them. It depends on almost nothing
-itself — only `@intentic/extension-manifest`, for the manifest schema the daemon validates installs against —
-and that is what lets every plane import it without a cycle. The manifest schema is in a package of its own
-rather than in `extension-api` precisely so this stays true in one direction.
+`api.sandbox.rpc` can be typed), and by every extension that talks to any of them. Its few shared dependencies
+include `@intentic/extension-manifest`, for the install shape, and `@intentic/registry`, for marketplace rows and
+their source-bound admission evidence. Keeping those schemas outside `extension-api` lets every plane import
+the wire without a cycle.
 
 ## Conventions & gotchas
 
