@@ -91,10 +91,20 @@ const openArea = (): void =>
             </div>
         </div>
 
-        <div v-else class="min-h-0 flex-1 overflow-hidden px-6 py-5">
+        <!-- NO CARD HERE. In the routed area the document is a body beside a contents rail and takes the frame
+             that says so; in a tab it IS the pane, and boxing it draws a lit border a few pixels inside the
+             pane's own — a card in a card, paying for it twice in padding and handing the prose a narrower
+             column than the same text has when the README beside it is opened as a file. So this reads exactly
+             like that file preview: the canvas, a centred measure, and `ui-softscroll` — a whisper of a
+             scrollbar until the pointer is in the column, which is right for a surface being read.
+
+             The scroll area is the TAB's rather than the page's, and can be: the host keys a document tab by its
+             directory, so another package is a fresh mount and arrives at the top on its own. -->
+        <div v-else class="ui-softscroll min-h-0 flex-1 overflow-y-auto bg-canvas px-6 py-5">
             <DocPage
                 v-if="dir === undefined"
                 key="overview"
+                class="mx-auto max-w-3xl"
                 :prose="set?.prose"
                 :anchors="[]"
                 :provenance="set?.repoDoc?.provenance"
@@ -104,6 +114,7 @@ const openArea = (): void =>
             <DocPage
                 v-else
                 :key="dir"
+                class="mx-auto max-w-3xl"
                 :prose="packageQuery.data.value"
                 :figures="packageFigures(dir, set?.index, set?.repoDoc)"
                 :anchors="staleness?.anchors ?? []"

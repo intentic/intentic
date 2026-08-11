@@ -3,9 +3,16 @@
 
      The prose is rendered by the kit's <Markdown>, which is the same engine the chat and the file viewer use, so
      a document's figures, code blocks and file links behave here exactly as they do everywhere else. Nothing on
-     this page is styled by the document: it authored meaning, the app draws it. -->
+     this page is styled by the document: it authored meaning, the app draws it.
+
+     CONTENT, NOT A SURFACE. It draws no frame, owns no scroller and sets no padding, because whether a document
+     wants a box around it is a fact about WHERE IT IS BEING READ, not about the document: in the routed area it
+     is the body beside a contents rail and takes the same <Panel> every other index-and-body screen does; in a
+     Workspace tab it is the tab's whole content, beside a README opened as a file, and a card there boxes a
+     document inside a pane that is already a box. Each surface says so in its own template; attributes fall
+     through to the root, so "how much room" is the caller's line to write. -->
 <script setup lang="ts">
-import { cmp, Icon, Markdown, Panel, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { cmp, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { DocAnchor, DocIndexEntry, DocProvenance } from "./docModel.js";
 import { host } from "./host.js";
@@ -42,14 +49,9 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
 </script>
 
 <template>
-    <!-- A framed <Panel>, like the note reader and the activity timeline. It used to be bare prose on the page,
-         which was the last of the three index-and-body screens to differ: the index is chrome and never boxes
-         itself, the BODY is content and always does. The Panel owns the scroll area (independent of the contents
-         menu beside it), so this component no longer runs one of its own. Keyed per page by the parent, so the
-         fade is one page arriving rather than a list of them animating. -->
-    <Panel grow class="animate-fade-in">
-        <div class="flex flex-col gap-5 px-6 py-5">
-            <!-- Staleness sits ABOVE the prose, because a reader who is about to trust a page needs to know first. It
+    <!-- Keyed per page by the caller, so the fade is one page arriving rather than a list of them animating. -->
+    <article class="flex animate-fade-in flex-col gap-5">
+        <!-- Staleness sits ABOVE the prose, because a reader who is about to trust a page needs to know first. It
              names the reason rather than just the verdict: "points at a file that is gone" and "12 commits behind"
              call for different actions.
 
@@ -57,56 +59,55 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
              so this is the ordinary condition of a document rather than an alarm about it — drawn as a bordered
              amber block it was the loudest thing on every page, which is both wrong and, being nearly always
              true, ignorable. The dot is the same amber as the sidebar's marks, so the two read as one fact. -->
-            <p v-if="staleness?.stale === true" class="flex items-center gap-2 text-xs text-muted">
-                <span class="size-1.5 shrink-0 rounded-full bg-warning/70" aria-hidden="true"></span>
-                May be out of date — {{ staleness.reason }}.
-            </p>
+        <p v-if="staleness?.stale === true" class="flex items-center gap-2 text-xs text-muted">
+            <span class="size-1.5 shrink-0 rounded-full bg-warning/70" aria-hidden="true"></span>
+            May be out of date — {{ staleness.reason }}.
+        </p>
 
-            <!-- Measured facts first: how big this is, what it sits between, how it compares. Nobody writes
+        <!-- Measured facts first: how big this is, what it sits between, how it compares. Nobody writes
              these — `intentic-docs check` computes them into the index and this draws them, so a page cannot
              carry a line count that stopped being true. -->
-            <Markdown v-if="figures !== undefined && figures !== ``" :source="figures" style="--prose-measure: 76ch" />
+        <Markdown v-if="figures !== undefined && figures !== ``" :source="figures" style="--prose-measure: 76ch" />
 
-            <Markdown v-if="prose !== undefined" :source="prose" style="--prose-measure: 76ch" />
-            <p v-else class="text-sm text-muted">This page has no prose yet.</p>
+        <Markdown v-if="prose !== undefined" :source="prose" style="--prose-measure: 76ch" />
+        <p v-else class="text-sm text-muted">This page has no prose yet.</p>
 
-            <!-- The anchors are places to go, so they are drawn as a list of places: a quiet label and rows that
+        <!-- The anchors are places to go, so they are drawn as a list of places: a quiet label and rows that
              light up under the pointer. The bordered card they used to sit in announced a panel of settings. -->
-            <section v-if="anchors.length > 0" class="flex flex-col gap-0.5">
-                <h2 :class="cmp.sectionLabel(`mb-1 text-2xs`)">Where to start reading</h2>
-                <button
-                    v-for="anchor in anchors"
-                    :key="anchor.path"
-                    type="button"
-                    class="anchorrow flex w-full items-start gap-3 rounded-lg px-2.5 py-1.5 text-left"
-                    @click="open(anchor)"
-                >
-                    <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
-                    <span class="flex min-w-0 flex-col">
-                        <span class="truncate font-mono text-xs text-link"
-                            >{{ anchor.path }}<span v-if="anchor.line !== undefined">:{{ anchor.line }}</span></span
-                        >
-                        <span class="text-2xs text-muted">{{ anchor.what }}</span>
-                    </span>
-                </button>
-            </section>
+        <section v-if="anchors.length > 0" class="flex flex-col gap-0.5">
+            <h2 :class="cmp.sectionLabel(`mb-1 text-2xs`)">Where to start reading</h2>
+            <button
+                v-for="anchor in anchors"
+                :key="anchor.path"
+                type="button"
+                class="anchorrow flex w-full items-start gap-3 rounded-lg px-2.5 py-1.5 text-left"
+                @click="open(anchor)"
+            >
+                <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
+                <span class="flex min-w-0 flex-col">
+                    <span class="truncate font-mono text-xs text-link"
+                        >{{ anchor.path }}<span v-if="anchor.line !== undefined">:{{ anchor.line }}</span></span
+                    >
+                    <span class="text-2xs text-muted">{{ anchor.what }}</span>
+                </span>
+            </button>
+        </section>
 
-            <!-- "When was this written, and what has happened since" is the first thing anyone asks of a page they
+        <!-- "When was this written, and what has happened since" is the first thing anyone asks of a page they
              are about to trust, and a page that cannot answer it does not deserve to be. The repository overview
              answers from its authored provenance; a package answers from git, because its page is a README and the
              commit that last touched it is a better date than any field an author has to remember to bump. -->
-            <footer v-if="writtenAt > 0" class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs text-subtle">
-                <StatusBadge :variant="staleness?.stale === true ? `warning` : `neutral`" size="xs" dot :label="`written ${timeAgo(writtenAt)}`" />
-                <span v-if="rev !== ``"
-                    >{{ provenance === undefined ? `in` : `against` }} <span class="font-mono">{{ rev.slice(0, 8) }}</span></span
-                >
-                <span v-if="provenance?.model !== undefined">by {{ provenance.model }}</span>
-                <span v-if="staleness !== undefined && staleness.behind > 0"
-                    >· {{ staleness.behind }} commit{{ staleness.behind === 1 ? `` : `s` }} since</span
-                >
-            </footer>
-        </div>
-    </Panel>
+        <footer v-if="writtenAt > 0" class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-2xs text-subtle">
+            <StatusBadge :variant="staleness?.stale === true ? `warning` : `neutral`" size="xs" dot :label="`written ${timeAgo(writtenAt)}`" />
+            <span v-if="rev !== ``"
+                >{{ provenance === undefined ? `in` : `against` }} <span class="font-mono">{{ rev.slice(0, 8) }}</span></span
+            >
+            <span v-if="provenance?.model !== undefined">by {{ provenance.model }}</span>
+            <span v-if="staleness !== undefined && staleness.behind > 0"
+                >· {{ staleness.behind }} commit{{ staleness.behind === 1 ? `` : `s` }} since</span
+            >
+        </footer>
+    </article>
 </template>
 
 <style scoped>

@@ -5,7 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, PageAction, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
+import { Button, cmp, Icon, PageAction, Panel, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
@@ -262,27 +262,35 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 </div>
             </div>
 
-            <!-- KEYED BY PAGE, so each document mounts fresh. Once the document has its own scrollbar, a reused
-                 instance keeps the last page's scroll position and you arrive halfway down a page you have never
-                 seen. Remounting also gives every figure a clean fit-on-init, which is what a new document wants. -->
-            <DocPage
-                v-else-if="page === undefined"
-                key="overview"
-                :prose="set?.prose"
-                :anchors="[]"
-                :provenance="set?.repoDoc?.provenance"
-                :repo="repo"
-                :staleness="undefined"
-            />
-            <DocPage
-                v-else
-                :key="page"
-                :prose="packageQuery.data.value"
-                :figures="packageFigures(page, index, set?.repoDoc)"
-                :anchors="entries.find((entry) => entry.dir === page)?.anchors ?? []"
-                :repo="repo"
-                :staleness="entries.find((entry) => entry.dir === page)"
-            />
+            <!-- A FRAMED BODY, because this screen is an index and a body: the contents list beside it is chrome
+                 and never boxes itself, so the document is what has to say "this is the thing you are reading".
+                 The frame belongs to the SURFACE and is written here rather than inside <DocPage> — the same page
+                 in a Workspace tab is the tab's whole content and wants no box at all. The Panel owns the scroll
+                 area, independent of the contents menu's own.
+
+                 KEYED BY PAGE, so each document mounts fresh. A reused instance keeps the last page's scroll
+                 position and you arrive halfway down a page you have never seen. Remounting also gives every
+                 figure a clean fit-on-init, which is what a new document wants. -->
+            <Panel v-else :key="page ?? `overview`" grow>
+                <DocPage
+                    v-if="page === undefined"
+                    class="px-6 py-5"
+                    :prose="set?.prose"
+                    :anchors="[]"
+                    :provenance="set?.repoDoc?.provenance"
+                    :repo="repo"
+                    :staleness="undefined"
+                />
+                <DocPage
+                    v-else
+                    class="px-6 py-5"
+                    :prose="packageQuery.data.value"
+                    :figures="packageFigures(page, index, set?.repoDoc)"
+                    :anchors="entries.find((entry) => entry.dir === page)?.anchors ?? []"
+                    :repo="repo"
+                    :staleness="entries.find((entry) => entry.dir === page)"
+                />
+            </Panel>
         </template>
 
         <GenerateDialog

@@ -147,6 +147,13 @@ directory nobody wrote an overview for, and a row that promises a document has t
 `DocsView` keeps the open page in the URL query, which is right for a routed area and wrong for a tab — the route
 belongs to the Workspace, and two open document tabs would fight over one key. A tab's subject is a prop.
 
+**The page itself draws no box.** Whether a document wants a frame is a fact about where it is being read, so
+[src/DocPage.vue](src/DocPage.vue) is content and each surface says how to hold it: in the area it is the body
+beside a contents rail and takes the framed panel every index-and-body screen here uses; in a tab it is the whole
+pane, and reads like the README beside it opened as a file — the canvas, a centred measure, a scrollbar that is a
+whisper until you point at it. A card there would box a document inside a pane that is already a box, and charge
+the prose two sets of padding for it.
+
 ## Key files
 
 - [src/paths.ts](src/paths.ts) — the trees, the tails, and where publishing sends each one; the convention *is* the API
