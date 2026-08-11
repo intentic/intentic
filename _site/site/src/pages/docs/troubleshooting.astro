@@ -48,13 +48,13 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     </p>
     <DocsCodeBlock code={twoContainers} lang="bash" title="On the machine hosting the sandbox" />
     <p>
-        Your sandbox's exact address is on <strong>Sandbox → Overview</strong>. If <code>/health</code> answers with
+        Your sandbox's exact address is on <strong>Sandbox → Overview</strong>. If <code>/health</code> answers with{" "}
         <code>"ok": true</code>, the daemon is alive and the tunnel is up, and the problem is above that line — a session, an account, a
         permission. If it does not answer, the problem is below it, and the logs are the next stop.
     </p>
     <DocsCodeBlock code={logs} lang="bash" title="When /health says nothing" />
     <p>
-        Your <a href="/docs/glossary/">slug</a> is the first label of that hostname. In the
+        Your <a href="/docs/glossary/">slug</a> is the first label of that hostname. In the{" "}
         <a href="/download/">desktop app</a> the same logs are a button, next to start, stop and update.
     </p>
 
@@ -77,7 +77,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>docker run says the port is already in use</h3>
     <p>
         The container publishes a loopback listener at a port derived from your sandbox's id, and something else on the machine holds it. That
-        port is only a shortcut for a browser on this same machine, so it is safe to drop: re-run
+        port is only a shortcut for a browser on this same machine, so it is safe to drop: re-run{" "}
         <a href="/docs/quickstart/#docker-run">step 4</a> with <code>--no-local-publish</code> and the sandbox works over its tunnel as usual.
         The scripted install paths do this for you — they retry without the port rather than failing.
     </p>
@@ -85,7 +85,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>The workspace never opens</h3>
     <p>
         The daemon announces its URL to the platform on boot, and your browser then probes the sandbox directly until it reports healthy. So a
-        workspace that never opens means one of those two halves is missing. Run the checks above: if both containers are up but
+        workspace that never opens means one of those two halves is missing. Run the checks above: if both containers are up but{" "}
         <code>/health</code> answers only on the host, the connector is the piece that has not come up, and its log says why.
     </p>
 
@@ -109,7 +109,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         An update that cannot come up healthy puts your previous sandbox back by itself, so a failed update is not something you have to
         recover from. An update that came up healthy and is simply worse is a rollback you ask for — <code>/work</code> and your history
-        survive both, because they live in named volumes rather than in the container. See
+        survive both, because they live in named volumes rather than in the container. See{" "}
         <a href="/docs/updates/">Updates &amp; rollback</a>.
     </p>
 
@@ -149,7 +149,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Fires are queued and nothing runs</h3>
     <p>
-        <strong>Require approval</strong> is on for that automation, which holds every fire until you approve it. That is different from
+        <strong>Require approval</strong> is on for that automation, which holds every fire until you approve it. That is different from{" "}
         <strong>Hold for a while</strong>, which runs the fire itself once the hold elapses. An explicit "ask me" always wins over a hold, so
         an automation carrying both waits for you. <a href="/docs/automations/">Automations, workflows &amp; loops</a> covers the queue.
     </p>
@@ -191,14 +191,14 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and a
         route it did not declare throws. So a missing surface usually means the manifest and the code disagree. When an extension's manifest
         grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences — approval never transfers to powers you did
-        not approve. <a href="/docs/extensions/">Extensions</a> covers what you approved; the
+        not approve. <a href="/docs/extensions/">Extensions</a> covers what you approved; the{" "}
         <a href="/api/manifest/">manifest reference</a> is what its author had to declare.
     </p>
 
     <h3>One capability vanished and the rest still work</h3>
     <p>
         A stored connection that cannot be read — a hand-edit, a format that moved — is skipped and reported <em>by name</em>, never
-        rewritten away, and every other capability keeps working. Reconnect that one card. <a href="/docs/capabilities/">Capabilities</a>
+        rewritten away, and every other capability keeps working. Reconnect that one card. <a href="/docs/capabilities/">Capabilities</a>{" "}
         covers where the credential lives.
     </p>
 

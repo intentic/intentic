@@ -133,10 +133,10 @@ export const apiBook: Book = {
                             },
                         },
                         {
-                            /* Last of the shelf, because it is the step that repeats: everything above happens once
-                             * per extension, this happens once per release. It existed only as fragments — updates
-                             * inside the publishing guide, the donation cadence inside the money page, going bad
-                             * inside trust — so "how do I stay listed and keep earning" had no page to be asked of. */
+                            /* Last of the extension's run, because it is the step that repeats: everything above
+                             * happens once per extension, this happens once per release. It existed only as fragments
+                             * — updates inside the publishing guide, the donation cadence inside the money page, going
+                             * bad inside trust — so "how do I stay listed and keep earning" had no page to be asked of. */
                             id: "maintain",
                             title: "Maintain & grow",
                             blurb: "Ship updates, stay ranked, and what sustained revenue rests on",
@@ -145,6 +145,22 @@ export const apiBook: Book = {
                                 description:
                                     "Ship an update with one pull request, know when it re-asks for approval, stay ranked in discovery, and how the monthly donation cadence turns maintenance into sustained revenue.",
                                 datePublished: "2026-08-11",
+                            },
+                        },
+                        {
+                            /* THE SECOND KIND OF THING YOU CAN SHIP — not an extension at all: no manifest, no
+                             * bundle, no repo pointer, just an HTTPS endpoint the platform forwards metered calls
+                             * to. It closes the shelf rather than joining the run above it, because the four pages
+                             * above are one artifact's lifecycle and this is a different artifact. Before it, the
+                             * provider's story was one honest sentence in /earn/'s fine print and a dead end. */
+                            id: "services",
+                            title: "Offer a service",
+                            blurb: "One endpoint, a signed forward, and a price in credits",
+                            meta: {
+                                title: "Offer a premium service · intentic API",
+                                description:
+                                    "Wire a service into intentic: one JSON endpoint, the Stripe-style signature to verify, what is paid versus refunded, pricing in credits, and how onboarding works today.",
+                                datePublished: "2026-08-12",
                             },
                         },
                     ],

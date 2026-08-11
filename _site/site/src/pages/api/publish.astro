@@ -54,7 +54,7 @@ const sources = `// A repo of its own
 >
     <h2>The shape of it</h2>
     <p>
-        intentic does not host extension code, build it, sign it, or take a cut of it. A registry entry is a
+        intentic does not host extension code, build it, sign it, or take a cut of it. A registry entry is a{" "}
         <strong>pointer to your repository at a commit</strong>, and installing follows that pointer directly from the owner's sandbox to
         your git host. Three consequences worth stating plainly:
     </p>
@@ -74,7 +74,7 @@ const sources = `// A repo of its own
 
     <h2>A registry is a git repo</h2>
     <p>
-        Add a <code>.claude-plugin/marketplace.json</code> to any repository and it is a registry. Mark an entry
+        Add a <code>.claude-plugin/marketplace.json</code> to any repository and it is a registry. Mark an entry{" "}
         <code>"kind": "extension"</code> and it installs as a sha-pinned intentic extension.
     </p>
     <DocsCodeBlock code={registry} lang="json" title=".claude-plugin/marketplace.json" />
@@ -110,14 +110,14 @@ const sources = `// A repo of its own
 
     <h2>Getting listed</h2>
     <p>
-        Two ways in, and they end at the same place: a pull request against the
+        Two ways in, and they end at the same place: a pull request against the{" "}
         <a href="/extensions/">official registry</a>. There is nowhere to sign up.
     </p>
     <ol>
         <li>
-            <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an
+            <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an{" "}
             <code>intentic-extension.json</code> at its root. A nightly job resolves your latest commit first, checks the manifest and shipped
-            bundle at that exact sha, and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or
+            bundle at that exact sha, and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or{" "}
             <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared — a listing
             that declares neither shows its initials.
         </li>
@@ -134,7 +134,7 @@ const sources = `// A repo of its own
         </li>
     </ol>
     <p>
-        Publisher slugs are first-come and tied to proven ownership of the source repo. Because the listing key is the manifest-derived
+        Publisher slugs are first-come and tied to proven ownership of the source repo. Because the listing key is the manifest-derived{" "}
         <code>publisher.name</code>, a scan that finds a repo claiming a slug somebody else already holds refuses it rather than opening a pull
         request that looks legitimate.
     </p>
@@ -145,22 +145,22 @@ const sources = `// A repo of its own
 
     <h2>What the person installing sees</h2>
     <p>
-        Your manifest, rendered as plain English rather than as JSON: <em>this extension adds a tile to your rail</em>,
+        Your manifest, rendered as plain English rather than as JSON: <em>this extension adds a tile to your rail</em>,{" "}
         <em>reads your workspace logs</em>, <em>runs a background process</em>, <em>puts a tool on your agent's PATH</em> — one line per
         declared contribution, with the route allowlist spelled out underneath, at one specific commit.
     </p>
     <p>
         Which makes the manifest a piece of writing rather than only configuration. Declare the narrowest set of routes that works and the
-        dialog is short and reassuring; declare a broad one and it is long and alarming, whatever the code actually does. The
+        dialog is short and reassuring; declare a broad one and it is long and alarming, whatever the code actually does. The{" "}
         <a href="/docs/extensions/">installer's page</a> is the whole of what they are shown, and it is worth reading once from their side.
     </p>
 
     <h2>Available today, and next</h2>
     <p>
         Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
-        private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the
-        <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from
-        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the whole
+        private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the{" "}
+        <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from{" "}
+        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the whole{" "}
         <a href="/api/maintain/">update lifecycle</a> — the badges, the powers diff, the kept previous version and one-click revert, the
         health watch, blocked-listing advisories, and the per-extension update policies.
     </p>

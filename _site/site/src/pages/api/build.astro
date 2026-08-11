@@ -157,7 +157,7 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <p>
         A <code>badge</code> is the one thing your tile can say without being opened, so treat it as a claim on attention: it must mean
-        "something happened here you don't know about", never "here is a statistic". It also has to be declared with
+        "something happened here you don't know about", never "here is a statistic". It also has to be declared with{" "}
         <code>"badge": true</code> in the manifest: a tile that can interrupt the user is a contribution the owner approves.
     </p>
 
@@ -193,7 +193,7 @@ const workspace = `.intentic/workspace-extensions/
     <DocsCodeBlock code={ship} lang="bash" title="Your machine" />
     <p>
         In the app, go to <strong>Capabilities → Add → Extension</strong> and give it the repo URL and that full commit sha (plus a token for
-        a private repo). The daemon clones into a staging directory, validates the manifest and checks that the entry bundle really exists
+        a private repo). The daemon clones into a staging directory, validates the manifest and checks that the entry bundle really exists{" "}
         <em>before</em> anything goes live, so a broken push can't replace a working install.
     </p>
     <p>
@@ -204,7 +204,7 @@ const workspace = `.intentic/workspace-extensions/
     <h2>Optional: give it a backend</h2>
     <p>
         Sometimes the view needs more than the daemon's routes offer — a client for somebody else's API, or work that outlives the tab. Add a
-        second bundle and name it in the manifest as <code>"server": "dist/server.js"</code>, with
+        second bundle and name it in the manifest as <code>"server": "dist/server.js"</code>, with{" "}
         <code>"engines": &#123; "intentic": "^2.1.0" &#125;</code>. It exports one function:
     </p>
     <DocsCodeBlock code={server} lang="typescript" title="src/server.ts" />
@@ -212,7 +212,7 @@ const workspace = `.intentic/workspace-extensions/
         Your UI half calls its own namespace with <code>api.sandbox</code> and no extra permission — the backend is your own code from the
         same approved checkout. The backend's reach the <em>other</em> way, into the daemon's routes via <code>api.daemon</code>, is the
         manifest's <code>permissions.daemon</code> allowlist. Bundle the server self-contained: everything except node builtins goes in,
-        because the installed checkout has no <code>node_modules</code>. The
+        because the installed checkout has no <code>node_modules</code>. The{" "}
         <a href="/api/host/#backend">Host API page</a> documents the whole server surface.
     </p>
 

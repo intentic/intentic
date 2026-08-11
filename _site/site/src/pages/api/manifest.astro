@@ -131,14 +131,14 @@ const processes = `"processes": [
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
     <p>
         Keep both as narrow as the feature needs. These lists are what a reviewer reads to understand declared daemon API use, not a complete
-        confinement boundary for browser or process code. The
+        confinement boundary for browser or process code. The{" "}
         <a href="/api/http/">HTTP API</a> page is what the routes are. An extension's <em>own</em> namespace, <code>/x/&lt;id&gt;/…</code>,
         needs no entry on either list: its backend is its own code from the same approved checkout.
     </p>
 
     <h2 id="backend">server — the backend half</h2>
     <p>
-        A manifest <code>server</code> entry names a prebuilt, self-contained node ESM bundle exporting
+        A manifest <code>server</code> entry names a prebuilt, self-contained node ESM bundle exporting{" "}
         <code>activateServer(api, context)</code>. That is the extension's backend: real server code of its own, for the features a browser
         bundle can't carry — a client library for somebody else's API, work that must outlive the tab, state assembled from workspace files.
     </p>
@@ -149,8 +149,8 @@ const processes = `"processes": [
         <li><strong>Self-contained by construction.</strong> The installed checkout has no <code>node_modules</code> and the host provides no import map, so everything except node builtins must be bundled in.</li>
     </ul>
     <p>
-        The backend's API surface — <code>routes.mount</code>, <code>api.daemon</code>, <code>workspaceRoot</code> — is on the
-        <a href="/api/host/#backend">Host API</a> page. A backend requires <code>engines.intentic</code> of
+        The backend's API surface — <code>routes.mount</code>, <code>api.daemon</code>, <code>workspaceRoot</code> — is on the{" "}
+        <a href="/api/host/#backend">Host API</a> page. A backend requires <code>engines.intentic</code> of{" "}
         <code>^2.1.0</code> or wider.
     </p>
 
@@ -197,8 +197,8 @@ const processes = `"processes": [
             <tr>
                 <td><code>fetch</code></td>
                 <td>
-                    How the host hands you the file. <code>"text"</code> is decoded utf8, as a <code>text</code> prop.
-                    <code>"blob"</code> is the whole file's bytes, as <code>blob</code>, for a format that must be parsed end to end.
+                    How the host hands you the file. <code>"text"</code> is decoded utf8, as a <code>text</code> prop.{" "}
+                    <code>"blob"</code> is the whole file's bytes, as <code>blob</code>, for a format that must be parsed end to end.{" "}
                     <code>"url"</code> is a streaming URL to point an element at, as <code>src</code>, for audio and video, which
                     range-read gigabytes and should never be held in memory. The host mints a credentialed URL and hands the URL to your
                     component; treat it as a short-lived bearer value and never log or persist it.

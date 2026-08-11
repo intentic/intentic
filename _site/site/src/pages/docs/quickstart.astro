@@ -227,7 +227,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <p>Install it, sign in, and click <strong>Run on this computer</strong> on the setup card. There is no code to copy: the click hands the app your setup code directly, and the app installs Docker if the machine has none, starts the sandbox and its tunnel, and opens your workspace as soon as it answers.</p>
     <p>
         Afterwards it stays in your tray to start, stop, update, rebuild and remove the sandbox, and to show its logs. It is not a second
-        product: it runs the very same setup script the pasted command runs, and you can still reach the same sandbox from any browser at
+        product: it runs the very same setup script the pasted command runs, and you can still reach the same sandbox from any browser at{" "}
         <a href={APP_URL}>app.intentic.dev</a>. Removing the app removes only the app — your sandbox, its files and its history stay in
         Docker until you remove them yourself. More on the <a href="/download/">download page</a>.
     </p>
@@ -243,14 +243,14 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         stops and names your two options rather than escalating on its own.
     </p>
     <p>
-        The script itself is short and readable before you pipe it anywhere:
+        The script itself is short and readable before you pipe it anywhere:{" "}
         <a href="https://intentic.dev/connect">intentic.dev/connect</a>. It does one thing that genuinely needs a dependency-free start —
         get Docker onto the machine, after asking — then fetches the <code>ic</code> CLI and hands over to it. Re-running the same line
         upgrades that CLI in place.
     </p>
     <DocsCodeBlock code={connectAdvanced} lang="bash" title="Variations" />
     <p>
-        For a scripted install with no setup code at all, pass the values directly instead:
+        For a scripted install with no setup code at all, pass the values directly instead:{" "}
         <code>CONNECT_TOKEN=… CF_TOKEN=… ./connect.sh</code>.
     </p>
 
@@ -270,11 +270,11 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         volumes, so <code>down</code> then <code>up</code> keeps it.
     </p>
     <p>
-        On your own Cloudflare zone there are two extra bootstrap steps before <code>up</code>: append your token to the
+        On your own Cloudflare zone there are two extra bootstrap steps before <code>up</code>: append your token to the{" "}
         <code>.env</code>, and mint the tunnel with the CLI the image already carries. The setup page prints both with your values in place.
     </p>
     <p>
-        Two things this path leaves out on purpose. The <strong>docker capability</strong>'s nested engine needs
+        Two things this path leaves out on purpose. The <strong>docker capability</strong>'s nested engine needs{" "}
         <code>privileged: true</code>, which stays your own edit — the rebuild flow recreates containers with <code>docker run</code> and
         would fight a Compose-managed one. And <strong>desktop sync</strong> isn't wired here; turn it on from its card once your workspace
         opens.
@@ -294,14 +294,14 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     </p>
     <DocsCodeBlock code={runInline} lang="bash" title="Your machine · bash" />
     <p>
-        Step 4 is the whole idea: <code>sandbox run-command</code> reads your environment on stdin and prints the complete, correctly quoted
+        Step 4 is the whole idea: <code>sandbox run-command</code> reads your environment on stdin and prints the complete, correctly quoted{" "}
         <code>docker run</code> line. Print it, read it, run it — and your tooling keeps working against future images without being
-        updated. The line it gives you names the container <code>intentic-sandbox-&lt;slug&gt;</code>, mounts the three named volumes, grants
+        updated. The line it gives you names the container <code>intentic-sandbox-&lt;slug&gt;</code>, mounts the three named volumes, grants{" "}
         <code>SYS_ADMIN</code> and <code>SYS_PTRACE</code> and nothing else, and publishes only a loopback port. Every field of it is
         explained on <a href="/docs/docker/">Docker setup</a>.
     </p>
     <p>
-        If <code>docker run</code> fails because the loopback port is already taken, re-run step 4 with
+        If <code>docker run</code> fails because the loopback port is already taken, re-run step 4 with{" "}
         <code>--no-local-publish</code>. That port is only a shortcut for a browser on this same machine; the sandbox works over its tunnel
         without it.
     </p>
@@ -333,7 +333,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         lands in your shell history, and why re-running the same command still works.
     </p>
     <p>
-        Setting up on a different machine from the one you're reading this on? On a phone, setup offers to
+        Setting up on a different machine from the one you're reading this on? On a phone, setup offers to{" "}
         <strong>email you the link back to this screen</strong> — open it on the target machine and copy the command there.
     </p>
     <p>
@@ -343,8 +343,8 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
 
     <h2>After it's running</h2>
     <p>
-        You can run several sandboxes at once, one per agent, and they coexist on the same machine without stepping on each other.
-        <a href="/docs/docker/">Docker setup</a> covers what was created and how to update, rebuild, and remove it;
+        You can run several sandboxes at once, one per agent, and they coexist on the same machine without stepping on each other.{" "}
+        <a href="/docs/docker/">Docker setup</a> covers what was created and how to update, rebuild, and remove it;{" "}
         <a href="/docs/architecture/">Architecture</a> covers why the pieces are split the way they are.
     </p>
 </DocsLayout>

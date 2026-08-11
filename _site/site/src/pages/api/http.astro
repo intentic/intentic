@@ -262,14 +262,14 @@ const groups = [
     </p>
     <DocsCodeBlock code={turn} lang="bash" title="Start a turn and watch it" />
     <p>
-        <code>conversationId</code> is yours to choose and is what makes a run resumable and addressable later. <code>isolated: true</code>
+        <code>conversationId</code> is yours to choose and is what makes a run resumable and addressable later. <code>isolated: true</code>{" "}
         runs the turn in that conversation's own git worktree instead of the shared tree, which is what lets several agents work at once
         without colliding. The work reaches your main tree only when something calls <code>land</code>.
     </p>
 
     <h2>The route surface</h2>
     <p>
-        Around 230 routes in the groups below. Rather than list them here, where they would date, ask the daemon: the
+        Around 230 routes in the groups below. Rather than list them here, where they would date, ask the daemon: the{" "}
         <code>hello</code> frame on <code>/events</code> advertises every route name this particular daemon implements.
     </p>
     <table>

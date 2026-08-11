@@ -82,16 +82,16 @@ const packages = [
 >
     <h2>How the API reaches your code</h2>
     <p>
-        There is no ambient global and no client you construct. The API arrives as the argument to
+        There is no ambient global and no client you construct. The API arrives as the argument to{" "}
         <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
-        route allowlist in your manifest. If you are writing your first extension, start with
+        route allowlist in your manifest. If you are writing your first extension, start with{" "}
         <a href="/api/build/">Build an extension</a> — this page is the reference it links back to.
     </p>
 
     <h2>Getting the handle</h2>
     <DocsCodeBlock code={activate} lang="typescript" title="src/extension.ts" />
     <p>
-        Views and composables that render later need the same handle, and passing it down through props is not what anyone wants to write.
+        Views and composables that render later need the same handle, and passing it down through props is not what anyone wants to write.{" "}
         <code>hostSlot()</code> gives your extension its own module-scoped accessor:
     </p>
     <DocsCodeBlock code={slot} lang="typescript" title="src/host.ts" />
@@ -102,7 +102,7 @@ const packages = [
 
     <h2>api.sandbox — talking to the daemon</h2>
     <p>
-        Auth is injected host-side; an extension never sees a token. Reach is scoped: every door here is checked against your manifest's
+        Auth is injected host-side; an extension never sees a token. Reach is scoped: every door here is checked against your manifest's{" "}
         <code>permissions.sandbox</code> allowlist, so a call to an undeclared method and path throws rather than reaching the whole daemon.
     </p>
     <table>
@@ -172,8 +172,8 @@ const packages = [
     <DocsCodeBlock code={badge} lang="typescript" title="A rail view with a badge" />
     <p>
         A badge is a claim on someone's attention, so the bar is high: it must mean "something happened here you don't know about", never
-        "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose
-        <em>size</em> is what you act on, and <code>mark</code> is a glyph for a pending action where the size changes nothing.
+        "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose{" "}
+        <em>size</em> is what you act on, and <code>mark</code> is a glyph for a pending action where the size changes nothing.{" "}
         <code>tone</code> is <code>info</code> at rest, <code>warning</code> for a risk being carried, or <code>danger</code> for something
         broken — stay sparing with that one, because its value is that it is rare.
     </p>
@@ -234,7 +234,7 @@ const packages = [
             <tr>
                 <td><code>chat.composeWorkflow(workflowId)</code></td>
                 <td>
-                    Open a new chat aimed at a workflow, so the next message the user types becomes that run's request. It hands over the
+                    Open a new chat aimed at a workflow, so the next message the user types becomes that run's request. It hands over the{" "}
                     <em>start</em> of the work rather than performing it, which is how a Run button avoids becoming a second way to begin
                     agent work with its own dialog that looks like nothing else in the product.
                 </td>
@@ -287,7 +287,7 @@ const packages = [
 
     <h2 id="backend">The backend half — activateServer()</h2>
     <p>
-        An extension with a manifest <code>server</code> entry has a second, smaller surface. The bundle exports
+        An extension with a manifest <code>server</code> entry has a second, smaller surface. The bundle exports{" "}
         <code>activateServer(api, context)</code>, and the daemon's backend host — one supervised node process shared by every enabled
         backend — imports it and calls it once per host start. There is no deactivate: retirement is the host process ending, which is the
         one teardown that cannot leak.

@@ -140,10 +140,10 @@ const host = new URL(page.url).host;
                 <h2 class="text-xl font-semibold tracking-tight text-content">Pick {page.name} when</h2>
                 <p class="mt-4 max-w-copy text-lg leading-relaxed text-content">{page.pickThem}</p>
                 <p class="mt-6 max-w-copy text-sm leading-relaxed text-subtle">
-                    Checked against
-                    <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>
-                    the week this shipped — these products move fast. Spot something out of date?
-                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>
+                    Checked against{" "}
+                    <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>{" "}
+                    the week this shipped — these products move fast. Spot something out of date?{" "}
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>{" "}
                     and it is fixed in the next build.
                 </p>
             </section>

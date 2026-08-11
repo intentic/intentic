@@ -151,7 +151,7 @@ const agentPoints = [
     </p>
     <p>
         The grouping never taxes the small case: a manifest with one section filled in is complete, installs the same way, and shows the
-        owner a one-line approval instead of a four-line one. And the parts that are portable stay portable. The <code>agent</code>
+        owner a one-line approval instead of a four-line one. And the parts that are portable stay portable. The <code>agent</code>{" "}
         contribution <em>is</em> a standard agent-plugin directory — skills, subagents, hooks, MCP servers — that works in other harnesses
         unchanged, and a registry file is the same marketplace format those harnesses already read. The envelope wraps the standard; it
         doesn't fork it.
@@ -182,7 +182,7 @@ const agentPoints = [
             runtime. That enforcement applies to host APIs, not ordinary browser globals.
         </li>
         <li>
-            <strong>Cooperative daemon calls are allowlisted.</strong> Each half declares the routes it calls through the extension API as
+            <strong>Cooperative daemon calls are allowlisted.</strong> Each half declares the routes it calls through the extension API as{" "}
             <code>"GET /logs"</code>-style entries, in two lists because they run as different principals. Undeclared API calls are refused;
             this is not a claim that arbitrary browser or process code is confined to that list.
         </li>
@@ -199,7 +199,7 @@ const agentPoints = [
         credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the exact source is audited.
     </p>
     <p>
-        What those mechanics <em>guarantee</em> — and the three words a listing can carry, <strong>listed</strong>, <strong>verified</strong>
+        What those mechanics <em>guarantee</em> — and the three words a listing can carry, <strong>listed</strong>, <strong>verified</strong>{" "}
         and <strong>blocked</strong> — is <a href="/api/verify/">Verification &amp; trust</a>. What they look like from the other side, at the
         moment somebody clicks install, is <a href="/docs/extensions/">Install &amp; manage extensions</a>.
     </p>
