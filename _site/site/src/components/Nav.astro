@@ -341,10 +341,15 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         gap: 4px 10px;
     }
 
+    /* Rows are spaced, not stacked flush: two of them are lit at once whenever the current page's row sits
+       next to the one under the pointer, and touching fills read as a single tall block with a seam in it.
+       2px is the same breath the docs sidebar puts between its rows. */
     .menu-section > ul {
         list-style: none;
         margin: 0;
         padding: 0;
+        display: grid;
+        gap: 2px;
     }
 
     .menu-section-label {
