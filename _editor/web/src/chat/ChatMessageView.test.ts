@@ -350,6 +350,10 @@ describe(`ChatMessageView sent time`, () => {
         expect(label?.className).toContain(`opacity-0`);
         // BESIDE the bubble, not under it: below it the label sat in the gap between two turns, touching both.
         expect(label?.className).toContain(`right-full`);
+        // And centred on the message rather than pinned to its first line — it spans the message's height and
+        // aligns in the middle of it, which is what keeps it off the top corner of a six-line prompt.
+        expect(label?.className).toContain(`inset-y-0`);
+        expect(label?.className).toContain(`items-center`);
     });
 
     // Nothing is invented for a row with no stamp: a message recorded before the daemon wrote them down draws

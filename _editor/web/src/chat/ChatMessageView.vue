@@ -732,21 +732,23 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  left is never narrower than 15% of the reading measure, and the label is five characters wide
                  (see sentClock) — it fits that flank at every panel width, with the column's own gutter behind
                  it for the tightest one. Right-aligned against the bubble so a run of stamps forms one edge
-                 down the margin rather than ragging, and level with the TOP of the message — where the eye
-                 enters it, and a line that holds whether the bubble is one line or six.
-                 Level is stated as the bubble's own metrics rather than as the offset they happen to work out
-                 to: the label's line box is set to the bubble's (1.625 × the body tier, where its own meta-tier
-                 box is 2px shorter), and its padding to the bubble's `py-2` plus the 1px border — so the two
-                 strings sit on one line to within a quarter-pixel, and stay there if either token moves. On a
-                 message that opens with a stacked attachment row it lands level with that instead, which is
-                 still the top of the message.
-                 It takes the pointer, which the old position could not afford: the flank is dead space, so a
-                 tooltip there blocks nothing — under the bubble the label lay over the strip a click uses to
-                 open a clamped prompt. -->
+                 down the margin rather than ragging, and CENTRED on the message it belongs to: a stamp level
+                 with the first line reads as a label attached to that line, and against a bubble six lines deep
+                 it hangs off the top corner with the rest of the margin empty beneath it. Centred, it points at
+                 the whole message, which is what it is the time of.
+                 Centred by spanning the message's own height and aligning inside it (`inset-y-0` + a flex
+                 centre) rather than by a half-height translate. The two land in the same pixel, but a transform
+                 rasterises what it moves through a compositing step, and five characters at the meta tier are
+                 exactly the ink that softens under one — and this way the rule states its intent (centre this on
+                 the message) instead of half of a height the label does not own. It is measured against the
+                 whole message, so a stacked attachment row counts toward the middle the same as the bubble does.
+                 The span covers the flank's full height this way, which is dead space either way — it takes the
+                 pointer for its tooltip and blocks nothing, unlike the old position under the bubble, which lay
+                 over the strip a click uses to open a clamped prompt. -->
             <span
                 v-if="sentClock"
                 v-tooltip.top="sentExact"
-                class="absolute top-0 right-full mr-2 pt-[calc(0.5rem+1px)] text-2xs leading-[calc(1.625*var(--text-xs))] whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
+                class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
                 >{{ sentClock }}</span
             >
         </div>
