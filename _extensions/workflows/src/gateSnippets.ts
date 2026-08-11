@@ -15,15 +15,16 @@ export const GATE_WAIT_S = 1800;
 export const gatePath = (workflowId: string, token: string): string =>
     `/workflows/${encodeURIComponent(workflowId)}/gate?token=${encodeURIComponent(token)}`;
 
-/* One copy-paste GitHub Actions step, running the published runner (@intentic/gate) rather than open-coded
- * curl: the runner owns the verdict-to-exit mapping — `pass` green, `fail` red, `blocked` NOT a red build,
- * because "the check could not judge" must never read as "the product is broken" (the distinction
- * gate.routes.ts exists to keep) — and twelve lines of shell here would be a second copy of it to drift. The
- * body it sends is what the pipeline knows: the commit and the branch, which become the run's request. */
+/* One copy-paste GitHub Actions step, running the Marketplace action (intentic/gate-action, built in
+ * _sandbox/gate-action) rather than open-coded curl: the action owns the verdict-to-exit mapping — `pass`
+ * green, `fail` red, `blocked` NOT a red build, because "the check could not judge" must never read as "the
+ * product is broken" (the distinction gate.routes.ts exists to keep) — and twelve lines of shell here would
+ * be a second copy of it to drift. No request either: the action composes the commit/branch/PR line from the
+ * workflow's own context, which is why the snippet is two lines instead of a template. */
 export const githubStep = (workflowName: string): string => `- name: ${workflowName}
-  env:
-    INTENTIC_GATE_URL: \${{ secrets.INTENTIC_GATE_URL }}
-  run: npx --yes @intentic/gate "commit \${{ github.sha }} on \${{ github.ref_name }}"`;
+  uses: intentic/gate-action@v1
+  with:
+    url: \${{ secrets.INTENTIC_GATE_URL }}`;
 
 // The same call with nothing around it, for every other CI system: the answer is one JSON object —
 // `outcome` (pass | fail | blocked), `reason`, `runId` — and the pipeline maps outcome to its own exit.

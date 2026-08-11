@@ -10,13 +10,14 @@ test("the path names the gate route and carries the token as its query", () => {
     expect(gatePath(`wf/odd`, `t`)).toBe(`/workflows/wf%2Fodd/gate?token=t`);
 });
 
-test("the GitHub step runs the published runner off a secret, never an inlined token", () => {
+test("the GitHub step uses the Marketplace action off a secret, never an inlined token", () => {
     const step = githubStep(`Release gate`);
     // The secret, not the URL: a token pasted into a committed file is a credential in the repo's history.
-    expect(step).toContain(`INTENTIC_GATE_URL: \${{ secrets.INTENTIC_GATE_URL }}`);
+    expect(step).toContain(`url: \${{ secrets.INTENTIC_GATE_URL }}`);
     expect(step).not.toContain(`http`);
-    // The runner owns the verdict-to-exit mapping (gate-cli); the snippet must not carry a second copy of it.
-    expect(step).toContain(`npx --yes @intentic/gate`);
+    // The action owns the verdict-to-exit mapping AND the default request; the snippet must carry neither.
+    expect(step).toContain(`uses: intentic/gate-action@v1`);
+    expect(step).not.toContain(`github.sha`);
 });
 
 test("the curl line rides the URL's own token and asks for the same wait", () => {

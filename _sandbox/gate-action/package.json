@@ -1,42 +1,24 @@
 {
-    "name": "@intentic/gate",
+    "name": "@intentic/gate-action",
     "version": "0.0.0",
-    "description": "Run an intentic release gate from a CI pipeline — POST what the pipeline knows, wait for the run, exit on the verdict",
+    "description": "The GitHub Action around the sandbox's two CI doors — wait on a release gate's verdict, or wake an event automation with the workflow's payload",
     "license": "MIT",
+    "private": true,
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/intentic/intentic.git",
-        "directory": "_sandbox/gate"
-    },
-    "types": "./dist/gate.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/gate.d.ts",
-            "import": {
-                "@intentic/src": "./src/gate.ts",
-                "default": "./dist/gate.js"
-            }
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "publishConfig": {
-        "access": "public",
-        "registry": "https://registry.npmjs.org/"
-    },
-    "bin": {
-        "intentic-gate": "./dist/cli.js"
+        "directory": "_sandbox/gate-action"
     },
     "scripts": {
-        "build": "tsgo",
+        "build": "tsgo && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.mjs --log-level=warning",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/gate": "workspace:*",
         "tslib": "catalog:"
     },
     "devDependencies": {
@@ -45,6 +27,7 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "esbuild": "catalog:",
         "vitest": "catalog:"
     }
 }

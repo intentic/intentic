@@ -1,0 +1,44 @@
+# The Marketplace face of the action — synced verbatim to the root of the public intentic/gate-action
+# repository by the release pipeline (publish-action.sh), alongside the bundled dist this metadata points at.
+# The runner reads THIS file; the package's own build and tests exist to keep what it promises true.
+name: "Intentic Agent Gate"
+description: "Run your intentic agent from CI — block on an agent-judged release gate, or wake the agent with the event payload"
+author: "intentic"
+branding:
+  icon: "shield"
+  color: "purple"
+inputs:
+  url:
+    description: >-
+      The door URL copied from your sandbox, token included — a release gate (…/workflows/<id>/gate) to wait
+      on, or an event automation's webhook (…/automations/<id>/fire) to wake. Store it as a repository secret.
+    required: true
+  request:
+    description: >-
+      What to tell the agent. Defaults to the commit, branch and pull-request link for a gate, and to the
+      workflow's full event payload for an automation.
+    required: false
+    default: ""
+  wait:
+    description: >-
+      How many seconds a gate holds the connection before the run is stopped (the server caps it at 3 hours).
+    required: false
+    default: "1800"
+  blocked-as:
+    description: >-
+      What a `blocked` verdict does to the step: "success" (the default — the gate could not judge, which is
+      not the same as the product being broken) or "failure".
+    required: false
+    default: "success"
+outputs:
+  outcome:
+    description: "The gate's verdict: pass, fail or blocked. Only set for the gate door."
+  reason:
+    description: "The verdict's own sentence — why the gate decided what it decided."
+  run-id:
+    description: "The run's id inside the sandbox, where the full transcript lives."
+  value:
+    description: "The raw judged value behind the verdict, when the gated workflow produced one."
+runs:
+  using: "node24"
+  main: "dist/index.mjs"

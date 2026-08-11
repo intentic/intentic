@@ -164,7 +164,9 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         id: "github-push",
         trigger: { kind: "event" },
         prompt: "A push just landed — the webhook payload is in $AUTOMATION_PAYLOAD. Review the new commits and summarize what changed.",
-        setup: "In the GitHub repo: Settings → Webhooks → Add webhook → paste this URL as the Payload URL, content type application/json.",
+        setup:
+            "In the GitHub repo: Settings → Webhooks → Add webhook → paste this URL as the Payload URL, content type application/json. " +
+            "Or from a workflow: put the URL in a secret and add a `uses: intentic/gate-action@v1` step — it sends the event payload for you.",
     },
     {
         providers: ["gitlab"],

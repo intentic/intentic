@@ -1,0 +1,57 @@
+# Sync the Marketplace GitHub Action to its public repo (intentic/gate-action), from the tag semantic-release
+# pushes — the same trigger and shape as npm-publish.yml, for the same reason: a pushed `v*` tag is a complete,
+# version-stamped tree, so there is nothing to bump and nothing to check out beyond the tag itself.
+#
+# The action cannot ship from this repository: a Marketplace listing requires a public repo with action.yml at
+# its root, one action per repo. So this builds the self-contained bundle here — where its tests and the
+# contract it is held to live — and publish-action.sh pushes the snapshot, tags the version, moves the floating
+# major, and creates the Release the listing surfaces.
+#
+# Inert until GATE_ACTION_TOKEN exists (a fine-grained PAT, Contents: read+write on intentic/gate-action): the
+# script skips loudly without it rather than failing the release train over an optional artifact. The first
+# Marketplace listing is a one-time manual step in the UI; releases after that surface on it by themselves.
+name: action publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: action-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+
+      - uses: ./.github/actions/pnpm-setup
+
+      # `--filter` pulls the dependency closure through turbo's ^build edge — the gate package's dist is what
+      # the bundle inlines.
+      - name: Build the action bundle
+        run: pnpm turbo run build --filter=./_sandbox/gate-action
+
+      - name: Sync to the public action repository
+        env:
+          GATE_ACTION_TOKEN: ${{ secrets.GATE_ACTION_TOKEN }}
+        run: bash _tools/scripts/publish-action.sh "${GITHUB_REF_NAME#v}"

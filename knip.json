@@ -29,7 +29,7 @@
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
         },
         "_platform/api": {
-            "entry": ["src/main.ts", "src/**/*.test.ts"]
+            "entry": ["src/**/*.test.ts"]
         },
         "_sandbox/sandbox": {
             "entry": [
@@ -49,6 +49,9 @@
         },
         "_sandbox/sync": {
             "entry": ["src/cli.ts", "src/**/*.test.ts", "scripts/*.sh"]
+        },
+        "_sandbox/gate-action": {
+            "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
         "_search/lsp": {
             "entry": ["src/cli.ts", "src/**/*.test.ts"]

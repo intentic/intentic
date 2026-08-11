@@ -26,13 +26,14 @@ deadline that fires is the server's — which stops the run instead of abandonin
 
 ## Pipeline templates
 
-GitHub Actions — the URL lives in a repository secret:
+GitHub Actions has a step of its own — the Marketplace action (`_sandbox/gate-action`), which wraps this
+package's exchange and composes the request from the workflow's context:
 
 ```yaml
 - name: Release gate
-  env:
-    INTENTIC_GATE_URL: ${{ secrets.INTENTIC_GATE_URL }}
-  run: npx --yes @intentic/gate "commit ${{ github.sha }} on ${{ github.ref_name }}"
+  uses: intentic/gate-action@v1
+  with:
+    url: ${{ secrets.INTENTIC_GATE_URL }}
 ```
 
 GitLab CI — `allow_failure: exit_codes` is a real neutral, so `blocked` can have its own colour:
@@ -50,7 +51,9 @@ release-gate:
 
 The gate route is the daemon's door for a caller with no identity; the designer's gate panel (the workflows
 extension) is where a gate is declared and its URL copied. This package is the third leg: the caller's side of
-the exchange, distributed on npm so a pipeline runs it cold with `npx`. It deliberately depends on nothing —
+the exchange, distributed on npm so a pipeline runs it cold with `npx`. On GitHub specifically the same
+exchange wears Marketplace clothes — `@intentic/gate-action` bundles this package's pure functions into the
+`intentic/gate-action` action — and every other CI system runs this CLI. It deliberately depends on nothing —
 every dependency would be install time on every pipeline of every team — and its hand-rolled verdict reader is
 held against `@intentic/sandbox-contract`'s schema by a test instead of by an import.
 
