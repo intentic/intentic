@@ -39,7 +39,7 @@ content-type: application/json
     book={apiBook}
     pageId="services"
     heading="Offer a service"
-    lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. If you can verify a webhook, you can be in the catalog."
+    lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. The technical bar is verifying a webhook; the catalog itself is curated."
 >
     <h2>What a service is for</h2>
     <p>
@@ -82,6 +82,25 @@ content-type: application/json
         tells the member what's left and when it resets. Price your real cost plus margin, not a teaser. {creatorSharePct}% of every
         spent credit's dollar value is yours; the split, your run counts and your earnings are on the public ledger, per service, for
         anyone to read. <a href="/earn/">Earn</a> explains what a credit is worth and why the model is unfarmable.
+    </p>
+
+    <h2>Admission &amp; the watch</h2>
+    <p>
+        Extensions pass an automated code audit because their code runs in somebody's browser and sandbox. A service has nothing to put
+        through that pipeline (no code of yours ships to anyone), so the gate is a different kind: <strong>admission is curated</strong>.
+        In v1 every row in the catalog is created by the platform after a human review of who you are, what the listing claims, and whether
+        the price fits the shape. There is no form that puts an endpoint in front of members' agents unreviewed.
+    </p>
+    <p>After admission, the watch is behavioral, because with a service, behavior is the artifact:</p>
+    <ul>
+        <li><strong>Every run is on the ledger.</strong> Your service's runs, credits and earnings are public, month by month. A track record is not something either of us can dress up.</li>
+        <li><strong>The mechanical case never becomes a dispute.</strong> No answer, no charge: the refund is the platform's code, not a support queue, so the commonest conflict resolves itself before anyone argues.</li>
+        <li><strong>Quality is a delisting question, not a chargeback.</strong> A served answer is paid even when it disappoints. A service that keeps disappointing is switched off: removed from the catalog with its run history kept, the same way a bad extension listing is blocked.</li>
+    </ul>
+    <p>
+        And the member keeps their own guard the whole way through: the agent only <em>discovers</em>. It offers from this curated catalog,
+        and nothing is spent until the owner says yes to a priced run. Discovery is the agent's job, admission is the platform's, spending
+        stays the member's.
     </p>
 
     <h2>Getting onboarded, honestly</h2>
