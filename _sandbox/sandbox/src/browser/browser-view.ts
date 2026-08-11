@@ -1,7 +1,9 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { browserSessionContext, browserSessionPage } from "./browser-sessions.js";
 import {
+    applySelect,
     dispatchInput,
+    readSelect,
     readSelection,
     startScreencast,
     VIEW_HEIGHT,
@@ -130,6 +132,14 @@ export const createBrowserViewRoute = (services: Services) =>
                     ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
                     return;
                 }
+                if (message.type === "selectOption") {
+                    // The owner picked from the menu the client drew for them — see readSelect in screencast.ts.
+                    const page = screencast?.page();
+                    if (page !== undefined) {
+                        await applySelect(page, message.index);
+                    }
+                    return;
+                }
                 // Everything left is a pointer or a keystroke, and needs somewhere to land.
                 const attached = screencast?.attached();
                 if (attached === undefined) {
@@ -140,6 +150,15 @@ export const createBrowserViewRoute = (services: Services) =>
                 } catch (err) {
                     // A page that navigated out from under the click — the rebind follows it; the input is lost.
                     services.logger.warn({ err }, "browser-view input dispatch failed");
+                }
+                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE. Chromium draws that list outside the page,
+                 * so the frames will never show it; asking after every release is how the client learns to draw
+                 * one itself. Release rather than press, because that is when the page has settled on what is
+                 * focused, and the answer is sent either way — an empty one closes a menu the owner clicked off. */
+                if (message.type === "mouse" && message.action === "up") {
+                    const page = screencast?.page();
+                    const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
+                    ws.send(JSON.stringify({ type: "select", menu: menu ?? null }));
                 }
             },
             onClose: () => {

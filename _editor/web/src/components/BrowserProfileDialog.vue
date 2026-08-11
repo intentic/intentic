@@ -4,7 +4,9 @@ import { noticeOf } from "../composables/useAsyncAction";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import BrowserSelectMenu from "./BrowserSelectMenu.vue";
 import { keyIntent, type KeyFrame } from "../composables/browser/keyIntent";
+import type { SelectMenu } from "../composables/browser/useBrowserView";
 import { viewportCoords } from "../composables/browser/viewportCoords";
 import { socketUrl as wsSocketUrl } from "../composables/sandbox/wsTicket";
 
@@ -49,6 +51,16 @@ let lastMove = 0;
 // The Ctrl+C in flight, waiting on the page's answer. One at a time: a second press before the first came back
 // is the same question asked twice.
 let pendingSelection: ((text: string) => void) | undefined;
+/* THE DROP-DOWN THE PICTURE CANNOT SHOW. Chromium draws an open <select> as a native menu outside the page, so
+ * no frame ever carries it; the daemon answers a click that focused one with its options and this draws a real
+ * menu over the control. Undefined whenever none is open. */
+const selectMenu = ref<SelectMenu | undefined>();
+// Closed here rather than on the daemon's say-so — leaving it up until a frame confirms the pick would read as
+// a click that did nothing, which is the whole complaint this menu exists to answer.
+const chooseOption = (index: number): void => {
+    selectMenu.value = undefined;
+    sendMsg({ type: "selectOption", index });
+};
 
 const browsing = computed(() => props.mode === "browse");
 
@@ -90,6 +102,7 @@ const connect = async (): Promise<void> => {
             message?: string;
             url?: string;
             text?: string;
+            menu?: SelectMenu | null;
         };
         // The encoding alternates: a cheap jpeg while the page paints, a sharp webp once it settles — so the
         // frame says which it is rather than the client assuming (screencast.ts).
@@ -107,6 +120,9 @@ const connect = async (): Promise<void> => {
         } else if (message.type === "selection") {
             pendingSelection?.(message.text ?? "");
             pendingSelection = undefined;
+        } else if (message.type === "select") {
+            // A drop-down to draw, or null for "nothing is open now" — which closes one clicked away from.
+            selectMenu.value = message.menu ?? undefined;
         } else if (message.type === "saved") {
             emit("done");
             close();
@@ -322,6 +338,16 @@ const finish = (): void => {
                 <Icon name="spinner" spin />
                 <span>{{ status === "error" ? "Couldn't start the browser." : "Starting the browser…" }}</span>
             </div>
+            <!-- An open drop-down, which the picture itself can never show — see BrowserSelectMenu. -->
+            <BrowserSelectMenu
+                v-if="selectMenu"
+                :menu="selectMenu"
+                :frame="imgEl"
+                :view-width="viewW"
+                :view-height="viewH"
+                @pick="chooseOption"
+                @close="selectMenu = undefined"
+            />
         </div>
 
         <template #footer>

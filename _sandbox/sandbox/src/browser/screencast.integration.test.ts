@@ -1,7 +1,16 @@
 import { existsSync } from "node:fs";
 import type { Browser } from "playwright";
 import { expect, test } from "vitest";
-import { dispatchInput, readSelection, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
+import {
+    applySelect,
+    dispatchInput,
+    readSelect,
+    readSelection,
+    startScreencast,
+    VIEW_HEIGHT,
+    VIEW_WIDTH,
+    type ScreencastFrame,
+} from "./screencast.js";
 
 /* THE CHROMIUM ON DISK IS THE HEADED ONE. The image installs the browser the agent's tools and the profile
  * windows need, and `chromium.launch()` on its own reaches instead for a headless-SHELL build that was never
@@ -226,6 +235,82 @@ test("editing chords land as editing commands in the page", { timeout: 120_000 }
             await dispatchInput(session, { type: "key", key: "ArrowLeft", shift: true });
         }
         expect(await selection()).toEqual({ start: "hello ".length, end: "hello world".length });
+    } finally {
+        await browser.close();
+    }
+});
+
+/* A DROP-DOWN IS THE ONE CONTROL THE PICTURE CANNOT SHOW.
+ *
+ * Chromium draws an open <select> as a native menu belonging to the browser, not to the page — so it is not on
+ * the compositor surface the screencast streams, and no frame will ever contain it. Clicking the control does
+ * focus it, which is why this looked so much like nothing happening at all: the list opened somewhere nobody
+ * could see, and the click aimed at the option wanted landed on the page behind it. A date of birth could not
+ * be filled in by hand, and the way through turned out to be guessing that the arrow keys still worked.
+ *
+ * Both halves are pinned here, against real Chromium because both are claims about Chromium: that the options
+ * can be read out of whatever the page has focused (including inside an embedded form, where these controls
+ * usually live), and that applying one lands as a real pick — value changed AND a change event the page's own
+ * handlers see, which is the part a hand-set selectedIndex quietly fails to do. */
+test("a focused drop-down can be read out and picked from", { timeout: 120_000 }, async () => {
+    const browser = await launch();
+    if (browser === undefined) {
+        return; // no browser on this box
+    }
+    try {
+        const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
+        const page = await context.newPage();
+        await page.goto(
+            `data:text/html,${encodeURIComponent(
+                `<body style="margin:0">
+                    <select id="month" style="position:absolute;left:100px;top:60px;width:200px;height:40px">
+                        <option>January</option><option>February</option><option disabled>March</option><option>April</option>
+                    </select>
+                    <p id="chosen">nothing yet</p>
+                    <script>document.getElementById('month').addEventListener('change', (e) => {
+                        document.getElementById('chosen').textContent = e.target.value;
+                    });</script>
+                </body>`,
+            )}`,
+        );
+
+        // Nothing focused: no menu to draw, and saying so is what closes one the owner clicked away from.
+        expect(await readSelect(page)).toBeUndefined();
+
+        await page.focus("#month");
+        const menu = await readSelect(page);
+        expect(menu?.options.map((option) => option.label)).toEqual(["January", "February", "March", "April"]);
+        expect(menu?.selected).toBe(0);
+        // A disabled row has to arrive marked, or the menu would offer a choice the page will refuse.
+        expect(menu?.options[2]?.disabled).toBe(true);
+        // And it is placed where the control actually is, so the menu opens over it rather than near it.
+        expect(menu?.rect.x).toBeCloseTo(100, 0);
+        expect(menu?.rect.y).toBeCloseTo(60, 0);
+
+        // The pick has to be a real one: the page's own change handler is what proves it, not the value alone.
+        await applySelect(page, 3);
+        expect(await page.inputValue("#month")).toBe("April");
+        expect(await page.textContent("#chosen")).toBe("April");
+
+        /* INSIDE AN EMBEDDED FORM, which is the ordinary case rather than the exotic one — the sign-ins these
+         * windows exist to rescue put their fields in an iframe, and a top-document-only read finds nothing
+         * exactly there. The rect has to come back in the PICTURE's coordinates, offset by where the frame sits. */
+        const embedded = await context.newPage();
+        await embedded.goto(
+            `data:text/html,${encodeURIComponent(
+                `<body style="margin:0"><iframe style="position:absolute;left:50px;top:30px;width:400px;height:200px;border:0"
+                    srcdoc="<select id='y' style='position:absolute;left:10px;top:20px'><option>2001</option><option>2002</option></select>"></iframe></body>`,
+            )}`,
+        );
+        const inner = await embedded.waitForSelector("iframe").then((handle) => handle.contentFrame());
+        await inner!.focus("#y");
+        const nested = await readSelect(embedded);
+        expect(nested?.options.map((option) => option.label)).toEqual(["2001", "2002"]);
+        expect(nested?.rect.x).toBeCloseTo(60, 0);
+        expect(nested?.rect.y).toBeCloseTo(50, 0);
+
+        await applySelect(embedded, 1);
+        expect(await inner!.inputValue("#y")).toBe("2002");
     } finally {
         await browser.close();
     }

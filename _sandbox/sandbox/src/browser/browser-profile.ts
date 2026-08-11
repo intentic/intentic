@@ -3,7 +3,9 @@ import type { BrowserContext, Page } from "playwright";
 import { ensureXvfb } from "./display.js";
 import { armPasskeys } from "./passkeys.js";
 import {
+    applySelect,
     dispatchInput,
+    readSelect,
     readSelection,
     startScreencast,
     VIEW_HEIGHT,
@@ -262,10 +264,26 @@ export const createBrowserProfileRoute = (services: Services) =>
                     ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
                     return;
                 }
+                if (message.type === "selectOption") {
+                    // The owner picked from the menu the client drew for them — see readSelect in screencast.ts.
+                    const page = view.page();
+                    if (page !== undefined) {
+                        await applySelect(page, message.index);
+                    }
+                    return;
+                }
                 try {
                     await dispatchInput(session, message);
                 } catch (err) {
                     services.logger.warn({ err }, "browser-profile input dispatch failed");
+                }
+                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE — Chromium draws that list outside the page
+                 * and the frames will never carry it, so the client is told what to draw instead. Answered on
+                 * release either way: an empty answer closes a menu the owner has clicked away from. */
+                if (message.type === "mouse" && message.action === "up") {
+                    const page = view.page();
+                    const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
+                    ws.send(JSON.stringify({ type: "select", menu: menu ?? null }));
                 }
             },
             onClose: () => {

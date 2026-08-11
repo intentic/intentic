@@ -33,6 +33,14 @@ const MOVE_THROTTLE_MS = 40;
 // without it. Long enough for a round trip through the tunnel, short enough not to strand the keyboard.
 const SELECTION_TIMEOUT_MS = 1500;
 
+// Mirrors the daemon's SelectMenu (screencast.ts) — the browser can't import that contract package, the same
+// reason the input frames are re-declared there rather than shared.
+export interface SelectMenu {
+    readonly options: readonly { readonly label: string; readonly disabled: boolean }[];
+    readonly selected: number;
+    readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+}
+
 export interface BrowserView {
     // The current frame as a data URL. Undefined until the first one lands — the view shows `status` instead.
     // Its encoding changes under it: a low-cost jpeg while the page moves, then one sharp webp once it settles
@@ -44,6 +52,12 @@ export interface BrowserView {
     readonly driving: Ref<boolean>;
     // Stream a specific page instead of following the agent. Pins daemon-side until the page closes.
     readonly bindPage: (pageId: string) => void;
+    /* THE DROP-DOWN THE PICTURE CANNOT SHOW. An open <select> is a native menu Chromium draws outside the page,
+     * so no frame ever carries it; the daemon answers a click that focused one with its options, and the pane
+     * draws a real menu instead (BrowserSelectMenu). Undefined whenever no drop-down is open. */
+    readonly select: Ref<SelectMenu | undefined>;
+    readonly chooseOption: (index: number) => void;
+    readonly closeSelect: () => void;
     // The pointer/keyboard handlers the pane binds. All no-op unless `driving`, so taking control (and giving
     // it back) is a state flip rather than a listener rebuild — no window in which a half-attached pane
     // swallows or duplicates events.
@@ -71,6 +85,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const frame = ref<string | undefined>();
     const status = ref<string | undefined>(`Connecting to the agent's browser…`);
     const driving = ref(false);
+    const select = ref<SelectMenu | undefined>();
     const socket = shallowRef<WebSocket | undefined>();
     // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently hand them back
     // whichever tab the agent happens to be on.
@@ -170,7 +185,15 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         });
         ws.addEventListener(`message`, (event) => {
             lastFrameAt = Date.now();
-            let message: { type?: string; data?: string; format?: string; message?: string; pageId?: string; text?: string };
+            let message: {
+                type?: string;
+                data?: string;
+                format?: string;
+                message?: string;
+                pageId?: string;
+                text?: string;
+                menu?: SelectMenu | null;
+            };
             try {
                 message = JSON.parse(String(event.data)) as typeof message;
             } catch {
@@ -188,6 +211,12 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             if (message.type === `selection`) {
                 pendingSelection?.(message.text ?? ``);
                 pendingSelection = undefined;
+                return;
+            }
+            if (message.type === `select`) {
+                // Sent after every release: a menu to draw, or null for "nothing is open now", which is what
+                // closes one the user has clicked away from.
+                select.value = message.menu ?? undefined;
                 return;
             }
             if (message.type === `gone`) {
@@ -235,6 +264,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             retryDelay = RETRY_MS;
             frame.value = undefined;
             driving.value = false;
+            // A menu describing a control in the browser being switched away from has nothing left to point at.
+            select.value = undefined;
             status.value = name.value === undefined ? undefined : `Connecting to the agent's browser…`;
             void connect();
         },
@@ -256,6 +287,14 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             pinned = pageId;
             send({ type: `bind`, pageId });
         },
+        select,
+        // Closed here rather than on the daemon's say-so: the pick is applied to the page the owner is looking
+        // at, and leaving the menu up until a frame confirms it would read as a click that did nothing.
+        chooseOption: (index) => {
+            select.value = undefined;
+            send({ type: `selectOption`, index });
+        },
+        closeSelect: () => (select.value = undefined),
         onMouseMove: (event, element) => {
             if (!driving.value) {
                 return;

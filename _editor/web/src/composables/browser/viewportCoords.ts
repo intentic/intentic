@@ -23,3 +23,31 @@ export const viewportCoords = (event: MouseEvent, element: HTMLElement, viewWidt
         y: clamp(event.clientY - rect.top - (rect.height - viewHeight * scale) / 2, viewHeight),
     };
 };
+
+/* THE SAME GEOMETRY READ BACKWARDS — where something the remote page reported sits on the picture as painted.
+ *
+ * Its one caller is the drop-down menu the client draws for a <select> (see readSelect in screencast.ts): the
+ * page answers with the control's rect in its own coordinates, and the menu has to appear over the control the
+ * person just clicked rather than somewhere near it. Sharing the letterbox arithmetic with viewportCoords above
+ * is the whole point — a menu placed by a second, subtly different copy of it would drift away from the very
+ * control that opened it, which is the bug that put both surfaces on one module in the first place.
+ *
+ * Answers offsets within the ELEMENT, so the menu positions absolutely inside the same box the frame paints in. */
+export const pictureRect = (
+    element: HTMLElement,
+    viewWidth: number,
+    viewHeight: number,
+    rect: { x: number; y: number; width: number; height: number },
+): { left: number; top: number; width: number; height: number } => {
+    const box = element.getBoundingClientRect();
+    const scale = Math.min(box.width / viewWidth, box.height / viewHeight);
+    if (scale <= 0) {
+        return { left: 0, top: 0, width: 0, height: 0 };
+    }
+    return {
+        left: (box.width - viewWidth * scale) / 2 + rect.x * scale,
+        top: (box.height - viewHeight * scale) / 2 + rect.y * scale,
+        width: rect.width * scale,
+        height: rect.height * scale,
+    };
+};

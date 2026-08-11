@@ -5,7 +5,8 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
 import { closeBrowser, useBrowsersQuery } from "../composables/browser/browsersQuery";
-import { useBrowserView } from "../composables/browser/useBrowserView";
+import { useBrowserView, VIEW_HEIGHT, VIEW_WIDTH } from "../composables/browser/useBrowserView";
+import BrowserSelectMenu from "../components/BrowserSelectMenu.vue";
 import { relativeTime } from "../composables/chat/catalog";
 import { postTurnControl } from "../composables/chat/turnStream";
 
@@ -268,6 +269,16 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                 <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                     <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                 </div>
+                <!-- An open drop-down, which the picture itself can never show — see BrowserSelectMenu. -->
+                <BrowserSelectMenu
+                    v-if="view.select.value && view.driving.value"
+                    :menu="view.select.value"
+                    :frame="frameEl"
+                    :view-width="VIEW_WIDTH"
+                    :view-height="VIEW_HEIGHT"
+                    @pick="view.chooseOption"
+                    @close="view.closeSelect"
+                />
             </div>
 
             <!-- A browser that has closed. Not a failed stream — there is nothing to stream — so it reads as the

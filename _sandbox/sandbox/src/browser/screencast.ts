@@ -12,8 +12,12 @@ import type { BrowserContext, CDPSession, Page } from "playwright";
 export const VIEW_WIDTH = 1280;
 export const VIEW_HEIGHT = 800;
 
-// Motion frames: cheap and smooth. Readability is the still's job, so these don't have to pay for it.
-const MOTION_QUALITY = 70;
+/* Motion frames: smooth first, but not cheap at the cost of being unreadable. The still below is what makes a
+ * settled page sharp — yet a page that keeps moving (a spinner, a carousel, a site mid-sign-up) never settles,
+ * and everything the person is trying to read is a motion frame for as long as that lasts. Quality 70 is where
+ * JPEG starts smearing small text, which is why watching a busy page read as "blurry" no matter how good the
+ * still was. Frames only flow while something is actually moving, so the extra bytes are paid exactly then. */
+const MOTION_QUALITY = 82;
 // One high-resolution capture this long after the last motion frame. Long enough that a scroll or a page load
 // doesn't fire one per frame, short enough to land before the eye has settled on the picture.
 const STILL_DELAY_MS = 400;
@@ -27,6 +31,24 @@ const STILL_SCALE = 2;
  * paying for an encode and a tunnel round trip each time. Frames inside this window belong to our own camera.
  * Generous against a loaded machine and still well under STILL_DELAY_MS, so a real change never waits on it. */
 const CAPTURE_ECHO_MS = 250;
+/* …EXCEPT THAT A FRAME INSIDE THAT WINDOW IS NOT ALWAYS OURS, and assuming it was is how the view came to lie.
+ *
+ * The window is our own camera's shake MOST of the time; it is also exactly where the frame showing the result
+ * of a click lands, because the click is what ended the quiet that armed the capture. Dropping it silently and
+ * scheduling nothing left the person looking at the screen they had already left: they pressed Continue, the
+ * page really did move on, and the picture kept the old button sitting there. So they pressed it again — on a
+ * button that no longer existed, in a form that had moved a step ahead of what they could see.
+ *
+ * A dropped frame therefore always buys another look. What keeps that from becoming the old self-feeding loop
+ * is that a capture can now tell whether anything moved: WebP of identical pixels at a fixed quality is
+ * byte-identical (true of a busy page, not just a blank one), so a still matching the one the client is already
+ * showing is proof the page is at rest and there was nothing to miss. */
+/* HOW FAST TO KEEP LOOKING once it is at rest. Doubling from STILL_DELAY_MS, capped here. A page that will
+ * never move again must not cost a capture every half second for as long as someone leaves the tab open; a
+ * change that slipped into a suppression window must not wait forever to be noticed. Backing off to this is
+ * both at once — and the common case never gets here at all, because a change that lands OUTSIDE a window (the
+ * overwhelming majority) is forwarded the moment it arrives, exactly as before. */
+const STILL_IDLE_MS = 5000;
 
 const SCREENCAST_OPTIONS = { format: "jpeg", quality: MOTION_QUALITY, maxWidth: VIEW_WIDTH, maxHeight: VIEW_HEIGHT, everyNthFrame: 1 } as const;
 
@@ -59,6 +81,10 @@ export type ScreencastClientMessage =
      * SANDBOX's clipboard, which nothing on their machine can read: the exact mirror of the paste problem the
      * clients solve by bridging their own clipboard in as a `text` frame. */
     | { readonly type: "selection" }
+    /* WHICH ENTRY OF A DROP-DOWN THE OWNER PICKED, from the menu the CLIENT drew — see readSelect below for why
+     * there is no other way to answer one of these. Applied to whichever <select> the page has focused, which
+     * is the same one the `select` frame going the other way described. */
+    | { readonly type: "selectOption"; readonly index: number }
     // Stream a specific page instead of whichever the agent opened last — the browser view's tab strip. Pins,
     // so the agent opening a tab no longer moves the picture out from under the user (see `pinned` below).
     | { readonly type: "bind"; readonly pageId: string }
@@ -208,6 +234,78 @@ export const readSelection = async (page: Page): Promise<string> => {
     return "";
 };
 
+/* THE ONE CONTROL THE PICTURE CANNOT SHOW, and the reason a date of birth could not be filled in by hand.
+ *
+ * A <select>'s open list is not part of the page. Chromium draws it as a native menu belonging to the BROWSER,
+ * a separate window on the virtual display, and `Page.startScreencast` streams the page's compositor surface —
+ * so the list is simply absent from every frame. Clicking the control does focus it and the menu really does
+ * open somewhere; the owner just sees nothing happen, and the click they aim at the option they wanted lands on
+ * whatever the page has at those coordinates instead. Keyboard was the only way through, and only if you
+ * guessed that it was.
+ *
+ * So the menu is drawn where it can be seen: in the operator's own browser, from the options read out here.
+ * Nothing is injected into the page to do it — an overlay of our own in the agent's DOM would be a mutation of
+ * the very thing these views exist to observe, visible to the agent's next snapshot. This reads, and the pick
+ * that comes back is applied through Playwright's own selectOption, which sets the value the way the frameworks
+ * on the far side expect (React tracks its own, and a hand-set .selectedIndex is invisible to it).
+ *
+ * EVERY FRAME, like readSelection above and for the same reason: these controls are as often inside an embedded
+ * form as in the top document. A frame's rect is added back in so the coordinates are the picture's own. */
+export interface SelectMenu {
+    readonly options: readonly { readonly label: string; readonly disabled: boolean }[];
+    readonly selected: number;
+    // Where the closed control sits in the streamed viewport, for the client to anchor its menu to.
+    readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+}
+
+export const readSelect = async (page: Page): Promise<SelectMenu | undefined> => {
+    for (const frame of page.frames()) {
+        const found = await frame
+            .evaluate(() => {
+                const active = document.activeElement;
+                // A `multiple` list renders inline and is already visible and clickable in the picture.
+                if (!(active instanceof HTMLSelectElement) || active.multiple) {
+                    return undefined;
+                }
+                const box = active.getBoundingClientRect();
+                return {
+                    options: Array.from(active.options).map((option) => ({ label: option.label || option.text, disabled: option.disabled })),
+                    selected: active.selectedIndex,
+                    rect: { x: box.left, y: box.top, width: box.width, height: box.height },
+                };
+            })
+            .catch(() => undefined);
+        if (found === undefined) {
+            continue;
+        }
+        // boundingBox() is already relative to the main frame's viewport, so one hop places any depth of nesting.
+        const holder = frame === page.mainFrame() ? undefined : await frame.frameElement().catch(() => undefined);
+        // boundingBox answers null for an element with no box at all, which is as good as having no offset.
+        const offset = holder === undefined ? undefined : ((await holder.boundingBox().catch(() => undefined)) ?? undefined);
+        return offset === undefined ? found : { ...found, rect: { ...found.rect, x: found.rect.x + offset.x, y: found.rect.y + offset.y } };
+    }
+    return undefined;
+};
+
+// Apply what the owner picked to the <select> the page still has focused — the same one readSelect described.
+export const applySelect = async (page: Page, index: number): Promise<void> => {
+    for (const frame of page.frames()) {
+        const handle = await frame.evaluateHandle(() => document.activeElement).catch(() => undefined);
+        const element = handle?.asElement() ?? undefined;
+        if (element === undefined) {
+            continue;
+        }
+        const isSelect = await element.evaluate((node) => node instanceof HTMLSelectElement && !node.multiple).catch(() => false);
+        if (!isSelect) {
+            continue;
+        }
+        // Playwright's own, rather than a hand-set selectedIndex: it fires input and change the way a real pick
+        // does and updates the value tracker React and friends dedupe against.
+        await element.selectOption({ index }).catch(() => undefined);
+        return;
+    }
+};
+
 // A live view of ONE browser context: the CDP session currently streaming, rebound as pages come and go.
 // `attached` is what an input frame is dispatched to, so mouse/keyboard follow the page on screen automatically.
 export interface Screencast {
@@ -246,6 +344,11 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // Whether a frame arriving now is the page moving or our own still capture shaking it — see CAPTURE_ECHO_MS.
     let capturing = false;
     let echoUntil = 0;
+    // The sharp frame the client is currently showing, kept to compare the next capture against: same bytes
+    // means the page has not moved since, which is the only reliable way to tell an echo from a real change.
+    let lastStill: string | undefined;
+    // How many captures in a row have found nothing new — the back-off's exponent. See STILL_IDLE_MS.
+    let quiet = 0;
 
     /* THE PICTURE ANYONE ACTUALLY READS IS A STILL ONE. Watching an agent browse is mostly watching a page that
      * is not moving — so the motion stream is tuned for smoothness (1x, quality 70, enough to follow a scroll)
@@ -283,7 +386,21 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         if (shot === undefined || stopped || paused || session !== attached) {
             return;
         }
+        if (shot.data === lastStill) {
+            // Pixel-for-pixel what the client already has. Nothing moved while we were photographing, so the
+            // frames suppressed to take this really were our own — count the confirmation and stop chasing.
+            quiet += 1;
+            return;
+        }
+        quiet = 0;
+        lastStill = shot.data;
         onFrame({ data: shot.data, format: "webp" });
+    };
+
+    // Every path that wants another sharp reading goes through here, so the back-off is applied in one place.
+    const armStill = (session: CDPSession): void => {
+        clearTimeout(stillTimer);
+        stillTimer = setTimeout(() => void still(session), Math.min(STILL_DELAY_MS * 2 ** quiet, STILL_IDLE_MS));
     };
 
     const bind = async (target: Page, pin = false): Promise<void> => {
@@ -293,8 +410,11 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
         pinned ||= pin;
         boundTo = target;
         clearTimeout(stillTimer);
-        // A different page's first frames are nobody's echo, however recently we photographed the last one.
+        // A different page's first frames are nobody's echo, however recently we photographed the last one —
+        // and nothing about the last page's sharp frame says anything about whether this one is at rest.
         echoUntil = 0;
+        lastStill = undefined;
+        quiet = 0;
         try {
             await attached?.detach();
         } catch {
@@ -307,13 +427,16 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             // are dropped precisely because nothing has changed.
             session.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
             if (capturing || Date.now() < echoUntil) {
-                // Our own still shaking the page it photographed. Forwarding it would undo the sharp frame we
-                // just sent, and re-arming the debounce would take another — which is the loop, not the page.
+                // Probably our own still shaking the page it photographed — forwarding it would undo the sharp
+                // frame we just sent, which is the flicker. But it may equally be the page answering a click,
+                // so dropping it is never the last word: look again, and let the capture settle the question.
+                armStill(session);
                 return;
             }
+            // A frame nobody's camera can account for: the page really moved, so the back-off starts over.
+            quiet = 0;
             onFrame({ data: frame.data, format: "jpeg" });
-            clearTimeout(stillTimer);
-            stillTimer = setTimeout(() => void still(session), STILL_DELAY_MS);
+            armStill(session);
         });
         // Normalize the window so client coords (VIEW_WIDTH x VIEW_HEIGHT) map 1:1 even for a smaller popup.
         await target.setViewportSize({ width: VIEW_WIDTH, height: VIEW_HEIGHT }).catch(() => {});
@@ -364,7 +487,11 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             paused = next;
             clearTimeout(stillTimer);
             // Coming back is a fresh stream, and its first frame is the surface as it stands — not an echo.
+            // That first frame is a motion one, so the sharp reading of it has to be taken again even if the
+            // page held perfectly still the whole time the tab was hidden.
             echoUntil = 0;
+            lastStill = undefined;
+            quiet = 0;
             const session = attached;
             if (session === undefined) {
                 return;
