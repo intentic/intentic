@@ -106,8 +106,15 @@ export const vpnHandler: CapabilityHandler = {
         }
         return vpn.username !== undefined && vpn.password !== undefined ? "password" : "presharedKey";
     },
-    // An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor either
-    // ipsec credential can reach the browser by being forgotten in a new field.
+    /* An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor either
+     * ipsec credential can reach the browser by being forgotten in a new field.
+     *
+     * The allowlist must therefore be COMPLETE over the non-credential fields, which is the other half of the
+     * same bargain: secret-fields.ts vaults the complement of this echo, so a tunnel parameter left out here is
+     * replaced in the manifest by the vault marker — and `pfs`, `dhGroup` and `routedNetworks` are an enum, an
+     * enum and a CIDR list, none of which the marker satisfies. The entry then fails CapabilitySchema on the
+     * next read and the whole tunnel disappears from the manifest rather than one label going missing. Every
+     * dial parameter is echoed for that reason, and because the card should show what it will dial with. */
     echo: (config) => {
         const vpn = config as VpnConfig;
         return {
@@ -116,13 +123,23 @@ export const vpnHandler: CapabilityHandler = {
             ...(vpn.provider === "wireguard"
                 ? {}
                 : vpn.provider === "fortinet"
-                  ? { server: vpn.server, port: vpn.port, username: vpn.username }
+                  ? {
+                        server: vpn.server,
+                        port: vpn.port,
+                        username: vpn.username,
+                        ...(vpn.trustedCert !== undefined ? { trustedCert: vpn.trustedCert } : {}),
+                        ...(vpn.realm !== undefined ? { realm: vpn.realm } : {}),
+                    }
                   : {
                         server: vpn.server,
                         ikeVersion: vpn.ikeVersion,
                         aggressive: vpn.aggressive,
+                        pfs: vpn.pfs,
+                        dhGroup: vpn.dhGroup,
+                        routedNetworks: vpn.routedNetworks,
                         ...(vpn.username !== undefined ? { username: vpn.username } : {}),
                         ...(vpn.localId !== undefined ? { localId: vpn.localId } : {}),
+                        ...(vpn.remoteId !== undefined ? { remoteId: vpn.remoteId } : {}),
                     }),
         };
     },

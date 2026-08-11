@@ -591,7 +591,11 @@ machinery is uniform:
   as `hasToken`/`hasSecret` booleans, and which fields those are is derived from `echo` rather than declared
   twice ([secret-fields.ts](_sandbox/sandbox/src/capabilities/secret-fields.ts)). This is exposure removed, not
   a wall: daemon and agent are both root in one container, so the split closes the leak that does not require
-  going looking, and the sandbox boundary remains the one that does.
+  going looking, and the sandbox boundary remains the one that does. Deriving the credential keys as the
+  COMPLEMENT of `echo` carries one obligation that is easy to miss and silent when missed: entries are validated
+  on read BEFORE the vault is consulted, so a field left out of `echo` is vaulted and the schema must still
+  accept the marker in its place — otherwise the entry fails validation and is skipped, and the capability
+  vanishes rather than losing a label. `secret-fields.test.ts` pins that round-trip per kind.
 - **One lifecycle** — `add` (streams its apply progress live), `remove`, `status`, `setSecret`
   ([capabilities.contract.ts](_sandbox/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
   by [capabilities.routes.ts](_sandbox/sandbox/src/capabilities/capabilities.routes.ts): precondition check →

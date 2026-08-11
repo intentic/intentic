@@ -46,9 +46,14 @@ Both repositories now exist, and the discovery path ran end to end for the first
 The published repo sat at `9305c108` — `engines.intentic: "^0.4.0"` — for long enough to outlive two major
 bumps of the extension API, so the one repository an author is told to copy was the one guaranteed not to
 load. `b129cfc4` is that fix, and the listing moved to it in
-[`intentic/registry#4`](https://github.com/intentic/registry/pull/4). **A listing pins a commit, so bumping
-`engines` anywhere means opening a listing PR in the same sitting** — the repo being right is not the same as
-the thing anyone installs being right.
+[`intentic/registry#4`](https://github.com/intentic/registry/pull/4), **merged** — which also moved the four
+other listings, every one of which was pinned before the `2.x` bump and therefore refused at install.
+
+**A listing pins a commit, so bumping `engines` anywhere means opening a listing PR in the same sitting** — the
+repo being right is not the same as the thing anyone installs being right, and the gap between those two is what
+an owner experiences as "I installed it and the row says incompatible". The delay here had a second cost worth
+recording: `#4` sat open long enough for somebody to install `9305c108` from the live catalogue, so the fix
+existed upstream while the only commit anyone could get was the broken one.
 
 That pull request was not hand-written. `_tools/registry-scan`'s scan ran against the live GitHub API, found the repo by
 its `intentic-extension` topic, parsed the manifest, resolved the head sha, and emitted the proposal, title and body
