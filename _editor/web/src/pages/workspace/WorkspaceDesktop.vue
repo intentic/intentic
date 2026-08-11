@@ -919,7 +919,10 @@ const endResize = (event: PointerEvent): void => {
                         @load-more="searchLoadMore"
                     />
                 </div>
-                <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
+                <!-- Bottom padding belongs to the TREE, not this scrollport: the explorer's empty-folder line
+                     pins itself to the bottom, and a scrollport that reserved space below it would leave a
+                     sliver of scrolled rows showing under the pinned line. -->
+                <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto pt-1">
                     <WorkspaceTree
                         :tree="tree"
                         :root-hidden="rootHidden"

@@ -320,9 +320,15 @@ describe(`the rows the sandbox keeps to itself`, () => {
 
 /* BARREN BRANCHES — folders holding nothing but empty folders, the debris agent file moves leave behind. The
  * subject is what the explorer SHOWS: nothing at all until the emptiness has settled (an agent mid-scaffold
- * must not strobe the tree), then ONE dimmed row for the whole chain, a one-line sweep footer, and a delete
- * that skips the confirm dialog — no content is lost, and the receipt's Undo puts an empty folder back
- * exactly. Timers are faked: the settle window is the behaviour, not incidental delay. */
+ * must not strobe the tree), then ONE dimmed row for the whole chain, a sweep line that NAMES what it is
+ * offering to delete, and a delete that skips the confirm dialog — no content is lost, and the receipt's Undo
+ * puts an empty folder back exactly. Timers are faked: the settle window is the behaviour, not incidental
+ * delay.
+ *
+ * The naming is the half that was missing: a bare count asked the user to authorise deleting things it never
+ * named, and the receipt afterwards named them no better — so what went was unknowable either side of the
+ * click. What is asserted here is that the names are THERE, that each one leads back to its row, and that a
+ * named folder can be kept instead of swept. */
 describe(`empty folders (barren branches)`, () => {
     // `web › demo › assets` where every link holds only the next — one piece of junk, not three.
     const BARREN_TREE: WorkspaceTreeEntry[] = [
@@ -330,6 +336,32 @@ describe(`empty folders (barren branches)`, () => {
         dir(`src`, [file(`src/main.ts`)]),
         file(`README.md`),
     ];
+    // Two branches, the second buried under a folder holding real content — so revealing it has something to
+    // open, which a root-level branch would never exercise.
+    const TWO_BARREN_TREE: WorkspaceTreeEntry[] = [
+        dir(`web`, [dir(`web/demo`, [dir(`web/demo/assets`, [])])]),
+        dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]),
+        file(`README.md`),
+    ];
+
+    // The sweep line's controls, by the words on them.
+    const button = (el: HTMLElement, label: string): HTMLElement =>
+        [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === label) as HTMLElement;
+    /* Each disclosed entry as its two lines: the branch being deleted, then where it lives. Two lines rather
+     * than one path because a 16rem column truncates from the right, which is exactly where the folder being
+     * deleted sits — so the halves are read separately here too. */
+    const entries = (el: HTMLElement): { name: string; where: string }[] =>
+        [...el.querySelectorAll(`li`)].map((row) => {
+            const [name, where] = [...row.querySelectorAll(`span`)].map((span) => span.textContent?.trim() ?? ``);
+            return { name: name ?? ``, where: where ?? `` };
+        });
+    // The control that reveals a named branch — the first button of the entry whose name line matches.
+    const entryNamed = (el: HTMLElement, name: string): HTMLElement =>
+        [...el.querySelectorAll(`li`)].find((row) => row.querySelector(`span`)?.textContent?.trim() === name)?.querySelector(`button`) as HTMLElement;
+    const settle = async (): Promise<void> => {
+        await vi.advanceTimersByTimeAsync(10_100);
+        await nextTick();
+    };
 
     beforeEach(() => {
         vi.useFakeTimers();
@@ -340,40 +372,95 @@ describe(`empty folders (barren branches)`, () => {
         useReceipts().dismissReceipt();
     });
 
-    it(`stays quiet through the settle window, then collapses the chain into one dimmed row and counts it`, async () => {
+    it(`stays quiet through the settle window, then collapses the chain into one dimmed row and names it`, async () => {
         const el = await mount({ tree: BARREN_TREE });
 
-        // Before the window passes: an ordinary row, no marker, no footer.
+        // Before the window passes: an ordinary row, no marker, no sweep line.
         expect(rows(el)).toEqual([`web`, `src`, `README.md`]);
-        expect(el.textContent).not.toContain(`empty folder`);
+        expect(el.textContent).not.toContain(`is empty`);
 
-        await vi.advanceTimersByTimeAsync(10_100);
-        await nextTick();
+        await settle();
 
         expect(rows(el)).toEqual([`web / demo / assets`, `src`, `README.md`]);
         const label = [...el.querySelectorAll(`[role="treeitem"] span`)].find((span) => span.textContent?.includes(`web / demo`));
         expect(label?.className).toContain(`text-subtle`);
-        expect(el.textContent).toContain(`1 empty folder`);
+        // One branch needs no disclosure — the line says which folder, in the same words the row wears.
+        expect(el.textContent).toContain(`web / demo / assets is empty`);
         // The chain's tail is the empty leaf: nothing to expand into, so no chevron.
         const chainRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(`web / demo`));
         expect(chainRow?.querySelector(`[data-icon^="chevron"]`)).toBeNull();
     });
 
-    it(`sweeps from the footer without a dialog, and the receipt holds the way back`, async () => {
-        const el = await mount({ tree: BARREN_TREE });
-        await vi.advanceTimersByTimeAsync(10_100);
+    it(`folds several branches into a count that opens into their names`, async () => {
+        const el = await mount({ tree: TWO_BARREN_TREE });
+        await settle();
+
+        // Closed: the count only. `src/old` is under a collapsed folder, so the tree itself shows nothing of it.
+        expect(el.textContent).toContain(`2 empty folders`);
+        expect(entries(el)).toEqual([]);
+
+        button(el, `2 empty folders`).click();
         await nextTick();
 
-        const cleanUp = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Clean up`) as HTMLElement;
-        cleanUp.click();
+        // A list standing away from the tree has no indentation to say where a folder lives, so every entry
+        // carries its location — `old` alone names nothing anyone could act on. A root-level branch has none.
+        expect(entries(el)).toEqual([
+            { name: `web / demo / assets`, where: `` },
+            { name: `old`, where: `src` },
+        ]);
+    });
+
+    it(`opens the way down to a named folder and selects it`, async () => {
+        const el = await mount({ tree: TWO_BARREN_TREE });
+        await settle();
+        button(el, `2 empty folders`).click();
+        await nextTick();
+        scrolled.length = 0;
+
+        entryNamed(el, `old`).click();
+        await nextTick();
+        await nextTick();
+
+        // `src` opened to make room for the row, which is then selected and scrolled to.
+        expect(rows(el)).toEqual([`web / demo / assets`, `src`, `main.ts`, `old`, `README.md`]);
+        const revealed = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `old`);
+        expect(revealed?.getAttribute(`aria-selected`)).toBe(`true`);
+        expect(scrolled).toContain(`old`);
+    });
+
+    it(`keeps one named folder instead of sweeping them all`, async () => {
+        const el = await mount({ tree: TWO_BARREN_TREE });
+        await settle();
+        button(el, `2 empty folders`).click();
+        await nextTick();
+
+        // The Keep beside `web / demo / assets` — the chain's DEEPEST folder is what gets the placeholder.
+        const keep = [...el.querySelectorAll(`li`)]
+            .find((row) => row.querySelector(`span`)?.textContent?.trim() === `web / demo / assets`)
+            ?.querySelector(`button:last-of-type`) as HTMLElement;
+        keep.click();
+        await vi.advanceTimersByTimeAsync(1);
+
+        const uploads = daemon.calls.filter((call) => call.path.startsWith(`/workspace/upload`));
+        expect(uploads.length).toBe(1);
+        expect(decodeURIComponent(uploads[0]?.path ?? ``)).toContain(`web/demo/assets/.gitkeep`);
+        expect(daemon.calls.some((call) => call.init?.method === `DELETE`)).toBe(false);
+    });
+
+    it(`sweeps from the line without a dialog, and the receipt names what went`, async () => {
+        const el = await mount({ tree: BARREN_TREE });
+        await settle();
+
+        button(el, `Clean up`).click();
         await vi.advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
         const deletes = daemon.calls.filter((call) => call.init?.method === `DELETE`);
         expect(deletes.length).toBe(1);
         expect(String(deletes[0]?.init?.body)).toContain(`"web"`);
+        // One branch fits a receipt and is the whole story.
         const { receipt } = useReceipts();
-        expect(receipt.value?.message).toBe(`1 empty folder removed`);
+        expect(receipt.value?.message).toBe(`web / demo / assets removed`);
 
         // Undo recreates the chain's deepest folder — recursive create rebuilds the exact shape.
         await receipt.value?.undo?.();
@@ -382,10 +469,36 @@ describe(`empty folders (barren branches)`, () => {
         expect(String(creates[0]?.init?.body)).toContain(`web/demo/assets`);
     });
 
+    it(`says where a buried folder is, on the line and on the receipt`, async () => {
+        const el = await mount({ tree: [dir(`src`, [file(`src/main.ts`), dir(`src/old`, [])]), file(`README.md`)] });
+        await settle();
+
+        // The line names it the same way the disclosed list would: what is going, then where it lives.
+        const sole = [...el.querySelectorAll(`span`)].filter((span) => span.className.includes(`block truncate`));
+        expect(sole.map((span) => span.textContent?.trim())).toEqual([`old is empty`, `src`]);
+
+        button(el, `Clean up`).click();
+        await vi.advanceTimersByTimeAsync(1);
+
+        // A receipt has no room to shade the halves differently, so it spells the whole path.
+        expect(useReceipts().receipt.value?.message).toBe(`src / old removed`);
+    });
+
+    it(`keeps the count in the receipt when several branches go at once`, async () => {
+        const el = await mount({ tree: TWO_BARREN_TREE });
+        await settle();
+
+        button(el, `Clean up`).click();
+        await vi.advanceTimersByTimeAsync(1);
+
+        // A self-retiring pill is the wrong place for a list — naming them was the line's job, before the click.
+        expect(useReceipts().receipt.value?.message).toBe(`2 empty folders removed`);
+        expect(daemon.calls.filter((call) => call.init?.method === `DELETE`).length).toBe(2);
+    });
+
     it(`skips the confirm dialog when the Delete key lands on a barren-only selection`, async () => {
         const el = await mount({ tree: BARREN_TREE });
-        await vi.advanceTimersByTimeAsync(10_100);
-        await nextTick();
+        await settle();
 
         const chainRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(`web / demo`)) as HTMLElement;
         chainRow.click();
@@ -394,6 +507,6 @@ describe(`empty folders (barren branches)`, () => {
         await vi.advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
-        expect(useReceipts().receipt.value?.message).toBe(`1 empty folder removed`);
+        expect(useReceipts().receipt.value?.message).toBe(`web / demo / assets removed`);
     });
 });

@@ -20,7 +20,7 @@ import { filesToEntries } from "./dropEntries";
 import { explorerShows } from "./explorerFilter";
 import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
-import { revealTargets } from "./revealPath";
+import { ancestorDirs, revealTargets } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -111,8 +111,13 @@ const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { say } = useReceipts();
 const { fileNesting } = useFileNesting();
 // Barren branches — folders holding nothing but empty folders (settled, so an agent mid-scaffold never
-// flickers the tree). Rows dim and collapse below; the sweep footer counts and clears the whole set.
-const { isBarren, roots: barrenRootEntries, chainOf, branchDirs } = useEmptyDirs(
+// flickers the tree). Rows dim and collapse below; the sweep line names them and clears the whole set.
+const {
+    isBarren,
+    roots: barrenRootEntries,
+    chainOf,
+    branchDirs,
+} = useEmptyDirs(
     () => tree,
     () => lazyChildren.value,
 );
@@ -574,6 +579,61 @@ const doDeleteSelection = (): void => {
     }
     confirmPaths.value = paths;
 };
+/* WHAT THE SWEEP IS ABOUT TO TAKE. A bare count asked the user to authorise deleting N things it never named,
+ * and the receipt afterwards named them no better — so the only record of what went was an Undo that restores
+ * all of it or none of it. The line NAMES what it counts instead: one branch reads as itself, several fold into
+ * a count that opens, and every name is a control that points at the row it stands for. Naming them is also
+ * what makes the choice stop being all-or-nothing, since a named branch can carry its own Keep.
+ *
+ * `pointedBarren` is the branch the pointer (or keyboard focus) is resting on in that list, lit in the tree so
+ * the name and the row are visibly the same thing. */
+const sweepOpen = ref(false);
+const pointedBarren = ref<string | undefined>(undefined);
+/* Each branch as the line writes it, in TWO parts, because a list standing away from the tree cannot borrow
+ * the tree's indentation to say where a folder lives: a branch called `old` names nothing a user could act on.
+ * So `where` carries the folders above it and `label` the barren chain itself — the same "web / demo / assets"
+ * the collapsed tree row wears. Kept apart rather than glued into one path because they mean opposite things:
+ * everything in `label` is about to be deleted and everything in `where` is staying, and a reader who takes
+ * "src / old" for one empty run would think a folder full of source was going with it. */
+interface BarrenBranch {
+    readonly entry: WorkspaceTreeEntry;
+    readonly where: string;
+    readonly label: string;
+}
+const branchOf = (entry: WorkspaceTreeEntry): BarrenBranch => ({
+    entry,
+    where: entry.path.split(`/`).slice(0, -1).join(` / `),
+    label: chainOf(entry).names.join(` / `),
+});
+const barrenBranches = computed<readonly BarrenBranch[]>(() => barrenRootEntries.value.map(branchOf));
+// One branch needs no disclosure: the line just says it.
+const soleBarren = computed(() => (barrenBranches.value.length === 1 ? barrenBranches.value[0] : undefined));
+// The whole path in one string — for a receipt, where there is no room to shade the two parts differently.
+const barrenPath = (branch: BarrenBranch): string => (branch.where === `` ? branch.label : `${branch.where} / ${branch.label}`);
+// A list that empties — swept, or the folders gained content — has nothing left to disclose. Folding it back
+// here is what stops it springing open later on an unrelated empty folder.
+watch(barrenBranches, (branches) => {
+    if (branches.length < 2) {
+        sweepOpen.value = false;
+    }
+    if (!branches.some((branch) => branch.entry.path === pointedBarren.value)) {
+        pointedBarren.value = undefined;
+    }
+});
+/* Point at the folder the line is naming: open the way down to it, scroll it into view, select it. Selection
+ * rather than focus, matching the reveal watch above — it orients the eye without taking the keyboard away
+ * from the list the user is still working through. */
+const revealBarren = async (entry: WorkspaceTreeEntry): Promise<void> => {
+    const dirs = ancestorDirs(entry.path);
+    if (dirs.some((dir) => !expanded.value.has(dir))) {
+        expanded.value = new Set([...expanded.value, ...dirs]);
+    }
+    selection.value = new Set([entry.path]);
+    anchor.value = entry.path;
+    lead.value = entry.path;
+    await nextTick();
+    rowEls.get(entry.path)?.scrollIntoView({ block: `nearest` });
+};
 /* Remove barren branches without ceremony, and hold the way back: the branch shapes are recorded BEFORE the
  * delete (afterwards the tree no longer knows them), and Undo recreates the deepest folder of each chain —
  * recursive create rebuilds the exact shape, which is what makes this the one delete that is genuinely
@@ -585,9 +645,14 @@ const sweepBarren = (roots: readonly WorkspaceTreeEntry[]): void => {
     const dirs = roots.flatMap((root) => branchDirs(root));
     const leaves = dirs.filter((dir) => !dirs.some((other) => other !== dir && other.startsWith(`${dir}/`)));
     const paths = roots.map((root) => root.path);
+    // Named while the tree still knows the shape. ONE branch fits a receipt and is the whole story; several
+    // would be a list, and a pill that retires itself is the wrong place for one — naming them was the line's
+    // job, before the click, where the names could still change the decision.
+    const first = roots[0];
+    const only = roots.length === 1 && first !== undefined ? barrenPath(branchOf(first)) : undefined;
     void run(async () => {
         await removeEntries(paths);
-        say(paths.length === 1 ? `1 empty folder removed` : `${paths.length} empty folders removed`, async () => {
+        say(only !== undefined ? `${only} removed` : `${paths.length} empty folders removed`, async () => {
             for (const dir of leaves) {
                 await createDir(dir);
             }
@@ -984,139 +1049,147 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 </script>
 
 <template>
-    <div
-        ref="treeEl"
-        class="min-h-full focus:outline-none"
-        role="tree"
-        aria-multiselectable="true"
-        tabindex="-1"
-        @keydown="onKeydown"
-        @mousedown.self="claimFocus"
-        @copy="onCopyEvent($event, 'copy')"
-        @cut="onCopyEvent($event, 'cut')"
-        @paste="onPasteEvent"
-        @contextmenu.self.prevent="openMenu($event, undefined)"
-    >
-        <!-- Phantom create row at the root (also covers an empty workspace). -->
-        <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
-            <div class="flex items-center gap-1.5 py-1 pr-2">
-                <span class="w-[0.7rem] shrink-0"></span>
-                <Icon class="shrink-0 text-2xs text-muted" :name="creating.type === 'dir' ? 'folder' : 'file'" />
-                <input
-                    v-model="createDraft"
-                    type="text"
-                    :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
-                    class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
-                    :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
-                    @click.stop
-                    @keydown.enter.prevent="commitCreate"
-                    @keydown.esc.prevent="cancelCreate"
-                    @blur="createError !== undefined ? cancelCreate() : commitCreate()"
-                    @vue:mounted="focusRename"
-                />
-            </div>
-            <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
-        </div>
-        <template v-for="row in visibleRows" :key="'more' in row ? row.key : row.entry.path">
-            <div
-                v-if="'more' in row"
-                class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
-                :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                v-tooltip.top="'Search with Ctrl+P'"
-            >
-                <span class="w-[0.7rem] shrink-0"></span>
-                <span class="min-w-0 flex-1 truncate"
-                    >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }} — search to reach them</span
-                >
-            </div>
-            <template v-else>
-                <button
-                    :ref="(el) => setRowEl(row.entry.path, el)"
-                    type="button"
-                    role="treeitem"
-                    :aria-selected="selection.has(row.entry.path)"
-                    :aria-expanded="expandable(row) ? row.isExpanded : undefined"
-                    :tabindex="tabbablePath === row.entry.path ? 0 : -1"
-                    :draggable="renamingPath !== row.entry.path && !locked(row.entry.path)"
-                    class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
-                    :class="{
-                        'ui-row-select-on': selection.has(row.entry.path),
-                        'ui-row-select-drop': row.entry.path === dragOverPath,
-                        'ui-row-select-changed': isRecentlyChanged(row.entry.path),
-                        'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
-                    }"
-                    :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                    @click="onRowClick($event, row)"
-                    @contextmenu.prevent.stop="openMenu($event, row.entry)"
-                    @dragstart="onRowDragStart($event, row)"
-                    @dragend="onRowDragEnd"
-                    @dragover="onRowDragOver($event, row)"
-                    @dragleave="onRowDragLeave(row)"
-                    @drop="onRowDrop($event, row)"
-                >
-                    <!-- No chevron on a locked folder (nothing behind it to expand into — the walk stops there)
-                         or on a barren chain whose tail is the empty leaf: either way the gesture would only be
-                         a promise the row can't keep. -->
-                    <Icon
-                        v-if="expandable(row)"
-                        class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
-                        :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
-                        @click="onChevronClick($event, row)"
-                    />
-                    <span v-else class="w-[0.7rem] shrink-0"></span>
-                    <!-- Icon size/colour come from the active explorer setup (minimal/colorful/vivid). The fixed-width
-                         slot keeps every glyph in one column so filenames align; ignored rows always dim. A locked
-                         row shows a padlock here (treat) and says so on hover — the tab it opens says the rest. -->
-                    <span
-                        class="flex shrink-0 items-center justify-center"
-                        :class="treat(row).slotClass"
-                        v-tooltip.right="locked(row.entry.path) ? 'Kept private by the sandbox' : undefined"
-                    >
-                        <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
-                    </span>
+    <!-- The tree fills the column and the sweep line rides its bottom edge, so the line is a sibling of the
+         `role="tree"` element rather than a stray non-treeitem inside it. -->
+    <div class="flex min-h-full flex-col">
+        <div
+            ref="treeEl"
+            class="flex-1 pb-1 focus:outline-none"
+            role="tree"
+            aria-multiselectable="true"
+            tabindex="-1"
+            @keydown="onKeydown"
+            @mousedown.self="claimFocus"
+            @copy="onCopyEvent($event, 'copy')"
+            @cut="onCopyEvent($event, 'cut')"
+            @paste="onPasteEvent"
+            @contextmenu.self.prevent="openMenu($event, undefined)"
+        >
+            <!-- Phantom create row at the root (also covers an empty workspace). -->
+            <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
+                <div class="flex items-center gap-1.5 py-1 pr-2">
+                    <span class="w-[0.7rem] shrink-0"></span>
+                    <Icon class="shrink-0 text-2xs text-muted" :name="creating.type === 'dir' ? 'folder' : 'file'" />
                     <input
-                        v-if="renamingPath === row.entry.path"
-                        v-model="renameDraft"
+                        v-model="createDraft"
                         type="text"
-                        class="min-w-0 flex-1 rounded border border-line-strong bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
+                        :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
+                        class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
+                        :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
                         @click.stop
-                        @keydown.enter.prevent="commitRename"
-                        @keydown.esc.prevent="cancelRename"
-                        @blur="commitRename"
+                        @keydown.enter.prevent="commitCreate"
+                        @keydown.esc.prevent="cancelCreate"
+                        @blur="createError !== undefined ? cancelCreate() : commitCreate()"
                         @vue:mounted="focusRename"
                     />
-                    <!-- A collapsed barren chain reads as one path ("public / demo / assets"): the shape of the
+                </div>
+                <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
+            </div>
+            <template v-for="row in visibleRows" :key="'more' in row ? row.key : row.entry.path">
+                <div
+                    v-if="'more' in row"
+                    class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
+                    :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                    v-tooltip.top="'Search with Ctrl+P'"
+                >
+                    <span class="w-[0.7rem] shrink-0"></span>
+                    <span class="min-w-0 flex-1 truncate"
+                        >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }} — search to reach them</span
+                    >
+                </div>
+                <template v-else>
+                    <button
+                        :ref="(el) => setRowEl(row.entry.path, el)"
+                        type="button"
+                        role="treeitem"
+                        :aria-selected="selection.has(row.entry.path)"
+                        :aria-expanded="expandable(row) ? row.isExpanded : undefined"
+                        :tabindex="tabbablePath === row.entry.path ? 0 : -1"
+                        :draggable="renamingPath !== row.entry.path && !locked(row.entry.path)"
+                        class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
+                        :class="{
+                            'ui-row-select-on': selection.has(row.entry.path),
+                            'ui-row-select-pointed': row.entry.path === pointedBarren,
+                            'ui-row-select-drop': row.entry.path === dragOverPath,
+                            'ui-row-select-changed': isRecentlyChanged(row.entry.path),
+                            'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
+                        }"
+                        :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                        @click="onRowClick($event, row)"
+                        @contextmenu.prevent.stop="openMenu($event, row.entry)"
+                        @dragstart="onRowDragStart($event, row)"
+                        @dragend="onRowDragEnd"
+                        @dragover="onRowDragOver($event, row)"
+                        @dragleave="onRowDragLeave(row)"
+                        @drop="onRowDrop($event, row)"
+                    >
+                        <!-- No chevron on a locked folder (nothing behind it to expand into — the walk stops there)
+                         or on a barren chain whose tail is the empty leaf: either way the gesture would only be
+                         a promise the row can't keep. -->
+                        <Icon
+                            v-if="expandable(row)"
+                            class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
+                            :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
+                            @click="onChevronClick($event, row)"
+                        />
+                        <span v-else class="w-[0.7rem] shrink-0"></span>
+                        <!-- Icon size/colour come from the active explorer setup (minimal/colorful/vivid). The fixed-width
+                         slot keeps every glyph in one column so filenames align; ignored rows always dim. A locked
+                         row shows a padlock here (treat) and says so on hover — the tab it opens says the rest. -->
+                        <span
+                            class="flex shrink-0 items-center justify-center"
+                            :class="treat(row).slotClass"
+                            v-tooltip.right="locked(row.entry.path) ? 'Kept private by the sandbox' : undefined"
+                        >
+                            <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
+                        </span>
+                        <input
+                            v-if="renamingPath === row.entry.path"
+                            v-model="renameDraft"
+                            type="text"
+                            class="min-w-0 flex-1 rounded border border-line-strong bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
+                            @click.stop
+                            @keydown.enter.prevent="commitRename"
+                            @keydown.esc.prevent="cancelRename"
+                            @blur="commitRename"
+                            @vue:mounted="focusRename"
+                        />
+                        <!-- A collapsed barren chain reads as one path ("public / demo / assets"): the shape of the
                          label IS the explanation — a branch holding nothing but emptiness, selectable and
                          deletable as the one unit it really is. -->
-                    <span
-                        v-else
-                        class="min-w-0 flex-1 truncate"
-                        :class="row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
-                        >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
-                    >
-                    <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
+                        <span
+                            v-else
+                            class="min-w-0 flex-1 truncate"
+                            :class="row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
+                            >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
+                        >
+                        <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
                          tree row, which is neither where anyone reads documentation nor anywhere a touch device
                          can reach; the workspace README owns that. -->
-                    <span v-if="row.entry.path === REFERENCE_DIR" class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
-                        >reference</span
-                    >
-                    <!-- The outbox, and the one badge here that is a WARNING rather than a label: everything
+                        <span
+                            v-if="row.entry.path === REFERENCE_DIR"
+                            class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
+                            >reference</span
+                        >
+                        <!-- The outbox, and the one badge here that is a WARNING rather than a label: everything
                          under this directory is on the open internet. Colored, not dimmed — the shelf is out of
                          focus, this is the opposite of out of focus. The Public tab in the sandbox hub owns the
                          detail (which files, at what address, which ones the guards refused). -->
-                    <span v-if="row.entry.path === PUBLIC_DIR" class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
-                        >public</span
-                    >
-                    <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
-                    <Icon
-                        v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
-                        name="spinner"
-                        :spin="true"
-                        aria-hidden="true"
-                        class="shrink-0 text-2xs text-subtle"
-                    />
-                    <!-- What this directory offers beside its name: its documents, its codebase health, its commit
+                        <span
+                            v-if="row.entry.path === PUBLIC_DIR"
+                            class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
+                            >public</span
+                        >
+                        <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
+                        <Icon
+                            v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
+                            name="spinner"
+                            :spin="true"
+                            aria-hidden="true"
+                            class="shrink-0 text-2xs text-subtle"
+                        />
+                        <!-- What this directory offers beside its name: its documents, its codebase health, its commit
                          graph, its management panel — whatever rowActions gives it (the tree doesn't know which).
                          Root has no row, so its own pair sits on the explorer toolbar instead.
 
@@ -1130,73 +1203,136 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                          An icon with a handler rather than a <button>: the ROW is the button (role="treeitem"),
                          and an interactive element inside one is invalid. The keyboard reaches these through the
                          row's own context menu instead. -->
-                    <Icon
-                        v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
-                        :key="action.id"
-                        :name="action.icon"
-                        aria-hidden="true"
-                        class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
-                        :class="restingClass(action, row.entry.path)"
-                        v-tooltip.right="action.tooltip"
-                        @click.stop="runAction(row.entry, action)"
-                    />
-                    <!-- Other members with this file open right now — live co-presence on the row. -->
-                    <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
-                    <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
-                    <Icon
-                        name="circle-fill"
-                        v-if="isRecentlyChanged(row.entry.path)"
-                        aria-hidden="true"
-                        class="shrink-0 text-[0.4rem] text-warning"
-                    />
-                </button>
-                <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch). -->
-                <div
-                    v-if="creating !== undefined && creating.dir === row.entry.path"
-                    class="flex flex-col"
-                    :style="{ paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem` }"
-                >
-                    <div class="flex items-center gap-1.5 py-1 pr-2">
-                        <span class="w-[0.7rem] shrink-0"></span>
-                        <span class="flex shrink-0 items-center justify-center" :class="treatEntry('', creating.type, false, false).slotClass">
-                            <Icon
-                                :name="creating.type === 'dir' ? 'folder' : 'file'"
-                                :class="[treatEntry('', creating.type, false, false).sizeClass, 'text-muted']"
-                            />
-                        </span>
-                        <input
-                            v-model="createDraft"
-                            type="text"
-                            :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
-                            class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
-                            :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
-                            @click.stop
-                            @keydown.enter.prevent="commitCreate"
-                            @keydown.esc.prevent="cancelCreate"
-                            @blur="createError !== undefined ? cancelCreate() : commitCreate()"
-                            @vue:mounted="focusRename"
+                        <Icon
+                            v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
+                            :key="action.id"
+                            :name="action.icon"
+                            aria-hidden="true"
+                            class="shrink-0 cursor-pointer text-2xs text-subtle transition-opacity hover:text-content group-hover:pointer-events-auto group-hover:opacity-100 group-focus:pointer-events-auto group-focus:opacity-100"
+                            :class="restingClass(action, row.entry.path)"
+                            v-tooltip.right="action.tooltip"
+                            @click.stop="runAction(row.entry, action)"
                         />
+                        <!-- Other members with this file open right now — live co-presence on the row. -->
+                        <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
+                        <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
+                        <Icon
+                            name="circle-fill"
+                            v-if="isRecentlyChanged(row.entry.path)"
+                            aria-hidden="true"
+                            class="shrink-0 text-[0.4rem] text-warning"
+                        />
+                    </button>
+                    <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch). -->
+                    <div
+                        v-if="creating !== undefined && creating.dir === row.entry.path"
+                        class="flex flex-col"
+                        :style="{ paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem` }"
+                    >
+                        <div class="flex items-center gap-1.5 py-1 pr-2">
+                            <span class="w-[0.7rem] shrink-0"></span>
+                            <span class="flex shrink-0 items-center justify-center" :class="treatEntry('', creating.type, false, false).slotClass">
+                                <Icon
+                                    :name="creating.type === 'dir' ? 'folder' : 'file'"
+                                    :class="[treatEntry('', creating.type, false, false).sizeClass, 'text-muted']"
+                                />
+                            </span>
+                            <input
+                                v-model="createDraft"
+                                type="text"
+                                :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
+                                class="min-w-0 flex-1 rounded border bg-canvas px-1 text-[0.8125rem] text-content focus:outline-none"
+                                :class="createError !== undefined ? 'border-danger' : 'border-line-strong'"
+                                @click.stop
+                                @keydown.enter.prevent="commitCreate"
+                                @keydown.esc.prevent="cancelCreate"
+                                @blur="createError !== undefined ? cancelCreate() : commitCreate()"
+                                @vue:mounted="focusRename"
+                            />
+                        </div>
+                        <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
                     </div>
-                    <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
-                </div>
+                </template>
             </template>
-        </template>
-        <!-- The sweep: one quiet line, present only while barren branches exist (post-settle) and gone the moment
-             they are — not a permanent fixture waiting to be useful. No dialog in front of it: deleting an empty
-             folder is the safest destructive act there is, and the receipt's Undo puts one back exactly. -->
-        <div v-if="barrenRootEntries.length > 0 && filter.trim() === ''" class="flex items-center gap-2 py-1.5 pl-3 pr-2 text-2xs text-subtle">
-            <span class="min-w-0 truncate">{{ barrenRootEntries.length }} empty {{ barrenRootEntries.length === 1 ? "folder" : "folders" }}</span>
-            <button
-                type="button"
-                class="shrink-0 cursor-pointer font-medium text-content/70 underline-offset-2 hover:text-content hover:underline"
-                @click="sweepBarren(barrenRootEntries)"
-            >
-                Clean up
-            </button>
+            <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
+                {{ filter.trim() ? "No matching files." : "Empty workspace." }}
+            </p>
         </div>
-        <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
-            {{ filter.trim() ? "No matching files." : "Empty workspace." }}
-        </p>
+        <!-- THE SWEEP. Present only while settled-barren branches exist and gone the moment they are — not a
+             fixture waiting to be useful — and PINNED to the bottom of the panel, because a line that only
+             surfaces at the end of a long scroll tells a large workspace nothing at all.
+
+             It NAMES what it counts. A single branch reads as itself; several fold into a count that opens; and
+             either way the name is a control that points at the row it stands for, so the abstraction and the
+             thing are one gesture apart. No dialog in front of the sweep: deleting an empty folder is the
+             safest destructive act there is, and the receipt's Undo puts one back exactly. -->
+        <div v-if="barrenBranches.length > 0 && filter.trim() === ''" class="sticky bottom-0 z-10 border-t border-line bg-card">
+            <!-- Every branch named, each one a way into the tree and each one keepable. Names are what make the
+                 choice stop being all-or-nothing: sweep the debris, keep the folder that is a drop point. -->
+            <!-- Space BETWEEN entries, since each is up to two lines and adjacent ones would otherwise read as
+                 one four-line block with no telling which location belongs to which name. -->
+            <ul v-if="sweepOpen && barrenBranches.length > 1" class="scrollbar-thin max-h-40 space-y-1.5 overflow-auto border-b border-line py-1.5">
+                <li v-for="branch in barrenBranches" :key="branch.entry.path" class="flex items-start gap-2 pr-2 pl-3">
+                    <button
+                        type="button"
+                        class="min-w-0 flex-1 cursor-pointer py-0.5 text-left text-2xs text-subtle hover:text-content"
+                        @click="revealBarren(branch.entry)"
+                        @mouseenter="pointedBarren = branch.entry.path"
+                        @mouseleave="pointedBarren = undefined"
+                        @focus="pointedBarren = branch.entry.path"
+                        @blur="pointedBarren = undefined"
+                    >
+                        <!-- Two lines rather than one path, because a path in a 16rem column truncates from the
+                             RIGHT — which is precisely where the folder being deleted is. The name that is going
+                             gets its own line and is never cut; where it lives goes underneath, quieter (those
+                             folders are staying) and croppable, since it is the half you can afford to lose. -->
+                        <span class="block truncate">{{ branch.label }}</span>
+                        <span v-if="branch.where !== ''" class="block truncate text-muted/70">{{ branch.where }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="shrink-0 cursor-pointer py-0.5 text-2xs text-subtle underline-offset-2 hover:text-content hover:underline"
+                        v-tooltip.top="'Keep this folder — it stops counting as empty'"
+                        @click="keepFolder(branch.entry)"
+                    >
+                        Keep
+                    </button>
+                </li>
+            </ul>
+            <div class="flex items-start gap-2 py-1.5 pr-2 pl-3 text-2xs text-subtle">
+                <!-- One folder: say which, in the same two lines the list uses. Several: the count opens. -->
+                <button
+                    v-if="soleBarren !== undefined"
+                    type="button"
+                    class="min-w-0 flex-1 cursor-pointer text-left hover:text-content"
+                    @click="revealBarren(soleBarren.entry)"
+                    @mouseenter="pointedBarren = soleBarren?.entry.path"
+                    @mouseleave="pointedBarren = undefined"
+                    @focus="pointedBarren = soleBarren?.entry.path"
+                    @blur="pointedBarren = undefined"
+                >
+                    <span class="block truncate">{{ soleBarren.label }} is empty</span>
+                    <span v-if="soleBarren.where !== ''" class="block truncate text-muted/70">{{ soleBarren.where }}</span>
+                </button>
+                <button
+                    v-else
+                    type="button"
+                    class="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left hover:text-content"
+                    :aria-expanded="sweepOpen"
+                    @click="sweepOpen = !sweepOpen"
+                >
+                    <span class="truncate">{{ barrenBranches.length }} empty folders</span>
+                    <Icon :name="sweepOpen ? 'chevron-down' : 'chevron-right'" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    class="shrink-0 cursor-pointer font-medium text-content/70 underline-offset-2 hover:text-content hover:underline"
+                    @click="sweepBarren(barrenRootEntries)"
+                >
+                    Clean up
+                </button>
+            </div>
+        </div>
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
         <ConfirmDialog
             :open="confirmPaths !== undefined"
@@ -1224,8 +1360,16 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 </template>
 
 <style scoped>
-/* Only the two states the shared `.ui-row-select` has no opinion about: a drop target, and the flash a row
-   gets when the file under it just changed on disk. Hover, selection and the focus ring come from the utility. */
+/* Only the states the shared `.ui-row-select` has no opinion about: a drop target, the flash a row gets when
+   the file under it just changed on disk, and the row an empty-folder name in the sweep line is pointing at.
+   Hover, selection and the focus ring come from the utility. */
+
+/* POINTED AT FROM ELSEWHERE — the pointer is on a name in the sweep line, not on this row, so the row cannot
+   use hover to answer. An outline rather than a fill: it has to be legible next to both the plain hover tint
+   and the selection tint without being mistaken for either. */
+.ui-row-select-pointed {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 55%, transparent);
+}
 .ui-row-select-drop {
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     box-shadow: inset 0 0 0 1px var(--color-primary-500);
