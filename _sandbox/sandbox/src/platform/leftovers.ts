@@ -1,6 +1,6 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import type { Logger } from "pino";
-import { pidAlive } from "./pid-alive.js";
 
 /* LEFTOVERS — everything a turn started, reclaimed once nobody owns it any more.
  *
@@ -12,11 +12,26 @@ import { pidAlive } from "./pid-alive.js";
  * request that will never come. They accumulate: a sandbox observed mid-investigation carried twelve of them, the
  * oldest 37 minutes into an afterlife nobody had asked for.
  *
- * THE MECHANISM IS THE ENVIRONMENT, for the reason workload-priority.ts reaches for niceness: it is the one
- * property a subtree inherits without anyone propagating it. Stamp the provider CLI with who it is working for
- * and every descendant carries the same answer, however many levels down and whoever spawned it — @playwright/mcp
- * did not have to cooperate, and neither did Chromium. procfs hands it back for any pid, so the whole tree is
- * legible from outside with no registry to keep in sync and nothing to leak when the daemon dies.
+ * THE MECHANISM IS INHERITANCE, twice over, for the reason workload-priority.ts reaches for niceness: what a
+ * subtree carries without anyone propagating it is the only thing that describes a tree nobody holds a handle on.
+ *
+ * WHICH TREE IS MINE is the PROCESS GROUP, and it is the kernel's answer rather than ours. Every process the
+ * daemon forks inherits its group, keeps it when its parent dies and it is reparented to init, and — this is the
+ * whole point — cannot be confused with another daemon's, because a group is named after the process that leads
+ * it. A second daemon in this container is in the group of whatever started it (an agent's shell, its own tmux
+ * pane) and its group is not this one. It therefore cannot SEE this daemon's processes to get them wrong.
+ *
+ * That is not a refinement of the label this module used to key on; it is the repair of it. A boot id in an env
+ * var is a claim about identity that anything can read and any older copy of this file can misread — and every
+ * agent branch in this workspace holds such a copy, because this repository IS the daemon and running it from
+ * source is how you watch a change work. Twice on 2026-08-11 a source run's first sweep read the live daemon's
+ * processes as a dead life's leavings and killed them mid-turn, four agent turns at a time. No liveness check
+ * fixes that class, because the check has to be in the code doing the killing. Group membership does: a sweep
+ * enumerates its own group and never learns the others exist.
+ *
+ * WHOSE WORK IT IS stays an env stamp, because that answer has no kernel object — a conversation id is ours. It
+ * is read only for processes already proven to be in this daemon's group, so it decides WHICH of my processes to
+ * reclaim and never WHOSE they are.
  *
  * WHOSE IT IS, is a conversation. Its turn run is live or it is not (turn-runs.ts), and that is the same fact the
  * chat, the fleet card and the journal all key on — so a leftover here is exactly "a process belonging to a turn
@@ -24,14 +39,9 @@ import { pidAlive } from "./pid-alive.js";
  * name a conversation nothing will ever report live, which is honest: bounded to maxTurns 1 and toolless, one that
  * outlives its grace window is broken by construction.
  *
- * THE BOOT ID is what makes a daemon's DEATH survivable. Nothing a daemon started may outlive it — the turn
- * journal already reasons this way about turns, and their processes are the same fact one layer down — so a
- * stamp from a life that has ENDED needs no owner lookup at all: it is reclaimable the moment it is seen.
- *
- * Ended is the load-bearing word, and it is asked of the pid the boot id carries rather than assumed from the id
- * not matching. Two daemons in one container is a thing that happens — a dev run of this very file, a test
- * harness, an update racing its predecessor — and to each of them every process of the other's is stamped with
- * an id that is not theirs. Reading that as "a dead life's leavings" is how a sweep kills work in flight.
+ * A DAEMON'S DEATH is survivable without a word about lives or generations. The container hands its daemon the
+ * same pid every restart, so a successor leads the same group its predecessor did and simply inherits the
+ * orphans: they are processes in my group whose owner is not live, which is the ordinary rule below.
  *
  * WHAT IS DELIBERATELY EXEMPT is anything under a tmux pane. A pane is a place with a watcher: the user has a tab
  * on it, the terminals list shows it, and terminal-session.ts already ages it out on a policy that knows about
@@ -44,33 +54,19 @@ import { pidAlive } from "./pid-alive.js";
  * a rule phrased as "orphaned processes" would eventually meet somebody's deliberate `nohup … &` and be right
  * about the parent and wrong about everything else. */
 
-// The stamp, and the vocabulary for reading it back. `<bootId>:<owner>` — two opaque tokens either side of a
-// colon, so an owner that ever grows a colon of its own still parses (the boot id cannot: it is minted here).
-export const WORKLOAD_ENV = "INTENTIC_WORKLOAD";
-
-/* This daemon's life, minted once at import: its pid, then a value nobody can predict, so no two lives can ever
- * share one. Not persisted anywhere — the whole job of the second half is to differ from whatever the last life
- * used.
+/* The stamp: WHOSE work this is, and nothing else. No boot id in it any more — identity of the daemon is the
+ * process group, and putting it here as well would be a second answer to a question the kernel already answers.
  *
- * THE PID IS IN THERE so a stamp can be asked the only question that makes reclaiming safe: is the daemon that
- * minted this still running? A sandbox is a machine people start daemons on — a dev run from source, a test
- * harness, a restart racing its predecessor — and "not my boot id" says nothing about whether the process on the
- * other end of it is alive. On 2026-08-11 it was: a dev run's first sweep read 27 of the live daemon's processes
- * as a dead life's leavings and killed them, taking four agent turns and the translator down with them. */
-export const BOOT_ID = `${process.pid}.${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
-
-// The daemon a stamp was minted by, for the liveness question above. Undefined for anything that did not come
-// out of BOOT_ID (a hand-set env var, a stamp from before the pid was in there) — which reads as "no daemon to
-// ask about" and leaves the process to the ownership rules below.
-export const daemonPidOf = (bootId: string): number | undefined => {
-    const dot = bootId.indexOf(".");
-    const pid = dot <= 0 ? Number.NaN : Number(bootId.slice(0, dot));
-    return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
-};
+ * The name changed with the meaning, which has a useful side effect: an older sweep looks for a variable that is
+ * no longer set on anything, and unstamped is the case every version of this file has always handled correctly —
+ * a sandbox is somebody's machine too, and a rule phrased as "orphaned processes" would eventually meet
+ * somebody's deliberate `nohup … &`. Every stale checkout in this workspace is therefore blind to us rather than
+ * wrong about us, without one of them being edited. */
+export const WORKLOAD_ENV = "INTENTIC_TURN_OWNER";
 
 // The env a spawned workload gets, to be spread into the child's environment. Owner is the conversation the work
 // belongs to; a flow with no conversation of its own passes one of the two reserved names below.
-export const workloadStamp = (owner: string): Record<string, string> => ({ [WORKLOAD_ENV]: `${BOOT_ID}:${owner}` });
+export const workloadStamp = (owner: string): Record<string, string> => ({ [WORKLOAD_ENV]: owner });
 
 /* THE TWO OWNERS THAT ARE NOT CONVERSATIONS.
  *
@@ -86,43 +82,24 @@ export const workloadStamp = (owner: string): Record<string, string> => ({ [WORK
 export const DAEMON_OWNER = "daemon";
 export const ONE_SHOT_OWNER = "one-shot";
 
-export interface WorkloadStamp {
-    readonly bootId: string;
-    readonly owner: string;
-}
-
-export const parseStamp = (value: string | undefined): WorkloadStamp | undefined => {
-    const colon = value?.indexOf(":") ?? -1;
-    if (value === undefined || colon <= 0) {
-        return undefined;
-    }
-    return { bootId: value.slice(0, colon), owner: value.slice(colon + 1) };
-};
-
-// One process as the sweep needs to see it. `ppid` is only ever used to walk upward looking for a pane.
+// One process as the sweep needs to see it. `pgrp` is what makes it mine or not; `ppid` is only ever used to
+// walk upward looking for a pane.
 export interface ScannedProcess {
     readonly pid: number;
     readonly ppid: number;
-    readonly stamp: WorkloadStamp | undefined;
+    readonly pgrp: number;
+    readonly owner: string | undefined;
 }
-
-// Why a process is reclaimable, which is also the difference between reclaiming it now and giving it a grace
-// window: a stamp from a previous daemon life cannot become legitimate again, an owner that has just finished
-// might still be unwinding.
-export type LeftoverReason = "previous-boot" | "owner-finished";
 
 export interface Leftover {
     readonly pid: number;
     readonly owner: string;
-    readonly reason: LeftoverReason;
 }
 
 export interface LeftoverPolicy {
-    readonly bootId: string;
-    // Whether the daemon that minted a FOREIGN boot id is still running — the difference between a previous
-    // life's orphan and a co-tenant's working process. Injected like ownerLive: the sweep owns the pid check
-    // (and the one case only it can see, a boot id carrying this very pid from a life that has ended).
-    readonly bootLive: (bootId: string) => boolean;
+    // This daemon's process group — the whole of what it may act on. Everything it forked is in here; nothing
+    // another daemon forked can be.
+    readonly group: number;
     // Whether this owner still has work in flight. Injected because the answer lives in the turn registry, and
     // this module deliberately knows nothing about turns.
     readonly ownerLive: (owner: string) => boolean;
@@ -150,26 +127,18 @@ const underPane = (pid: number, parents: ReadonlyMap<number, number>, panePids: 
     return false;
 };
 
-/* The pure decision: which stamped processes nobody owns, and why. No clock — the grace window belongs to the
- * sweep, which is the only thing that can say how long a pid has been in this state. */
-export const leftoverProcesses = (scanned: readonly ScannedProcess[], { bootId, bootLive, ownerLive, panePids }: LeftoverPolicy): Leftover[] => {
+/* The pure decision: which of MY processes nobody owns any more. Three conditions, in the order that makes the
+ * dangerous one unreachable — not in my group is not my business, whatever it is stamped with. No clock: the
+ * grace window belongs to the sweep, which is the only thing that can say how long a pid has been in this state. */
+export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, ownerLive, panePids }: LeftoverPolicy): Leftover[] => {
     const parents = new Map(scanned.map((entry) => [entry.pid, entry.ppid]));
     const leftovers: Leftover[] = [];
-    for (const { pid, stamp } of scanned) {
-        if (stamp === undefined || underPane(pid, parents, panePids)) {
+    for (const { pid, pgrp, owner } of scanned) {
+        if (owner === undefined || pgrp !== group || underPane(pid, parents, panePids)) {
             continue;
         }
-        if (stamp.bootId !== bootId) {
-            // Someone else's, and the only thing that decides which someone: a daemon still running is a daemon
-            // whose processes are its own business, whatever it has its roots on. Only a life that ended leaves
-            // leftovers.
-            if (!bootLive(stamp.bootId)) {
-                leftovers.push({ pid, owner: stamp.owner, reason: "previous-boot" });
-            }
-            continue;
-        }
-        if (!ownerLive(stamp.owner)) {
-            leftovers.push({ pid, owner: stamp.owner, reason: "owner-finished" });
+        if (!ownerLive(owner)) {
+            leftovers.push({ pid, owner });
         }
     }
     return leftovers;
@@ -184,22 +153,23 @@ export const leftoverProcesses = (scanned: readonly ScannedProcess[], { bootId, 
 const NUMERIC = /^\d+$/u;
 
 // `stat`'s second field is the executable name in parentheses and may itself contain spaces and parentheses, so
-// the only safe split is after the LAST `)`: ppid is then the second field of what remains.
-export const parsePpid = (stat: string): number | undefined => {
+// the only safe split is after the LAST `)`: state, ppid and pgrp are the first three fields of what remains.
+export const parseProcStat = (stat: string): { ppid: number; pgrp: number } | undefined => {
     const rest = stat
         .slice(stat.lastIndexOf(")") + 1)
         .trim()
         .split(/\s+/u);
     const ppid = Number(rest[1]);
-    return Number.isSafeInteger(ppid) && ppid >= 0 ? ppid : undefined;
+    const pgrp = Number(rest[2]);
+    return Number.isSafeInteger(ppid) && ppid >= 0 && Number.isSafeInteger(pgrp) && pgrp >= 0 ? { ppid, pgrp } : undefined;
 };
 
 // procfs hands back the environment NUL-separated, in the form it had at exec — which is what we want: a child
 // cannot edit its way out of the stamp it was born with.
-export const stampOf = (environ: string): WorkloadStamp | undefined => {
+export const ownerOf = (environ: string): string | undefined => {
     for (const entry of environ.split("\0")) {
         if (entry.startsWith(`${WORKLOAD_ENV}=`)) {
-            return parseStamp(entry.slice(WORKLOAD_ENV.length + 1));
+            return entry.slice(WORKLOAD_ENV.length + 1);
         }
     }
     return undefined;
@@ -208,8 +178,8 @@ export const stampOf = (environ: string): WorkloadStamp | undefined => {
 const scanProcess = async (pid: number): Promise<ScannedProcess | undefined> => {
     try {
         const [stat, environ] = await Promise.all([readFile(`/proc/${pid}/stat`, "utf8"), readFile(`/proc/${pid}/environ`, "utf8")]);
-        const ppid = parsePpid(stat);
-        return ppid === undefined ? undefined : { pid, ppid, stamp: stampOf(environ) };
+        const ids = parseProcStat(stat);
+        return ids === undefined ? undefined : { pid, ...ids, owner: ownerOf(environ) };
     } catch {
         return undefined;
     }
@@ -225,20 +195,22 @@ export const scanProcesses = async (): Promise<ScannedProcess[]> => {
 /* HOW LONG AN OWNER MAY BE GONE before its processes are. Long enough that a turn's own unwind — the SDK's
  * stdin-EOF, its grace, its SIGTERM, and whatever the CLI then does to its MCP servers — has plainly had its
  * chance and not taken it; short enough that a browser profile does not sit on half a gigabyte for the rest of
- * the afternoon. A previous life's processes wait for none of this. */
+ * the afternoon. */
 const GRACE_MS = 3 * 60_000;
 
 // SIGTERM first and SIGKILL only on the pass after, so a process with a shutdown path gets to run it. The two
 // signals are a window apart by construction: `killed` remembers what has already been asked nicely.
 const signalFor = (pid: number, asked: ReadonlySet<number>): NodeJS.Signals => (asked.has(pid) ? "SIGKILL" : "SIGTERM");
 
-/* Is the daemon behind a foreign boot id still running? Two ways to answer no, and the second is the one that
- * keeps a restart able to clean up after itself: a container hands its daemon the same pid every time (docker's
- * init makes it pid 7 on every boot), so a stamp naming THIS pid under another boot id came from this pid's
- * previous life — which has ended, by definition, since this one is running. */
-const daemonAlive = (bootId: string): boolean => {
-    const pid = daemonPidOf(bootId);
-    return pid !== undefined && pid !== process.pid && pidAlive(pid);
+/* THIS DAEMON'S GROUP, read once from procfs — the sweep's whole licence, and the reason it cannot reach another
+ * daemon's work. Undefined off Linux and on any procfs that will not answer, and the sweep then does nothing at
+ * all: a daemon that cannot establish which processes are its own has no business signalling any of them. */
+const ownProcessGroup = (): number | undefined => {
+    try {
+        return parseProcStat(readFileSync("/proc/self/stat", "utf8"))?.pgrp;
+    } catch {
+        return undefined;
+    }
 };
 
 export interface LeftoverSweep {
@@ -260,16 +232,17 @@ export interface LeftoverSweepOptions {
 export const startLeftoverSweep = ({ ownerLive, panePids, logger, graceMs = GRACE_MS, intervalMs = 60_000 }: LeftoverSweepOptions): LeftoverSweep => {
     const unownedSince = new Map<number, number>();
     const asked = new Set<number>();
+    const group = ownProcessGroup();
     let running = false;
 
     const sweep = async (): Promise<void> => {
-        if (running || process.platform !== "linux") {
+        if (running || group === undefined || process.platform !== "linux") {
             return;
         }
         running = true;
         try {
             const [scanned, panes] = await Promise.all([scanProcesses(), panePids().catch(() => new Map<number, string>())]);
-            const leftovers = leftoverProcesses(scanned, { bootId: BOOT_ID, bootLive: daemonAlive, ownerLive, panePids: new Set(panes.keys()) });
+            const leftovers = leftoverProcesses(scanned, { group, ownerLive, panePids: new Set(panes.keys()) });
             const seen = new Set(leftovers.map((entry) => entry.pid));
             for (const pid of unownedSince.keys()) {
                 if (!seen.has(pid)) {
@@ -282,8 +255,7 @@ export const startLeftoverSweep = ({ ownerLive, panePids, logger, graceMs = GRAC
             for (const leftover of leftovers) {
                 const since = unownedSince.get(leftover.pid) ?? now;
                 unownedSince.set(leftover.pid, since);
-                // A previous life's processes have no owner that could come back, so they skip the window.
-                if (leftover.reason === "owner-finished" && now - since < graceMs) {
+                if (now - since < graceMs) {
                     continue;
                 }
                 try {
@@ -298,7 +270,7 @@ export const startLeftoverSweep = ({ ownerLive, panePids, logger, graceMs = GRAC
                 logger.info(
                     {
                         reclaimed: reclaimed.length,
-                        previousBoot: reclaimed.filter((entry) => entry.reason === "previous-boot").length,
+                        group,
                         owners: [...new Set(reclaimed.map((entry) => entry.owner))].slice(0, 10),
                     },
                     "leftovers: reclaimed processes whose turn had finished",

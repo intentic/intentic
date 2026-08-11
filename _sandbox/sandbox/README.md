@@ -83,9 +83,13 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   [src/platform/leftovers.ts](src/platform/leftovers.ts) stamps each one with WHOSE turn it is, so the provider
   CLI's MCP servers and their headless browsers — three levels down, and nothing here holds a handle on them —
   can be reclaimed once that turn has finished. Anything under a tmux pane is exempt: that has a watcher, and
-  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy. A stamp
-  from another daemon is only a leftover once that daemon is provably gone — the stamp carries its pid, because
-  a container can hold two daemons and "not mine" is not "abandoned".
+  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy. WHICH of
+  those processes are this daemon's at all is not a stamp but the PROCESS GROUP — a container can hold two
+  daemons, a second one is in the group of the shell that started it, and a sweep enumerates its own group and
+  never learns the other's processes exist. That is deliberately not a check the sweep can get wrong: twice on
+  2026-08-11 a source run of this daemon read the live one's processes as a dead life's leavings and killed four
+  agent turns mid-answer, and no amount of care in this file would have helped, because the file doing the
+  killing was a checkout from a branch that predated the care.
 - [src/platform/container-owner.ts](src/platform/container-owner.ts) — which daemon this one is. This repository
   is the sandbox, so an agent working in it runs the daemon from source to watch a change work, and everything
   held once per container (HOME, the tmux server, the process sweep, the translator, the platform registration,

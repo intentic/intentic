@@ -237,9 +237,12 @@ survive reconnects. Its subsystems:
   the scheduler, the drafts publisher and the CI hooks. A container can hold more than one daemon — this
   repository IS the daemon, so a run of it from source is an ordinary thing for an agent to do — and the second
   one otherwise repoints HOME at its own empty roots (taking the live sandbox's git access, transcripts and
-  desktop enrollment down without an error anywhere) and reclaims every process the live daemon started as a
-  dead life's leavings, which on 2026-08-11 killed four agent turns mid-answer, twice. A guest daemon serves its
-  own routes and owns nothing that was here before it.
+  desktop enrollment down without an error anywhere). A guest daemon serves its own routes and owns nothing that
+  was here before it. What a guest cannot reach at all is the live daemon's PROCESSES: the leftover sweep
+  ([`leftovers.ts`](_sandbox/sandbox/src/platform/leftovers.ts)) enumerates its own process group rather than
+  filtering every process in the container by a label, so another daemon's work is not something it can decide
+  wrongly about — it is not in the set. The label that survives says only WHOSE turn a process belongs to, read
+  after group membership has already answered whose daemon it is.
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
   ([environment/](_sandbox/sandbox/src/environment/)).
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
