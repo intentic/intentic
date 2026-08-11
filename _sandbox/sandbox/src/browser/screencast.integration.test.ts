@@ -13,6 +13,17 @@ import { dispatchInput, startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type Screencas
  * read back by DECODING it in a second page of the same browser and sampling pixels, which is the only check
  * that distinguishes "sharp picture of the right place" from "a blank of exactly the right size". */
 
+/* Wait for something Chromium does on its own timetable rather than sleeping a guess past it — the same rule,
+ * and the same reason, as browser-sessions.integration.test.ts. The still is DEBOUNCED off the last motion
+ * frame and taking it re-rasters the page, so the first webp lands ~600ms in on an idle box and far later when
+ * the whole monorepo's suites are on the same cores. Generous and finite, so a real regression still fails on
+ * the assertion that follows instead of hanging to the test timeout. */
+const settle = async (until: () => boolean): Promise<void> => {
+    for (let attempt = 0; attempt < 200 && !until(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+};
+
 // A page of 100px bands whose red channel is its index, so one pixel answers "which part of the page is this?".
 const BANDS = 60;
 const BAND_HEIGHT = 100;
@@ -47,10 +58,8 @@ test("the settle still photographs the page where it is now, not the top of the 
         });
         try {
             // The still is debounced off the last motion frame, and capturing one makes the page repaint — so
-            // wait for one to ARRIVE rather than sleeping past a guess at that cycle (browser-sessions' rule).
-            for (let attempt = 0; attempt < 200 && stills.length === 0; attempt += 1) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
+            // wait for one to ARRIVE rather than sleeping past a guess at that cycle.
+            await settle(() => stills.length > 0);
             expect(stills.length).toBeGreaterThan(0);
 
             // Decode the still and read the band at its top edge and its bottom edge. A blank capture answers
@@ -111,7 +120,11 @@ test("a page where nothing is happening settles into silence", { timeout: 120_00
         const frames: ScreencastFrame[] = [];
         const screencast = await startScreencast(context, (frame) => frames.push(frame));
         try {
-            // Well past the settle: three seconds is five of the cycles the old stream sustained.
+            // Silence is measured FROM the still, not from here. One fixed span covering both the capture and
+            // the quiet after it is the stopwatch this suite keeps losing to: on a loaded machine the sharp
+            // frame simply hadn't been taken yet, and "no still" read as "no silence".
+            await settle(() => frames.some((frame) => frame.format === "webp"));
+            // Then watch: three seconds is five of the cycles the old self-sustaining stream ran at.
             await new Promise((resolve) => setTimeout(resolve, 3000));
             // What a static page is worth: the picture, and one sharp reading of it.
             expect(frames.filter((frame) => frame.format === "webp")).toHaveLength(1);
