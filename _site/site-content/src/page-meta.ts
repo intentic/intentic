@@ -62,6 +62,13 @@ export const pageMeta: Record<string, PageMeta> = {
             "One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger.",
         datePublished: "2026-08-11",
     },
+    // The argued version of every promise /earn makes. Its own page so the short one stays scannable.
+    "/earn/fine-print/": {
+        title: "The fine print · Earn · intentic",
+        description:
+            "Every promise the Earn page makes, argued in full: the credit arithmetic, why there is no telemetry, why farming loses money, the service rules, the public ledger, and what exists today.",
+        datePublished: "2026-08-11",
+    },
     [compareHref("")]: compareIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(apiPages.map((page) => [apiHref(page.id), page.meta])),

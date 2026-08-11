@@ -1,0 +1,149 @@
+---
+import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* THE ARGUED VERSION. /earn/ is the shape of the economy, graspable in one scroll of figures and tiles; this
+ * page is every promise on it argued in full — the arithmetic, the design choices and the honest status. It
+ * moved OFF /earn/ because seven screens of reasoned prose under the diagrams made the page a wall: the
+ * reader deciding whether the deal is fair needs the tiles, and the reader auditing it needs this, and they
+ * are almost never the same visit. Figures still come from the published pool config — nothing retyped. */
+
+const n = (value: number) => value.toLocaleString(`en-GB`);
+
+const entry = `{
+    "name": "acme.reddit-research",
+    "kind": "extension",
+    "tier": "premium",
+    "description": "Deep subreddit research: audiences, timing, and what actually gets traction.",
+    "version": "1.2.0",
+    "source": { "source": "github", "repo": "acme/reddit-research", "sha": "9f2c1ab…" }
+}`;
+---
+
+<BaseLayout
+    title="The fine print · Earn · intentic"
+    description="Every promise the Earn page makes, argued in full: the credit arithmetic, why there is no telemetry, why farming loses money, the service rules, the public ledger, and what exists today."
+>
+    <Nav />
+    <main class="flex-1">
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-12 lg:pt-32">
+                <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The fine print</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every promise, argued in full.</h1>
+                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    <a href="/earn/">Earn</a> is the shape of the economy; this page is its reasoning — the arithmetic behind the split, the
+                    design choices behind the rules, and an honest account of what exists today.
+                </p>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-7xl px-6 py-14 lg:py-16">
+            {/* docs-article carries the reading measure the docs pages get from their layout; without it every
+                paragraph here sets at the container's full width, which is the wall this page exists to avoid. */}
+            <div class="docs-article docs-body">
+                <h2>The deal</h2>
+                <p>
+                    A user buys one <strong>intentic membership</strong> (${pool.priceUsd}/month). It includes every <code>premium</code> extension
+                    wherever they work and a daily allowance of <strong>credits</strong>, the pool's only currency.{" "}
+                    <strong>Every credit a member spends pays {creatorSharePct}% of its dollar value to the creator it went to</strong>; the rest runs the platform.
+                    Two ways credits move:
+                </p>
+                <ul>
+                    <li><strong>Install donations</strong>: installing a premium extension donates a published number of credits to its publisher, once, automatically. Updating it donates again, at most once a month. That is the whole way non-service extensions earn.</li>
+                    <li><strong>Service runs</strong>: metered per-run spends on priced services (the section below).</li>
+                </ul>
+                <p>
+                    There is no per-extension checkout, no subscription-per-tool, and no cut taken from anything you sell outside the pool. A creator
+                    lists once and earns from installs; a member pays once and supports what they choose by choosing it.
+                </p>
+
+                <h2>No telemetry, by construction</h2>
+                <p>
+                    Sandboxes are self-hosted: yours, like your editor. So the pool pays on <strong>nothing a sandbox could report</strong>:
+                    no usage pings, no active-day bits, no counts, ever. The only economic signal that exists is what passes through the platform's own
+                    hands: a member's deliberate install donation, a member's service run. Your machine tells nobody what you run on it.
+                </p>
+                <p>Why donations at install, and not the obvious alternatives:</p>
+                <ul>
+                    <li><strong>Not usage metering</strong>: a self-hosted client can invent any usage it likes, and honest ones shouldn't phone home at all.</li>
+                    <li><strong>Not minutes or tokens</strong>: those pay slow, bloated tools more for being slow and bloated.</li>
+                    <li><strong>Not a per-tool checkout</strong>: friction at every install kills the browsing that makes a catalog worth listing in.</li>
+                </ul>
+
+                <h2>Why farming loses money, arithmetically</h2>
+                <p>
+                    A member's credits are bounded by their own membership: a month's allowance is worth exactly what they paid. So a publisher
+                    "farming" donations to their own listing with bought memberships can only redirect <em>a {creatorSharePct}% share of money they themselves paid
+                    in</em>: every farmed dollar costs more than it returns, at any scale. The monthly donation dedupe also stops update spam:
+                    an install can donate at most twelve times a year however often its publisher ships. What remains for policy is only nudging real
+                    users into meaningless updates, which is <strong>delisting grounds</strong>, stated on the row like every other trust decision.
+                </p>
+
+                <h2>Services &amp; credits: runs with real costs</h2>
+                <p>
+                    Some tools aren't a prompt and glue: they call paid data APIs or burn real compute per run. Those are <strong>services</strong>,
+                    and they run on <strong>credits</strong>: a membership includes a daily allowance ({n(pool.dailyCredits)} credits, resetting at UTC midnight, same
+                    honest reset as the free trial), and a service publishes its credit price. The rules a member can hold us to:
+                </p>
+                <ul>
+                    <li><strong>The price is visible before the run.</strong> Any surface can ask what a run costs and what's left today; a refusal for lack of credits answers with the remaining count and when it resets.</li>
+                    <li><strong>No charge on failure.</strong> Credits are spent atomically before the call and refunded automatically when the provider errors or never answers. A provider's "your query was malformed" is an answer: that one is paid for and relayed verbatim.</li>
+                    <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is; the user never holds a provider account or key. Every forwarded call is signed so a provider can verify it came from intentic and drop everything else.</li>
+                </ul>
+                <p>
+                    A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. Donations and runs both
+                    spend from the same daily allowance, so a member's total support is bounded by exactly what they paid, which is what makes the
+                    whole economy sybil-proof. Credits nobody spends pay nobody: the pool figure is a ceiling payouts approach, and the ledger prints
+                    both numbers so neither can pose as the other.
+                </p>
+                <p>
+                    <strong>Who let it in, and your worst case.</strong> The catalog is curated: in v1 every service is admitted, and when it
+                    goes bad delisted, by the platform; there is no self-serve path onto it. Nothing of a provider's ever runs on your
+                    machine, so a run's whole blast radius is its listed price and the JSON answer your agent reads back. The mechanical case
+                    never needs a dispute (no answer, no charge, enforced in code); a <em>served</em> answer is paid even when it disappoints,
+                    and chronic disappointment is what delisting is for rather than a per-run argument.
+                </p>
+                <p>
+                    Running something that costs real money per call? <a href="/api/services/">Offer a service</a> explains the provider's
+                    endpoint, signature checks, payments, refunds and admission.
+                </p>
+
+                <h2>The ledger is public</h2>
+                <p>
+                    The platform serves <code>GET /pool/transparency</code> to anyone, no login. It carries member count, gross revenue, the split, the
+                    pool ceiling and the paid total, every premium extension's donors, credits and earnings, and every service's runs, credits and
+                    earnings: for this month and the two before it. The numbers are exact, computed from the same ledger the payouts will settle on.
+                    Member counts for past months are today's snapshot (the platform keeps no status history), and the page you are reading says so
+                    rather than dressing an estimate up as an audit.
+                </p>
+
+                <h2>What exists today, honestly</h2>
+                <ul>
+                    <li><strong>Working now:</strong> premium listings, the membership, install donations with the monthly dedupe, credits and metered service runs (spend, refund, signed forwarding), the demo service, the pool math, and the public ledger.</li>
+                    <li><strong>Not yet:</strong> payout rails: the ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating. Also not yet: credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
+                </ul>
+                <p>
+                    The split ({creatorSharePct}%) is configuration the platform publishes on the ledger itself, so this page and the endpoint cannot quietly
+                    disagree. If the number ever changes, it changes loudly, prospectively, and on that page first.
+                </p>
+
+                <h2>Opting in</h2>
+                <p>
+                    One field on your registry entry. Everything else on <a href="/api/publish/">Publish &amp; registries</a>: the sha-pinned pointer,
+                    the manifest gate, the <a href="/api/verify/">trust states</a>: applies to premium listings unchanged.
+                </p>
+                <DocsCodeBlock code={entry} lang="json" title=".claude-plugin/marketplace.json: one entry" />
+                <p>
+                    Premium is honored on the <a href="/extensions/">official registry</a>, because that is the registry the platform's pool reads.
+                    A private registry can mark rows premium for its own purposes, but the public pool neither sees nor pays them.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+</BaseLayout>
