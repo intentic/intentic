@@ -2,7 +2,8 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { type QueryFn, runAgent } from "./agent.js";
+import { runAgent } from "./agent.js";
+import type { QueryFn } from "./sdk-stream.js";
 
 // Force the tmux gate ON. In CI the wrapper is absent so tmuxRunEnabled() is false and no `terminal` frame is
 // emitted (agent.test.ts covers that gated-off path); here we stub existsSync true FOR THE WRAPPER'S PATH ONLY
