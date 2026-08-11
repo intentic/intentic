@@ -14,6 +14,12 @@ const fire = `curl -X POST "$SANDBOX/automations/nightly-sweep/fire?token=…" \
 
 { "ok": true }`;
 
+// The one step a GitHub workflow adds to wait on a gate. The URL is a repository secret because it carries its
+// own token; the action fills in the commit and branch it's running for, so there is nothing else to write.
+const gate = `- uses: intentic/gate-action@v1
+  with:
+    url: \${{ secrets.INTENTIC_GATE_URL }}`;
+
 const triggers = [
     {
         name: `Schedule`,
@@ -157,6 +163,18 @@ const triggers = [
     <p>
         Keeping the gate separate from the design is the point. What a run does stays the graph's business, so today's release check can be an
         acceptance sweep and next month's a security review, without the gate ever learning what either of them is.
+    </p>
+    <p>
+        On GitHub it's one step. Paste the gate's URL into a repository secret and add the <strong>Intentic Agent Gate</strong> action, from
+        the GitHub Marketplace, to your workflow. The build then waits for the verdict: <strong>green</strong> when it passes,
+        <strong>red</strong> when it fails, and <strong>left alone</strong> when the gate couldn't reach a decision — because a check that
+        breaks is not the same as a product that broke. The reason shows up right on the run.
+    </p>
+    <DocsCodeBlock code={gate} lang="yaml" title="A release gate in GitHub Actions" />
+    <p>
+        Any other CI system calls the same URL with a single command — the URL is all it needs. The action is also the tidy way to fire a
+        webhook automation from a workflow: point that same step at an automation's address instead, and it hands over what just happened
+        without you keeping any <code>curl</code> around.
     </p>
 
     <h2>Loops</h2>
