@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Icon, type IconName, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -51,8 +51,7 @@ import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
 import ChatPersonaMenu from "./ChatPersonaMenu.vue";
-import ChatWorkflowMenu from "./ChatWorkflowMenu.vue";
-import ChatLoopMenu from "./ChatLoopMenu.vue";
+import ChatRunThroughMenu from "./ChatRunThroughMenu.vue";
 import { useLoopDesigns } from "../composables/agents/useLoopDesigns";
 import { startLoop, stopLoop } from "../composables/agents/useLoops";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
@@ -183,13 +182,11 @@ const input = ref<HTMLTextAreaElement>();
 // out into a real window and still have overlays that land in the right place and close when clicked away from.
 const modelOpen = ref(false);
 const modeOpen = ref(false);
-const workflowOpen = ref(false);
-const loopOpen = ref(false);
+const runThroughOpen = ref(false);
 const personaOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
-const workflowPill = ref<HTMLElement>();
-const loopPill = ref<HTMLElement>();
+const runThroughPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
@@ -326,19 +323,13 @@ watch(fleetTurn, (now, before) => {
     hydrateOnce(props.conversation);
 });
 
-/* THE LOOP CONTROL, and it is a BADGE with three states rather than a button with two.
+/* THE LOOP HALF OF THE RUN-THROUGH BADGE. The badge itself (states, glyph, what a press means) is assembled
+ * further down with the workflow half, because the two are one control; what lives here is what only a loop
+ * has — the fleet entry behind a RUNNING one, and the stop.
  *
- * Unarmed it is a bare glyph that opens the picker. Armed it names the saved loop, in the composer's active
- * tint, and the next Send starts that loop with whatever is in the box as its goal — the workflow badge's
- * behaviour exactly, because it is the same bargain: pick the shape, type the job, press send once.
- *
- * RUNNING it is a stop, with the round count beside it, and that state outranks the other two: a loop already
- * going is not something the next message decides, so the press has to mean "end it" no matter what else the
- * composer is holding.
- *
- * Two things are read off the fleet entry rather than asked anywhere: whether this agent works in its own
- * worktree (a loop cannot change that mid-flight), and whether one is already running (the daemon refuses a
- * second, so offering one would only spend a round to say no).
+ * Two things are read off that entry rather than asked anywhere: whether this agent works in its own worktree
+ * (a loop cannot change that mid-flight), and whether one is already running (the daemon refuses a second, so
+ * offering one would only spend a round to say no).
  */
 const activeLoop = computed(() => agentById(props.conversation.conversationId)?.loop);
 const looping = computed(() => activeLoop.value?.state === `running`);
@@ -351,27 +342,22 @@ const endLoop = async (): Promise<void> => {
     // this plus the Stop button beside it, which is exactly how it reads on screen.
     await stopLoop(props.conversation.conversationId).catch(() => undefined);
 };
+// A pick REPLACES a pick, in both directions — see the badge below. The composer can only run the next message
+// one way, so holding both ids at once was never a state a person could mean, only one they could reach.
 const pickLoop = (design: LoopDesign | undefined): void => {
-    loopOpen.value = false;
+    runThroughOpen.value = false;
     loopFailure.value = undefined;
     props.conversation.loopId.value = design?.id;
+    if (design !== undefined) {
+        props.conversation.workflowId.value = undefined;
+    }
 };
-// The picker's way out to the page that owns saved loops — the same errand the persona menu's "Manage" runs,
-// and the only door to the long form now that the composer no longer carries one.
-const manageLoops = (): void => {
-    loopOpen.value = false;
+// The picker's way out to the page that owns saved loops AND saved workflows — the same errand the persona
+// menu's "Manage" runs, and the only door to the long loop form now that the composer carries none.
+const manageRunThrough = (): void => {
+    runThroughOpen.value = false;
     void router.push({ name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
 };
-// Said in full on the control, because "stop" next to a Stop button that means something else is the one place
-// this feature can genuinely mislead someone.
-const loopHint = computed(() => {
-    if (looping.value) {
-        return `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`;
-    }
-    return pickedLoop.value === undefined
-        ? `Send this message over and over, until something you can state is true`
-        : `Send runs “${pickedLoop.value.name}” — this message is the goal, repeated until it is met`;
-});
 
 // Claude subscription headroom for this conversation's account, pushed from the agent stream at no token
 // cost — a small ring once that account's first Claude turn reports its limits, tinted as the binding pool
@@ -813,21 +799,77 @@ const pickedWorkflow = computed(() => workflowDesigns.value.find((workflow) => w
  * ignoring — a tab switch is enough to land in that state, since the open flags belong to the pane and the
  * badge belongs to the conversation. Either way the answer is the same: the composer that owns them closes
  * them.
+ *
+ * The run-through panel is NOT in this list, and that is the point of it: it is the one control a picked
+ * workflow leaves live, because it is the control holding the pick. Closing it on `!isConnected` would be
+ * right, but the pick that lands there closes it already, and unpicking has to stay reachable.
  */
 watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
     if (!isConnected || workflow !== undefined) {
         modelOpen.value = false;
         modeOpen.value = false;
         personaOpen.value = false;
-        loopOpen.value = false;
     }
 });
 
+// The loop pick's mirror image: one badge, one answer, so arming this disarms that.
 const pickWorkflow = (workflow: Workflow | undefined): void => {
-    workflowOpen.value = false;
+    runThroughOpen.value = false;
     workflowFailure.value = undefined;
     props.conversation.workflowId.value = workflow?.id;
+    if (workflow !== undefined) {
+        props.conversation.loopId.value = undefined;
+    }
 };
+
+/* --- THE RUN-THROUGH BADGE ------------------------------------------------------------------------
+ * ONE control for the one question — what is the next message run THROUGH — and it took two pills far too
+ * long to admit they were asking it. A loop repeats the message here until a bar is cleared; a workflow hands
+ * it to a design of sessions that are not this one. Different machines, mutually exclusive answers, and the
+ * old row expressed that exclusivity by greying whichever pill you hadn't used yet.
+ *
+ * FOUR STATES, in this precedence:
+ *
+ *  - RUNNING a loop — the round count, and the press ENDS it. Outranks everything, including a workflow the
+ *    user might otherwise want to arm mid-loop: a loop already going spends money with nobody pressing
+ *    anything between rounds, so the one press it needs is the way out, and a badge that hid the stop behind
+ *    a menu would leave the fleet board as the only exit. One press ends it and the badge is a picker again.
+ *  - WORKFLOW armed — the design's own glyph and name, in the active tint.
+ *  - LOOP armed — the same, in the loop's glyph.
+ *  - Nothing — a bare `fork`: a message taking some route other than straight down into this chat. Neither of
+ *    the two specific glyphs, deliberately, since either would read as one of them already being armed.
+ *
+ * Never greyed under a workflow badge the way model, effort, mode and persona are. Those describe a turn the
+ * workflow send doesn't make; this one IS the badge, and a control you cannot press to undo is a trap.
+ */
+const runThroughIcon = computed<IconName>(() => {
+    if (looping.value || pickedLoop.value !== undefined) {
+        return `repeat`;
+    }
+    return pickedWorkflow.value === undefined ? `fork` : `sitemap`;
+});
+const runThroughName = computed(() => pickedWorkflow.value?.name ?? pickedLoop.value?.name);
+const runThroughHint = computed(() => {
+    if (looping.value) {
+        return `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`;
+    }
+    if (pickedWorkflow.value !== undefined) {
+        return `Send runs “${pickedWorkflow.value.name}” with this message as its request`;
+    }
+    if (pickedLoop.value !== undefined) {
+        return `Send runs “${pickedLoop.value.name}” — this message is the goal, repeated until it is met`;
+    }
+    return `Repeat this message until a goal is met, or run it through a workflow`;
+});
+const runThroughLabel = computed(() => {
+    if (looping.value) {
+        return `Stop looping`;
+    }
+    if (pickedWorkflow.value !== undefined) {
+        return `Workflow: ${pickedWorkflow.value.name}`;
+    }
+    return pickedLoop.value === undefined ? `Run this message through a loop or a workflow` : `Loop: ${pickedLoop.value.name}`;
+});
 
 /* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD. The pick lives on the conversation (and rides every turn
  * it sends); what the pane adds is the card behind the id — the name on the pill, and the one state worth
@@ -1672,14 +1714,17 @@ watch(
                                 ></textarea>
 
                                 <div class="flex items-center gap-1 px-2.5 pb-2.5">
-                                    <!-- MODEL, EFFORT, MODE, LOOP GO INERT UNDER A WORKFLOW BADGE, and that is not a
-                                         caveat about the feature — it is what the badge means. Every one of them
+                                    <!-- MODEL, EFFORT, MODE, PERSONA GO INERT UNDER A WORKFLOW BADGE, and that is not
+                                         a caveat about the feature — it is what the badge means. Every one of them
                                          describes a turn on THIS conversation, and a workflow send makes none: the
                                          message becomes a run's request, and each step opens its own unattended
                                          session on the provider, harness and model the step declares, looping the way
                                          the step says to loop. Left live they were four controls that changed nothing
                                          about the press beneath them — pick Opus · Max · Plan, watch the run come back
                                          on something else, and you would be right to call it a bug.
+
+                                         The run-through badge at the end of the row is the exception, because it is
+                                         the badge: see it for why it never dims.
 
                                          Dimmed rather than hidden: they still say what an ordinary send would use, the
                                          line under the box says whose they are instead, and the badge is one press
@@ -1705,11 +1750,11 @@ watch(
 
                                     <!-- MODE leads the right-hand group, and the group reads left to right as a
                                          gradient away from the model: which brain (model · effort), then how it
-                                         works (mode), then who it is (persona), then how the message is run
-                                         (loop · workflow). Mode sits closest to effort because the two are one
-                                         thought — how hard it thinks, and how much rope it has — and because it
-                                         is the only pill here that is always worded, so it anchors the row's
-                                         baseline where a bare glyph could not. -->
+                                         works (mode), then who it is (persona), then what the message is run
+                                         through (loop or workflow). Mode sits closest to effort because the two
+                                         are one thought — how hard it thinks, and how much rope it has — and
+                                         because it is the only pill here that is always worded, so it anchors
+                                         the row's baseline where a bare glyph could not. -->
                                     <button
                                         ref="modePill"
                                         type="button"
@@ -1761,83 +1806,49 @@ watch(
                                         <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
                                     </button>
 
-                                    <!-- LOOP. Sits with the controls that shape the TURN (mode, effort) rather than
-                                         with Send, because that is what it changes: the next message is run over
-                                         and over instead of once.
+                                    <!-- RUN THROUGH — the row's last shaping control, and ONE where there were
+                                         two. A loop and a workflow answer the same question about the next
+                                         message (what is it run THROUGH) with answers the composer can only
+                                         take one of, so they are one badge: picking is picking, and a pick
+                                         replaces a pick. Two glyphs side by side said the same thing only by
+                                         greying each other out, which is a rule you learn by tripping over it.
 
-                                         A BADGE, like the workflow pill it stands next to and for the same
-                                         reason — a saved loop is a shape you pick, and the message you type is
-                                         the job you point it at. Unpicked it is a bare glyph; picked it names
-                                         the loop in the active tint, so a composer about to spend money round
-                                         after round says so before the press rather than after it.
+                                         Unpicked it is a bare neutral glyph — all the room a control most
+                                         chats never use deserves. Picked it wears the CHOSEN thing's own icon
+                                         and names it in the active tint, so nothing the two pills used to say
+                                         about an armed state is lost: a composer about to spend money round
+                                         after round, or to fan one message across paid sessions, still says so
+                                         before the press rather than after it.
 
-                                         A RUNNING loop takes the pill over entirely — the count replaces the
-                                         name and the press ends it — and it keeps that under a workflow badge,
-                                         where the three controls before it lose theirs: stopping something
-                                         already going is not a thing the next message decides, and a badge that
-                                         took the stop away would leave the loop no way out but the fleet board. -->
+                                         A RUNNING loop takes it over entirely — the count replaces the name,
+                                         the press ends it — and that outranks even an armed workflow, because
+                                         stopping something already going is not a thing the next message
+                                         decides, and a badge that buried the stop in a menu would leave the
+                                         loop no way out but the fleet board. -->
                                     <button
-                                        ref="loopPill"
+                                        ref="runThroughPill"
                                         type="button"
                                         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{
-                                            'composer-active': looping || (pickedLoop !== undefined && pickedWorkflow === undefined),
-                                            'composer-steered': pickedWorkflow !== undefined && !looping,
-                                        }"
-                                        :disabled="pickedWorkflow !== undefined && !looping"
-                                        @click="looping ? endLoop() : (loopOpen = !loopOpen)"
-                                        v-tooltip.top="loopHint"
+                                        :class="{ 'composer-active': looping || pickedLoop !== undefined || pickedWorkflow !== undefined }"
+                                        @click="looping ? endLoop() : (runThroughOpen = !runThroughOpen)"
+                                        v-tooltip.top="runThroughHint"
                                         :aria-pressed="looping"
-                                        :aria-expanded="looping ? undefined : loopOpen"
-                                        :aria-label="
-                                            looping
-                                                ? `Stop looping`
-                                                : pickedLoop !== undefined
-                                                  ? `Loop: ${pickedLoop.name}`
-                                                  : `Loop until a goal is met`
-                                        "
+                                        :aria-expanded="looping ? undefined : runThroughOpen"
+                                        :aria-label="runThroughLabel"
                                     >
                                         <Icon
-                                            name="repeat"
+                                            :name="runThroughIcon"
                                             class="text-2xs"
-                                            :class="looping || pickedLoop !== undefined ? 'text-link' : ''"
+                                            :class="looping || runThroughName !== undefined ? 'text-link' : ''"
                                             :spin="looping"
                                         />
                                         <span v-if="activeLoop && looping" class="@max-md:hidden"
                                             >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
                                         >
-                                        <template v-else-if="pickedLoop">
-                                            <span class="max-w-32 truncate @max-md:hidden">{{ pickedLoop.name }}</span>
+                                        <template v-else-if="runThroughName !== undefined">
+                                            <span class="max-w-32 truncate @max-md:hidden">{{ runThroughName }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </template>
-                                    </button>
-
-                                    <!-- WORKFLOW. Loop's neighbour because it answers the same question about
-                                         the next message — what is it run THROUGH — and a different answer:
-                                         loop runs it here, over and over; this hands it to a graph of sessions
-                                         that are not this one.
-
-                                         A BADGE, not a one-shot picker: while a design is picked it NAMES it,
-                                         in the composer's active tint, and the message goes there when you
-                                         press send like any other. Unpicked it is a bare glyph, which is all
-                                         the room a control most chats never use deserves. -->
-                                    <button
-                                        ref="workflowPill"
-                                        type="button"
-                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-active': pickedWorkflow !== undefined }"
-                                        @click="workflowOpen = !workflowOpen"
-                                        v-tooltip.top="
-                                            pickedWorkflow !== undefined
-                                                ? `Send runs “${pickedWorkflow.name}” with this message as its request`
-                                                : `Run this message through a workflow instead of sending it here`
-                                        "
-                                        :aria-expanded="workflowOpen"
-                                        :aria-label="pickedWorkflow !== undefined ? `Workflow: ${pickedWorkflow.name}` : `Run through a workflow`"
-                                    >
-                                        <Icon name="sitemap" class="text-2xs" :class="pickedWorkflow !== undefined ? 'text-link' : ''" />
-                                        <span v-if="pickedWorkflow" class="max-w-32 truncate @max-md:hidden">{{ pickedWorkflow.name }}</span>
-                                        <Icon v-if="pickedWorkflow" name="chevron-down" class="text-2xs text-subtle" />
                                     </button>
 
                                     <button
@@ -1970,7 +1981,7 @@ watch(
             </div>
         </div>
 
-        <!-- The five composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
+        <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
              — the overlay measures the room its side of the pill actually has IN THE PILL'S OWN WINDOW and caps
              itself to it, so a picker fits whether this panel is docked in a column or floating in a window the
@@ -1985,11 +1996,14 @@ watch(
         <ResponsiveOverlay v-model="personaOpen" :anchor="personaPill" cross="end" header="Acts as" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="workflowOpen" :anchor="workflowPill" cross="end" header="Run through a workflow" panel-class="w-80 p-1">
-            <ChatWorkflowMenu :picked="conversation.workflowId.value" @picked="pickWorkflow($event)" />
-        </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="loopOpen" :anchor="loopPill" cross="end" header="Loop until" panel-class="w-80 p-1">
-            <ChatLoopMenu :picked="conversation.loopId.value" @picked="pickLoop($event)" @manage="manageLoops()" />
+        <ResponsiveOverlay v-model="runThroughOpen" :anchor="runThroughPill" cross="end" header="Run this message through" panel-class="w-80 p-1">
+            <ChatRunThroughMenu
+                :loop="conversation.loopId.value"
+                :workflow="conversation.workflowId.value"
+                @loop="pickLoop($event)"
+                @workflow="pickWorkflow($event)"
+                @manage="manageRunThrough()"
+            />
         </ResponsiveOverlay>
     </div>
 </template>

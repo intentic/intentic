@@ -25,6 +25,7 @@ import { KNOWLEDGE_BASE } from "@intentic/ext-knowledge";
 import { MEMORY_BASE } from "@intentic/ext-memory";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
@@ -463,6 +464,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         () => refuse(`This is the demo workspace — the archive here has no way back, so a run stays on the board.`),
     ],
     [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace — nothing has been archived to restore.`)],
+
+    /* Saved loops — the workflows page's second kind of design, and the other half of the composer's
+     * run-through picker. Reading is real, so the picker shows what it is actually for: two ways for a message
+     * to be run over and over, each saying what stops it. Saving and deleting refuse for the reason every
+     * design here refuses — a loop the demo let you keep would vanish on reload, which teaches worse than a
+     * clear no. */
+    [`GET`, `/loops/designs`, () => json({ designs: demoLoops() })],
+    [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
+    [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
 
     /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
      * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded.
