@@ -249,6 +249,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     it(`leaves the ledgers and the bulk out even though they travel`, () => {
         for (const path of [
             `.intentic/workflow-runs.json`,
+            // Split out of the tracked automations manifest precisely so a fire stops dirtying it — the one
+            // entry here that would be a REGRESSION rather than an oversight if it ever went tracked.
+            `.intentic/automation-runs.json`,
             `.intentic/loops.json`,
             `.intentic/thread-sessions.json`,
             `.intentic/extension-usage.json`,

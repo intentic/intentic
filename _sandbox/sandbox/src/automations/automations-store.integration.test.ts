@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -7,10 +7,12 @@ import type { Automation } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
 
-// A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
-const tempStore = (): { store: AutomationsStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "autos-")), `${STATE_DIR}`, "automations.json");
-    return { store: fileAutomationsStore(path), path };
+// A store over fresh temp paths (the .intentic dir doesn't exist yet — the store must create it on write).
+const tempStore = (): { store: AutomationsStore; path: string; runsPath: string } => {
+    const dir = join(mkdtempSync(join(tmpdir(), "autos-")), `${STATE_DIR}`);
+    const path = join(dir, "automations.json");
+    const runsPath = join(dir, "automation-runs.json");
+    return { store: fileAutomationsStore(path, runsPath), path, runsPath };
 };
 
 const automation = (id: string, cron = "* * * * *"): Automation => ({
@@ -69,13 +71,70 @@ test("recordRun prepends newest-first, caps the history, and drops runs for remo
     expect(await store.remove("inbox")).toBe(false);
 });
 
+/* THE POINT OF THE SPLIT, asserted on the bytes rather than on the read model: the manifest is one of the few
+ * things under `.intentic` the root repo tracks, and an automation firing three times a day used to rewrite it
+ * three times a day — committing run timestamps and conversation ids beside the prompt they belonged to. A run
+ * must land entirely in the untracked ledger, leaving the reviewed file byte-identical. */
+test("recording a run leaves the tracked manifest untouched and writes only the ledger", async () => {
+    const { store, path, runsPath } = tempStore();
+    await store.upsert(automation("inbox"));
+    const manifestBefore = await readFile(path, "utf8");
+
+    await store.recordRun("inbox", { at: 1, outcome: "completed", conversationId: "cnv_1" });
+
+    expect(await readFile(path, "utf8")).toBe(manifestBefore);
+    expect(manifestBefore).not.toContain("cnv_1");
+    expect(JSON.parse(await readFile(runsPath, "utf8"))).toEqual({ inbox: [{ at: 1, outcome: "completed", conversationId: "cnv_1" }] });
+    // …and the store still hands its callers the joined record, which is all anything above it ever sees.
+    expect((await store.get("inbox"))?.runs).toEqual([{ at: 1, outcome: "completed", conversationId: "cnv_1" }]);
+});
+
+test("removing an automation takes its run history with it", async () => {
+    const { store, runsPath } = tempStore();
+    await store.upsert(automation("inbox"));
+    await store.upsert(automation("standup", "0 9 * * *"));
+    await store.recordRun("inbox", { at: 1, outcome: "completed" });
+    await store.recordRun("standup", { at: 2, outcome: "completed" });
+
+    expect(await store.remove("inbox")).toBe(true);
+    // The ledger keeps no entry for an id the manifest no longer has, so it cannot grow forever.
+    expect(JSON.parse(await readFile(runsPath, "utf8"))).toEqual({ standup: [{ at: 2, outcome: "completed" }] });
+});
+
+// Re-using the id of a deleted automation starts a fresh history rather than inheriting the old one's past —
+// the hole the two separately-queued files leave, closed by upsert rather than by a lock across both.
+test("an automation re-created under a used id starts with no runs", async () => {
+    const { store } = tempStore();
+    await store.upsert(automation("inbox"));
+    await store.recordRun("inbox", { at: 1, outcome: "error", detail: "boom" });
+    await store.remove("inbox");
+
+    await store.upsert(automation("inbox"));
+    expect((await store.get("inbox"))?.runs).toEqual([]);
+});
+
 test("a corrupt or schema-invalid manifest reads as empty rather than throwing", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
     expect(await store.list()).toEqual([]);
-    await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", enabled: true, runs: [] }]));
+    await writeFile(path, JSON.stringify([{ id: "x", trigger: { kind: "bogus" }, prompt: "p", enabled: true }]));
     expect(await store.list()).toEqual([]);
+});
+
+/* The asymmetry between the two files: a damaged ledger costs the run history and nothing else, because the
+ * manifest is what decides an automation exists and the scheduler must keep firing it. Reading a broken ledger
+ * as an absent manifest would silently stop every automation in the sandbox. */
+test("a corrupt ledger costs the history but still lists and fires the automations", async () => {
+    const { store, runsPath } = tempStore();
+    await store.upsert(automation("inbox"));
+    await store.recordRun("inbox", { at: 1, outcome: "completed" });
+    await writeFile(runsPath, "{ not valid json");
+
+    expect((await store.list()).map((record) => [record.id, record.runs])).toEqual([["inbox", []]]);
+    // The next recorded run rebuilds it, which is why nothing asks the owner to repair this file.
+    await store.recordRun("inbox", { at: 2, outcome: "completed" });
+    expect((await store.get("inbox"))?.runs).toEqual([{ at: 2, outcome: "completed" }]);
 });
 
 /* The streak the spin-loop guard reads. Runs arrive newest-first, and only `error` keeps a streak alive:

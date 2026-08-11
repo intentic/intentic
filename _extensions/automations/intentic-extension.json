@@ -25,6 +25,7 @@
         "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
         "files": [
             { "path": ".intentic/automations.json", "invalidates": ["automations"] },
+            { "path": ".intentic/automation-runs.json", "invalidates": ["automations"] },
             { "path": ".intentic/personas.json", "invalidates": ["personas"] },
             { "path": ".intentic/approvals/", "invalidates": ["automation-approvals"] }
         ]

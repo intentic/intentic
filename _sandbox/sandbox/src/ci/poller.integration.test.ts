@@ -43,7 +43,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
     await defaultGit(dir, ["remote", "add", "origin", "https://github.com/acme/web.git"]);
     const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"));
+    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
     await automations.upsert({ id: "poll-ci", trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci", enabled: true });
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),

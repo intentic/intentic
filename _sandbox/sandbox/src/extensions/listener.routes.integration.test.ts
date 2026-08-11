@@ -19,7 +19,7 @@ import { createListenerRoutes } from "./listener.routes.js";
 // fake that small. The dispatch route drives fireAutomation, so approvals + a payload-guard-free automation are enough.
 const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
     unstubbed<Services>("services", {
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         approvals: fileApprovalsStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),

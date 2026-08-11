@@ -8,7 +8,10 @@ import { seedDefaultAutomations } from "./default-automations.js";
 
 const stores = (): { automations: ReturnType<typeof fileAutomationsStore>; ledger: string } => {
     const root = mkdtempSync(join(tmpdir(), "seed-"));
-    return { automations: fileAutomationsStore(join(root, "automations.json")), ledger: join(root, "automations.seeded.json") };
+    return {
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
+        ledger: join(root, "automations.seeded.json"),
+    };
 };
 
 test("a fresh workspace is seeded the fix chore — enabled, held per fire, visible like any other row", async () => {

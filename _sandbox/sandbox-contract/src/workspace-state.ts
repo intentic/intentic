@@ -152,6 +152,25 @@ const STATE_FILES = [
         portability: "carry",
         versioned: true,
     },
+    /* The run history, keyed by automation id — the LEDGER half of what automations.json used to be, and split
+     * out of it for the one reason this table's `versioned` note already gives: a tracked file must be worth
+     * reviewing. A scheduled automation records a run every time it fires, so every fire dirtied the manifest
+     * the owner reviews, and the run records went into `git log` with it — timestamps and conversation ids
+     * committed beside the prompt they belong to, burying an actual edit to the automation's config under
+     * machine noise. Config is now the only thing in the tracked file, and a fire touches nothing tracked.
+     *
+     * It is `carry` for the same reason the workflow ledger is: a run history is about the automation, not about
+     * the machine, and an export that dropped it would arrive claiming every automation had never run.
+     *
+     * Its invalidation is the extension's, exactly like the manifest above — and it has to be DECLARED there
+     * rather than inherited, because the row renders its run history from this file now: without its own entry
+     * a completed run would stop refreshing the view the moment it stopped living in automations.json. */
+    {
+        path: ".intentic/automation-runs.json",
+        invalidates: [],
+        why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
+        portability: "carry",
+    },
     {
         path: ".intentic/approvals/",
         invalidates: [],

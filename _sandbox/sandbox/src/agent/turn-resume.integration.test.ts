@@ -472,7 +472,7 @@ const journalServices = async (root: string, autoResumeOnRestart = true): Promis
     const services = unstubbed<Services>("services", {
         ...fakeServices(root),
         turnJournal: fileTurnJournal(join(root, "turns")),
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),

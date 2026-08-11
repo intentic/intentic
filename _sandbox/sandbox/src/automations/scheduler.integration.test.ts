@@ -18,7 +18,7 @@ import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./sched
 const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSchema> = {}, live: string[] = []): Services =>
     unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", { liveSessionIds: () => live }),
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         // Read by the spin-loop guard after a failed run. Defaults parse from `{}`, so the guard is OFF unless a
         // test asks for it — which is also the production default.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {

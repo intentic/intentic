@@ -14,7 +14,7 @@ import { dispatchWorkspaceEvent } from "./workspace-events.js";
 // Same shape as scheduler.test's fake — the dispatcher reaches only automations/approvals/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         approvals: fileApprovalsStore(join(root, "approvals")),
         turnJournal: fileTurnJournal(join(root, "turns")),

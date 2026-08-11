@@ -24,7 +24,7 @@ const ORIGIN = "https://site.example";
 
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),

@@ -16,7 +16,7 @@ import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 // The listener paths touch automations/capabilities/activity/workspace/logger; `unstubbed` keeps the fake small.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
-        automations: fileAutomationsStore(join(root, "automations.json")),
+        automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),

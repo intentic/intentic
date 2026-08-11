@@ -30,7 +30,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
     await defaultGit(dir, ["remote", "add", "origin", "https://github.com/acme/web.git"]);
     const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"));
+    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
     await automations.upsert({
         id: automationId,
         trigger: { kind: "listener", provider: "ci", ...narrow },
@@ -174,7 +174,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
     await defaultGit(dir, ["remote", "add", "origin", "git@gitlab.example.com:group/app.git"]);
     const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
     await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.example.com", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"));
+    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
     await automations.upsert({
         id: "wh-gitlab",
         trigger: { kind: "listener", provider: "ci", eventType: "pipeline_succeeded" },

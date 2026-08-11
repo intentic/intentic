@@ -308,6 +308,8 @@ export interface Services {
     // accounts each speaks for. The turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
+    // Their run history is the untracked ledger beside it (.intentic/automation-runs.json), joined on read so
+    // that nothing above this store knows the two are separate files.
     readonly automations: AutomationsStore;
     // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
     // its own restart journal — a loop still marked `running` at boot is one the daemon died under.
@@ -886,7 +888,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/control-tokens.json")),
-        automations: fileAutomationsStore(statePath(workspace.root, ".intentic/automations.json")),
+        automations: fileAutomationsStore(
+            statePath(workspace.root, ".intentic/automations.json"),
+            statePath(workspace.root, ".intentic/automation-runs.json"),
+        ),
         loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
         loopDesigns: fileLoopDesignsStore(statePath(workspace.root, ".intentic/loop-designs.json")),
         workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/workflows.json")),
