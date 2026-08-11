@@ -12,7 +12,7 @@ export const meRoutes = {
     // setup payloads are secrets, not personal data.
     export: os.me.export.handler(async ({ context }) => {
         const user = requireUser(context);
-        const [sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, extensionUseDays, creditSpends, serviceRuns] = await Promise.all([
+        const [sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, donations, creditSpends, serviceRuns] = await Promise.all([
             context.prisma.session.findMany({
                 where: { userId: user.id },
                 select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
@@ -35,9 +35,9 @@ export const meRoutes = {
                 where: { userId: user.id },
                 select: { status: true, currentPeriodEnd: true, createdAt: true },
             }),
-            context.prisma.extensionUseDay.findMany({
+            context.prisma.donation.findMany({
                 where: { userId: user.id },
-                select: { extensionId: true, day: true },
+                select: { extensionId: true, month: true, credits: true },
             }),
             context.prisma.creditSpend.findMany({
                 where: { userId: user.id },
@@ -48,6 +48,6 @@ export const meRoutes = {
                 select: { serviceId: true, credits: true, status: true, createdAt: true },
             }),
         ]);
-        return { user, sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, extensionUseDays, creditSpends, serviceRuns };
+        return { user, sessions, accounts, sandboxes, memberships, invitesSent, poolMembership, donations, creditSpends, serviceRuns };
     }),
 };

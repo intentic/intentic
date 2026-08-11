@@ -98,7 +98,7 @@ const ringXY = (deg: number, rr = ring.r) => {
 const revNodes = [
     { label: "Members pay", xy: ringXY(270), anchor: "middle", lx: 150, ly: 30 },
     { label: "Pooled monthly", xy: ringXY(0), anchor: "start", lx: 262, ly: 155 },
-    { label: "Split by real use", xy: ringXY(90), anchor: "middle", lx: 150, ly: 286 },
+    { label: "Split by credits spent", xy: ringXY(90), anchor: "middle", lx: 150, ly: 286 },
     { label: "Paid to creators", xy: ringXY(180), anchor: "end", lx: 38, ly: 155 },
 ];
 // four short arcs at the quadrant midpoints; each carries one auto-oriented arrowhead so the loop reads clockwise
@@ -165,7 +165,7 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                             viewBox="-80 0 476 300"
                             class="mt-4 h-auto w-full max-w-[560px] text-link"
                             role="img"
-                            aria-label="A monthly cycle: members pay, a share is pooled, the pool is split by real use, and creators are paid — then it renews."
+                            aria-label="A monthly cycle: members pay, a share is pooled, the pool is split by the credits members spend, and creators are paid — then it renews."
                         >
                             <defs>
                                 <marker id="rev-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
@@ -189,7 +189,7 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                             }
                         </svg>
                         <p class="mt-2 max-w-md text-2xs leading-relaxed text-subtle">
-                            A monthly pool, split by real use and published in the open — free extensions never enter it; premium is opt-in.
+                            A monthly pool, split by the credits members actually spend — install donations and service runs — and published in the open. No usage is ever metered; free extensions never enter it; premium is opt-in.
                         </p>
                     </div>
                 </div>
@@ -250,7 +250,7 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
                                             {entry.tier === "premium" && (
                                                 <span
                                                     class="shrink-0 rounded-sm bg-overlay/40 px-1 text-2xs font-medium text-primary-400"
-                                                    title="Needs an intentic membership; its use pays its creator from the pool"
+                                                    title="Needs an intentic membership; installing donates credits to its creator"
                                                 >
                                                     Premium
                                                 </span>

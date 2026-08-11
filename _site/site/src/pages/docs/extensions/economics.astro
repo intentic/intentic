@@ -15,42 +15,44 @@ const entry = `{
 <DocsLayout
     pageId="extensions/economics"
     heading="The creator pool"
-    lead="One membership funds the extensions people actually use. The split is published, the unit is defined, and the ledger is public — this page is the whole deal, stated once."
+    lead="One membership, one currency: credits. Installing premium work donates them; running services spends them; every spent credit pays its creator a published share — with no telemetry anywhere. This page is the whole deal, stated once."
 >
     <h2>The deal</h2>
     <p>
         A user buys one <strong>intentic membership</strong> ($20/month). It unlocks every <code>premium</code> extension for them,
-        everywhere they work. <strong>70% of membership revenue forms the creator pool</strong>, and each month the pool is divided among
-        premium extensions in proportion to how much members actually used them. The remaining 30% runs the platform.
+        everywhere they work, and includes a daily allowance of <strong>credits</strong> — the pool's only currency.
+        <strong>Every credit a member spends pays 70% of its dollar value to the creator it went to</strong>; the rest runs the platform.
+        Two ways credits move:
     </p>
-    <p>
-        There is no per-extension billing, no checkout between a user and each tool they try, and no cut taken from anything you sell
-        outside the pool. A creator lists once and earns from use; a member pays once and stops thinking about it.
-    </p>
-
-    <h2>The unit: an active day</h2>
-    <p>
-        The pool pays on <strong>member active-days</strong>: one member's sandbox actually used your extension on one calendar day (UTC).
-        Used means user-driven work — the extension's UI doing real work in front of its owner, or its backend answering its UI. Not
-        installs, not opens of the store page, not background timers.
-    </p>
-    <p>Why this unit, and not the obvious alternatives:</p>
     <ul>
-        <li><strong>Not installs</strong> — installs are a one-click number that can be farmed and forgotten. Retained use can't be faked without delivering something someone returns to.</li>
-        <li><strong>Not minutes or tokens</strong> — those pay slow, bloated tools more for being slow and bloated.</li>
-        <li><strong>Not ratings</strong> — a day someone came back is a rating that costs the rater nothing to be honest about.</li>
+        <li><strong>Install donations</strong> — installing a premium extension donates a published number of credits to its publisher, once, automatically. Updating it donates again, at most once a month. That is the whole way non-service extensions earn.</li>
+        <li><strong>Service runs</strong> — metered per-run spends on priced services (the section below).</li>
     </ul>
     <p>
-        A day bit is also deliberately the <em>least</em> a revenue share can run on, which is the privacy design: what leaves a member's
-        sandbox is extension id + date, nothing else — no routes, no counts, no content. Free extensions and private installs report
-        nothing at all, not even their names.
+        There is no per-extension checkout, no subscription-per-tool, and no cut taken from anything you sell outside the pool. A creator
+        lists once and earns from installs; a member pays once and supports what they choose by choosing it.
     </p>
 
-    <h2>The anti-gaming rule, in writing</h2>
+    <h2>No telemetry, by construction</h2>
     <p>
-        Engagement farming — nagging, self-firing activity, anything engineered to mint day bits rather than do work someone asked for —
-        is <strong>delisting grounds</strong>. The registry's review can remove a listing from the pool, and the reason is stated on the
-        row like every other trust decision. YouTube took a decade to write this down; we are writing it down on day one.
+        Sandboxes are self-hosted — yours, like your editor. So the pool deliberately pays on <strong>nothing a sandbox could report</strong>:
+        no usage pings, no active-day bits, no counts, ever. The only economic signal that exists is what passes through the platform's own
+        hands — a member's deliberate install donation, a member's service run. Your machine tells nobody what you run on it.
+    </p>
+    <p>Why donations at install, and not the obvious alternatives:</p>
+    <ul>
+        <li><strong>Not usage metering</strong> — a self-hosted client can invent any usage it likes, and honest ones shouldn't phone home at all.</li>
+        <li><strong>Not minutes or tokens</strong> — those pay slow, bloated tools more for being slow and bloated.</li>
+        <li><strong>Not a per-tool checkout</strong> — friction at every install kills the browsing that makes a catalog worth listing in.</li>
+    </ul>
+
+    <h2>Why farming loses money, arithmetically</h2>
+    <p>
+        A member's credits are bounded by their own membership — a month's allowance is worth exactly what they paid. So a publisher
+        "farming" donations to their own listing with bought memberships can only redirect <em>a 70% share of money they themselves paid
+        in</em>: every farmed dollar costs more than it returns, at any scale. The monthly donation dedupe closes the update-spam variant —
+        an install can donate at most twelve times a year however often its publisher ships. What remains for policy is only nudging real
+        users into meaningless updates, which is <strong>delisting grounds</strong>, stated on the row like every other trust decision.
     </p>
 
     <h2>Services &amp; credits: runs with real costs</h2>
@@ -65,24 +67,24 @@ const entry = `{
         <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is; the user never holds a provider account or key. Every forwarded call is signed so a provider can verify it came from intentic and drop everything else.</li>
     </ul>
     <p>
-        A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. A service's provider earns a
-        published share (70%) of the credit value members actually consume — and those earnings settle <strong>out of the pool first</strong>,
-        because services carry real upstream costs; what remains is what active-days divide among premium extensions. The order is printed in
-        the ledger itself, month by month.
+        A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. Donations and runs both
+        spend from the same daily allowance, so a member's total support is bounded by exactly what they paid — which is what makes the
+        whole economy sybil-proof. Credits nobody spends pay nobody: the pool figure is a ceiling payouts approach, and the ledger prints
+        both numbers so neither can pose as the other.
     </p>
 
     <h2>The ledger is public</h2>
     <p>
         The platform serves <code>GET /pool/transparency</code> to anyone, no login. It carries member count, gross revenue, the split, the
-        pool, and every premium extension's active-days, share and slice — plus every service's runs, credits and earnings — for this month and
-        the two before it. The share percentages are exact, computed from the same ledger the payouts will settle on. Member counts for past months
-        are today's snapshot (the platform keeps no status history), and the page you are reading says so rather than dressing an estimate
-        up as an audit.
+        pool ceiling and the paid total, every premium extension's donors, credits and earnings, and every service's runs, credits and
+        earnings — for this month and the two before it. The numbers are exact, computed from the same ledger the payouts will settle on.
+        Member counts for past months are today's snapshot (the platform keeps no status history), and the page you are reading says so
+        rather than dressing an estimate up as an audit.
     </p>
 
     <h2>What exists today, honestly</h2>
     <ul>
-        <li><strong>Working now:</strong> premium listings, the membership, the premium gate, use-day metering, credits and metered service runs (spend, refund, signed forwarding), the pool math, and the public ledger.</li>
+        <li><strong>Working now:</strong> premium listings, the membership, install donations with the monthly dedupe, credits and metered service runs (spend, refund, signed forwarding), the demo service, the pool math, and the public ledger.</li>
         <li><strong>Not yet:</strong> payout rails — the ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating. Also not yet: credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
     </ul>
     <p>

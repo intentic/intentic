@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 /* THE SIGNED FORWARD — one metered call from the platform to a service's upstream, carrying proof of origin.
  *
@@ -11,6 +11,29 @@ import { createHmac } from "node:crypto";
  * services rather than live feeds.
  *
  * Injectable fetch, the trial pool's pattern, so the route tests drive failures without a network. */
+
+// How far a forwarded call's timestamp may sit from now before a replayed capture dies of old age.
+const SIGNATURE_TOLERANCE_S = 300;
+
+/* The provider's side of the handshake, published here as working reference: recompute
+ * HMAC-SHA256(secret, "{timestamp}.{body}") and compare constant-time. The platform's own demo upstream
+ * verifies with exactly this, so the reference can never drift from what the forward actually sends. */
+export const verifyServiceSignature = (
+    body: string,
+    timestamp: string | undefined,
+    signature: string | undefined,
+    secret: string,
+    now: () => Date = () => new Date(),
+): boolean => {
+    const at = Number(timestamp);
+    if (timestamp === undefined || signature === undefined || !Number.isFinite(at) || Math.abs(now().getTime() / 1000 - at) > SIGNATURE_TOLERANCE_S) {
+        return false;
+    }
+    const expected = createHmac(`sha256`, secret).update(`${timestamp}.${body}`).digest(`hex`);
+    const a = Buffer.from(signature, `utf8`);
+    const b = Buffer.from(expected, `utf8`);
+    return a.length === b.length && timingSafeEqual(a, b);
+};
 
 export interface ForwardResult {
     // Whether the provider ANSWERED — any completed HTTP exchange below 500. A 4xx is the provider refusing

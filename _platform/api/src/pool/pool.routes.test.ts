@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import type { Config } from "../config.js";
+import { seedDemoService } from "./pool-demo.js";
 import type { StripeGateway } from "./pool-stripe.js";
 import { poolHttpRoutes } from "./pool.routes.js";
 
@@ -33,6 +34,8 @@ const baseConfig = {
         creatorShare: 0.7,
         dailyCredits: 100,
         serviceShare: 0.7,
+        donationCredits: 50,
+        demoService: false,
     },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: false },
@@ -43,18 +46,18 @@ const configWith = (pool: Partial<Config[`pool`]>): Config => ({ ...baseConfig, 
 const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`hex`);
 
 interface Stored {
-    useDays: { userId: string; extensionId: string; day: string }[];
+    donations: { userId: string; extensionId: string; month: string; credits: number }[];
     memberships: { userId: string; stripeCustomerId: string; stripeSubscriptionId: string; status: string; currentPeriodEnd: Date }[];
     services: { id: string; slug: string; publisher: string; name: string; description: string; upstreamUrl: string; secret: string; creditsPerRun: number; active: boolean }[];
     creditSpends: Map<string, number>;
     serviceRuns: { userId: string; serviceId: string; credits: number; status: string; createdAt: Date }[];
 }
 
-// Enough Prisma for these routes: the sandbox token lookup, membership reads/writes, and the use-day
-// ledger with the unique-key dedupe createMany does for real.
+// Enough Prisma for these routes: the sandbox token lookup, membership reads/writes, and the donation
+// ledger with the unique key create enforces for real.
 const fakePrisma = (seed?: Partial<Stored>) => {
     const stored: Stored = {
-        useDays: seed?.useDays ?? [],
+        donations: seed?.donations ?? [],
         memberships: seed?.memberships ?? [],
         services: seed?.services ?? [],
         creditSpends: seed?.creditSpends ?? new Map(),
@@ -66,19 +69,27 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
             ),
         },
-        extensionUseDay: {
-            createMany: vi.fn(async ({ data }: { data: { userId: string; extensionId: string; day: string }[] }) => {
-                const fresh = data.filter(
-                    (row) =>
-                        !stored.useDays.some(
-                            (existing) => existing.userId === row.userId && existing.extensionId === row.extensionId && existing.day === row.day,
-                        ),
+        donation: {
+            findUnique: vi.fn(async ({ where }: { where: { userId_extensionId_month: { userId: string; extensionId: string; month: string } } }) => {
+                const key = where.userId_extensionId_month;
+                return (
+                    stored.donations.find(
+                        (row) => row.userId === key.userId && row.extensionId === key.extensionId && row.month === key.month,
+                    ) ?? null
                 );
-                stored.useDays.push(...fresh);
-                return { count: fresh.length };
             }),
-            findMany: vi.fn(async ({ where }: { where: { day: { gte: string } } }) =>
-                stored.useDays.filter((row) => row.day >= where.day.gte),
+            create: vi.fn(async ({ data }: { data: Stored[`donations`][number] }) => {
+                const clash = stored.donations.some(
+                    (row) => row.userId === data.userId && row.extensionId === data.extensionId && row.month === data.month,
+                );
+                if (clash) {
+                    throw new Error(`unique constraint`);
+                }
+                stored.donations.push(data);
+                return data;
+            }),
+            findMany: vi.fn(async ({ where }: { where: { month: { gte: string } } }) =>
+                stored.donations.filter((row) => row.month >= where.month.gte),
             ),
         },
         membership: {
@@ -161,8 +172,10 @@ const fakePrisma = (seed?: Partial<Stored>) => {
 const call = (config: Config, prisma: PrismaClient, path: string, init?: RequestInit) =>
     createApp(config, prisma, logger).app.request(path, { ...init, headers: { "x-intentic-connect": `tok`, "content-type": `application/json`, ...init?.headers } });
 
-const report = (config: Config, prisma: PrismaClient, rows: unknown, headers?: Record<string, string>) =>
-    call(config, prisma, `/pool/report`, { method: `POST`, body: JSON.stringify({ rows }), headers });
+const MEMBER_ROW = { userId: `user-1`, stripeCustomerId: `cus_1`, stripeSubscriptionId: `sub_1`, status: `active`, currentPeriodEnd: new Date(`2026-08-10T12:00:00Z`) };
+
+const donate = (config: Config, prisma: PrismaClient, extensionId: string, headers?: Record<string, string>) =>
+    call(config, prisma, `/pool/donate`, { method: `POST`, body: JSON.stringify({ extensionId }), headers });
 
 describe(`the creator pool`, () => {
     it(`does not exist on a platform that sells nothing`, async () => {
@@ -172,34 +185,45 @@ describe(`the creator pool`, () => {
         }
     });
 
-    it(`refuses a report from a token that belongs to no sandbox`, async () => {
+    it(`refuses a donation from a token that belongs to no sandbox`, async () => {
         const { prisma } = fakePrisma();
-        const response = await report(baseConfig, prisma, [], { "x-intentic-connect": `nope` });
+        const response = await donate(baseConfig, prisma, `acme.research`, { "x-intentic-connect": `nope` });
         expect(response.status).toBe(404);
     });
 
-    it(`lands reported days once, however often the tail is re-sent`, async () => {
+    it(`refuses a non-member's donation with the way forward, charging nothing`, async () => {
         const { prisma, stored } = fakePrisma();
-        const rows = [{ extensionId: `acme.research`, day: `2026-08-09` }, { extensionId: `acme.research`, day: `2026-08-10` }];
-        expect((await report(baseConfig, prisma, rows)).status).toBe(200);
-        expect((await report(baseConfig, prisma, rows)).status).toBe(200);
-        expect(stored.useDays).toHaveLength(2);
-        expect(stored.useDays[0]).toMatchObject({ userId: `user-1`, extensionId: `acme.research`, day: `2026-08-09` });
+        const response = await donate(baseConfig, prisma, `acme.research`);
+        expect(response.status).toBe(403);
+        expect(stored.donations).toEqual([]);
+        expect(stored.creditSpends.size).toBe(0);
     });
 
-    it(`drops days outside the accept window instead of back-filling published history`, async () => {
-        const { prisma, stored } = fakePrisma();
-        const response = await report(baseConfig, prisma, [
-            { extensionId: `acme.research`, day: `2020-01-01` },
-            { extensionId: `acme.research`, day: new Date().toISOString().slice(0, 10) },
-        ]);
-        expect(((await response.json()) as { accepted: number }).accepted).toBe(1);
-        expect(stored.useDays).toHaveLength(1);
+    it(`donates once per month: the install pays, the reinstall answers "already supported"`, async () => {
+        const { prisma, stored } = fakePrisma({ memberships: [MEMBER_ROW] });
+        const month = new Date().toISOString().slice(0, 7);
+        const first = (await (await donate(baseConfig, prisma, `acme.research`)).json()) as { donated: number; remaining: number };
+        expect(first).toMatchObject({ donated: 50 });
+        const second = (await (await donate(baseConfig, prisma, `acme.research`)).json()) as { donated: number };
+        expect(second.donated).toBe(0);
+        expect(stored.donations).toEqual([{ userId: `user-1`, extensionId: `acme.research`, month, credits: 50 }]);
+        // One donation's worth of credits spent, not two.
+        expect([...stored.creditSpends.values()]).toEqual([50]);
     });
 
-    it(`refuses a malformed report outright`, async () => {
-        const { prisma } = fakePrisma();
-        expect((await report(baseConfig, prisma, [{ extensionId: `../../etc`, day: `2026-08-10` }])).status).toBe(400);
+    it(`refuses a donation past the daily allowance and gives the optimistic bite back`, async () => {
+        const day = new Date().toISOString().slice(0, 10);
+        const { prisma, stored } = fakePrisma({ memberships: [MEMBER_ROW], creditSpends: new Map([[`user-1:${day}`, 80]]) });
+        const response = await donate(baseConfig, prisma, `acme.research`);
+        expect(response.status).toBe(429);
+        expect(((await response.json()) as { error: { type: string } }).error.type).toBe(`insufficient_credits`);
+        expect(stored.donations).toEqual([]);
+        expect(stored.creditSpends.get(`user-1:${day}`)).toBe(80);
+    });
+
+    it(`refuses a malformed donation outright`, async () => {
+        const { prisma } = fakePrisma({ memberships: [MEMBER_ROW] });
+        expect((await donate(baseConfig, prisma, `../../etc`)).status).toBe(400);
     });
 
     it(`answers premium only for a paid, current membership`, async () => {
@@ -217,25 +241,27 @@ describe(`the creator pool`, () => {
         expect(await (await call(baseConfig, nobody.prisma, `/pool/status`)).json()).toEqual({ premium: false });
     });
 
-    it(`publishes the ledger without a login, paying members' use and only that`, async () => {
-        const day = new Date().toISOString().slice(0, 10);
-        const month = day.slice(0, 7);
+    it(`publishes the ledger without a login, paying what the donations actually carried`, async () => {
+        const month = new Date().toISOString().slice(0, 7);
         const { prisma } = fakePrisma({
             memberships: [{ userId: `user-1`, stripeCustomerId: `cus_1`, stripeSubscriptionId: `sub_1`, status: `active`, currentPeriodEnd: NOW }],
-            useDays: [
-                { userId: `user-1`, extensionId: `acme.research`, day },
-                { userId: `free-rider`, extensionId: `acme.research`, day },
-            ],
+            donations: [{ userId: `user-1`, extensionId: `acme.research`, month, credits: 50 }],
         });
         // No connect token, no session — the transparency read is public by design.
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/transparency`);
         expect(response.status).toBe(200);
-        const body = (await response.json()) as { creatorShare: number; months: { month: string; poolCents: number; memberActiveDays: number; otherActiveDays: number; extensions: { extensionId: string; amountCents: number }[] }[] };
+        const body = (await response.json()) as {
+            creatorShare: number;
+            donationCredits: number;
+            months: { month: string; poolCents: number; paidCents: number; extensions: { extensionId: string; donors: number; credits: number; earningsCents: number }[] }[];
+        };
         expect(body.creatorShare).toBe(0.7);
+        expect(body.donationCredits).toBe(50);
         const current = body.months.find((entry) => entry.month === month);
-        // 1 member × $20 × 70% = 1400 cents, all of it to the one extension the member used.
-        expect(current).toMatchObject({ memberActiveDays: 1, otherActiveDays: 1, poolCents: 1400 });
-        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, activeDays: 1, share: 1, amountCents: 1400 }]);
+        // Ceiling: 1 member × $20 × 70% = 1400¢. Paid: 50 credits × (2000¢/3000) × 70% = 23¢ — the ledger
+        // states both, so nobody can read the ceiling as a promise.
+        expect(current).toMatchObject({ poolCents: 1400, paidCents: 23 });
+        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 23 }]);
     });
 
     it(`refuses an unsigned webhook and honours a signed subscription lapse`, async () => {
@@ -386,12 +412,63 @@ describe(`metered service runs`, () => {
         expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(80);
     });
 
-    it(`publishes service earnings and pays extensions from what remains`, async () => {
-        const day = new Date().toISOString().slice(0, 10);
+    it(`serves the demo service end to end: seeded, signed, verified, answered, metered`, async () => {
+        const demoConfig = configWith({ demoService: true });
+        const { prisma, stored } = fakePrisma({ memberships: [MEMBER] });
+        // Give the fake enough of `service.create`/`update` for the seeder.
+        const prismaAny = prisma as unknown as {
+            service: {
+                create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+                update: (args: { where: { slug: string }; data: Record<string, unknown> }) => Promise<unknown>;
+            };
+        };
+        prismaAny.service.create = async ({ data }) => {
+            stored.services.push({ id: `svc_demo`, ...(data as Omit<Stored[`services`][number], `id`>) });
+            return data;
+        };
+        prismaAny.service.update = async ({ where, data }) => {
+            const row = stored.services.find((service) => service.slug === where.slug);
+            Object.assign(row ?? {}, data);
+            return row;
+        };
+        await seedDemoService(prisma, demoConfig);
+        expect(stored.services).toMatchObject([{ slug: `demo-research`, publisher: `intentic`, creditsPerRun: 5, active: true }]);
+
+        // The forward's fetch dispatched back into the same app — the demo upstream verifies the signature
+        // exactly as an external provider would, so this drives the WHOLE path: spend → sign → verify →
+        // answer → relay with the meter on it.
+        const app = poolHttpRoutes({
+            config: demoConfig,
+            prisma,
+            // The sub-app under test has no `/pool` mount prefix (app.ts adds it); strip it when dispatching
+            // the forward back in.
+            fetchFn: (async (url: string | URL | Request, init?: RequestInit) =>
+                app.request(new URL(String(url)).pathname.replace(/^\/pool/, ``), init)) as typeof fetch,
+            now: () => NOW,
+        });
+        const response = await app.request(`/services/demo-research/run`, {
+            method: `POST`,
+            body: `{"query":"launch on reddit"}`,
+            headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
+        });
+        expect(response.status).toBe(200);
+        const answer = (await response.json()) as { demo: boolean; query: string; summary: string };
+        expect(answer.demo).toBe(true);
+        expect(answer.query).toBe(`launch on reddit`);
+        expect(response.headers.get(`x-intentic-credits-remaining`)).toBe(`95`);
+        expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `ok` }]);
+
+        // And the intermediary promise holds: an unsigned call straight at the upstream is refused.
+        const unsigned = await app.request(`/demo/upstream`, { method: `POST`, body: `{"query":"x"}` });
+        expect(unsigned.status).toBe(401);
+    });
+
+    it(`publishes service earnings beside donations, refunded runs earning nothing`, async () => {
+        const month = new Date().toISOString().slice(0, 7);
         const { prisma } = fakePrisma({
             services: [RESEARCH],
             memberships: [MEMBER],
-            useDays: [{ userId: `user-1`, extensionId: `acme.research`, day }],
+            donations: [{ userId: `user-1`, extensionId: `acme.research`, month, credits: 50 }],
             serviceRuns: [
                 { userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `ok`, createdAt: new Date() },
                 { userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `refunded`, createdAt: new Date() },
@@ -400,14 +477,14 @@ describe(`metered service runs`, () => {
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/transparency`);
         const body = (await response.json()) as {
             serviceShare: number;
-            months: { month: string; poolCents: number; servicePoolCents: number; extensionPoolCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { amountCents: number }[] }[];
+            months: { month: string; poolCents: number; paidCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { extensionId: string; earningsCents: number }[] }[];
         };
         expect(body.serviceShare).toBe(0.7);
-        const current = body.months.find((entry) => entry.month === day.slice(0, 7));
-        // 1 member × $20 × 70% = 1400 pool. Credit value = 2000¢/3000 credits = 2/3¢; 40 credits × 2/3¢ ×
-        // 70% = 18¢ to the service (the refunded run earns nothing); extensions split the remaining 1382¢.
+        const current = body.months.find((entry) => entry.month === month);
+        // Credit value = 2000¢/3000 = 2/3¢. Service: 40 ok credits × 2/3¢ × 70% = 18¢ (the refunded run
+        // earns nothing). Donation: 50 credits × 2/3¢ × 70% = 23¢. Both on the same ledger, side by side.
         expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 18 }]);
-        expect(current).toMatchObject({ poolCents: 1400, servicePoolCents: 18, extensionPoolCents: 1382 });
-        expect(current?.extensions).toMatchObject([{ amountCents: 1382 }]);
+        expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 23 }]);
+        expect(current).toMatchObject({ poolCents: 1400, paidCents: 41 });
     });
 });

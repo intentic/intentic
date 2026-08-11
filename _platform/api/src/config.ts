@@ -119,17 +119,26 @@ const configSchema = z.object({
             // The membership's monthly price in USD as the transparency page states it — display + pool math
             // only; what Stripe actually charges is the Price above. POOL_PRICE_USD.
             priceUsd: z.coerce.number().nonnegative().default(20),
-            // The fraction of membership revenue that forms the creator pool. The published number the whole
-            // model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
+            // The fraction of a spent credit's VALUE its recipient earns — a donated credit pays the
+            // extension's creator this share, a consumed credit pays the service's provider this share
+            // (credit value is derived and published: priceUsd / (30 × dailyCredits)). The published number
+            // the whole model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
             creatorShare: z.coerce.number().min(0).max(1).default(0.7),
-            // A member's daily credit allowance for metered service runs, reset at UTC midnight like the
-            // trial. The membership's cost ceiling: 1000/day bounds what a member can spend, which is what
-            // lets a flat price fund per-run services at all. POOL_DAILY_CREDITS.
+            // A member's daily credit allowance, reset at UTC midnight like the trial. The membership's cost
+            // ceiling: 1000/day bounds what a member can spend — on service runs and on install donations —
+            // which is what lets a flat price fund a per-credit economy at all. POOL_DAILY_CREDITS.
             dailyCredits: z.coerce.number().int().nonnegative().default(1000),
-            // The fraction of consumed credit VALUE a service's provider earns (credit value is derived and
-            // published: priceUsd / (30 × dailyCredits)). Paid out of the creator pool BEFORE the active-day
-            // split — services carry real upstream costs, so they settle first. POOL_SERVICE_SHARE.
+            // What a service's provider earns per consumed credit, as a share of its value — kept a separate
+            // knob from creatorShare because a service carries real upstream costs a prompt-pack does not.
+            // POOL_SERVICE_SHARE.
             serviceShare: z.coerce.number().min(0).max(1).default(0.7),
+            // What installing (or, at most monthly, updating) a premium non-service extension donates to its
+            // creator, in credits. Flat across the catalog on purpose: a price the listing could set would be
+            // the first number anyone games. POOL_DONATION_CREDITS.
+            donationCredits: z.coerce.number().int().nonnegative().default(200),
+            // Seed the self-contained demo service (a canned research answerer the platform itself hosts) so
+            // the catalog is demonstrable without a provider. POOL_DEMO_SERVICE.
+            demoService: z.stringbool().default(false),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`

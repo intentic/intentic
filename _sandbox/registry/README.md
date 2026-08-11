@@ -53,11 +53,11 @@ dangerous one. Both are asserted by pull request, like `trust`, and are worth ex
 ## Tier, and what premium buys into
 
 `tier` is the listing's price: `free` (the default, and the whole story for most rows) or `premium` — the
-listing opts into the **creator pool**. A premium row needs an intentic membership to install and enable, both
-surfaces badge it before the click, and its retained active use is what earns its publisher a share of
-membership revenue. The economics live in
-[The creator pool](https://intentic.dev/docs/extensions/economics/); only the official registry's premium
-markers are read by the platform's pool, so the field on a private registry asserts nothing.
+listing opts into the **creator pool**. A premium row needs an intentic membership, both surfaces badge it
+before the click, and installing it **donates a published number of the member's credits to the publisher**
+(once, deduped monthly — updates donate again at most monthly). No usage is metered or reported anywhere;
+the deliberate install is the whole signal. The economics live in
+[The creator pool](https://intentic.dev/docs/extensions/economics/).
 
 ## The mark
 

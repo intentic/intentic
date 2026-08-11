@@ -1039,15 +1039,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             headers,
             ...(body !== undefined && body !== null ? { body, duplex: "half" } : {}),
         } as RequestInit);
-        // An answered backend call is the other observation point of the creator pool (the first is the UI's
-        // usage report): a premium extension's UI talking to its own server is the user using it. Only when
-        // the backend actually answered — a 5xx or a host mid-restart is not use anyone experienced.
-        if (upstream.status < 500) {
-            const extensionId = url.pathname.split("/")[2];
-            if (extensionId !== undefined && extensionId !== "") {
-                services.extensionUse.note(extensionId);
-            }
-        }
         return new Response(upstream.body, { status: upstream.status, headers: endToEndHeaders(upstream.headers) });
     });
 

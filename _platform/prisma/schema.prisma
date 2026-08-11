@@ -30,7 +30,7 @@ model User {
     sandboxes        Sandbox[]
     trialUsage       TrialUsage[]
     membership       Membership?
-    extensionUseDays ExtensionUseDay[]
+    donations        Donation[]
     creditSpends     CreditSpend[]
     serviceRuns      ServiceRun[]
 
@@ -230,12 +230,14 @@ model DesktopHandoff {
 // ---------------------------------------------------------------------------
 // The creator pool. The membership a user bought (mirrored from Stripe by
 // webhook — Stripe stays the source of truth for money, this row is the
-// platform's fast local answer to "is this user premium"), the use-day ledger
-// the pool's revenue share is computed from, and the services economy on top:
-// the catalog of priced upstreams, the per-day credit meter, and the run
-// ledger. The pool's numbers are PUBLIC by design (GET /pool/transparency),
-// so no table here may ever hold more than ids, statuses, counts and days —
-// the one secret (a service's signing key) is encrypted at rest.
+// platform's fast local answer to "is this user premium"), and the credit
+// economy the revenue share is computed from: the per-day credit meter, the
+// donation ledger (install-time support for non-service extensions — the
+// platform's ONLY signal about them; no usage telemetry exists), the catalog
+// of priced upstreams, and the service-run ledger. The pool's numbers are
+// PUBLIC by design (GET /pool/transparency), so no table here may ever hold
+// more than ids, statuses, counts and months — the one secret (a service's
+// signing key) is encrypted at rest.
 // ---------------------------------------------------------------------------
 
 // One row per user who ever completed a membership checkout. `status` is Stripe's subscription status
@@ -257,24 +259,28 @@ model Membership {
     @@map("membership")
 }
 
-// One row = "this user's sandbox used this premium extension on this UTC day" — the unit the pool pays on,
-// reported by the daemon (POST /pool/report) and idempotent by the unique key, so a daemon re-sending its
-// 7-day tail every few hours costs nothing. Day as a plain YYYY-MM-DD string, the trial_usage precedent:
-// the share is computed per calendar month, so the string's prefix IS the group key. Swept by retention.ts
-// after the transparency window; cascades with the user (GDPR).
-model ExtensionUseDay {
+// One row = "this member's install of this premium extension donated its credits this month" — the unit a
+// non-service extension is paid on. Written by POST /pool/donate at install/update time and NEVER from any
+// usage signal: sandboxes are self-hosted, so the platform meters only what passes through its own hands
+// (credits), and no telemetry leaves anyone's machine. The unique key is the whole dedupe story: a reinstall
+// in the same month is a no-op that charges nothing, an update in a later month donates again — at most
+// twelve donations per install per year, which is also what bounds an update-spamming publisher. `credits`
+// is stamped from config at donation time, so a later price change never rewrites history. Keyed by the
+// manifest-derived extension identity (publisher.name), the same identity listings and payouts use.
+model Donation {
     id          String   @id @default(cuid())
     userId      String
     user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
     extensionId String
-    day         String
+    month       String
+    credits     Int
     createdAt   DateTime @default(now())
 
-    @@unique([userId, extensionId, day])
-    // The transparency aggregate and the retention sweep both scan by day; the unique above leads with
+    @@unique([userId, extensionId, month])
+    // The transparency aggregate and the retention sweep both scan by month; the unique above leads with
     // userId and can't serve them.
-    @@index([day])
-    @@map("extension_use_day")
+    @@index([month])
+    @@map("donation")
 }
 
 // A priced upstream the platform will meter and forward to — one row per premium service, created by the

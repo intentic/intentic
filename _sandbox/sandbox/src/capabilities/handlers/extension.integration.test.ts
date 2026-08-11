@@ -24,11 +24,13 @@ const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]
 
 // A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.integration.test.ts pattern).
 // `stopped` records ctx.panels.stop calls for the remove/update quiesce tests; `stored` is the capability store
-// the update path reads the OUTGOING config from (empty ⇒ a first install).
-const tempCtx = (premium = false): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability> } => {
+// the update path reads the OUTGOING config from (empty ⇒ a first install); `donatedTo` records the donation
+// gate's calls (the premium install/update path).
+const tempCtx = (member = false): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability>; donatedTo: string[] } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));
     const stopped: string[] = [];
     const stored = new Map<string, Capability>();
+    const donatedTo: string[] = [];
     const ctx = {
         workspace: { root },
         files: { read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath },
@@ -36,9 +38,15 @@ const tempCtx = (premium = false): { ctx: CapabilityCtx; root: string; stopped: 
         terminalRun: createTerminalRunner(),
         panels: { stop: (key: string) => stopped.push(key) },
         capabilities: { get: async (id: string) => stored.get(id) },
-        premium: async () => (premium ? { premium: true } : { premium: false, detail: "this account has no active intentic membership" }),
+        donatePremium: async (extensionId: string) => {
+            if (!member) {
+                return { ok: false, donated: 0, detail: "Installing a premium extension needs an intentic membership." };
+            }
+            donatedTo.push(extensionId);
+            return { ok: true, donated: 200 };
+        },
     } as unknown as CapabilityCtx;
-    return { ctx, root, stopped, stored };
+    return { ctx, root, stopped, stored, donatedTo };
 };
 
 const MANIFEST = {
@@ -85,20 +93,30 @@ test("apply installs a valid extension; status carries the pinned sha", async ()
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "active", detail: await gitHead(extensionDir(root, "demo")) });
 });
 
-test("a premium install without a membership is refused before anything is cloned, with the reason", async () => {
-    const { ctx, root } = tempCtx(false);
+test("a premium install whose donation is refused never goes live, and says why", async () => {
+    const { ctx, root, donatedTo } = tempCtx(false);
     const remote = await fixtureRepo(MANIFEST, true);
     await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }))).rejects.toThrow(
-        /premium extension.*no active intentic membership/,
+        /premium extension.*needs an intentic membership/,
     );
+    expect(donatedTo).toEqual([]);
     expect(await readdir(extensionsRoot(root)).catch(() => [])).toEqual([]);
 });
 
-test("a premium install with a membership proceeds like any other", async () => {
-    const { ctx, root } = tempCtx(true);
+test("a premium install donates to the manifest-derived identity, then proceeds like any other", async () => {
+    const { ctx, root, donatedTo } = tempCtx(true);
     const remote = await fixtureRepo(MANIFEST, true);
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha, tier: "premium" }));
+    // publisher.name from the checkout's own manifest — never the capability entry id the form chose.
+    expect(donatedTo).toEqual(["acme.demo"]);
     expect(await readWorkspaceFile(join(extensionDir(root, "demo"), "dist", "extension.js"))).toContain("activate");
+});
+
+test("a free install never touches the donation path", async () => {
+    const { ctx, donatedTo } = tempCtx(true);
+    const remote = await fixtureRepo(MANIFEST, true);
+    await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));
+    expect(donatedTo).toEqual([]);
 });
 
 test("a checkout without a manifest is rejected before it goes live, leaving no debris", async () => {

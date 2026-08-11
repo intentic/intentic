@@ -217,11 +217,6 @@ export const createExtensionsRoutes = (services: Services) => {
                 input.used,
                 new Date().toISOString(),
             );
-            // A non-empty batch is the UI saying this extension did real work in front of the user — the
-            // creator pool's day bit rides the report that already exists rather than a new wire.
-            if (Object.values(input.used).some((calls) => calls > 0)) {
-                services.extensionUse.note(input.id);
-            }
             return { ok: true } as const;
         }),
         readiness: i.readiness.handler(async ({ input }) => {

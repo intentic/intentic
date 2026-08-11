@@ -2985,11 +2985,12 @@ export const ExtensionConfigSchema = z.object({
         .optional(),
     token: z.string().min(1).optional(),
     /* The registry row's tier, copied onto the install by the browse pre-fill. `premium` is what the daemon's
-     * two pool duties key off: enabling needs the owner's membership, and the extension's active days are
-     * reported to the platform's creator pool (extensions/extension-active-use.ts) — an absent tier means
-     * free, reports nothing, and asks for nothing. Self-declared rather than verified against the registry
-     * (the daemon is the owner's own machine; the pool pays creators from what members actually use, so a
-     * stripped marker cheats nobody but the person stripping it out of their own membership's worth). */
+     * two pool duties key off: installing (or updating) donates the owner's credits to the publisher — the
+     * gate the apply passes through — and enabling needs the owner's membership. An absent tier means free,
+     * donates nothing, and asks for nothing; NO usage is metered or reported either way. Self-declared rather
+     * than verified against the registry (the daemon is the owner's own machine; a stripped marker skips a
+     * donation the owner was choosing to make, which cheats the creator once — and is exactly the honesty the
+     * open-source posture accepts and the docs state). */
     tier: z.enum(["free", "premium"]).optional(),
     /* The registry this install's row lives in, copied on by the browse pre-fill like `tier` — what the update
      * check compares the pinned sha against and reads advisories from. Absent (a hand-typed git install) falls

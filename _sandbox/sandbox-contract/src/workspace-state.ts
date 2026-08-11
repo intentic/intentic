@@ -247,18 +247,6 @@ const STATE_FILES = [
         why: "Which of the routes each extension DECLARED it has actually called — the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
         portability: "carry",
     },
-    /* The creator pool's day bits: which PREMIUM extensions saw use, per UTC day — all the revenue share runs
-     * on, and all that ever leaves the sandbox. Nothing watches it and nothing renders it; it exists so the
-     * owner can read exactly what their sandbox reported. Identity, not carry: the days are THIS machine's
-     * report, the platform's ledger already holds every one it sent, and a bundle that carried them would
-     * re-report one machine's use as another's. */
-    {
-        path: ".intentic/extension-active-use.json",
-        invalidates: [],
-        why: "Which premium extensions saw use, per UTC day — the sandbox's half of the creator-pool ledger, written by the daemon for its own reporter (platform/pool-report.ts). No view renders it, so a change invalidates nothing; it exists on disk so the owner can read exactly what their sandbox reported and nothing more.",
-        portability: "identity",
-        note: "Use days stay with the machine that reported them; the new sandbox starts its own.",
-    },
     {
         path: ".intentic/members.json",
         invalidates: [],

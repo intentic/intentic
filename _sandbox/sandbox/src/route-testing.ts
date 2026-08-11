@@ -371,9 +371,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         info: undefined,
         tools: [],
         capabilities: memoryCapabilitiesStore(),
-        // The creator pool's noter, defanged: these suites drive routes, and a premium day bit written into
-        // the shared workspace root would leak between tests. The noter's own behaviour has its own suite.
-        extensionUse: { note: () => {} },
         // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
         // nobody has said no on yet.
         capabilityDismissals: memoryDismissalsStore(),

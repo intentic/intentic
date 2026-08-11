@@ -20,6 +20,13 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await agent.authorize("agent", "GET", "/vpn")).toBe("ok");
     expect(await agent.authorize("agent", "POST", "/vpn/office/connect")).toBe("ok");
     expect(await agent.authorize("agent", "GET", "/capabilities/npm/otp")).toBe("ok");
+    // The services CLI's two routes: the priced catalog, and one metered run — spend bounded platform-side.
+    expect(await agent.authorize("agent", "GET", "/pool/services")).toBe("ok");
+    expect(await agent.authorize("agent", "POST", "/pool/services/demo-research/run")).toBe("ok");
+    // But never the daemon's other pool surfaces, and never a shape the run glob doesn't spell.
+    expect(await agent.authorize("agent", "POST", "/pool/services")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "GET", "/pool/services/demo-research/run")).toBe("out-of-scope");
+    expect(await agent.authorize("agent", "POST", "/pool/services/a/b/run")).toBe("out-of-scope");
     // The routes a code-minting token must never buy: the manifest, a capability's config, the secrets page.
     expect(await agent.authorize("agent", "GET", "/capabilities")).toBe("out-of-scope");
     expect(await agent.authorize("agent", "GET", "/capabilities/npm/status")).toBe("out-of-scope");

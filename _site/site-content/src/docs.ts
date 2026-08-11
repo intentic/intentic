@@ -350,7 +350,7 @@ export const docsSections: DocsSection[] = [
                                 meta: {
                                     title: "The creator pool · intentic docs",
                                     description:
-                                        "How premium extensions and services earn: the membership, daily credits with per-run pricing and no charge on failure, the published split, the active-day unit, the anti-gaming rule, and the transparency ledger anyone can read.",
+                                        "How premium extensions and services earn: the membership, daily credits, install donations with no telemetry anywhere, per-run service pricing with no charge on failure, the published split, and the transparency ledger anyone can read.",
                                     datePublished: "2026-08-10",
                                 },
                             },

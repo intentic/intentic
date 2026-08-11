@@ -4,7 +4,7 @@ The **database layer** — the Prisma schema, the generated client, and the migr
 
 ## Responsibilities
 
-- Define the schema: the Better Auth tables (`User`/`Session`/`Account`/`Verification`), the sandbox registry (`Sandbox`/`SandboxMember` — connection token + announced `daemonUrl`; no liveness state), the free-trial meter (`TrialUsage`), and the creator pool (`Membership` — the Stripe mirror — the `ExtensionUseDay` ledger the revenue share is computed from, and the services economy: `Service` catalog rows, the `CreditSpend` daily meter, and the `ServiceRun` ledger provider earnings settle on).
+- Define the schema: the Better Auth tables (`User`/`Session`/`Account`/`Verification`), the sandbox registry (`Sandbox`/`SandboxMember` — connection token + announced `daemonUrl`; no liveness state), the free-trial meter (`TrialUsage`), and the creator pool's credit economy (`Membership` — the Stripe mirror — the `CreditSpend` daily meter, the `Donation` ledger non-service extensions earn by, the `Service` catalog rows, and the `ServiceRun` ledger provider earnings settle on).
 - Generate the client and own the migration history.
 - Provide nothing at runtime beyond the client — no business logic.
 

@@ -1702,7 +1702,7 @@ const submitLabel = computed(() =>
                                             <span
                                                 v-if="entry.tier === 'premium'"
                                                 class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                                                v-tooltip.top="`Premium — needs an intentic membership; its use pays its creator from the pool`"
+                                                v-tooltip.top="`Premium — needs an intentic membership; installing donates credits to its creator`"
                                                 >Premium</span
                                             >
                                             <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>

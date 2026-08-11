@@ -174,7 +174,6 @@ import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/agent-tools.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
-import { createUseNoter, type UseNoter } from "./extensions/extension-active-use.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,
@@ -292,9 +291,6 @@ export interface Services {
     // carry the daemon-provisioned free-trial endpoint when the platform serves one (trial/trial-endpoint.ts);
     // it is never written to the file.
     readonly capabilities: CapabilitiesStore;
-    // The creator pool's observation point: notes user-driven work by a premium extension as a per-day bit
-    // (extensions/extension-active-use.ts). Called from the UI's usage-report route and the /x proxy.
-    readonly extensionUse: UseNoter;
     // Moves any credential still sitting in the READABLE manifest into the vault, answering the ids it moved.
     // A boot step (main.ts), and an invariant rather than a one-time conversion — the manifest is a file the
     // agent may edit, so a real value can arrive in it at any time (capabilities/capabilities-store.ts).
@@ -880,7 +876,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,
-        extensionUse: createUseNoter(workspace.root, (id) => capabilities.get(id)),
         vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
         secretValues: secretValuesOf(secretVault, () => workspace.repos["desired-state"]),
         trial,

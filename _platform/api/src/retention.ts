@@ -18,13 +18,13 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     // The creator pool's ledgers keep 13 months: a full year of transparency history plus the month in
     // progress, then the rows go — they are pseudonymous but per-user, so storage limitation applies. The
     // credit meter's day rows follow the same window (nothing reads a past day, but a year of them is what
-    // lets a member dispute a bill), as do the service-run rows earnings were computed from.
+    // lets a member dispute a bill), as do the donation and service-run rows earnings were computed from.
     const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS).toISOString().slice(0, 10);
     const [sessions, verifications, handoffs] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
-        prisma.extensionUseDay.deleteMany({ where: { day: { lt: ledgerCutoff } } }),
+        prisma.donation.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
         prisma.creditSpend.deleteMany({ where: { day: { lt: ledgerCutoff } } }),
         prisma.serviceRun.deleteMany({ where: { createdAt: { lt: new Date(`${ledgerCutoff}T00:00:00.000Z`) } } }),
     ]);

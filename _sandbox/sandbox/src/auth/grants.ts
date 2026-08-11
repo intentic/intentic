@@ -47,12 +47,20 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     },
 });
 
-// The `vpn` and `otp` CLIs on the agent's PATH (and in the owner's terminals) reach the daemon over loopback
-// with the per-boot agent token. Scoped hard: the agent may dial and drop the tunnels the owner configured and
-// may mint one-time codes off a stored TOTP seed — each derived, expiring within its period — and may never
-// read /secrets or /capabilities themselves, which would hand it the credentials behind them.
+// The `vpn`, `otp` and `services` CLIs on the agent's PATH (and in the owner's terminals) reach the daemon
+// over loopback with the per-boot agent token. Scoped hard: the agent may dial and drop the tunnels the owner
+// configured, may mint one-time codes off a stored TOTP seed — each derived, expiring within its period —
+// and may browse and run the platform's priced services on the owner's credit allowance; it may never read
+// /secrets or /capabilities themselves, which would hand it the credentials behind them.
 const agentReach = (method: string, path: string): boolean =>
-    path === "/vpn" || path.startsWith("/vpn/") || (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path));
+    path === "/vpn" ||
+    path.startsWith("/vpn/") ||
+    (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
+    // The premium-services surface the `services` CLI drives: the priced catalog, and one metered run. The
+    // spend is bounded by the owner's daily allowance platform-side, and the skill's etiquette (offer with
+    // the price, run only after the owner agrees in chat) is the consent story; nothing here reads a secret.
+    (method === "GET" && path === "/pool/services") ||
+    (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path));
 
 /* The WIDE grant — a panel's backend is server-side code running inside this container that legitimately acts
  * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one

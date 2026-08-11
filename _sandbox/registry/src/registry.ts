@@ -43,10 +43,11 @@ export const RegistryTrustSchema = z.enum(["verified", "listed", "blocked"]);
 export type RegistryTrust = z.infer<typeof RegistryTrustSchema>;
 
 /* WHAT A LISTING COSTS. `free` is the default and the whole story for most rows. `premium` opts the listing
- * into the creator pool: installing and enabling it requires an intentic membership, its retained active use
- * is what earns its publisher a share of the pool, and both surfaces badge it so the price is visible before
- * the click. On a third-party registry the field still parses but means nothing — the pool only pays listings
- * on the official registry, because that is the one whose entries the platform reads. */
+ * into the creator pool: installing it requires an intentic membership and donates a published number of the
+ * member's credits to the publisher (once, deduped monthly — an update in a later month donates again), and
+ * both surfaces badge it so the price is visible before the click. No usage is ever metered or reported for
+ * this; the deliberate act of installing is the whole signal. On a third-party registry the field still
+ * parses but means nothing — the pool only pays listings the platform's members actually install. */
 export const RegistryTierSchema = z.enum(["free", "premium"]);
 export type RegistryTier = z.infer<typeof RegistryTierSchema>;
 

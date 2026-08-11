@@ -4,7 +4,7 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
 import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { type PremiumStatus, premiumStatus } from "../platform/pool-status.js";
+import { donateForExtension, type DonationOutcome } from "../platform/pool-donate.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
 import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
@@ -50,9 +50,9 @@ export interface CapabilityCtx {
     // The image-baked extensions dir (services.config.extensionsDir) — lets the cli handler build the connector
     // registry (installedExtensions) from the narrow ctx without holding Services.
     readonly extensionsDir: string;
-    // The owner's membership, asked of the platform fresh (platform/pool-status.ts) — what the extension
-    // handler gates a `tier: "premium"` install on.
-    readonly premium: () => Promise<PremiumStatus>;
+    // Support a premium extension's creator with the owner's credits (platform/pool-donate.ts) — the gate a
+    // `tier: "premium"` install passes through, and the only money moment a non-service extension has.
+    readonly donatePremium: (extensionId: string) => Promise<DonationOutcome>;
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
@@ -114,7 +114,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         hostHub: services.hostHub,
         endpointModels: services.endpointModels,
         extensionsDir: services.config.extensionsDir,
-        premium: () => premiumStatus(services.config),
+        donatePremium: (extensionId) => donateForExtension(services.config, extensionId),
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),

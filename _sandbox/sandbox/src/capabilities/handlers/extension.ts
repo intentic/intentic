@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { ExtensionManifestSchema, extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
 import { invalidExtensionFragment } from "../../environment/fragment-sources.js";
 import { extensionProcessKey } from "../../extensions/extension-processes.js";
@@ -29,21 +29,14 @@ export const extensionHandler: CapabilityHandler = {
     },
     apply: async function* (ctx, id, config) {
         const { url, ref, path, token, tier } = config as ExtensionConfig;
-        /* The premium gate, asked fresh at the moment that needs it. Fail-closed with the probe's own reason
-         * — "no membership" and "platform unreachable" are different sentences, and the card shows whichever
-         * is true. The tier marker itself is self-declared (the schema says why), so this is a product
-         * surface, not DRM: the honest install path carries the registry row's tier, and the gate holds it. */
-        if (tier === "premium") {
-            const membership = await ctx.premium();
-            if (!membership.premium) {
-                throw new Error(`this is a premium extension and ${membership.detail ?? "the membership could not be confirmed"} — join from Settings, then add it again`);
-            }
-        }
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
         yield { kind: "log", message: `Cloning ${url} @ ${ref}…` };
+        // Set inside validate — the donation keys on the manifest-derived identity, which exists only once
+        // the checkout has been read. Captured out so the apply can SAY what happened after it goes live.
+        let donation: { donated: number } | undefined;
         await checkoutInto(ctx, session, extensionsRoot(ctx.workspace.root), id, {
             url,
             ref,
@@ -71,6 +64,21 @@ export const extensionHandler: CapabilityHandler = {
                     throw new Error("not an intentic extension: no intentic-extension.json at the extension root");
                 }
                 const manifest = ExtensionManifestSchema.parse(JSON.parse(raw));
+                /* THE PREMIUM GATE IS THE DONATION. Installing (or updating to a new sha) a premium
+                 * extension supports its creator with the owner's credits — once per month at most, the
+                 * platform dedupes — and an install whose donation is refused does not proceed: throwing
+                 * here discards the staged checkout like any other validation failure, so nothing half-paid
+                 * ever goes live. Keyed on publisher.name (the identity creators are paid under), read from
+                 * the manifest the checkout actually contains rather than anything the form claimed. The
+                 * tier marker itself is self-declared (the schema says why) — this is a product surface,
+                 * not DRM; the honest install path carries the registry row's tier, and the gate holds it. */
+                if (tier === "premium") {
+                    const outcome = await ctx.donatePremium(extensionIdOf(manifest));
+                    if (!outcome.ok) {
+                        throw new Error(`this is a premium extension — ${outcome.detail ?? "the donation could not be completed"}`);
+                    }
+                    donation = { donated: outcome.donated };
+                }
                 // Prebuilt-dist rule: the sha the owner approved must BE the code that runs — no install-time build.
                 if (manifest.entry !== undefined && (await ctx.files.read(join(dir, manifest.entry))) === undefined) {
                     throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file — commit the prebuilt bundle`);
@@ -90,6 +98,15 @@ export const extensionHandler: CapabilityHandler = {
                 }
             },
         });
+        if (donation !== undefined) {
+            yield {
+                kind: "log",
+                message:
+                    donation.donated > 0
+                        ? `Supported the creator with ${donation.donated} credits — thank you.`
+                        : "Already supported this creator this month — nothing charged.",
+            };
+        }
         yield { kind: "log", message: "Extension installed — reload the app to load its UI; agent contributions load next turn." };
     },
     status: async (ctx, id, config) => {

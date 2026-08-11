@@ -52,14 +52,15 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
-- Hold up the daemon's end of the creator pool: gate installing/enabling a `tier: "premium"` extension on the
-  owner's membership (asked of the platform fresh at the gate, src/platform/pool-status.ts), record a per-day
-  "was used" bit for premium extensions only (src/extensions/extension-active-use.ts — id + UTC day is ALL that
-  is recorded or reported, and free/private extensions report nothing, not even their names), re-send the
-  idempotent 7-day tail to the platform's ledger every few hours (src/platform/pool-report.ts), and relay
-  metered service runs verbatim (src/platform/pool-services.ts): the daemon adds the connect token and nothing
-  else — the member gate, the credit meter and the refund discipline are the platform's, and which services an
-  extension backend may spend the owner's credits on is a `permissions.daemon` glob approved at install.
+- Hold up the daemon's end of the creator pool — with NO usage telemetry, by design. Installing (or updating)
+  a `tier: "premium"` extension donates the owner's credits to its publisher through the platform
+  (src/platform/pool-donate.ts — the donation IS the premium gate, keyed on the checkout's own manifest
+  identity, refused installs leave no debris); enabling one re-checks the membership (src/platform/pool-status.ts);
+  nothing about what runs on this machine is ever reported. Metered service runs relay verbatim
+  (src/platform/pool-services.ts): the daemon adds the connect token and nothing else — the member gate, the
+  credit meter and the refund discipline are the platform's. The agent reaches the priced catalog through the
+  `services` CLI (bin/services + the baked services skill), scoped by the agent token's grant; which services
+  an extension backend may spend the owner's credits on is a `permissions.daemon` glob approved at install.
 
 ## Key files
 

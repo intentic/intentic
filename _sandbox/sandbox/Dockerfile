@@ -393,6 +393,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/vpn /usr/local/bin/vpn
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.
 COPY --chmod=755 _sandbox/sandbox/bin/otp /usr/local/bin/otp
+# The premium-services command the services skill teaches: list the platform's priced catalog, run one on the
+# owner's credits. Same shape as vpn/otp — it relays through the daemon and owns no economics; the member
+# gate, the meter and the refund discipline are all platform-side.
+COPY --chmod=755 _sandbox/sandbox/bin/services /usr/local/bin/services
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

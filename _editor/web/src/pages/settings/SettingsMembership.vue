@@ -89,7 +89,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                     Stripe reports this membership as “{{ membership.status }}” — manage it below if something needs attention.
                 </p>
                 <p class="text-xs text-muted">
-                    {{ sharePercent }}% of your membership goes to the creators of the premium extensions you actually use, on a
+                    {{ sharePercent }}% of every credit you spend — installing premium extensions, running services — goes to their creators, on a
                     <a :href="transparencyUrl" target="_blank" rel="noopener" class="underline">public ledger</a>.
                 </p>
                 <div class="mt-1">
@@ -102,7 +102,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 </p>
                 <p class="text-sm">
                     ${{ membership.priceUsd }}/month unlocks premium extensions everywhere you work — and {{ sharePercent }}% of it is shared
-                    with the creators of the ones you actually use, by use, on a
+                    with the creators of what you install and run, credit by credit, on a
                     <a :href="transparencyUrl" target="_blank" rel="noopener" class="underline">public ledger</a>.
                 </p>
                 <div class="mt-1">

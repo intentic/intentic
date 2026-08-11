@@ -5,6 +5,7 @@ import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
+import { seedDemoService } from "./pool/pool-demo.js";
 import { startRetention } from "./retention.js";
 import { startSandboxPool } from "./sandbox/sandbox-pool.js";
 import { startTracing } from "./tracing.js";
@@ -32,6 +33,9 @@ if (!config.email.apiKey || !config.email.from) {
 const prisma = createPrisma(config);
 startRetention(prisma, config, logger);
 startSandboxPool(prisma, config, logger);
+// The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
+// and self-swallowing — a catalog short one demo row must never hold the platform's boot.
+void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));
 const { app } = createApp(config, prisma, logger);
 
 /* Dev serves https (the SPA does too, for FedCM); prod runs plain http behind a TLS-terminating proxy.
