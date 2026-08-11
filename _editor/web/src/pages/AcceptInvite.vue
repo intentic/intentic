@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import type { InvitePreview } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
-import { noticeFrom } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 

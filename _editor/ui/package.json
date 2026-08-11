@@ -58,7 +58,11 @@
             "types": "./src/composables/useTextSize.ts",
             "default": "./src/composables/useTextSize.ts"
         },
-        "./styles/*": "./src/styles/*"
+        "./styles/*": "./src/styles/*",
+        "./async": {
+            "types": "./src/composables/async.ts",
+            "default": "./src/composables/async.ts"
+        }
     },
     "scripts": {
         "generate:icons": "bun run scripts/generateIconData.ts",

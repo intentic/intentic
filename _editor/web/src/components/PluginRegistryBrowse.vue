@@ -13,10 +13,10 @@ import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic-app/api-contract";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { BrandMark, cmp, type NoticeModel, RowGroup } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "../composables/extensions/useCapabilities";
-import { noticeFrom } from "../composables/useAsyncAction";
 import { checksOk, checksProblem } from "../pages/sandbox/discoverListing";
 
 /** What this card installs — the rows of any other kind are not its to offer. */

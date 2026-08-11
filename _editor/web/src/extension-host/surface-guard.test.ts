@@ -32,6 +32,9 @@ interface RecordedSurface {
     readonly contributes: readonly string[];
     readonly api: readonly string[];
     readonly listener?: readonly string[];
+    // api.sandbox's own members, recorded from 2.3.0 on — the sub-surface where drift actually happened (rpc
+    // arrived unrecorded; role() is why this exists). Optional because earlier entries predate it.
+    readonly sandboxApi?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -54,11 +57,30 @@ const apiMembers = (): string[] => {
     return [...text.slice(open + 1, end).matchAll(/^ {4}readonly (\w+)\??:/gm)].map((match) => match[1] ?? ``).toSorted();
 };
 
+// The members of one nested block of IntenticApi (e.g. `sandbox`), by the same indent rule apiMembers uses one
+// level down: prettier holds the file at four spaces, so a block's own members are the only entries at column 8.
+const nestedMembers = (block: string): string[] => {
+    const text = readFileSync(resolve(sdkRoot, `src/api.ts`), `utf8`);
+    const start = text.indexOf(`readonly ${block}: {`);
+    const open = text.indexOf(`{`, start);
+    let depth = 0;
+    let end = text.length;
+    for (let i = open; i < text.length; i++) {
+        if (text[i] === `{`) depth++;
+        else if (text[i] === `}` && --depth === 0) {
+            end = i;
+            break;
+        }
+    }
+    return [...text.slice(open + 1, end).matchAll(/^ {8}(?:readonly )?(\w+)\??[(:<]/gm)].map((match) => match[1] ?? ``).toSorted();
+};
+
 const liveSurface = (): RecordedSurface => ({
     manifest: Object.keys(ExtensionManifestSchema.shape).toSorted(),
     contributes: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape).toSorted(),
     api: apiMembers(),
     listener: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape.listener.unwrap().shape).toSorted(),
+    sandboxApi: nestedMembers(`sandbox`),
 });
 
 test(`the surface this version promises is the surface it has`, () => {

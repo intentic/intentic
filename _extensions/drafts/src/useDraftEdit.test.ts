@@ -1,4 +1,4 @@
-import type { DraftSummary } from "@intentic-app/api-contract";
+import type { DraftSummary } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDraftEdit } from "./useDraftEdit";
 

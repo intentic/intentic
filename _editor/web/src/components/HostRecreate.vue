@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
 import { cmp, Code, commandLang, Notice, type NoticeModel, Segmented, useOsPreference } from "@intentic/ui";
-import { noticeFrom } from "../composables/useAsyncAction";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import MachineRunLog from "../pages/sandbox/MachineRunLog.vue";

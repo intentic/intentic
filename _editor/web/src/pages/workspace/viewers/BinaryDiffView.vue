@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { formatBytes, ImageView, isRenderableImage, useDevice } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
-import { errorMessage } from "../../../composables/useAsyncAction";
 import { useLayout } from "../../../composables/useLayout";
 
 /* WHAT CHANGED, WHEN THE CHANGE ISN'T TEXT. Monaco's diff editor is the right tool for a file made of lines and

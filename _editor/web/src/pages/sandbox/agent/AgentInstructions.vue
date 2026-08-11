@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
 import { cmp, CopyButton, Notice, Row, RowGroup, Segmented } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -8,7 +9,6 @@ import { computed, ref } from "vue";
 import { sandboxJson } from "../../../composables/sandbox/sandboxClient";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
-import { useAsyncAction } from "../../../composables/useAsyncAction";
 import { useDraft } from "../../../composables/useDraft";
 import { asPercent, commitPercent } from "./numberInputs";
 import { verdictsOf } from "../savingsChart";

@@ -19,10 +19,10 @@
      a fade and a toggle — the same shape <Code> uses for a long command, for the same reason: a hard cut reads
      as a rendering bug. -->
 <script setup lang="ts">
-import type { DraftSummary } from "@intentic-app/api-contract";
-import { cmp } from "@intentic/ui";
+import type { DraftSummary } from "@intentic/sandbox-contract";
+import { cmp } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { attachmentPreview } from "../../composables/chat/attachmentPreviews";
+import { attachmentPreview } from "./attachmentPreviews";
 import { LONG_POST, paragraphsOf, postsATitle } from "./postText";
 
 const { draft, tone = `full` } = defineProps<{

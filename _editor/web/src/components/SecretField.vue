@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { cmp, Notice } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";
 import { useCapabilitySecret } from "../composables/extensions/useCapabilities";
 import { useSecrets } from "../composables/secrets/useSecrets";
-import { useAsyncAction } from "../composables/useAsyncAction";
 
 /* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight
  * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Sandbox Secrets tab

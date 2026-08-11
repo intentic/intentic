@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type IconName, useDevice } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
@@ -13,7 +14,6 @@ import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
 import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
-import { useNow } from "../composables/useNow";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { usePaneView } from "../composables/chat/useChat";

@@ -20,8 +20,8 @@
      the same argument the acceptance panel makes for stories. Escape closes the editor; the last words are
      written on the way out, never dropped. -->
 <script setup lang="ts">
-import type { DraftSummary } from "@intentic-app/api-contract";
-import { ProseField } from "@intentic/ui";
+import type { DraftSummary } from "@intentic/sandbox-contract";
+import { ProseField } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, computed, onBeforeUnmount } from "vue";
 import { postsATitle } from "./postText";
 

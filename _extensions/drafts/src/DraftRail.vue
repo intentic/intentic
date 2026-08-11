@@ -29,7 +29,7 @@ export interface DraftScope {
 </script>
 
 <script setup lang="ts">
-import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/ui";
+import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/extension-ui";
 import { computed } from "vue";
 
 const { all, platforms } = defineProps<{

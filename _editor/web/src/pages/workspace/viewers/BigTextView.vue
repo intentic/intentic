@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow } from "@intentic-app/api-contract";
 import { formatBytes } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../composables/workspace/fileWindow";
-import { errorMessage } from "../../../composables/useAsyncAction";
 import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../fileType";
 import CodeView from "./CodeView.vue";

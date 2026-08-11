@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Card, StatusBadge } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Popover from "primevue/popover";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { errorMessage } from "../../composables/useAsyncAction";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";

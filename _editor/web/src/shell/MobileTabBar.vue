@@ -4,8 +4,10 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
+import { activationBadge, detectActivations, extensionPath } from "../core-views/registry";
 import { useAgents } from "../composables/agents/useAgents";
-import { useDrafts } from "../composables/extensions/useDrafts";
+import { useCapabilities } from "../composables/extensions/useCapabilities";
+import { usePanels } from "../composables/extensions/usePanels";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { pushBadge } from "../composables/workspace/pushBadge";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -18,7 +20,13 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
  * things-to-act-on badge (agent drafts + uncommitted changes); Menu carries what the sandbox needs from its
  * owner, standing in for the desktop rail's sandbox chip, which a phone has nowhere to put. Everything the
  * desktop rail holds beyond these lives on the Menu page. Tabs that talk to the daemon are inert while it's
- * unreachable — Menu stays live because sandbox switching lives there. */
+ * unreachable — Menu stays live because sandbox switching lives there.
+ *
+ * REVIEW IS THE DRAFTS EXTENSION'S TILE, PROMOTED. The queue moved out of the app, so the tab reads its route
+ * and its owed-count off the same registry entry the desktop rail and the mobile menu render — naming the id
+ * for PLACEMENT, exactly as RAIL_GROUPS ranks extension ids, never reaching into the extension's data. With
+ * the pack off the tab keeps its place and falls back to the changes half alone: the workspace's own
+ * uncommitted work is shell business whatever the queue is. */
 
 interface Tab {
     readonly to: string;
@@ -32,17 +40,24 @@ interface Tab {
 }
 
 const { reachable } = useSandbox();
-const { owed: draftsOwed } = useDrafts();
 const { attention } = useAgents();
 const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
 
+// The drafts extension's activation, when the pack is on: its path is the tab's target and its badge count is
+// the queue's own `owed` — the identical number the desktop rail shows, because it is the same badge() call.
+const { panels } = usePanels();
+const { capabilities } = useCapabilities();
+const draftsTile = computed(() => {
+    const active = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === `intentic.drafts`);
+    return active === undefined ? undefined : { to: extensionPath(active.extension, active.activation), badge: activationBadge(active) };
+});
+
 // Things to act on: the drafts that owe a decision plus uncommitted changes. Once that total is zero but the
 // workspace still owes its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over —
 // so the fact looks the same on a phone as on a desk, and the tab never reads as empty over work that is still
-// waiting. The drafts half is useDrafts' `owed`, the same count the desktop rail's Drafts tile badges: this used
-// to be every draft in the store, so one post ever published left the tab permanently wearing a number.
+// waiting.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
     // A push in flight, or one standing unsent, comes first — it is the thing happening now, and on a phone the
     // panel that shows it is two taps away (pushBadge.ts).
@@ -50,7 +65,7 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
     if (push !== undefined) {
         return push;
     }
-    const count = draftsOwed.value + changes.count.value;
+    const count = (draftsTile.value?.badge?.count ?? 0) + changes.count.value;
     if (count > 0) {
         return { count, tooltip: `${count} to review` };
     }
@@ -69,7 +84,13 @@ const tabs = computed<readonly Tab[]>(() => [
             : {}),
     },
     { to: `/workspace`, label: `Files`, icon: `file-tree`, needsSandbox: true },
-    { to: `/drafts`, label: `Review`, icon: `send`, needsSandbox: true, ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }) },
+    {
+        to: draftsTile.value?.to ?? `/workspace`,
+        label: `Review`,
+        icon: `send`,
+        needsSandbox: true,
+        ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
+    },
     { to: `/menu`, label: `Menu`, icon: `bars`, needsSandbox: false, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
 

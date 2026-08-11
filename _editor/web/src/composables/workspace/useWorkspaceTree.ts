@@ -1,4 +1,5 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
+import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
@@ -7,7 +8,6 @@ import { readFileWindow } from "./fileWindow";
 import { resetEmptyDirsState } from "./useEmptyDirs";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import { noticeFrom, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "./workspaceScope";

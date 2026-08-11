@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { BrandMark, cmp, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";

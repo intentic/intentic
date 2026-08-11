@@ -26,7 +26,7 @@ import {
     writeUpdatePolicy,
 } from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
-import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 
 // Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
@@ -119,6 +119,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     commit,
                     source: extension.source,
                     enabled: extension.enabled,
+                    ...(ESSENTIAL_EXTENSIONS.has(identity) ? { essential: true } : {}),
                     // Absent rather than empty when nothing has been observed: the row must be able to tell
                     // "never exercised" from "exercised and uses none of these".
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
@@ -274,6 +275,14 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
             const extension = await find(input.id);
+            /* The switch is fixed for a surface whose engine runs regardless (see ESSENTIAL_EXTENSIONS): the
+             * scheduler would keep firing turns with the one page that can see, stop or approve them gone. The
+             * tab draws these switches as fixed, so this refusal is the backstop for a caller that skipped it. */
+            if (!input.enabled && ESSENTIAL_EXTENSIONS.has(extensionIdOf(extension.manifest))) {
+                throw new ORPCError("BAD_REQUEST", {
+                    message: `${extensionIdOf(extension.manifest)} is the control surface for an engine that runs regardless — it cannot be switched off`,
+                });
+            }
             /* The premium gate's second door: an installed premium extension that was later disabled (or
              * whose owner's membership lapsed) re-checks at the flip, the same fresh probe the install made.
              * Baked and workspace extensions have no capability entry and no tier — never gated. */

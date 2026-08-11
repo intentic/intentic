@@ -49,6 +49,32 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
     expect((await listed())["intentic.discord"]).toBe(true);
 });
 
+/* THE FIXED SWITCHES. Each of these is the only control surface for an engine the daemon runs regardless —
+ * the scheduler fires turns whether or not anything draws them — so "off" would not stop anything, only blind
+ * the owner to it. The defect this pins: disabling the automations page used to leave every cron, listener and
+ * approval firing with no way to see, stop or approve a single one. */
+test("an essential extension cannot be switched off, reads enabled over a stale entry, and says so on its row", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-essential-")));
+    // A disabled entry written before the concept existed (or by hand) — must not keep the surface shut.
+    await mkdir(join(workspace.root, ".intentic"), { recursive: true });
+    await writeFile(join(workspace.root, ".intentic/extension-enablement.json"), JSON.stringify({ "intentic.automations": false }));
+    const client = clientFor(createApp(services({ workspace })));
+
+    const rows = (await client.extensions.list()).extensions;
+    const automations = rows.find((extension) => extension.id === "intentic.automations");
+    expect(automations).toMatchObject({ enabled: true, essential: true });
+
+    // The refusal is the backstop for a caller that skipped the tab's fixed switch.
+    expect(await errorCode(client.extensions.setEnabled({ id: "intentic.automations", enabled: false }))).toBe("BAD_REQUEST");
+    // Enabling an already-enabled essential is a no-op, not an error — idempotent callers stay simple.
+    await client.extensions.setEnabled({ id: "intentic.automations", enabled: true });
+
+    // The set is exactly the fail-active surfaces; a fail-safe one (drafts feeds only on prior approvals)
+    // keeps its ordinary switch.
+    const essentials = rows.filter((extension) => extension.essential === true).map((extension) => extension.id);
+    expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.maintenance", "intentic.workflows"]);
+});
+
 test("re-enabling a premium extension re-checks the membership and refuses without one", async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-premium-")));
     // The baked discord extension wearing a premium capability entry — what a git-installed premium extension
@@ -134,6 +160,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.deployments",
         "intentic.discord",
         "intentic.documentation",
+        "intentic.drafts",
         "intentic.git-history",
         "intentic.google-workspace",
         "intentic.imap",

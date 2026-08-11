@@ -3902,6 +3902,16 @@ export const ExtensionSummarySchema = z.object({
     // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
     enabled: z.boolean(),
+    /* THE SWITCH IS FIXED ON — this extension is the only control surface for an engine the daemon runs
+     * regardless. The automations scheduler fires turns on a clock whether or not anything draws them, and
+     * hiding the one page that can see, stop or approve those fires would not stop the spend — it would only
+     * remove the owner's ability to notice it. So the daemon refuses the flip, and the tab draws the switch as
+     * fixed with this fact as the reason.
+     *
+     * Declared by the CORE about its own engines' surfaces, never by a manifest: a field an extension could set
+     * on itself would be a pack making itself un-removable, which is a self-granted privilege the approval flow
+     * exists to prevent. */
+    essential: z.boolean().optional(),
     /* How much of the reach this extension asked for it has actually used, keyed by the DECLARED entry so a row
      * joins straight onto `permissions.sandbox`. Absent for an extension that has never been observed calling
      * anything, which is a different claim from "uses none of them" and has to stay tellable: a freshly installed
@@ -4957,6 +4967,7 @@ export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 // `invalid` = filenames that failed to parse. Agent-written files are a trust boundary — without this a typo'd
 // draft would silently never post.
 export const DraftsListSchema = z.object({ drafts: z.array(DraftSummarySchema), invalid: z.array(z.string()) });
+export type DraftsList = z.infer<typeof DraftsListSchema>;
 // entryId, not a bare string: the id becomes a filename under .intentic/drafts/.
 export const DraftIdParamSchema = z.object({ id: entryId });
 

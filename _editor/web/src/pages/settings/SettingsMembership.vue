@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { MembershipState } from "@intentic-app/api-contract";
 import { Card, Icon } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { errorMessage } from "../../composables/useAsyncAction";
 import { apiClient } from "../../composables/useApi";
 import { environment } from "../../environments/environment";
 

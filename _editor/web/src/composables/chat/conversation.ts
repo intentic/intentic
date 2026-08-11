@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/ui/async";
 import {
     type AgentCommand,
     type AgentEvent,
@@ -19,7 +20,6 @@ import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { errorMessage } from "../useAsyncAction";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
 import { providerModels, providerTabs } from "./providerCatalog";

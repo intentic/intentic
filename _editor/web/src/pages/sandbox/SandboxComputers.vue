@@ -1,17 +1,7 @@
 <script setup lang="ts">
 import type { Computer, MachineSandboxOp } from "@intentic/sandbox-contract";
-import {
-    type MachineSandboxGroup,
-    InfoHint,
-    MachineDetail,
-    Notice,
-    type NoticeModel,
-    RowGroup,
-    StatusBadge,
-    type StatusVariant,
-    timeAgo,
-} from "@intentic/ui";
-import { noticeFrom } from "../../composables/useAsyncAction";
+import { InfoHint, MachineDetail, type MachineSandboxGroup, Notice, type NoticeModel, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import { noticeFrom, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -22,7 +12,6 @@ import MachineRunLog from "./MachineRunLog.vue";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
-import { useNow } from "../../composables/useNow";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
  *

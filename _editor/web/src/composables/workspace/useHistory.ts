@@ -1,9 +1,9 @@
 import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
+import { useAsyncAction } from "@intentic/ui/async";
 import { type QueryClient, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { useAsyncAction } from "../useAsyncAction";
 import { useChat } from "../chat/useChat";
 import { resetEditBuffers } from "./useEditBuffers";
 import { sandboxKey } from "../sandbox/useSandbox";

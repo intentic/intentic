@@ -60,6 +60,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. The SURFACE only: what can wake an agent and what is worth starting from are served together by the daemon's trigger catalogue (`GET /automations/catalog`) — its own sources merged with every pack's `contributes.listener` and `contributes.automationTemplates` — and this page names no integration of its own. |
 | `deployments` | UI view + backend | Container health, incidents and one-click redeploys over a connected Komodo. Its whole Komodo side (client, board translation, repo→stack links, fix turns) is its backend — the daemon core carries no Komodo feature; the credential is read through the daemon's connection route, declared in `permissions.daemon`. |
+| `drafts` | UI view | The approval inbox for posts the agent proposed: approve/edit/reschedule/reject, with the publish engine (store, publisher automation, routes) staying in the daemon. Was an in-app page; the move minted `api.sandbox.role()` and the kit's `BrandMark`/`NoticeStack`/`useNow`/`useAsyncAction`. |
 | `documentation` | UI view + agent CLI + plugin | Plain-language architecture docs for every repo and package: a map-first agent run writes them as a reviewable draft, the owner publishes them into the repo. Ships the `intentic-docs` CLI (`contributes.bin`) and the `documenting` skill (`contributes.agent`). |
 | `git-history` | UI document | Every repository's commit graph, as an icon on its Workspace tree row: lanes and merges, a commit's changed files, and the write actions on one (branch, tag, checkout, cherry-pick, revert, drop, merge, rebase, reset) — plus the branch switcher. The uncommitted half of the same story stays in the app's Changes panel. |
 | `knowledge` | UI view + backend + agent CLI + plugin | The owner's knowledge vault: a workspace folder of markdown notes that is also a typed graph — `type:` makes a note a thing, a `[[link]]` in a header field is a named relationship. Search, the note, what links to it, and the map around it; the vault's own vocabulary keeps the words consistent without ever refusing a capture. Ships the `kb` CLI (`contributes.bin`, built from the same engine its backend serves) and the `knowledge` skill (`contributes.agent`). |
@@ -126,6 +127,16 @@ switch reachable) and drops out of `enabledExtensions()`, which every consumer t
 up iterates: no agent plugin dir, no PATH entry, no listener provider, no connector card, no contributed env
 var, no autoStart process. In the browser the loader retires its activation, so its views, viewers, commands
 and file bindings unwind without a reload.
+
+**Three switches are fixed on** — `automations`, `workflows`, `maintenance` (`ESSENTIAL_EXTENSIONS` in the
+daemon). Each is the sole control surface for an engine the daemon runs regardless: the scheduler fires turns
+on its own, a running workflow advances daemon-side, the probe runner spends machine time on its tick. "Off"
+would not stop any of that — it would only remove the owner's ability to see, stop or approve it, which is how
+disabling the automations page once left every cron and approval firing invisibly. The daemon refuses the flip
+and the tab draws the switch as fixed with the reason. Declared by the core, never by a manifest: a field an
+extension could set on itself would be a pack making itself un-removable. Drafts is deliberately NOT in the
+set — its publisher acts only on drafts the owner already approved, so a hidden surface starves that engine
+rather than blinding anyone.
 
 Not everything converges at the same moment, and the tab says which per extension: `views`, `viewers`,
 `commands`, `files`, `processes`, `capabilities`, `listener` and `settings` are immediate; `agent` and `bin` are

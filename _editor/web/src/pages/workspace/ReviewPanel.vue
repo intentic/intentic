@@ -2,6 +2,7 @@
 import Button from "primevue/button";
 import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
@@ -21,7 +22,6 @@ import { ahead, behind, syncable, unpublished } from "../../composables/workspac
 import { COMMIT_SCOPE, useChanges, workingStatKey } from "../../composables/workspace/useChanges";
 import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
-import { useNow } from "../../composables/useNow";
 import { useReceipts } from "../../composables/receipts";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";

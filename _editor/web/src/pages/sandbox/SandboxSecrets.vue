@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { cmp, FilterBar, NoticeStack, type NoticeModel, RowGroup, Segmented } from "@intentic/ui";
+import { cmp, FilterBar, type NoticeModel, NoticeStack, RowGroup, Segmented } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -11,7 +12,6 @@ import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useSecretInventory } from "../../composables/secrets/useSecrets";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 
 /* THE ONE PLACE EVERY CREDENTIAL IN THIS SANDBOX IS VISIBLE — and, past a dozen of them, a list built to be

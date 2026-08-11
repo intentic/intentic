@@ -2,8 +2,8 @@
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* NEW EXTENSION — the whole form, because there is almost nothing to ask.
  *

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
 import { Card, cmp, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
@@ -12,7 +13,6 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 

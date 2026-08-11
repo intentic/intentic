@@ -9,7 +9,6 @@ import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { useDrafts } from "../composables/extensions/useDrafts";
 import { useRole } from "../composables/sandbox/useRole";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
@@ -72,8 +71,6 @@ const tileLabel = (tile: AreaTile): string => (tile.badge?.tooltip === undefined
 
 const { panels, settled: panelsSettled } = usePanels();
 const { capabilities, settled: capabilitiesSettled } = useCapabilities();
-// Drafts is agent-driven; its tile is permanent and the badge carries how much is owed (see draftsBadge).
-const { owed: draftsOwed, broken: draftsBroken } = useDrafts();
 // The agent's browsers, on the same appear-on-content terms. Polled loosely: this is the always-on read that
 // makes the tile show up mid-turn, and the view itself polls tighter once it is on screen.
 const { sessions: browsers } = useBrowsersQuery();
@@ -151,21 +148,6 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
 });
 
-/* WHAT THE DRAFTS TILE SAYS — the queue's own `owed` count (useDrafts defines it and says why it excludes what it
- * excludes). Danger tone once something is broken rather than merely waiting: a post that failed and a post
- * awaiting approval want different afternoons, and a bare number cannot say which is in it. */
-const draftsBadge = computed<ViewBadge | undefined>(() => {
-    const owed = draftsOwed.value;
-    const broken = draftsBroken.value;
-    if (owed === 0) {
-        return undefined;
-    }
-    // Phrased to follow the tile's name, which tileLabel puts in front of it: "Drafts · 3 waiting on you".
-    const tooltip =
-        broken === 0 ? `${owed} waiting on you` : owed === broken ? `${broken} failed to post` : `${owed} waiting on you, ${broken} failed to post`;
-    return { count: owed, ...(broken > 0 ? { tone: `danger` } : {}), tooltip };
-});
-
 // The thin shell: three always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
 // workspace content (repo facts from /panels) and contribute their own sidebar elements (Infrastructure, Live
 // status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
@@ -196,22 +178,6 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         // The other half of that pair — a branching tree, which is what this view opens on anyway.
         icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
-    },
-    /* PERMANENT, AND THE BADGE CARRIES THE QUEUE. Drafts used to appear only once something was waiting, which made
-     * it the one navigation tile whose arrival re-seated every tile beneath it — and it arrived on someone else's
-     * schedule, an agent proposing a post overnight. A column that moves under the hand has to be re-read. It is
-     * now an AREA on the terms ext-maintenance argued for its own: the surface exists whether or not anything is in
-     * it, so it can be visited to confirm the queue is empty, and the badge rather than the tile's existence is the
-     * signal. The phone has always worked this way — its "Review" tab is fixed and badges the same fact.
-     *
-     * A core shell surface, not an extension (the mobile bottom bar depends on it too). Where it lands among the
-     * others is RAIL_GROUPS' call like every other tile's, not a splice here. */
-    {
-        id: `drafts`,
-        to: `/drafts`,
-        label: `Drafts`,
-        icon: `send`,
-        ...(draftsBadge.value === undefined ? {} : { badge: draftsBadge.value }),
     },
 ]);
 /* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that

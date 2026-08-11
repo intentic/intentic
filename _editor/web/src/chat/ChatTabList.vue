@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { cmp, ContextMenu, type IconName, SearchBar } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
 import { createTitleEdit } from "../composables/agents/titleEdit";
@@ -14,7 +15,6 @@ import {
     unreadBadge,
 } from "../composables/agents/agentStatus";
 import { sessionCategory } from "../composables/sessionCategory";
-import { useNow } from "../composables/useNow";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import HoverCard from "../components/HoverCard.vue";

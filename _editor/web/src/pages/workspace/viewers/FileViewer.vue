@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { CopyButton, useDevice } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
-import { errorMessage } from "../../../composables/useAsyncAction";
 import { sha256Hex } from "../../../composables/workspace/contentHash";
 import { readFileWindow } from "../../../composables/workspace/fileWindow";
 import { mediaUrl } from "../../../composables/workspace/mediaUrl";

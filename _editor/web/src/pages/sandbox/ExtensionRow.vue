@@ -2,11 +2,11 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
 import { BrandMark, cmp, StatusBadge } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
-import { errorMessage } from "../../composables/useAsyncAction";
 import type { ExtensionEntry } from "../../composables/extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
@@ -231,7 +231,24 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 />
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />
                 <span v-else-if="entry.state.label !== undefined" class="text-2xs text-subtle">{{ entry.state.label }}</span>
+                <!-- An essential surface's switch is FIXED, not hidden: a control that vanishes reads as a bug,
+                     one that is visibly on and immovable reads as a fact. The title carries the why — its engine
+                     runs whether or not anything draws it, so off would not stop anything, only blind the owner
+                     to it. The daemon refuses the flip regardless; this only says so before the click. -->
+                <span
+                    v-if="entry.extension.essential"
+                    :title="`Always on — this is the only window onto work the sandbox does on its own.`"
+                    class="cursor-not-allowed"
+                >
+                    <ToggleSwitch
+                        class="ui-switch-sm pointer-events-none"
+                        :model-value="true"
+                        disabled
+                        :aria-label="`${extensionIdOf(manifest)} is always on`"
+                    />
+                </span>
                 <ToggleSwitch
+                    v-else
                     class="ui-switch-sm"
                     :model-value="entry.extension.enabled"
                     :disabled="pending"

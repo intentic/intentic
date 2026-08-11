@@ -2,13 +2,13 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { cmp, Segmented, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useExtensions } from "../../composables/extensions/useExtensions";
-import { errorMessage } from "../../composables/useAsyncAction";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import { router } from "../../router";
 import { updateBrief } from "./extensionBrief";

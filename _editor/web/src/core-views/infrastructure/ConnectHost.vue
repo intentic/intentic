@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
 import { cmp, Code, commandLang, InfoHint, Notice, type NoticeModel, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
+import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { noticeFrom, noticeOf } from "../../composables/useAsyncAction";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 import { zoneFromUrl } from "@intentic/sandbox-contract";

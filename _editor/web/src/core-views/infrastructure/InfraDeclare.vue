@@ -2,10 +2,10 @@
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
 import { Card, cmp, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import { bashCommand } from "../../environments/scriptCommand";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { useDeployments } from "../../composables/extensions/useDeployments";

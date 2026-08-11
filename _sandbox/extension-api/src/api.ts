@@ -310,6 +310,16 @@ export interface IntenticApi {
         // endpoints. Undefined until the sandbox has registered its address. Not needed for `request`/`json`
         // (those take a path and inject auth) — only when the raw origin must be shown to the user.
         origin(): string | undefined;
+        /* THE SIGNED-IN USER'S TRUST TIER on the active sandbox — `owner`, `maintainer`, `collaborator` or
+         * `viewer` — reactive when read inside a computed, like `reachable`. For AFFORDANCES ONLY: every route
+         * is independently floored by the daemon, so what this gates is whether an Approve button renders, never
+         * whether the call would succeed. A view that shows a viewer buttons the daemon will refuse teaches them
+         * that buttons lie; this is how a view says less instead.
+         *
+         * The first consumer is the drafts queue (approve/reject are maintainer-and-up), and it existed as a
+         * private composable before it was public API — which is the pattern this package's history warns about:
+         * a surface only its own app needs is a surface nobody else can build the same feature on. */
+        role(): "owner" | "maintainer" | "collaborator" | "viewer";
     };
     readonly workspace: {
         repos(): readonly RepoFacts[];

@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/vue-query";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { errorMessage } from "../useAsyncAction";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 
 // The workspace upload queue: drops (and file-input picks) funnel through here instead of a one-shot spinner, so a

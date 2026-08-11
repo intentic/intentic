@@ -10,4 +10,14 @@
  * A git-installed bundle resolves its bare specifiers through the import map in index.html, which carries the
  * barrel alone — so nothing is exported here that the barrel does not also export, and a third-party author
  * reaching for `@intentic/extension-ui` is missing none of it. */
-export { formatBytes, formatDate, formatDateTime, formatDayMonth, formatTime, formatTimestamp, formatTokens, timeAgo } from "@intentic/ui/format";
+export {
+    formatBytes,
+    formatDate,
+    formatDateTime,
+    formatDayMonth,
+    formatTime,
+    formatTimestamp,
+    formatTokens,
+    formatWeekdayTime,
+    timeAgo,
+} from "@intentic/ui/format";

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Card, cmp, CopyButton, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../composables/extensions/memoryImport";
 import { useSandbox } from "../../../composables/sandbox/useSandbox";
-import { noticeFrom } from "../../../composables/useAsyncAction";
 import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
 
 /* Bring context from another AI assistant into this sandbox's agent memory files. A two-step copy-paste rather

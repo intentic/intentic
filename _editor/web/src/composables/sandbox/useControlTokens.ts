@@ -1,5 +1,5 @@
 import { ref, watch } from "vue";
-import { noticeFrom, useAsyncAction } from "../useAsyncAction";
+import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { sandboxJson } from "./sandboxClient";
 import { jsonBody } from "./jsonBody";
 import { useSandbox } from "./useSandbox";

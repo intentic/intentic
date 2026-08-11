@@ -65,7 +65,12 @@ export function useExtensionList() {
                     extension.advisory !== undefined
                         ? { label: `blocked`, variant: `danger`, badge: true, attention: true }
                         : extension.health?.state === `unhealthy`
-                          ? { label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`, variant: `warning`, badge: true, attention: true }
+                          ? {
+                                label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,
+                                variant: `warning`,
+                                badge: true,
+                                attention: true,
+                            }
                           : undefined;
                 const registryDetail =
                     extension.advisory !== undefined

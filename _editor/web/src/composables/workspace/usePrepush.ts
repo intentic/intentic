@@ -1,8 +1,8 @@
 import type { PrepushRun } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
-import { errorMessage } from "../useAsyncAction";
 
 /* THE PRE-PUSH CHECK, browser-side — start it, watch it, stop it.
  *

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { formatTokens, ProgressRing, useDevice } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { requestLandAgent } from "../composables/agents/agentActions";
 import { useRole } from "../composables/sandbox/useRole";
-import { errorMessage } from "../composables/useAsyncAction";
 import OriginMark from "../components/OriginMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../composables/agents/laneDrop";

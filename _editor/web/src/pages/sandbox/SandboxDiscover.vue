@@ -2,6 +2,7 @@
 import Button from "primevue/button";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
 import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, Segmented } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../composables/agents/agentActions";
@@ -10,7 +11,6 @@ import { useExtensions } from "../../composables/extensions/useExtensions";
 import { useRegistry } from "../../composables/extensions/useRegistry";
 import { useRole } from "../../composables/sandbox/useRole";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import { auditBrief, updateBrief } from "./extensionBrief";
 import DiscoverCard from "./DiscoverCard.vue";

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useNow } from "@intentic/ui/async";
 import GateCard from "./GateCard.vue";
 import { formatElapsed } from "../composables/agents/agentStatus";
 import { bootSteps, bootStartedAt } from "../composables/sandbox/useDaemonBoot";
-import { useNow } from "../composables/useNow";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Shown while the active daemon is REACHED but not yet READY — the window the sandbox spends listening on

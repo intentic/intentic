@@ -13,10 +13,10 @@
      That path is simply folded away until someone says it is theirs. -->
 <script setup lang="ts">
 import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { apiClient } from "../composables/useApi";
-import { noticeFrom } from "../composables/useAsyncAction";
 
 // `email` is shown, not sent: the server addresses this to the session's own account and takes no recipient,
 // so what the caller passes here is only what the confirmation line reads back.

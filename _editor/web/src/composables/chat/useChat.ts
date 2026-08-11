@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/ui/async";
 import {
     type AgentCommand,
     type AgentHarness,
@@ -49,7 +50,6 @@ import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useSandbox } from "../sandbox/useSandbox";
-import { errorMessage } from "../useAsyncAction";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
 export interface ChatSession {

@@ -168,6 +168,11 @@ export { type Device, useDevice } from "./composables/useDevice.js";
  * chat panel is never as wide as the screen. */
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
+/* The wall clock and the mutation-report shape moved here from the web app when the drafts queue became an
+ * extension: both are exactly what every view with a live readout or a user-facing mutation hand-rolls, and the
+ * app's four independent `now` intervals were the original argument for the first one. */
+export { useNow } from "./composables/useNow.js";
+export { errorMessage, noticeFrom, noticeOf, useAsyncAction } from "./composables/useAsyncAction.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
 // The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns
 // the picked colour into the ramps every surface, border and link resolves through) — a caller only ever

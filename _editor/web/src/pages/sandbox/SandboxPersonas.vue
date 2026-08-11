@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
 import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import PersonaForm, { type PersonaDraft, type PersonaGrantable } from "./PersonaForm.vue";
@@ -8,7 +9,6 @@ import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccou
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { identityHue } from "../../composables/identityHue";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
-import { noticeFrom } from "../../composables/useAsyncAction";
 
 /* THE PERSONAS this sandbox wears when it acts outside, and the one place they are created and edited.
  *

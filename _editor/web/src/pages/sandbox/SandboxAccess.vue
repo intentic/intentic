@@ -2,13 +2,13 @@
 import type { InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
 import { Avatar, cmp, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Select from "primevue/select";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { apiClient } from "../../composables/useApi";
-import { noticeFrom } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { identityHue } from "../../composables/identityHue";

@@ -1,4 +1,4 @@
-import type { DraftSummary } from "@intentic-app/api-contract";
+import type { DraftSummary } from "@intentic/sandbox-contract";
 import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { type PostEdit, postEdit } from "./postText";
 

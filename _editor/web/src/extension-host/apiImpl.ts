@@ -311,6 +311,9 @@ export const createExtensionApi = (
                 const base = useSandbox().daemonUrl.value;
                 return base === undefined || base === `` ? undefined : base;
             },
+            // The same optimistic default useRole makes (`owner` until the platform summary loads — loopback
+            // sandboxes never carry one), and for the same reason: this gates affordances, the daemon gates acts.
+            role: () => useSandbox().active.value?.role ?? `owner`,
         },
         workspace: {
             repos: () => host.repos(),

@@ -17,4 +17,8 @@
 // for its own service, and a `listener` may declare a second narrowing field (`automation.branchField`) for a
 // source whose events carry one. Both fold into the daemon's trigger catalogue, so a pack that knows something
 // worth waking on says so itself instead of being written into the automations surface. Additive.
-export const extensionApiVersion = "2.2.0";
+// 2.3.0 adds `api.sandbox.role()` — the signed-in user's trust tier, for affordance gating (the daemon floors
+// every route regardless). Surfaced when the drafts queue moved out of the app: approve/reject are
+// maintainer-and-up, and no extension could say so. Additive. The surface guard grew a `sandboxApi` member
+// list with this release, so additions below the top-level grain are recorded from here on.
+export const extensionApiVersion = "2.3.0";

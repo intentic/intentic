@@ -22,6 +22,10 @@ export {
     Avatar,
     BarChart,
     BottomSheet,
+    /* <BrandMark> ships because the drafts queue is the second surface to draw a platform as its brand (the
+     * capability cards were the first) — and because its fallback is the part a hand-roll skips: a platform
+     * with no installed connector still has to render as SOMETHING, and the monogram is that something. */
+    BrandMark,
     Card,
     /* The window a copy has to go through. Missing from this surface is why git-history called
      * `navigator.clipboard` directly and copying a commit SHA out of a POPPED-OUT panel silently did nothing:
@@ -67,6 +71,11 @@ export {
     MarkdownFigure,
     type NavGroup,
     NavRail,
+    /* <NoticeStack> and its model ship beside <ConfirmDialog> for the same reason <InfoDialog> does: a view
+     * with several async actions needs somewhere for their failures to land that isn't one action's own row,
+     * and a hand-rolled error strip is the first thing to disagree with the app's about tone and dismissal. */
+    type NoticeModel,
+    NoticeStack,
     Page,
     /* <PageAction> ships beside <PageHeader> for the same reason <Row> ships beside <RowGroup>: handing out the
      * container without the thing that goes in it is what made every view invent one. Five extensions filled
@@ -112,6 +121,14 @@ export {
      * decided. Ships because a keyboard-navigable list is the shape half these views are, and the parts a
      * hand-roll leaves out (wrapping at the ends, keeping the active row in view) are invisible on a mouse. */
     useListNavigation,
+    /* <useNow> and <useAsyncAction> ship because the drafts queue was the first extension with a live countdown
+     * and a page of mutations — the two shapes every such view hand-rolls, one interval and one busy flag at a
+     * time, each subtly wrong (a clock that keeps ticking with nothing on screen; a double-click firing twice). */
+    useNow,
+    errorMessage,
+    noticeFrom,
+    noticeOf,
+    useAsyncAction,
     /* "Is my own element too narrow for this layout" — the question every extension view actually means, since it
      * renders into a pane the reader can drag to half its width, not into the window. */
     useNarrow,
@@ -119,7 +136,17 @@ export {
 } from "@intentic/ui";
 // Also reachable as `@intentic/extension-ui/format` — see the note there for why an extension's pure logic
 // wants them without the components attached.
-export { formatBytes, formatDate, formatDateTime, formatDayMonth, formatTime, formatTimestamp, formatTokens, timeAgo } from "./format.js";
+export {
+    formatBytes,
+    formatDate,
+    formatDateTime,
+    formatDayMonth,
+    formatTime,
+    formatTimestamp,
+    formatTokens,
+    formatWeekdayTime,
+    timeAgo,
+} from "./format.js";
 /* The figure vocabulary that <Markdown> renders from prose and <MarkdownFigure> renders from data. Types only —
  * an extension needs them to BUILD a figure out of facts it already holds (a dependency graph, a staleness
  * tally) rather than round-tripping through markdown to draw one. The parser and the document splitter stay out

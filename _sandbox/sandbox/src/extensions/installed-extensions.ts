@@ -114,13 +114,32 @@ const workspaceExtensions = async (
 // only a safety net), then the git-installed extension capabilities whose checkout still parses, then the
 // workspace extensions. Every row carries the owner's switch; nothing is filtered here (see enabledExtensions).
 // `invalid` is workspace-only by construction: the other sources were validated at bake or install time.
+/* THE EXTENSIONS WHOSE SWITCH IS FIXED ON — each is the sole control surface for an engine the daemon runs
+ * regardless of any switch. Turning the page off would not stop the engine; it would only blind the owner to it:
+ *   automations  — the scheduler, the listeners and the approval queue fire turns (spend, edits) on their own.
+ *   workflows    — a running workflow advances daemon-side, and its release-gate webhook answers CI, with the
+ *                  page holding the only stop button.
+ *   maintenance  — the probe runner spends real machine time (audits hit the network, knip type-checks the
+ *                  tree) on its own tick, and the panel is the only place that work is visible.
+ * Keyed by manifest identity (publisher.name), the same key the enablement file uses. A CORE list on purpose,
+ * never a manifest field: essentialness is a claim about the relationship between a daemon engine and its one
+ * surface, and a field an extension could set on itself would be a pack making itself un-removable.
+ *
+ * Contrast drafts, which is NOT here though the daemon fires its publisher on its own: that engine acts only on
+ * drafts the owner already approved, so a hidden surface starves it rather than blinding anyone — fail-safe,
+ * where these three fail-active. */
+export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows", "intentic.maintenance"]);
+
 export const extensionInventory = async (
     services: ExtensionHost,
 ): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
     const capabilities = await services.capabilities.list();
-    // Keyed by publisher.name, not the capability entry id, so the switch survives a remove/re-add.
+    // Keyed by publisher.name, not the capability entry id, so the switch survives a remove/re-add. An
+    // essential extension reads enabled whatever the file says — a stale "false" written before the concept
+    // existed must not keep the scheduler's only window shut.
     const enablement = await readExtensionEnablement(services.workspace.root);
-    const enabledOf = (manifest: ExtensionManifest): boolean => enablement[extensionIdOf(manifest)] !== false;
+    const enabledOf = (manifest: ExtensionManifest): boolean =>
+        ESSENTIAL_EXTENSIONS.has(extensionIdOf(manifest)) || enablement[extensionIdOf(manifest)] !== false;
     const installed: InstalledExtension[] = [];
     for (const capability of capabilities) {
         if (capability.kind !== "extension") {

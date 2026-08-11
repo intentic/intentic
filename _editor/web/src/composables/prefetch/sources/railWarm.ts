@@ -1,6 +1,5 @@
 import { fetchBrowsers, browsersKey } from "../../browser/browsersQuery";
 import { capabilitiesKey, fetchCapabilities } from "../../extensions/useCapabilities";
-import { draftsKey, fetchDrafts } from "../../extensions/useDrafts";
 import { fetchPanels, panelsKey } from "../../extensions/usePanels";
 import { fetchSubagents, subagentsKey } from "../../subagents/subagentsQuery";
 import { fetchModules, modulesKey } from "../../workspace/useModules";
@@ -36,7 +35,6 @@ export const railWarmSource = (): readonly WarmTask[] => [
     // review that groups on arrival and one that regroups a beat later. (The agent review needs no entry here:
     // its layout rides its own diff, which this loader already warms.)
     warmQuery(`rail:workspace-modules`, `rail`, { queryKey: modulesKey(), queryFn: fetchModules }),
-    warmQuery(`rail:drafts`, `rail`, { queryKey: draftsKey, queryFn: fetchDrafts }),
     warmQuery(`rail:panels`, `rail`, { queryKey: panelsKey, queryFn: fetchPanels }),
     warmQuery(`rail:capabilities`, `rail`, { queryKey: capabilitiesKey, queryFn: fetchCapabilities }),
     warmQuery(`rail:browsers`, `rail`, { queryKey: browsersKey, queryFn: fetchBrowsers }),

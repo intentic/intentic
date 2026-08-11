@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { errorMessage } from "../useAsyncAction";
+import { errorMessage } from "@intentic/ui/async";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
 import { unregistered } from "./agentStatus";
 import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";

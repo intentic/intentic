@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Row, RowGroup } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../composables/useApi";
-import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 

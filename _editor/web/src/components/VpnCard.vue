@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { cmp, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
-import { errorMessage } from "../composables/useAsyncAction";
 import { useVpn } from "../composables/sandbox/useVpn";
 
 /* The sandbox's VPN tunnels: what is carrying traffic right now, and the connect/disconnect controls for it.

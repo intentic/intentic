@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
 import { Card, formatDateTime, type NoticeModel, NoticeStack, StatusBadge } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { bundleDownloadUrl, useBundleExports } from "../../composables/sandbox/useBundleExports";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { useAsyncAction } from "../../composables/useAsyncAction";
 
 /* MOVING A SANDBOX — export this one's environment to a file, or restore one into this sandbox.
  *

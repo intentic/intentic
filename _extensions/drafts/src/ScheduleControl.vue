@@ -10,7 +10,7 @@
      SIZE AND COLOUR ARE THE CALLER'S. No text-size class here, so the same control reads as body text under a
      post being reviewed and as a small fact beside a scheduled one — the two placements it has. -->
 <script setup lang="ts">
-import { cmp, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/ui";
+import { cmp, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, ref } from "vue";
 
 const { at } = defineProps<{

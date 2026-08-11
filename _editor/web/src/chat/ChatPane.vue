@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon, type IconName, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -24,7 +25,6 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
-import { errorMessage } from "../composables/useAsyncAction";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { usePersonas } from "../composables/sandbox/usePersonas";

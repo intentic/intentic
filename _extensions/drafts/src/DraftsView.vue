@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { DraftSummary } from "@intentic-app/api-contract";
+import { type DraftSummary, roleAtLeast } from "@intentic/sandbox-contract";
 import {
     BrandMark,
+    Button,
     cmp,
     ConfirmDialog,
     formatTimestamp,
@@ -13,22 +14,20 @@ import {
     SplitView,
     StatusBadge,
     timeAgo,
-} from "@intentic/ui";
-import Button from "primevue/button";
+    useAsyncAction,
+    useNow,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useRole } from "../composables/sandbox/useRole";
-import { useAsyncAction } from "../composables/useAsyncAction";
-import { useDrafts } from "../composables/extensions/useDrafts";
-import { useExtensions } from "../composables/extensions/useExtensions";
-import DraftMeta from "./drafts/DraftMeta.vue";
-import DraftPost from "./drafts/DraftPost.vue";
-import DraftRail, { type DraftScope } from "./drafts/DraftRail.vue";
-import { countdownWords, limitOf, postsATitle } from "./drafts/postText";
-import PostEditor from "./drafts/PostEditor.vue";
-import ScheduleControl from "./drafts/ScheduleControl.vue";
-import { useDraftEdit } from "./drafts/useDraftEdit";
-import { useNow } from "../composables/useNow";
+import DraftMeta from "./DraftMeta.vue";
+import DraftPost from "./DraftPost.vue";
+import DraftRail, { type DraftScope } from "./DraftRail.vue";
+import { host } from "./host";
+import { countdownWords, limitOf, postsATitle } from "./postText";
+import PostEditor from "./PostEditor.vue";
+import ScheduleControl from "./ScheduleControl.vue";
+import { useDraftEdit } from "./useDraftEdit";
+import { useDrafts } from "./useDrafts";
+import { usePlatformCatalog } from "./usePlatformCatalog";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
  * file per draft into .intentic/drafts/ (taught by the daemon's drafts skill); this page is the owner's
@@ -92,8 +91,7 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 // Publishing is the ship tier: below maintainer the queue is a read — the posts, their schedule, their
 // status — with every approve/reject/reschedule affordance absent (the daemon floors the draft mutations
 // the same way). Watching what is about to go out is exactly what a viewer is for.
-const { canShip } = useRole();
-const { enabled: enabledExtensions } = useExtensions();
+const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
 
 /* WHO POSTS IT, from the manifest that owns that fact. `platform` is a bare string by contract (a new platform
@@ -102,14 +100,7 @@ const { notice: actionError, run } = useAsyncAction();
  * here could have guessed: X's mark is black, so its entry forces a light one. A platform with no installed
  * connector still renders, because BrandMark falls through to a monogram, and that is the case that has to
  * keep working: a draft can be proposed for somewhere this sandbox cannot yet post. */
-const platformCatalog = computed(
-    () =>
-        new Map(
-            enabledExtensions.value
-                .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
-                .map((contribution) => [contribution.id, contribution.catalog] as const),
-        ),
-);
+const platformCatalog = usePlatformCatalog();
 /* Keyed by the platform ID as well as by a draft, because the rail's rows ARE platforms — there is no post
  * beneath them to read the id off. An unnamed platform's fallback is CAPITALISED here rather than in CSS,
  * unlike the queue's own meta line (DraftMeta.vue): the same string is a picker option and a tooltip on a
@@ -152,11 +143,9 @@ const platformScopes = computed<DraftScope[]>(() =>
  *
  * A slice the queue no longer holds is not a slice. Approving the last Reddit draft takes that row away, and a
  * link to it made yesterday falls back to everything rather than stranding its reader on a page about nothing. */
-const route = useRoute();
-const router = useRouter();
 const scope = computed<string>({
-    get: () => (typeof route.query[`platform`] === `string` ? route.query[`platform`] : ``),
-    set: (value) => void router.replace({ name: `drafts`, query: { ...route.query, platform: value === `` ? undefined : value } }),
+    get: () => host().route.query()[`platform`] ?? ``,
+    set: (value) => host().route.setQuery({ platform: value === `` ? undefined : value }),
 });
 const activeScope = computed<DraftScope>(() => platformScopes.value.find((entry) => entry.key === scope.value) ?? allScope.value);
 const railScope = computed<string>({ get: () => activeScope.value.key, set: (value) => (scope.value = value) });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick, ref } from "vue";
-import { useNow } from "./useNow";
+import { useNow } from "@intentic/ui/async";
 
 // The ref-count is the whole point: one interval however many readouts are up, none once the last one is gone,
 // and a consumer that arms after an idle spell reads a fresh instant rather than the one the clock stopped on.

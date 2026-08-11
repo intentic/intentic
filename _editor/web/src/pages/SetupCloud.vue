@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/api-contract";
 import { cmp, Notice, type NoticeModel, NoticeStack, Segmented, useDevice } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Select from "primevue/select";
 import { computed, ref, watch } from "vue";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
-import { noticeFrom } from "../composables/useAsyncAction";
 import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, sizeLabel } from "./setupCloud";
 
 /* Step 3's cloud machine form (see setupCloud.ts for what this is). The flow is three moves on one card:

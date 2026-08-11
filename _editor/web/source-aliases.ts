@@ -78,6 +78,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // reset and an extension's day dividers are all pure functions over a number, reached from composables and
     // pure projections whose unit tests run without a DOM.
     "@intentic/ui/format": fromRoot("_editor/ui/src/format.ts"),
+    // And again, for the busy-flag and wall-clock composables (moved into the kit when drafts became an
+    // extension): plain state on vue's reactivity, reached from dozens of composables whose node tests must not
+    // boot the component graph — the theme reader touches `document` at module scope — to build a notice.
+    "@intentic/ui/async": fromRoot("_editor/ui/src/composables/async.ts"),
     // And once more, for the icon VOCABULARY rather than the <Icon> that draws it: every icon name arriving
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.

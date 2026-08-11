@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { cmp, Notice, type NoticeModel } from "@intentic/ui";
-import { noticeOf } from "../composables/useAsyncAction";
+import { noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, ref, watch } from "vue";

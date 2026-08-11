@@ -1,4 +1,5 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
+import { useAsyncAction } from "@intentic/ui/async";
 import {
     isTestPath,
     type AgentSpan,
@@ -14,7 +15,6 @@ import { useCodeStats } from "../workspace/useCodeStats";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import { useAsyncAction } from "../useAsyncAction";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "./useAgents";

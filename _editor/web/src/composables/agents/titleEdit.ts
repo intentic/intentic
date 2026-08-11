@@ -1,5 +1,5 @@
 import { reactive, ref, type VNode } from "vue";
-import { errorMessage } from "../useAsyncAction";
+import { errorMessage } from "@intentic/ui/async";
 import { useAgents } from "./useAgents";
 
 /* Inline title-edit state machine for one agent surface (fleet card, detail header). Per-instance factory —

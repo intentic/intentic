@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/ui/async";
 import type {
     CommitResult,
     FileDiffResponse,
@@ -16,7 +17,6 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import { errorMessage } from "../useAsyncAction";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { useCodeStats } from "./useCodeStats";

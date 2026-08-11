@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { BrandMark, CopyButton, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../pages/sandbox/secretRows";
 import { reveal, useSecrets } from "../composables/secrets/useSecrets";
-import { noticeFrom } from "../composables/useAsyncAction";
 import SecretField from "./SecretField.vue";
 
 /* ONE SECRET, on one line until asked otherwise — the extension row's shape, for the extension row's reason:

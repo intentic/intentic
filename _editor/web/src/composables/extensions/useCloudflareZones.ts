@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref } from "vue";
+import { errorMessage } from "@intentic/ui/async";
 import { devFillGet, devFillSet } from "../devFill";
 import { apiClient } from "../useApi";
-import { errorMessage } from "../useAsyncAction";
 
 /* Cloudflare API token + zone discovery, shared by the onboarding Setup screen and the in-app "Connect
  * Cloudflare" step. The token is sent to the platform only for a request-scoped zone listing

@@ -1,4 +1,5 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
@@ -9,7 +10,6 @@ import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
-import { errorMessage } from "../useAsyncAction";
 
 /* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
  * `agents` roster snapshots (last frame wins, the presence pattern — see useSandboxLiveness) and an explicit

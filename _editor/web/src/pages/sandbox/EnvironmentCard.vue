@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { Card, Code, Notice, type NoticeModel, Segmented, StatusBadge } from "@intentic/ui";
+import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -9,7 +10,6 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useEnvironmentContents } from "../../composables/sandbox/useEnvironmentContents";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
-import { useAsyncAction } from "../../composables/useAsyncAction";
 import HostRecreate from "../../components/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
 import DiffToolbar from "../workspace/viewers/DiffToolbar.vue";

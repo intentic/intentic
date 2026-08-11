@@ -11,8 +11,8 @@
 <script setup lang="ts">
 import { type ForticlientConnection } from "@intentic/sandbox-contract";
 import { cmp, type NoticeModel, RowGroup } from "@intentic/ui";
+import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
-import { noticeFrom, noticeOf } from "../composables/useAsyncAction";
 import { importForticlient } from "../composables/sandbox/useVpn";
 
 const emit = defineEmits<{
