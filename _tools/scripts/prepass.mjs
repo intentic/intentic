@@ -2,9 +2,10 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Six invariants live here, and all of them exist because the checks that catch drift used to run in
- * exactly one place — CI, on main, after the merge. (5 and 6 — the release-heading contract and the
- * undeclared-shrink gate on the wire contract — are documented at their own blocks below.)
+ * --only`. Seven invariants live here, and all of them exist because the checks that catch drift used to run in
+ * exactly one place — CI, on main, after the merge. (5, 6 and 7 — the release-heading contract, the
+ * undeclared-shrink gate on the wire contract, and the armed-hooks check — are documented at their own blocks
+ * below.)
  *
  * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
@@ -75,7 +76,7 @@
  * hand-written `tsconfig.libs.json` is the proof: it names 13 of the 23 packages that need building, and the
  * one it happens to omit — `@intentic/constants` — was on its own worth 3 phantom errors in the daemon.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 /* BY FILE, NOT BY PACKAGE NAME. The walker is the same one `@intentic/constants/node` exports, but a BARE
  * specifier is resolved through `node_modules`, and the two callers that matter most here run before there is
@@ -576,6 +577,27 @@ if (existsSync(join(root, LOCK_FILE))) {
     }
 }
 
+/* Invariant 7. THE HOOKS ARE ARMED. A hook git cannot execute is a hook git SKIPS — with a hint, not an
+ * error — and the push sails past every gate above, invariant 6 included. That is not hypothetical: the
+ * checkout this was written against had a pre-push born 100644, healed to 100755 in the index on 2026-08-07,
+ * and never once healed ON DISK — every later update reached its working tree as a patch, which keeps the mode
+ * a file already has. prepass there said "undeclared shrink", the hook there said nothing, and an undeclared
+ * contract break reached main.
+ *
+ * Asserted on disk rather than in the index because the disk is what git consults at push time, and asserted
+ * here because this runs on the machine about to push — a fresh CI checkout re-applies the tracked bit and
+ * passes untouched. The remedy is the prepare script (it re-arms on every install), so the message names it.
+ * Windows has no executable bit and never runs these hooks through one, so it has nothing to assert. */
+const disarmed = [];
+const hooksDir = join(root, ".githooks");
+if (process.platform !== "win32" && existsSync(hooksDir)) {
+    for (const hook of readdirSync(hooksDir)) {
+        if ((statSync(join(hooksDir, hook)).mode & 0o111) === 0) {
+            disarmed.push(`.githooks/${hook} is not executable — git skips it with a hint and the push bypasses every gate in this file; run \`pnpm install\` (or \`chmod +x .githooks/*\`) to re-arm`);
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
@@ -583,6 +605,7 @@ const reports = [
     ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
     ["The release-body headings drifted apart (they are parsed, not prose)", headingDrift],
     ["The wire contract shrank without a declared breaking change", undeclaredBreaks],
+    ["Git hooks are disarmed on this checkout, so pushes skip these gates entirely", disarmed],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -595,6 +618,7 @@ console.log(`lockfile: ${importers.length} importers record the specifiers their
 console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
 console.log(`release headings: writer and both parsers spell the same two sections`);
 console.log(`wire contract: nothing shrank undeclared against merge-base`);
+console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */
