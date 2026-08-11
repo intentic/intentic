@@ -10,6 +10,7 @@ import type {
     ToolKind,
     TurnNote,
 } from "@intentic/sandbox-contract";
+import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "./errands";
 
 /* The transcript VOCABULARY — what a chat is made of, with no notion of how it is produced.
@@ -403,4 +404,33 @@ export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
         cuts.set(turn.id, below);
     }
     return cuts;
+};
+
+/* WHICH DAY A TURN WAS SENT ON, for the turns where that day is not the one already on screen — keyed by turn
+ * id, absent for every other turn. The transcript draws one marker row per entry (ChatPane), and that row is
+ * the chat's date: it is what lets each prompt's own hover stamp shrink to the clock alone.
+ *
+ * The day comes off the turn's first STAMPED message, which is its opening prompt — the only row that carries a
+ * time (see ChatMessage.sentAt). A turn with no stamp anywhere (a restored history's opening frames, rows
+ * recorded before stamps existed) contributes no marker, and does not break the run either: the next dated turn
+ * is compared against the last day actually marked.
+ *
+ * Days are compared as the FORMATTED string rather than by date arithmetic, in the viewer's own zone: two turns
+ * are on the same day exactly when they would print the same marker, which is the only sense of "same day" this
+ * is for. */
+export const dayMarksOf = (turns: readonly ChatTurn[]): Map<number, string> => {
+    const marks = new Map<number, string>();
+    let marked: string | undefined;
+    for (const turn of turns) {
+        const sentAt = turn.messages.find((message) => message.sentAt !== undefined)?.sentAt;
+        if (sentAt === undefined) {
+            continue;
+        }
+        const day = formatDate(sentAt);
+        if (day !== marked) {
+            marks.set(turn.id, day);
+            marked = day;
+        }
+    }
+    return marks;
 };

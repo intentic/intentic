@@ -21,7 +21,7 @@ import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
-import { type ChatAttachment, type ChatMessage, forkCutsOf, turnsOf } from "../composables/chat/transcript";
+import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
 import { errorMessage } from "../composables/useAsyncAction";
@@ -418,6 +418,15 @@ const isStreaming = (message: ChatMessage): boolean =>
 // the same top edge and pile up on the one before it. Recomputed per streamed frame like the list it replaces,
 // and just as shallow: one pass, no message read beyond its role.
 const turns = computed(() => turnsOf(messages.value));
+
+/* THE TRANSCRIPT'S DATE — a day named above the first turn sent on it, and nowhere else (dayMarksOf).
+ *
+ * A chat is read over days and reopened weeks later, and until now the only place a date appeared at all was
+ * inside a per-prompt label nobody sees without hovering the right bubble: "what did I ask on Tuesday" meant
+ * hunting with the pointer. One marker per change of day answers it for a whole stretch of turns at once, costs
+ * a thin row per day rather than per message, and is what lets each prompt's own stamp shrink to the clock
+ * alone (see ChatMessageView's sentClock). */
+const dayMarks = computed(() => dayMarksOf(turns.value));
 
 /* WHAT A FORK BELOW EACH TURN INHERITS — the number that turn's mark hands the daemon (forkCutsOf), and the one
  * thing the grouped render has thrown away: a section knows its messages, not where they sit in the flat list.
@@ -1323,7 +1332,26 @@ watch(
                              does. A bare "continue" and an app errand both fold into the turn they serve
                              (see foldsIntoTurn), so the question that defines the work stays pinned through
                              the continued answer. -->
-                        <template v-for="turn in turns" :key="turn.id">
+                        <!-- `index` is here for the day marker below, which is the one row that cares where it
+                             stands in the column rather than which turn it belongs to. -->
+                        <template v-for="(turn, index) in turns" :key="turn.id">
+                            <!-- THE DAY THIS STRETCH OF THE CONVERSATION WAS SENT ON — drawn only where the date
+                                 changes (dayMarks), so a chat written in one sitting carries exactly one and a
+                                 chat picked up over a fortnight says so where it was picked up. Between the
+                                 sections rather than inside one, because it is a boundary, not part of a turn.
+                                 Bare centred text, no rule across the column: a line there fences the turns off
+                                 from each other, which is the reason the old cut line between every two turns
+                                 went (see ChatForkCut). Weighted above rather than below — the marker belongs to
+                                 what follows it, and the extra air separates it from the answer it interrupts.
+                                 The first row needs none of that air: the column's own top padding is already
+                                 there. -->
+                            <div
+                                v-if="dayMarks.get(turn.id)"
+                                class="flex justify-center pb-0.5 text-2xs text-subtle"
+                                :class="index === 0 ? '' : 'pt-3'"
+                            >
+                                {{ dayMarks.get(turn.id) }}
+                            </div>
                             <section class="group/turn relative flex flex-col gap-1">
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is

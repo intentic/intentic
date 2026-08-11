@@ -7,7 +7,7 @@ import { providerAccounts } from "./providerAccounts";
 import { transcriptView } from "./transcriptClock";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
-import { type ChatMessage, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
+import { type ChatMessage, dayMarksOf, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
@@ -348,6 +348,36 @@ describe(`Conversation`, () => {
         // Every turn has one, the first included: a fork below the opening answer keeps that whole exchange.
         expect(forkCutsOf(turnsOf(messages.slice(0, 2)))).toEqual(new Map([[1, 2]]));
         expect(forkCutsOf([])).toEqual(new Map());
+    });
+
+    /* THE TRANSCRIPT'S DATE (dayMarksOf) — a day named once, above the first turn sent on it. It is what the
+     * per-prompt stamp leans on to be five characters wide, so the rule that matters is that it fires on every
+     * change of day and on nothing else.
+     *
+     * Stamps are built from local wall-clock parts rather than UTC: the marker is the viewer's own day, so a
+     * fixture pinned to a UTC hour would land on either side of midnight depending on where the runner is. */
+    it(`dayMarksOf names a day above the first turn sent on it and nowhere else`, () => {
+        const at = (day: number, hour: number): number => new Date(2026, 7, day, hour).getTime();
+        const turns = turnsOf([
+            // Opening frames with no stamp of their own — a restored history. They name no day and do not
+            // consume the first one either: the prompt below still carries the marker.
+            { id: 1, role: `assistant`, text: `restored` },
+            { id: 2, role: `user`, text: `morning`, sentAt: at(10, 9) },
+            { id: 3, role: `assistant`, text: `on it` },
+            // Same day, hours later: no second marker.
+            { id: 4, role: `user`, text: `and this too`, sentAt: at(10, 17) },
+            { id: 5, role: `assistant`, text: `done` },
+            // Picked up the next day.
+            { id: 6, role: `user`, text: `back`, sentAt: at(11, 8) },
+        ]);
+
+        const marks = dayMarksOf(turns);
+        expect([...marks.entries()]).toEqual([
+            [2, `Aug 10, 2026`],
+            [6, `Aug 11, 2026`],
+        ]);
+        // A transcript nothing is stamped in draws no marker at all rather than a plausible-looking date.
+        expect(dayMarksOf(turnsOf([{ id: 1, role: `user`, text: `hi` }])).size).toBe(0);
     });
 
     it(`isAcknowledgment matches whole-message lexicon entries through trailing punctuation, nothing more`, () => {

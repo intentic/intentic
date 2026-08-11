@@ -331,21 +331,25 @@ describe(`ChatMessageView added-notes row`, () => {
     });
 });
 
-/* WHEN THE MESSAGE WAS SENT, on the bubble it belongs to. Hover-only and out of flow, because the hour a turn
- * was sent at is worth nothing to someone reading the answer and everything to someone scrolling back for
- * "what did I ask on Tuesday" — so it costs the transcript no height and the reader no attention. */
+/* WHEN THE MESSAGE WAS SENT, in the margin beside the bubble it belongs to. Hover-only and out of flow, because
+ * the hour a turn was sent at is worth nothing to someone reading the answer and everything to someone scrolling
+ * back for "what did I ask on Tuesday" — so it costs the transcript no height and the reader no attention. */
 describe(`ChatMessageView sent time`, () => {
-    // 2026-08-10T14:32 UTC. Formatted in the runner's zone, so the assertion is on the DAY, which every zone
-    // this could run in agrees on for a mid-afternoon instant.
+    // 2026-08-10T14:32 UTC. Rendered in the runner's zone, so the assertion is on the SHAPE of the label rather
+    // than on an hour — every zone agrees it is a two-digit 24-hour clock and nothing else.
     const sentAt = Date.UTC(2026, 7, 10, 14, 32);
 
-    it(`shows the day and minute a message was sent, revealed by hovering it`, () => {
+    it(`shows the minute a message was sent, revealed by hovering it`, () => {
         const label = mount({ id: 6, role: `user`, text: `fix the bug`, sentAt }).querySelector(`.group-hover\\:opacity-100`);
 
-        expect(label?.textContent).toContain(`Aug 10, 2026`);
+        // The clock alone: the day is carried by the transcript's own marker row (see dayMarksOf), which is what
+        // keeps this label narrow enough for the margin it hangs in.
+        expect(label?.textContent?.trim()).toMatch(/^\d{2}:\d{2}$/u);
         // Out of flow and hidden until the pointer arrives — the two halves of costing the transcript nothing.
         expect(label?.className).toContain(`absolute`);
         expect(label?.className).toContain(`opacity-0`);
+        // BESIDE the bubble, not under it: below it the label sat in the gap between two turns, touching both.
+        expect(label?.className).toContain(`right-full`);
     });
 
     // Nothing is invented for a row with no stamp: a message recorded before the daemon wrote them down draws

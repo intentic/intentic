@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type IconName, useDevice } from "@intentic/ui";
-import { formatDateTime } from "@intentic/ui/format";
+import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
@@ -604,12 +604,20 @@ const attachmentsAside = computed(
     () => props.message.text.length > 0 && attachmentThumbs.value.length === 1 && attachmentThumbs.value[0]?.previewUrl !== undefined,
 );
 
-/* WHEN THE MESSAGE WAS SENT, as the day and minute it was sent on: "Aug 10, 2026, 14:32" (the kit's default
- * "when" label). Absolute rather than "3h ago" — the question a transcript raises is which sitting a turn
- * belongs to, which a relative age answers only for the last hour and then has to keep re-rendering to stay
- * true. Undefined on every row that has no stamp of its own (see ChatMessage.sentAt), and the label is not
- * drawn at all rather than saying so. */
-const sentAt = computed(() => (props.message.sentAt === undefined ? undefined : formatDateTime(props.message.sentAt)));
+/* WHEN THE MESSAGE WAS SENT, as the wall-clock minute alone: "14:32". Absolute rather than "3h ago" — the
+ * question a transcript raises is which sitting a turn belongs to, which a relative age answers only for the
+ * last hour and then has to keep re-rendering to stay true.
+ *
+ * The DAY is not in the label, because it is already on screen: the transcript draws a marker naming the day
+ * wherever the date changes (ChatPane's dayMarks), so every stamp reads under one. That is what buys the label
+ * its place — five characters fit the margin beside the bubble, where the twenty of "Aug 10, 2026, 14:32" did
+ * not, and the full day and minute stay one hover away in the tooltip for the one reader who wants them without
+ * scrolling up to the marker.
+ *
+ * Undefined on every row that has no stamp of its own (see ChatMessage.sentAt), and the label is not drawn at
+ * all rather than saying so. */
+const sentClock = computed(() => (props.message.sentAt === undefined ? undefined : formatClock(props.message.sentAt)));
+const sentExact = computed(() => (props.message.sentAt === undefined ? undefined : formatDateTime(props.message.sentAt)));
 </script>
 
 <template>
@@ -711,18 +719,35 @@ const sentAt = computed(() => (props.message.sentAt === undefined ? undefined : 
                     </button>
                 </div>
             </div>
-            <!-- WHEN IT WAS SENT, under the bubble's right edge and only while the pointer is on the message.
+            <!-- WHEN IT WAS SENT, in the MARGIN BESIDE the bubble and only while the pointer is on the message.
                  A transcript is read for what was said, so the hour it was said at is worth exactly the room it
                  takes when nobody is asking — which is none: the label is absolute, so it costs the row no
-                 height, and it lands in the padding the prompt row already carries below itself (0.5rem, plus
-                 the 0.25rem between turns) rather than pushing the answer down. `leading-none` is what keeps it
-                 inside that budget — the meta tier's own line box is 1rem and would overhang the reply.
-                 Not a control: it takes no pointer, so hovering the bubble to open a clamped prompt still
-                 reaches the bubble underneath it. -->
+                 height either way. What the margin buys over the strip below the bubble (where this used to
+                 hang) is that the label is INSIDE its own message's band. Under the bubble it sat in the gap
+                 between two turns — the row's own 0.5rem of bottom padding plus the 0.25rem between turns, which
+                 the meta tier fills edge to edge — so it touched the bubble above and the answer below at once,
+                 reading as plausibly a header for that answer as a footer for the prompt. And it landed in the
+                 one corner of the bubble that already carries the clamp fade and the open/close chip.
+                 The room is guaranteed, not hoped for: a prompt caps at 85% of the column, so the flank to its
+                 left is never narrower than 15% of the reading measure, and the label is five characters wide
+                 (see sentClock) — it fits that flank at every panel width, with the column's own gutter behind
+                 it for the tightest one. Right-aligned against the bubble so a run of stamps forms one edge
+                 down the margin rather than ragging, and level with the TOP of the message — where the eye
+                 enters it, and a line that holds whether the bubble is one line or six.
+                 Level is stated as the bubble's own metrics rather than as the offset they happen to work out
+                 to: the label's line box is set to the bubble's (1.625 × the body tier, where its own meta-tier
+                 box is 2px shorter), and its padding to the bubble's `py-2` plus the 1px border — so the two
+                 strings sit on one line to within a quarter-pixel, and stay there if either token moves. On a
+                 message that opens with a stacked attachment row it lands level with that instead, which is
+                 still the top of the message.
+                 It takes the pointer, which the old position could not afford: the flank is dead space, so a
+                 tooltip there blocks nothing — under the bubble the label lay over the strip a click uses to
+                 open a clamped prompt. -->
             <span
-                v-if="sentAt"
-                class="pointer-events-none absolute top-full right-0 mt-px text-2xs leading-none whitespace-nowrap text-subtle opacity-0 transition-opacity group-hover:opacity-100"
-                >{{ sentAt }}</span
+                v-if="sentClock"
+                v-tooltip.top="sentExact"
+                class="absolute top-0 right-full mr-2 pt-[calc(0.5rem+1px)] text-2xs leading-[calc(1.625*var(--text-xs))] whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
+                >{{ sentClock }}</span
             >
         </div>
         <!-- A mid-turn preamble is a notice with nothing to say on its own line: its whole content is the notes

@@ -56,7 +56,7 @@ export const initialsOf = (name: string): string | undefined => {
  * `hour12: false` is the h23 cycle per ECMA-402, so midnight reads 00:05 and never 24:05.
  *
  * Formatters are built once here: constructing an Intl.DateTimeFormat is the expensive half of formatting, and
- * keeping them private is what stops a surface from quietly growing a seventh variant. */
+ * keeping them private is what stops a surface from quietly growing a variant of its own. */
 const DATE = new Intl.DateTimeFormat(`en-US`, { year: `numeric`, month: `short`, day: `numeric` });
 const DAY_MONTH = new Intl.DateTimeFormat(`en-US`, { month: `short`, day: `numeric` });
 const DATE_TIME = new Intl.DateTimeFormat(`en-US`, {
@@ -77,6 +77,7 @@ const TIMESTAMP = new Intl.DateTimeFormat(`en-US`, {
     hour12: false,
 });
 const TIME = new Intl.DateTimeFormat(`en-US`, { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false });
+const CLOCK = new Intl.DateTimeFormat(`en-US`, { hour: `2-digit`, minute: `2-digit`, hour12: false });
 const WEEKDAY_TIME = new Intl.DateTimeFormat(`en-US`, { weekday: `short`, hour: `2-digit`, minute: `2-digit`, hour12: false });
 
 /** A calendar day on its own: "Jul 28, 2026". */
@@ -93,6 +94,12 @@ export const formatTimestamp = (at: number): string => TIMESTAMP.format(at);
 
 /** Clock time alone, for rows already grouped under a day: "15:45:12". */
 export const formatTime = (at: number): string => TIME.format(at);
+
+/* The wall-clock MINUTE alone: "15:45". The narrowest a "when" label gets, for a surface that has room for five
+ * characters beside a row and states the day somewhere else — the chat transcript's per-prompt stamp, which
+ * sits in the margin beside the bubble under a marker naming the day (see formatDate). Seconds are left to
+ * formatTime: a message was sent at a minute, and the second it landed on is noise at four characters' cost. */
+export const formatClock = (at: number): string => CLOCK.format(at);
 
 /** A weekday and time, for instants within the coming week: "Tue 15:45". */
 export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
