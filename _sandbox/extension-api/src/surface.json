@@ -102,5 +102,41 @@
             "workspace"
         ],
         "listener": ["automation", "events", "provider"]
+    },
+    "2.2.0": {
+        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "server", "version"],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "chat",
+            "commands",
+            "documents",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": ["automation", "events", "provider"]
     }
 }

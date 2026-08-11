@@ -22,6 +22,17 @@
                 "starterPrompt": "Email events just arrived — each line of the payload is one JSON event: type `message` (new mail: the author is the sender, content holds the subject and a text excerpt, extra carries uid/messageId/attachments), `flags` (a message's flags changed) or `expunge` (a message was deleted). Triage the new mail and summarize anything urgent; fetch a full message over IMAP (curl imaps://, by its extra.uid) when the excerpt isn't enough."
             }
         },
+        "automationTemplates": [
+            {
+                "id": "new-email",
+                "title": "New email",
+                "icon": "envelope",
+                "requires": ["imap"],
+                "trigger": { "kind": "listener", "provider": "imap", "eventType": "message" },
+                "prompt": "New email just arrived — each payload line is one JSON event with the sender, subject and a text excerpt. Summarize anything urgent; fetch the full message over IMAP (curl imaps://, by extra.uid) when you need more than the excerpt.",
+                "note": "instant"
+            }
+        ],
         "processes": [
             {
                 "name": "gateway",

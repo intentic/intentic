@@ -4307,6 +4307,104 @@ export const AutomationsListSchema = z.object({ automations: z.array(AutomationS
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
 
+/* ---- the automation catalogue: everything that can wake an agent here, and what to start from ----
+ *
+ * ONE ANSWER TO ONE QUESTION, and that is the whole reason it exists. The composer used to carry a hand-written
+ * list of every source and every template — CI, Komodo, Sentry, Stripe, email, the website widget, the chore
+ * book — while the daemon's upsert carried a SECOND hand-written list of the providers it would accept. Two
+ * lists, edited in different packages, disagreeing was a matter of time; and every area that gained something
+ * worth waking on had to edit the automations surface to say so, which is the dependency pointing backwards.
+ *
+ * Now the daemon merges what IT emits with what every installed extension declares, and serves the result. The
+ * composer draws whatever comes back and knows the name of nothing; `upsert` validates against the same merge.
+ * An area gains a trigger by declaring it, and the surface it appears on does not change.
+ *
+ * WHERE A SOURCE IS DECLARED IS WHERE ITS EVENTS COME FROM — `webchat` and `ci` are the daemon's own (it holds
+ * the widget endpoint and the pipeline webhook receiver), every other one belongs to the extension whose
+ * gateway or backend dispatches it.
+ *
+ * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, because the source's starter and the template's prompt
+ * describe the same payload, and one payload described in two packages is two descriptions to keep in step. A
+ * template on the generic `event` webhook has no source to sit beside, so it goes with the pack carrying the
+ * capability card it names — which is the same pack the user connected to make it work at all. */
+
+// A source's per-source narrowing field, as the generic editor draws it. Absent ⇒ the editor offers no such
+// filter rather than inventing one the provider has no meaning for.
+const TriggerFieldSchema = z.object({ label: z.string().min(1), placeholder: z.string().min(1), hint: z.string().min(1).optional() });
+
+export const TriggerSourceSchema = z.object({
+    // The slug a listener trigger fires on (Trigger.provider).
+    provider: z.string().min(1),
+    label: z.string().min(1),
+    // Simple-icons slug, or an app glyph — the same logo/icon split a capability card and an extension mark draw.
+    logo: z.string().min(1).optional(),
+    icon: z.string().min(1).optional(),
+    events: z.array(z.object({ value: z.string().min(1), label: z.string().min(1) })),
+    channel: TriggerFieldSchema,
+    // A SECOND narrowing axis, for sources whose events carry one — `ci` narrows by git ref as well as by repo.
+    branchField: TriggerFieldSchema.optional(),
+    // Only sources whose `message` events distinguish addressed messages set this; absent ⇒ no mention-only filter.
+    mentionLabel: z.string().min(1).optional(),
+    // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.
+    starterPrompt: z.string().min(1).optional(),
+    /* Capability providers that make this source WORK — any one of them connected is enough (a CI trigger rides
+     * github or gitlab). Empty ⇒ nothing to connect, the source is usable as it stands. Availability is computed
+     * in the browser rather than served, because the browser's capability facts are pushed live and a served
+     * boolean would be stale between polls. */
+    requires: z.array(z.string().min(1)).default([]),
+    /* Whether the extension declaring this is switched ON. Disabled ones are still listed, and that is the
+     * point: a stored automation must stay readable and editable while the pack that supplied its provider is
+     * off, showing the real label instead of degrading to a bare slug. */
+    enabled: z.boolean(),
+});
+export type TriggerSource = z.infer<typeof TriggerSourceSchema>;
+
+/* HOW A TEMPLATE IS OFFERED. Absent ⇒ it lives in the create dialog's gallery, where you go once you know what
+ * you want. The two named forms are for what a user would never think to go looking for:
+ *   create    — a shelf card on the page that makes the automation in one click, switched off, ready to read.
+ *               The chores are all of these: upkeep nobody opens an automations page hunting for.
+ *   configure — a shelf card that opens the dialog PREFILLED, for a template that cannot work unconfigured (a
+ *               Doorbell with no allowed sites admits nobody, and a row that silently does nothing is worse
+ *               than a form). */
+export const TemplateOfferSchema = z.enum(["create", "configure"]);
+
+export const AutomationTemplateSchema = z.object({
+    // Prefills the automation name, so it is also what "does one of these already exist" is asked by.
+    id: z.string().min(1),
+    title: z.string().min(1),
+    logo: z.string().min(1).optional(),
+    icon: z.string().min(1).optional(),
+    // Same rule as a source's: any one connected is enough, empty ⇒ always offered.
+    requires: z.array(z.string().min(1)).default([]),
+    trigger: TriggerSchema,
+    // Prefills the guard command (a shell one-liner; non-zero exit skips the wake).
+    guard: z.string().min(1).optional(),
+    // Prefills the countdown hold: each fire waits this long, visibly and cancellably, before starting itself.
+    holdForSeconds: z.number().int().positive().optional(),
+    prompt: z.string().min(1),
+    // The card's disclosure under the title — "instant", "checks every 5 min", "skips changes under 20 lines".
+    note: z.string().min(1).optional(),
+    // Post-save instructions: where to paste the webhook URL this automation just minted.
+    setup: z.string().min(1).optional(),
+    // What the shelf card says under the title. Only offered templates need one; a gallery entry has its
+    // trigger beside it for context.
+    description: z.string().min(1).optional(),
+    offer: TemplateOfferSchema.optional(),
+    /* WHETHER THE AUTOMATION THIS MAKES WATCHES THIS CODEBASE — the flag the created record stores, which is
+     * what puts its row on the chores shelf rather than among the integrations.
+     *
+     * Carried rather than inferred from the trigger, because a nightly dependency sweep and a nightly Stripe
+     * poll are both `schedule` and only one of them is about your code. */
+    chore: z.boolean().optional(),
+});
+export type AutomationTemplate = z.infer<typeof AutomationTemplateSchema>;
+
+export const AutomationCatalogSchema = z.object({
+    sources: z.array(TriggerSourceSchema),
+    templates: z.array(AutomationTemplateSchema),
+});
+export type AutomationCatalog = z.infer<typeof AutomationCatalogSchema>;
+
 // ---- workflows: a designed graph of sessions ----
 /* THE THIRD DRIVER. An automation answers "run this at 3am", a loop answers "run this until it is done", and a
  * workflow answers "run these, in this order, each handing its result to the next".

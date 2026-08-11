@@ -3,8 +3,8 @@ import { Button, cmp, CopyButton, Icon } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
-import type { ListenerSource } from "./listenerSources";
-import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
+import type { AutomationTemplate } from "@intentic/sandbox-contract";
+import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
 
@@ -28,15 +28,22 @@ import { triggerKey, useAutomationForm } from "./useAutomationForm";
  * act happened, so the panel stays in place and swaps its body for what to paste — the list is above and below
  * it the whole time, never covered. */
 
-const { prefill, listenerSources } = defineProps<{ prefill?: AutomationRecipe; listenerSources: readonly ListenerSource[] }>();
+const { prefill, listenerSources, templates } = defineProps<{
+    prefill?: AutomationTemplate;
+    listenerSources: readonly AvailableSource[];
+    templates: readonly AutomationTemplate[];
+}>();
 const emit = defineEmits<{ created: [id: string]; close: [] }>();
 
 const { automations, save } = useAutomations();
-const state = useAutomationForm(computed(() => listenerSources));
-const { form, valid, touchAll, build, loadRecipe } = state;
+const state = useAutomationForm(
+    computed(() => listenerSources),
+    computed(() => templates),
+);
+const { form, valid, touchAll, build, loadTemplate } = state;
 
 const capabilities = computed(() => host().workspace.capabilities());
-const picked = ref<AutomationRecipe | undefined>(prefill);
+const picked = ref<AutomationTemplate | undefined>(prefill);
 /* The template the form is actually holding — the pick, for as long as the trigger is still the one it prefilled.
  * Choosing another trigger rewrites the prompt for whatever fires now (useAutomationForm), so a chip still naming
  * the template would be naming text that is gone. Derived rather than cleared by hand because the chip is a claim
@@ -68,12 +75,10 @@ const fields = ref<InstanceType<typeof AutomationFields>>();
 const CARD_SELECTED = `bg-primary-600/15 text-link ring-1 ring-inset ring-primary-500/40`;
 const CARD_IDLE = `bg-overlay text-muted hover:text-content`;
 
-// "Start from" suggestions: provider-less recipes always show; provider-bound ones only when one of their
-// capabilities is enabled.
-const recipes = computed(() => {
-    const enabled = new Set(capabilities.value.map((capability) => capability.config[`provider`]).filter((provider) => typeof provider === `string`));
-    return AUTOMATION_RECIPES.filter((recipe) => recipe.providers === undefined || recipe.providers.some((provider) => enabled.has(provider)));
-});
+// "Start from" suggestions: templates needing nothing connected always show; the rest once one of the
+// capabilities they name is. The list itself comes from the daemon's catalogue, so a pack installed a minute
+// ago is offered here without this file knowing it exists.
+const recipes = computed(() => availableTemplates(templates, capabilities.value));
 
 // The open gallery, filtered and split in two: chores watch this workspace, everything else is fired from
 // outside it. Two short labelled runs stay scannable where one flat pile of near-identical cards would not —
@@ -81,9 +86,7 @@ const recipes = computed(() => {
 const recipeGroups = computed(() => {
     const needle = recipeFilter.value.trim().toLowerCase();
     const matches = recipes.value.filter((recipe) =>
-        [recipe.title, recipe.note, recipe.description, recipe.id, recipe.providers?.join(` `)].some((field) =>
-            field?.toLowerCase().includes(needle),
-        ),
+        [recipe.title, recipe.note, recipe.description, recipe.id, recipe.requires.join(` `)].some((field) => field?.toLowerCase().includes(needle)),
     );
     return [
         { label: `Code chores`, items: matches.filter((recipe) => recipe.chore === true) },
@@ -102,10 +105,10 @@ const toggleRecipes = (): void => {
     void nextTick(() => recipeFilterInput.value?.focus());
 };
 
-const pickRecipe = (recipe: AutomationRecipe): void => {
+const pickRecipe = (recipe: AutomationTemplate): void => {
     picked.value = recipe;
     recipesOpen.value = false;
-    loadRecipe(recipe);
+    loadTemplate(recipe);
 };
 
 // Enter in the filter takes the top match — and, because the gallery sits inside the form, never submits it.
@@ -177,7 +180,7 @@ const finish = (id: string): void => {
                         @click="toggleRecipes"
                     >
                         <img v-if="template?.logo" :src="`https://cdn.simpleicons.org/${template.logo}`" class="h-3.5 w-3.5 shrink-0" alt="" />
-                        <Icon v-else :name="template?.icon ?? 'bolt'" class="shrink-0" />
+                        <Icon v-else :name="glyph(template?.icon) ?? 'bolt'" class="shrink-0" />
                         <span class="min-w-0 truncate">{{ template?.title ?? `Start from a template` }}</span>
                         <span v-if="!template" class="shrink-0 text-subtle">{{ recipes.length }}</span>
                         <Icon name="chevron-down" class="shrink-0" />
@@ -231,7 +234,7 @@ const finish = (id: string): void => {
                                         class="mt-0.5 h-4 w-4 shrink-0"
                                         alt=""
                                     />
-                                    <Icon v-else :name="recipe.icon ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
+                                    <Icon v-else :name="glyph(recipe.icon) ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
                                     <!-- STACKED, not a row. The note beside the title is what the dialog's one-line
                                          rows did, and at a third of this popover's width it took so much of the
                                          card that the title truncated to "Patch security ad…" and the description
@@ -241,7 +244,7 @@ const finish = (id: string): void => {
                                         <span class="block truncate font-medium">{{ recipe.title }}</span>
                                         <!-- Chores carry a description and now have room to show it — in the
                                              dialog's one-line rows it lived in a tooltip. An integration has none
-                                             by design (see AutomationRecipe.description): title and note say
+                                             by design (see AutomationTemplate.description): title and note say
                                              enough. -->
                                         <span v-if="recipe.description" class="mt-0.5 line-clamp-2 block text-2xs text-subtle">
                                             {{ recipe.description }}

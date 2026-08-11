@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationSummary } from "@intentic/sandbox-contract";
+import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract";
 import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, SearchBar, Segmented } from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
@@ -7,9 +7,8 @@ import AutomationRow from "./AutomationRow.vue";
 import DoorbellInstallDialog from "./DoorbellInstallDialog.vue";
 import { since } from "./cronSchedule";
 import { host } from "./host";
-import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
+import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
-import { useListenerSources } from "./useListenerSources";
 
 /* Automations: agent wake-ups, native to every sandbox (no capability to enable). One automation = trigger
  * (cron, webhook, a live listener on the daemon's provider connection, or a moment in this workspace's own
@@ -36,7 +35,12 @@ import { useListenerSources } from "./useListenerSources";
  * the only thing that answers them. */
 
 const { automations, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
-const { sources: listenerSources, error: listenerError } = useListenerSources();
+const { sources, templates, error: catalogError } = useCatalog();
+/* The catalogue as this browser can act on it: the daemon says what exists, the live capability facts say what
+ * is connected. Resolved once here and handed down, so the row, the composer and the shelves all read one
+ * answer instead of each deriving their own. */
+const listenerSources = computed(() => withAvailability(sources.value, host().workspace.capabilities()));
+const offered = computed(() => availableTemplates(templates.value, host().workspace.capabilities()));
 
 // The filter bar costs a line, so it earns it only once the list is long enough that scanning it by eye stops
 // being instant. Below that the whole list is on screen and a filter is chrome in front of the answer.
@@ -60,7 +64,7 @@ const confirmRemoveId = ref<string | undefined>(undefined);
 const search = ref(``);
 const view = ref<View>(`all`);
 
-const topError = computed(() => actionError.value ?? listError.value ?? listenerError.value);
+const topError = computed(() => actionError.value ?? listError.value ?? catalogError.value);
 
 /* The countdown holds' clock. One ticking ref for the whole section rather than a timer per row — it exists
  * only while a hold with a deadline is on screen, and a second's granularity is the reading a person does.
@@ -108,35 +112,25 @@ const shown = computed(() =>
         .toSorted((a, b) => Number(b.enabled) - Number(a.enabled) || a.id.localeCompare(b.id)),
 );
 
-const CHORE_RECIPES = AUTOMATION_RECIPES.filter((recipe) => recipe.chore === true);
 // Shelved on the stored `chore` flag, not on the trigger: a nightly dependency sweep and a nightly Stripe poll
 // are both `schedule`, and only one of them is about this codebase.
 const chores = computed(() => shown.value.filter((automation) => automation.chore === true));
 const integrations = computed(() => shown.value.filter((automation) => automation.chore !== true));
 // A chore recipe with no automation of that id yet — what the suggestion strip offers. Matching on id (not on
 // trigger) keeps a user's own second review chore from hiding the stock one.
-const availableChores = computed(() => CHORE_RECIPES.filter((recipe) => !automations.value.some((automation) => automation.id === recipe.id)));
+const availableChores = computed(() =>
+    offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
+);
 
-/* The same offer for the handful of NON-chore recipes marked `suggest` — today just the Doorbell, which nobody
- * arrives at this page looking for. Provider-gated ones only show once their capability is connected, exactly
- * as they do in the dialog's gallery. Unlike a chore, picking one opens the dialog prefilled: a Doorbell with
- * no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
-const SUGGESTED_RECIPES = AUTOMATION_RECIPES.filter((recipe) => recipe.chore !== true && recipe.suggest === true);
-const availableSuggestions = computed(() => {
-    const connected = new Set(
-        host()
-            .workspace.capabilities()
-            .map((capability) => capability.config[`provider`]),
-    );
-    return SUGGESTED_RECIPES.filter(
-        (recipe) =>
-            !automations.value.some((automation) => automation.id === recipe.id) &&
-            (recipe.providers === undefined || recipe.providers.some((provider) => connected.has(provider))),
-    );
-});
+/* The same offer for templates marked `configure` — today just the Doorbell, which nobody arrives at this page
+ * looking for. Unlike a `create` one, picking it opens the composer prefilled rather than saving: a Doorbell
+ * with no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
+const availableSuggestions = computed(() =>
+    offered.value.filter((template) => template.offer === `configure` && !automations.value.some((automation) => automation.id === template.id)),
+);
 // Which recipe the composer opens on, when it was opened from a suggestion rather than from "New".
-const createPrefill = ref<AutomationRecipe | undefined>(undefined);
-const openFromSuggestion = (recipe: AutomationRecipe): void => {
+const createPrefill = ref<AutomationTemplate | undefined>(undefined);
+const openFromSuggestion = (recipe: AutomationTemplate): void => {
     createPrefill.value = recipe;
     createOpen.value = true;
 };
@@ -172,7 +166,7 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
 
 // Turning a chore on for the first time: create it from its recipe, enabled. From here it is an ordinary row —
 // the pill is gone because the thing it offered now exists.
-const enableChore = async (recipe: AutomationRecipe): Promise<void> => {
+const enableChore = async (recipe: AutomationTemplate): Promise<void> => {
     const trigger = recipe.trigger;
     // The two shapes a chore has: it reacts to a change in this workspace, or it sweeps it on a clock. A webhook
     // or a live provider connection is by definition the outside world, so it is not a chore.
@@ -304,6 +298,7 @@ const toggleDetail = (id: string): void => {
             <!-- Creating, in the list. Keyed on the prefill so picking a different suggestion while the panel is
                  already open remounts it on that template rather than leaving the previous one's fields up. -->
             <AutomationComposer
+                :templates="offered"
                 v-if="createOpen"
                 :key="createPrefill?.id ?? `blank`"
                 :prefill="createPrefill"
@@ -349,6 +344,7 @@ const toggleDetail = (id: string): void => {
                     :key="chore.id"
                     :automation="chore"
                     :listener-sources="listenerSources"
+                    :templates="offered"
                     :expanded="expanded.has(chore.id)"
                     :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
                     @toggle="toggle(chore, $event)"
@@ -365,6 +361,7 @@ const toggleDetail = (id: string): void => {
                     :key="automation.id"
                     :automation="automation"
                     :listener-sources="listenerSources"
+                    :templates="offered"
                     :expanded="expanded.has(automation.id)"
                     :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
                     @toggle="toggle(automation, $event)"
@@ -393,7 +390,7 @@ const toggleDetail = (id: string): void => {
                         @click="openFromSuggestion(recipe)"
                     >
                         <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
-                        <Icon v-if="recipe.icon" :name="recipe.icon" class="shrink-0 text-2xs" />
+                        <Icon v-if="recipe.icon" :name="glyph(recipe.icon)!" class="shrink-0 text-2xs" />
                         {{ recipe.title }}
                         <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
                     </button>
@@ -422,7 +419,7 @@ const toggleDetail = (id: string): void => {
                             :spin="enabling === recipe.id"
                             class="shrink-0 text-2xs text-subtle"
                         />
-                        <Icon v-if="recipe.icon" :name="recipe.icon" class="shrink-0 text-2xs" />
+                        <Icon v-if="recipe.icon" :name="glyph(recipe.icon)!" class="shrink-0 text-2xs" />
                         {{ recipe.title }}
                         <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
                     </button>

@@ -1,10 +1,17 @@
-import type { AgentHarness, AgentProvider, Automation, AutomationSummary, WebchatConfig, WorkspaceEventKind } from "@intentic/sandbox-contract";
+import type {
+    AgentHarness,
+    AgentProvider,
+    Automation,
+    AutomationSummary,
+    AutomationTemplate,
+    WebchatConfig,
+    WorkspaceEventKind,
+} from "@intentic/sandbox-contract";
 import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
+import { type AvailableSource, listenerSourceOf } from "./catalog";
 import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
-import { listenerSourceOf, type ListenerSource } from "./listenerSources";
-import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
 
 /* ONE automation form, for both the thing that creates automations and the thing that edits them.
  *
@@ -29,13 +36,18 @@ export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
 export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provider?: string }): string =>
     trigger.kind === `listener` ? `listener:${trigger.provider}` : trigger.kind;
 
-/* TEXT THE FORM PUT IN THE BOX, rather than the user — a live source's starter, a template's prompt, or nothing
- * typed yet. Compared verbatim, and that is the whole test: one keystroke makes the prompt the user's and
- * nothing here rewrites it again. */
-const RECIPE_PROMPTS = new Set<string>(AUTOMATION_RECIPES.map((recipe) => recipe.prompt));
-const FORM_GUARDS = new Set<string>([``, ...AUTOMATION_RECIPES.flatMap((recipe) => (recipe.guard === undefined ? [] : [recipe.guard]))]);
-
-export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]>) {
+/* THE FORM'S OWN TEXT, and both halves now arrive from the daemon's catalogue rather than from a table in this
+ * package — which is why they are computed per call instead of being module constants. A template contributed
+ * by a pack installed five minutes ago has to count as "text the form put here" exactly as a built-in one does,
+ * or the first source change after picking it would refuse to replace a prompt the user never wrote. */
+export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[]>, templates: ComputedRef<readonly AutomationTemplate[]>) {
+    /* TEXT THE FORM PUT IN THE BOX, rather than the user — a live source's starter, a template's prompt, or
+     * nothing typed yet. Compared verbatim, and that is the whole test: one keystroke makes the prompt the
+     * user's and nothing here rewrites it again. */
+    const templatePrompts = computed(() => new Set<string>(templates.value.map((template) => template.prompt)));
+    const formGuards = computed(
+        () => new Set<string>([``, ...templates.value.flatMap((template) => (template.guard === undefined ? [] : [template.guard]))]),
+    );
     let original: Automation | undefined;
     const form = reactive({
         kind: `schedule` as TriggerKind,
@@ -142,7 +154,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         () =>
             new Set<string>([
                 ...sources.value.flatMap((source) => (source.starterPrompt === undefined ? [] : [source.starterPrompt])),
-                ...RECIPE_PROMPTS,
+                ...templatePrompts.value,
             ]),
     );
 
@@ -164,7 +176,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
             form.prompt = starterPrompt.value ?? ``;
             // A template's GUARD came with its prompt and goes with it: a jq over .intentic/drafts/ left behind on
             // a Discord listener is a row that never fires and never says why.
-            if (FORM_GUARDS.has(form.guard)) {
+            if (formGuards.value.has(form.guard)) {
                 form.guard = ``;
             }
             promptFor = key;
@@ -175,7 +187,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
      * or one whose prompt was edited and whose source then changed. Nothing may rewrite it — it is not the form's
      * — but it is the one mismatch that can be named, so the form offers the swap instead of leaving a Discord
      * briefing on a CI trigger to be discovered from a confused run at 3 a.m. */
-    const staleStarter = computed<ListenerSource | undefined>(() => {
+    const staleStarter = computed<AvailableSource | undefined>(() => {
         if (form.kind !== `listener` || form.prompt === starterPrompt.value) {
             return undefined;
         }
@@ -264,25 +276,29 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         touched.clear();
     };
 
-    // Prefill from a template. Only the fields a recipe actually carries — everything else keeps its default,
-    // so picking a template twice can't accumulate state from the first pick.
-    const loadRecipe = (recipe: AutomationRecipe): void => {
+    /* Prefill from a template. Only the fields a template actually carries — everything else keeps its default,
+     * so picking a template twice can't accumulate state from the first pick.
+     *
+     * `chore` is carried, never inferred from the trigger: a nightly dependency sweep and a nightly Stripe poll
+     * are both `schedule`, and only one of them is about this codebase. It is the same flag the created
+     * automation stores, which is what decides the shelf it lands on. */
+    const loadTemplate = (template: AutomationTemplate): void => {
         reset();
-        form.kind = recipe.trigger.kind;
-        form.id = recipe.id;
-        form.guard = recipe.guard ?? ``;
-        form.holdForSeconds = recipe.holdForSeconds ?? 0;
-        form.prompt = recipe.prompt;
-        form.chore = recipe.chore === true;
-        if (recipe.trigger.kind === `schedule`) {
-            Object.assign(schedule, parseCron(recipe.trigger.cron));
+        form.kind = template.trigger.kind;
+        form.id = template.id;
+        form.guard = template.guard ?? ``;
+        form.holdForSeconds = template.holdForSeconds ?? 0;
+        form.prompt = template.prompt;
+        form.chore = template.chore === true;
+        if (template.trigger.kind === `schedule`) {
+            Object.assign(schedule, parseCron(template.trigger.cron));
         }
-        if (recipe.trigger.kind === `listener`) {
-            form.provider = recipe.trigger.provider;
-            form.eventType = recipe.trigger.eventType;
+        if (template.trigger.kind === `listener`) {
+            form.provider = template.trigger.provider;
+            form.eventType = template.trigger.eventType;
         }
-        if (recipe.trigger.kind === `workspace`) {
-            form.workspaceEvent = recipe.trigger.event;
+        if (template.trigger.kind === `workspace`) {
+            form.workspaceEvent = template.trigger.event;
         }
         // The template's prompt WAS written for the trigger it just set, so this is not a trigger change.
         promptFor = triggerKey(form);
@@ -477,7 +493,7 @@ export function useAutomationForm(sources: ComputedRef<readonly ListenerSource[]
         // directions
         reset,
         load,
-        loadRecipe,
+        loadTemplate,
         build,
     };
 }

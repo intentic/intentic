@@ -8,7 +8,7 @@
     "permissions": {
         "sandbox": [
             "GET /automations",
-            "GET /extensions",
+            "GET /automations/catalog",
             "GET /personas",
             "GET /ci/runs",
             "POST /automations",

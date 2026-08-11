@@ -24,12 +24,16 @@ forbidden — the contract imported the manifest schema from here, so depending 
   **approval + gating surface**: the install dialog shows exactly the declared contribution points, and the host
   refuses any runtime registration (view, command, viewer, setting, process…) the approved manifest never
   declared. Contribution points: `views`, `files`, `viewers`, `documents`, `commands`, `settings`,
-  `processes`, `agent`, `environment`, `capabilities`, `listener`, `bin`, plus the `permissions.sandbox` route
-  allowlist. That list is not prose to be kept in sync by hand — `surface-guard.test.ts` reads it back out of
-  this file and fails when it stops matching the schema.
+  `processes`, `agent`, `environment`, `capabilities`, `listener`, `automationTemplates`, `bin`, plus the
+  `permissions.sandbox` route allowlist. That list is not prose to be kept in sync by hand —
+  `surface-guard.test.ts` reads it back out of this file and fails when it stops matching the schema.
   A `listener` owns both halves of its public vocabulary: labelled event types for daemon validation and the
   source/filter/starter wording a generic automation editor renders. Installing a listener therefore adds a
   configurable automation source without an app release or a second provider table.
+  `automationTemplates` is the other half of that bargain: the starting points for a pack's own service —
+  trigger, prompt, guard, setup instructions — declared by whoever knows the service rather than written into
+  the automations surface. Both fold into one catalogue the daemon serves (`GET /automations/catalog`), which
+  is also what `POST /automations` validates against, so the editor cannot offer a trigger the daemon refuses.
   Identity is derived, never declared — `extensionIdOf(manifest) = ${publisher}.${name}`.
 - **[facts.ts](src/facts.ts)** — the stable **detection** vocabulary (`RepoFacts`, `CapabilityFacts`) a
   view's `detect()` reads to decide when to activate. This is *not* the data plane.

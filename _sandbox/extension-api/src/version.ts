@@ -13,4 +13,8 @@
 // 2.1.0 adds the backend half: a manifest `server` bundle (activateServer, run by the daemon's backend host
 // under /x/<id>/…) and `permissions.daemon` beside `permissions.sandbox`. Additive — a 2.0 manifest is a 2.1
 // manifest that ships no backend.
-export const extensionApiVersion = "2.1.0";
+// 2.2.0 opens the automation composer: `contributes.automationTemplates` lets a pack ship the starting points
+// for its own service, and a `listener` may declare a second narrowing field (`automation.branchField`) for a
+// source whose events carry one. Both fold into the daemon's trigger catalogue, so a pack that knows something
+// worth waking on says so itself instead of being written into the automations surface. Additive.
+export const extensionApiVersion = "2.2.0";

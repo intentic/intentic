@@ -177,9 +177,11 @@ export const extensionBinDirsOf = async (services: ExtensionHost): Promise<strin
     return dirs;
 };
 
-// Every realtime-listener provider an installed extension declares → the event types it emits
-// (contributes.listener). The automations upsert validates a listener trigger against this (plus core
-// `webchat`), and the listener routes serve a gateway under its provider.
+// Every realtime-listener provider an ENABLED extension declares → the event types it emits
+// (contributes.listener) — the gateway-backed sources, which is what the activity feed asks for and what the
+// listener routes serve a control surface under. Not the automations vocabulary: that is the trigger catalogue
+// (automations/catalog.ts), which also carries the daemon's own sources and keeps a disabled pack's row so the
+// automation standing on it stays readable.
 export const listenerProvidersOf = async (services: ExtensionHost): Promise<Map<string, Set<string>>> => {
     const providers = new Map<string, Set<string>>();
     for (const extension of await enabledExtensions(services)) {

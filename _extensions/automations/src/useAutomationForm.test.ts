@@ -1,8 +1,7 @@
-import type { Automation } from "@intentic/sandbox-contract";
+import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { computed, nextTick } from "vue";
-import type { ListenerSource } from "./listenerSources";
-import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
+import type { AvailableSource } from "./catalog";
 import { useAutomationForm } from "./useAutomationForm";
 
 /* THE PROMPT HAS TO AGREE WITH THE TRIGGER, and nothing downstream can tell when it doesn't: the daemon fires
@@ -13,35 +12,53 @@ import { useAutomationForm } from "./useAutomationForm";
  * Every case below is the same question — whose text is in the box. The form's own (a starter, a template) may be
  * rewritten for whatever fires now; the user's may not, ever. */
 
-const DISCORD: ListenerSource = {
+const DISCORD: AvailableSource = {
     provider: `discord`,
     label: `Discord`,
     logo: `discord`,
+    enabled: true,
     available: true,
+    requires: [],
     events: [{ value: `message`, label: `Messages` }],
     mentionLabel: `Only mentions`,
     channel: { label: `Channel`, placeholder: `all channels` },
     starterPrompt: `Handle Discord messages.`,
 };
-const CI: ListenerSource = {
+const CI: AvailableSource = {
     provider: `ci`,
     label: `CI/CD`,
     icon: `bolt`,
+    enabled: true,
     available: true,
+    requires: [],
     events: [{ value: `pipeline_failed`, label: `Pipeline failed` }],
     channel: { label: `Repository`, placeholder: `all repos` },
     starterPrompt: `Handle CI results.`,
 };
-const SOURCES = computed<readonly ListenerSource[]>(() => [DISCORD, CI]);
-const formState = () => useAutomationForm(SOURCES);
 
-const recipe = (id: string): AutomationRecipe => {
-    const found = AUTOMATION_RECIPES.find((entry) => entry.id === id);
-    if (found === undefined) {
-        throw new Error(`no recipe ${id}`);
-    }
-    return found;
+/* The templates arrive from the daemon's catalogue now, so the fixtures below stand in for it rather than
+ * being imported from a table in this package. Shaped on the two the form actually has to tell apart: one that
+ * sets a listener trigger, and one that sets a workspace trigger AND a guard. */
+const FIX_CI: AutomationTemplate = {
+    id: `fix-failing-ci`,
+    title: `Fix failing CI`,
+    requires: [`github`],
+    trigger: { kind: `listener`, provider: `ci`, eventType: `pipeline_broken` },
+    prompt: `A pipeline that was green just went red — fix it.`,
 };
+const REVIEW: AutomationTemplate = {
+    id: `review-agent-work`,
+    title: `Review agent work`,
+    requires: [],
+    trigger: { kind: `workspace`, event: `turn.settled` },
+    guard: `test "$(git diff --numstat | wc -l)" -gt 0`,
+    prompt: `An agent just finished a turn. Review its diff.`,
+    chore: true,
+};
+
+const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
+const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW]);
+const formState = () => useAutomationForm(SOURCES, TEMPLATES);
 
 describe(`the prompt follows the trigger`, () => {
     it(`arrives with the picked source's starter`, async () => {
@@ -85,9 +102,9 @@ describe(`the prompt follows the trigger`, () => {
 
 describe(`a template's own text`, () => {
     it(`survives the trigger it set itself`, async () => {
-        const fixCi = recipe(`fix-failing-ci`);
-        const { form, loadRecipe } = formState();
-        loadRecipe(fixCi);
+        const fixCi = FIX_CI;
+        const { form, loadTemplate } = formState();
+        loadTemplate(fixCi);
         await nextTick();
         // Filling the form from a template moves the trigger AND the prompt in one go — without that being told
         // apart from a trigger change, the template's own words are the first thing overwritten.
@@ -96,9 +113,9 @@ describe(`a template's own text`, () => {
     });
 
     it(`goes, with its guard, when the trigger moves off it`, async () => {
-        const review = recipe(`review-agent-work`);
-        const { form, loadRecipe } = formState();
-        loadRecipe(review);
+        const review = REVIEW;
+        const { form, loadTemplate } = formState();
+        loadTemplate(review);
         await nextTick();
         expect(form.guard).toBe(review.guard);
         form.kind = `listener`;

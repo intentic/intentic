@@ -515,6 +515,44 @@
                 "skill": "skills/mysql/SKILL.md",
                 "fragment": "env/mysql.Dockerfile"
             }
+        ],
+        "automationTemplates": [
+            {
+                "id": "github-push",
+                "title": "Push to repo",
+                "logo": "github",
+                "requires": ["github"],
+                "trigger": { "kind": "event" },
+                "prompt": "A push just landed — the webhook payload is in $AUTOMATION_PAYLOAD. Review the new commits and summarize what changed.",
+                "setup": "In the GitHub repo: Settings → Webhooks → Add webhook → paste this URL as the Payload URL, content type application/json. Or from a workflow: put the URL in a secret and add a `uses: intentic/gate-action@v1` step — it sends the event payload for you."
+            },
+            {
+                "id": "gitlab-push",
+                "title": "Push to repo",
+                "logo": "gitlab",
+                "requires": ["gitlab"],
+                "trigger": { "kind": "event" },
+                "prompt": "A push just landed — the webhook payload is in $AUTOMATION_PAYLOAD. Review the new commits and summarize what changed.",
+                "setup": "In the GitLab project: Settings → Webhooks → paste this URL and check Push events."
+            },
+            {
+                "id": "sentry-alert",
+                "title": "New alert",
+                "logo": "sentry",
+                "requires": ["sentry"],
+                "trigger": { "kind": "event" },
+                "prompt": "A Sentry alert just fired — the payload is in $AUTOMATION_PAYLOAD. Investigate the error and suggest a fix.",
+                "setup": "In Sentry: Alerts → your alert rule → add a webhook action pointing at this URL."
+            },
+            {
+                "id": "komodo-alert",
+                "title": "Deployment alert",
+                "icon": "box",
+                "requires": ["komodo"],
+                "trigger": { "kind": "event" },
+                "prompt": "Komodo just fired an alert — the payload is in $AUTOMATION_PAYLOAD: `level` is the severity, `target` names the resource ({type, id}), `data` carries the specifics, and `resolved` is true when this is the all-clear for an earlier alert. Use your Komodo capability to look up that resource and its recent container logs, then say what broke and what would fix it. Do not deploy, restart or stop anything unless the user asks.",
+                "setup": "In Komodo: Alerters → New Alerter → endpoint type Custom → paste this URL. Narrow it with the alerter's alert-type and resource filters."
+            }
         ]
     }
 }

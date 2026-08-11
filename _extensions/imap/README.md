@@ -27,3 +27,6 @@ watermark — is IMAP against a protocol that predates all of them.
 - The watermark is the whole correctness story. It is covered by an integration test
   ([src/watermark.integration.test.ts](src/watermark.integration.test.ts)) rather than a unit test, because the
   failure it prevents only appears across a real reconnect.
+- The "New email" starting point is declared here (`contributes.automationTemplates`), beside the listener it
+  fires on. The source's starter and the template's prompt describe the same payload, so they are one package's
+  problem rather than two.

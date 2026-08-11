@@ -561,11 +561,27 @@ schemas live entirely in its `_extensions/` package (UI halves compiled into the
 backends baked as `dist/server.js`), and the daemon core carries neither feature at all. Deployments also
 exercises the two kernel calls a real feature backend needs: `GET /capabilities/{id}/connection` — a
 capability's stored config, secrets included, refused to every signed-in caller so only a declared extension
-grant can read it — and `POST /agent` for its one-click fix turns. That is the intended trajectory — feature
-backends (activity, chores, logs, drafts, then the automations family and CI) migrating out one by one, each
-migration deleting its core routes, until the daemon is the kernel: files/git/watcher, terminals and
-processes, the agent runtime, capabilities and their privileged handlers, auth, and the extension system
-itself.
+grant can read it — and `POST /agent` for its one-click fix turns.
+
+**But not everything moves out, and the direction is decided by one question: does anything else plug into it?**
+
+A **feature** is a surface over its own data that nobody else extends — memory, deployments, knowledge,
+acceptance, documentation. Its routes, schemas and translation belong in its package and the daemon is better
+off not knowing it exists. Those migrate out one by one, each migration deleting its core routes.
+
+A **substrate** is something other extensions fire into or contribute to — the automations trigger bus, the
+batch run engine, the standing-check registry, CI as an event source. Those stay in the core and publish a
+contribution point instead, for two reasons. An extension can be switched off, and a trigger bus that stops
+when someone hides a screen is not a bus. And a substrate that lives inside one extension leaves every other
+extension either editing that extension or reinventing it — which is not hypothetical: while the automations
+vocabulary lived in the automations *view*, that view carried a hand-written table of CI, Komodo, Sentry,
+Stripe, email and the whole chore book, and the daemon carried a second copy of the same list to validate
+against. It is now one catalogue the daemon serves ([automations/catalog.ts](_sandbox/sandbox/src/automations/catalog.ts)),
+merging its own sources with each pack's `contributes.listener` and `contributes.automationTemplates`.
+
+So the end state is a kernel PLUS its substrates: files/git/watcher, terminals and processes, the agent
+runtime, capabilities and their privileged handlers, auth, the extension system itself — and the cross-cutting
+buses every extension is allowed to contribute to.
 
 ### Capabilities
 

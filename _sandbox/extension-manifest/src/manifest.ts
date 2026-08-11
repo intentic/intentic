@@ -148,15 +148,31 @@ export const AgentContributionSchema = z.object({
 });
 export type AgentContribution = z.infer<typeof AgentContributionSchema>;
 
-// A realtime listener the extension's gateway process (contributes.processes) implements. This is the ONE
-// catalog both halves consume: the daemon derives its accepted event types from `events`, while the automation
-// editor derives the source picker, filters and starter from `automation`. Keeping those facts on the provider
-// extension is what lets a newly installed listener become configurable without a matching app release.
+// One narrowing field the generic automation editor draws for a source — a channel, a branch. `hint` is the
+// sentence under the input, for a filter whose empty case is easy to get wrong.
+const TriggerFieldContributionSchema = z.object({
+    label: z.string().min(1),
+    placeholder: z.string().min(1),
+    hint: z.string().min(1).optional(),
+});
+
+// A realtime listener source the extension supplies. This is the ONE catalog both halves consume: the daemon
+// derives its accepted event types from `events` and folds `automation` into the trigger catalogue it serves,
+// while the automation editor derives the source picker, filters and starter from that. Keeping those facts on
+// the provider extension is what lets a newly installed listener become configurable without a matching app
+// release.
 //
-// `provider` is the slug its automation triggers fire on (Trigger.provider). The daemon serves the gateway a
+// `provider` is the slug its automation triggers fire on (Trigger.provider). The daemon serves a
 // provider-scoped control surface — GET /listeners/<provider>/state to reconcile, POST …/dispatch to wake an
 // automation (optionally holding a turn-stream), …/failure + …/status to report. The daemon holds no provider
-// connection itself; the extension's process does.
+// connection itself.
+//
+// WHAT DISPATCHES IT IS OPEN. A gateway process (contributes.processes) is the usual answer and the one the
+// reconcile feed is shaped for — it holds a live connection the daemon must not. But an extension BACKEND can
+// dispatch through the same route by declaring `POST /listeners/*/dispatch` in `permissions.daemon`, which is
+// how an area that learns things on its own schedule (an estate poller noticing a container died) contributes
+// a trigger without running a gateway at all. Declaring this with neither is legal and inert: the source is
+// offered, and nothing ever fires it.
 export const ListenerContributionSchema = z.object({
     provider: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     events: z
@@ -175,12 +191,65 @@ export const ListenerContributionSchema = z.object({
         // Only sources whose `message` events distinguish addressed messages declare this. Absent means the
         // generic editor offers no mention-only filter rather than inventing provider semantics.
         mentionLabel: z.string().min(1).optional(),
-        channel: z.object({ label: z.string().min(1), placeholder: z.string().min(1) }),
+        channel: TriggerFieldContributionSchema,
+        // A SECOND narrowing axis, for a source whose events carry one — a pipeline's git ref, so a trigger can
+        // say "the branch that ships" rather than "every agent's every failure". Absent ⇒ the editor offers
+        // only the channel filter.
+        branchField: TriggerFieldContributionSchema.optional(),
         // The provider owns the payload vocabulary, so it also owns the first prompt that explains that payload.
         starterPrompt: z.string().min(1),
     }),
 });
 export type ListenerContribution = z.infer<typeof ListenerContributionSchema>;
+
+/* A STARTING POINT in the automation composer — a trigger, a prompt written for that trigger's payload, and
+ * whatever guard or hold makes it safe to leave on. Pure prefill: creating one makes an ordinary automation and
+ * the daemon knows nothing about templates afterwards.
+ *
+ * IT LIVES WITH THE AREA THAT KNOWS THE SERVICE, which is the point of it being a contribution at all. The
+ * automation surface used to carry every one of these — Komodo's, Sentry's, Stripe's, CI's, the chore book's —
+ * so a pack that gained something worth reacting to could not say so without an edit to a surface it has
+ * nothing to do with. A template declared here appears when the pack is installed and its capability connected,
+ * and disappears with it.
+ *
+ * The daemon validates each one against the real trigger schema when it builds the catalogue and drops what
+ * does not parse, so a template can never offer a trigger that `upsert` would refuse. */
+export const AutomationTemplateContributionSchema = z.object({
+    // Prefills the automation name, and is what "does one of these exist already" is asked by — so it must be
+    // spelled as an automation id, not as prose.
+    id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/),
+    title: z.string().min(1),
+    logo: z.string().min(1).optional(),
+    icon: z.string().min(1).optional(),
+    // Capability providers that make this template WORK — any one connected is enough (fixing CI rides github
+    // or gitlab). Omitted ⇒ nothing to connect, always offered.
+    requires: z.array(z.string().min(1)).optional(),
+    // Shaped loosely here and parsed strictly at the merge: the manifest package cannot see the trigger union
+    // (the dependency runs the other way), so the daemon is where a declaration meets the real schema.
+    trigger: z.object({
+        kind: z.enum(["schedule", "event", "listener", "workspace"]),
+        cron: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        eventType: z.string().min(1).optional(),
+        event: z.string().min(1).optional(),
+    }),
+    guard: z.string().min(1).optional(),
+    holdForSeconds: z.number().int().positive().optional(),
+    prompt: z.string().min(1),
+    note: z.string().min(1).optional(),
+    setup: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    /* Absent ⇒ the create dialog's gallery, where you go once you know what you want. `create` puts a card on
+     * the page that makes the automation switched off in one click; `configure` puts one there that opens the
+     * dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never
+     * think to go looking for, and a pack that marked everything as offered would have built a gallery with
+     * extra steps. */
+    offer: z.enum(["create", "configure"]).optional(),
+    // Whether what this makes watches THIS codebase (the chores shelf) rather than the outside world. Declared
+    // rather than read off the trigger: a nightly dependency sweep and a nightly Stripe poll are both schedules.
+    chore: z.boolean().optional(),
+});
+export type AutomationTemplateContribution = z.infer<typeof AutomationTemplateContributionSchema>;
 
 // A Dockerfile fragment baked into the sandbox image overlay so the extension's tools are present at runtime
 // (a whisper binary, a psql client, …). `fragment` is a checkout-relative path to a file holding ONLY RUN/ENV
@@ -444,6 +513,9 @@ export const ExtensionManifestSchema = z.object({
             environment: EnvironmentContributionSchema.optional(),
             capabilities: z.array(CapabilityContributionSchema).optional(),
             listener: ListenerContributionSchema.optional(),
+            // Starting points this pack offers in the automation composer. Declared by whoever knows the
+            // service, not by the composer. See AutomationTemplateContributionSchema.
+            automationTemplates: z.array(AutomationTemplateContributionSchema).optional(),
             // A checkout-relative directory of executables the daemon prepends to the AGENT's PATH each turn —
             // how an extension ships a command-line tool for the agent (the CLI-tools path). The files ARE the
             // approved code (they ride the sha-pinned checkout); the daemon only adds the dir to PATH.

@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import {
     AutomationApprovalIdParamSchema,
     AutomationApprovalsListSchema,
+    AutomationCatalogSchema,
     AutomationEnabledInputSchema,
     AutomationIdParamSchema,
     AutomationSchema,
@@ -17,6 +18,11 @@ import {
 // instead of waking; `approve` runs the held wake, `reject` drops it.
 export const automationsContract = {
     list: oc.route({ method: "GET", path: "/automations" }).output(AutomationsListSchema),
+    /* WHAT CAN WAKE AN AGENT HERE, and what to start from — the daemon's own sources and templates merged with
+     * every installed extension's. The composer's entire vocabulary, so that adding a trigger to an area is a
+     * change to that area and to nothing else. `upsert` below validates against the same merge, which is what
+     * keeps the surface and the daemon from disagreeing about what is allowed. */
+    catalog: oc.route({ method: "GET", path: "/automations/catalog" }).output(AutomationCatalogSchema),
     upsert: oc.route({ method: "POST", path: "/automations" }).input(AutomationSchema).output(OkSchema),
     setEnabled: oc.route({ method: "POST", path: "/automations/{id}/enabled" }).input(AutomationEnabledInputSchema).output(OkSchema),
     remove: oc.route({ method: "DELETE", path: "/automations/{id}" }).input(AutomationIdParamSchema).output(OkSchema),

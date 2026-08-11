@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbox-contract";
+import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
 import { Button, cmp, CopyButton, formatDateTime, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
-import { listenerSourceOf, type ListenerSource } from "./listenerSources";
+import { type AvailableSource, listenerSourceOf } from "./catalog";
 import AutomationFields from "./AutomationFields.vue";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
@@ -18,7 +18,13 @@ import { useAutomationForm } from "./useAutomationForm";
  * Shared by both shelves on the Automations page (chores and integrations) because an enabled chore IS an
  * ordinary automation and must not grow a second presentation that can drift from it. */
 
-const props = defineProps<{ automation: AutomationSummary; listenerSources: readonly ListenerSource[]; expanded: boolean; busy?: boolean }>();
+const props = defineProps<{
+    automation: AutomationSummary;
+    listenerSources: readonly AvailableSource[];
+    templates: readonly AutomationTemplate[];
+    expanded: boolean;
+    busy?: boolean;
+}>();
 const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; expand: []; run: []; install: [] }>();
 
 const trigger = computed<Trigger>(() => props.automation.trigger);
@@ -107,7 +113,10 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
  * between keystrokes. */
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
-const editForm = useAutomationForm(computed(() => props.listenerSources));
+const editForm = useAutomationForm(
+    computed(() => props.listenerSources),
+    computed(() => props.templates),
+);
 const { save } = useAutomations();
 const saving = computed(() => save.isPending.value);
 

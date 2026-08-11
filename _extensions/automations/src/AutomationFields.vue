@@ -3,6 +3,7 @@ import { personaBounds, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-cont
 import { cmp, formatDateTime, Icon, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
+import { glyph } from "./catalog";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
 import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
@@ -365,7 +366,7 @@ const setProvider = (provider: string): void => {
                                 @click="setProvider(source.provider)"
                             >
                                 <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-4 w-4" alt="" />
-                                <Icon v-else :name="source.icon ?? 'bolt'" class="text-2xs" />
+                                <Icon v-else :name="glyph(source.icon) ?? 'bolt'" class="text-2xs" />
                                 {{ source.label }}
                                 <span v-if="!source.available" class="text-2xs text-warning">Unavailable</span>
                                 <Icon name="check-circle" v-if="form.provider === source.provider" class="ml-auto" />

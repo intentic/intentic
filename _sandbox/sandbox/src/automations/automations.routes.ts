@@ -3,13 +3,12 @@ import { automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contr
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
-import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
-import { listenerProvidersOf } from "../extensions/installed-extensions.js";
 import { ensureFrontDeskPersona } from "../personas/front-desk.js";
 import type { AutomationRecord } from "./automations-store.js";
+import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { fireAutomation, runHeldWake } from "./scheduler.js";
 
 // An invalid cron can only come from a hand-edited manifest (upsert rejects it) — surface "no next run"
@@ -37,6 +36,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 return nextRun !== undefined ? Object.assign(automation, { nextRun }) : automation;
             }),
         })),
+        catalog: i.catalog.handler(async () => await automationCatalog(services)),
         upsert: i.upsert.handler(async ({ input }) => {
             if (input.trigger.kind === "schedule") {
                 try {
@@ -45,21 +45,22 @@ export const createAutomationsRoutes = (services: Services) => {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
                 }
             }
-            // A listener trigger's provider/eventType are open strings in the schema — validate them here against
-            // what's actually installed: the core gateway-less sources (`webchat`, which narrows to no event
-            // types, and `ci`, whose events the daemon's own webhook receiver dispatches) plus every provider an
-            // extension declares via contributes.listener, and that provider's declared event types.
+            /* A listener trigger's provider/eventType are open strings in the schema — validated here against the
+             * SAME catalogue the composer draws from, so what the editor can offer and what this will accept
+             * cannot disagree. They used to be two hand-written lists in two packages, which is a disagreement
+             * waiting for whichever one was edited second.
+             *
+             * A source with no event types narrows to none (webchat's single kind needs no picker), so the
+             * provider is checked first and the event type only when one was named. */
             if (input.trigger.kind === "listener") {
                 const { provider, eventType } = input.trigger;
-                const declared = await listenerProvidersOf(services);
-                declared.set(CI_PROVIDER, CI_EVENT_TYPES);
-                const eventTypes = declared.get(provider);
-                if (provider !== "webchat" && eventTypes === undefined) {
+                const events = triggerSourceEvents(await automationCatalog(services)).get(provider);
+                if (events === undefined) {
                     throw new ORPCError("BAD_REQUEST", {
                         message: `unknown listener provider "${provider}" — install the extension that declares it`,
                     });
                 }
-                if (eventType !== undefined && eventTypes !== undefined && !eventTypes.has(eventType)) {
+                if (eventType !== undefined && events.size > 0 && !events.has(eventType)) {
                     throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });
                 }
             }

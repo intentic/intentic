@@ -37,3 +37,8 @@ here to every view that gates on them.
   only connector of `browser` kind here. The browser half exists for what no token can do anymore — WebAuthn
   2FA and publish approvals — which the sandbox answers with its own enrolled passkey (the daemon's browser
   passkey store).
+- The webhook automations for these services are declared here too (`contributes.automationTemplates`) — a
+  GitHub or GitLab push, a Sentry alert, a Komodo deployment alert. A template that fires on the generic
+  webhook has no trigger source to sit beside, so it goes with the pack carrying the card it needs connected,
+  which is the same card the user had to connect for it to work at all. The automations surface names none of
+  them.

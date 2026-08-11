@@ -58,7 +58,7 @@ fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` 
 | `acceptance` | UI view | Every repo's `docs/user-stories` + their acceptance criteria, authored here and walked through the running app by agents driving real browsers (one isolated fleet session per story, screenshots + report, live watchable). |
 | `activity` | UI view | The agent activity feed. |
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
-| `automations` | UI view | Cron / webhook / listener automations. |
+| `automations` | UI view | Cron / webhook / listener automations. The SURFACE only: what can wake an agent and what is worth starting from are served together by the daemon's trigger catalogue (`GET /automations/catalog`) — its own sources merged with every pack's `contributes.listener` and `contributes.automationTemplates` — and this page names no integration of its own. |
 | `deployments` | UI view + backend | Container health, incidents and one-click redeploys over a connected Komodo. Its whole Komodo side (client, board translation, repo→stack links, fix turns) is its backend — the daemon core carries no Komodo feature; the credential is read through the daemon's connection route, declared in `permissions.daemon`. |
 | `documentation` | UI view + agent CLI + plugin | Plain-language architecture docs for every repo and package: a map-first agent run writes them as a reviewable draft, the owner publishes them into the repo. Ships the `intentic-docs` CLI (`contributes.bin`) and the `documenting` skill (`contributes.agent`). |
 | `git-history` | UI document | Every repository's commit graph, as an icon on its Workspace tree row: lanes and merges, a commit's changed files, and the write actions on one (branch, tag, checkout, cherry-pick, revert, drop, merge, rebase, reset) — plus the branch switcher. The uncommitted half of the same story stays in the app's Changes panel. |
@@ -134,6 +134,24 @@ image rebuild.
 
 The split is no longer a UI veneer: the backend host gives an extension a server half of its own, and
 `memory` is the first feature whose backend lives entirely in its package — own contract, own routes, no
-daemon-core feature code. The rest (activity, automations, logs, CI…) migrate the same way, each migration
-deleting its core routes, until the daemon is the kernel: files/git/watcher, terminals and processes, the
-agent runtime, capabilities and their privileged handlers, auth, and the extension system itself.
+daemon-core feature code. `deployments` followed, and the rest (activity, logs, drafts…) migrate the same way,
+each migration deleting its core routes.
+
+## Which way a feature moves — substrate or feature
+
+Not everything migrates out, and getting this backwards is expensive in both directions. The test is whether
+**other things plug into it**:
+
+- **A feature** is a surface over its own data that nobody else extends — `memory`, `deployments`, `knowledge`,
+  `acceptance`, `documentation`. Its routes, schemas and translation belong in its package, and the core is
+  better off not knowing it exists. These migrate OUT.
+- **A substrate** is something other packs fire into or contribute to — the automations trigger bus, the batch
+  run engine, the standing-check registry, the CI event source. These stay in the core and publish a
+  contribution point, for two reasons. An extension can be switched off, and a bus that stops when someone
+  hides a screen is not a bus. And a substrate living in one pack means every other pack that wants to reach it
+  either edits that pack or reinvents it — which is exactly what happened while the automations vocabulary lived
+  in the automations view, and what three separately-written isolated-run implementations are still evidence of.
+
+The end state is a kernel plus substrates: files/git/watcher, terminals and processes, the agent runtime,
+capabilities and their privileged handlers, auth, the extension system — and the cross-cutting buses every pack
+is allowed to contribute to.

@@ -8,24 +8,32 @@ cron expression, or a listener a connector provides) with the prompt to run when
 ## Responsibilities
 
 - Compose an automation: its trigger, its prompt, which agent runs it, and which persona it runs as.
-- Derive live trigger choices from installed listener contributions rather than owning provider knowledge.
+- Draw every trigger and every starting template from the daemon's catalogue, owning the name of no integration.
 - Translate a schedule into something a person can read back before they save it.
-- Offer recipes — the automations most workspaces want, pre-written.
 - Install the doorbell widget, the automation whose trigger is a visitor on your website.
 
 ## Key files
 
 - [src/useAutomations.ts](src/useAutomations.ts) — the list, and the writes that change it.
+- [src/catalog.ts](src/catalog.ts) — the daemon's catalogue, and what this browser adds to it (what is connected).
 - [src/cronSchedule.ts](src/cronSchedule.ts) — schedule parsing and the plain-language sentence it renders as.
-- [src/listenerSources.ts](src/listenerSources.ts) — which non-time triggers exist, from the connectors that are on.
-- [src/useListenerSources.ts](src/useListenerSources.ts) — installed listener declarations joined to connected capabilities.
-- [src/recipes.ts](src/recipes.ts) — the pre-written automations, and what each is for.
 - [src/useAutomationForm.ts](src/useAutomationForm.ts) — the composer's state and its validation.
 
 ## How it fits
 
 Automations are native to every sandbox — there is no capability to enable — so the view detects
 unconditionally and the rail tile is permanent.
+
+**This package is the surface, not the vocabulary.** What can wake an agent, and what is worth starting from,
+are served together by the daemon (`GET /automations/catalog`): its own sources — the website widget and CI,
+whose endpoints it holds — merged with what every installed pack declares (`contributes.listener`,
+`contributes.automationTemplates`). `POST /automations` validates against that same merge, so the picker cannot
+offer a trigger the daemon would refuse.
+
+Both halves used to live here, as two hand-written tables naming CI, Komodo, Sentry, Stripe, email and every
+chore in the book — with the daemon keeping a second copy of the source list to validate against. That made
+this page the file you edited when a pack you had nothing to do with gained a trigger, and made the two lists a
+disagreement waiting for whichever was edited second.
 
 ## Conventions & gotchas
 
@@ -46,7 +54,14 @@ unconditionally and the rail tile is permanent.
   approval wins.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
   row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
-- Two automations arrive seeded, each defined once in the contract and offered again as a recipe only after the
-  owner deletes it: the dependency fix chore ("Fix what a dependency change broke"), enabled with a 60-second
-  hold, and the drafts publisher ("Publish approved drafts"), which the daemon also fires by id the instant a
-  draft is approved and due — its cron is only the sweep for future-dated drafts and dropped fires.
+- Two automations arrive seeded, each defined once in the contract and offered again as a template only after
+  the owner deletes it: the dependency fix chore ("Fix what a dependency change broke"), enabled with a
+  60-second hold, and the drafts publisher ("Publish approved drafts"), which the daemon also fires by id the
+  instant a draft is approved and due — its cron is only the sweep for future-dated drafts and dropped fires.
+- A source outlives the pack that supplied it and a template does not, which reads like an inconsistency until
+  you ask what each one is for. A source has to keep naming the trigger of an automation already standing on it,
+  so a switched-off pack keeps its row and the picker simply declines to offer it. A template is something you
+  have not made yet, and offering one from a pack that is off would offer to create a row that cannot fire.
+- A pack names its glyph as an open string, because neither the wire contract nor the manifest schema may depend
+  on the UI kit to spell one. The cast happens once, where the two vocabularies meet; an unknown name renders
+  the icon set's own fallback rather than nothing.

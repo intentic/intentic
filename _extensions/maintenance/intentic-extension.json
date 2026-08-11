@@ -14,8 +14,6 @@
             "GET /workspace/file",
             "POST /workspace/upload",
             "GET /panels",
-            "GET /automations",
-            "POST /automations",
             "POST /agent",
             "POST /agent/stop",
             "GET /agents"
