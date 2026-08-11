@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* Three mechanisms that get confused for each other, on one page precisely so the differences are visible.
  * "6 · Make it autonomous" in the autonomous-employees guide is the narrative version; this is the reference. */
@@ -38,6 +39,10 @@ const triggers = [
     heading="Automations, workflows & loops"
     lead="Three ways an agent does work you aren't sitting there for: something outside wakes it, a design runs several agents in order, or one agent repeats until the goal is actually met."
 >
+    {/* A HEADING, though it opens the page. This table is the most useful thing here — three words readers
+        routinely swap for one another — and without a heading it was in no table of contents, had no anchor, and
+        could not be linked to by anyone answering "what's the difference?". */}
+    <h2>Automation, workflow or loop?</h2>
     <p>They get mistaken for each other, so the distinction first:</p>
     <table>
         <thead>
@@ -81,10 +86,11 @@ const triggers = [
 
     <h3>Who serves the wake</h3>
     <p>
-        An automation can pin its provider, model, harness and <strong>account</strong>. The account matters more here than anywhere else,
-        for a reason a chat never meets: nobody is watching. A sandbox holds several accounts side by side, and when the first is out of
-        headroom — or belongs to an organisation that turned the plan off — every fire errors against it until a human happens to read the
-        row. Pinning is the difference between a quiet nightly sweep and a Doorbell that turned visitors away all day.
+        An automation can pin its provider, model, <a href="/docs/glossary/">harness</a> and <strong>account</strong>. The account matters
+        more here than anywhere else, for a reason a chat never meets: nobody is watching. A sandbox holds several accounts side by side, and
+        the first one can run out of headroom, or belong to an organisation that turned the plan off. Every fire then errors against it until
+        a human happens to read the row. Pinning is the difference between a quiet nightly sweep and a Doorbell that turned visitors away all
+        day.
     </p>
 
     <h3>Approving a fire</h3>
@@ -101,8 +107,8 @@ const triggers = [
     </ul>
     <p>
         An explicit "ask me" always wins over a hold. A held fire snapshots the payload that caused it, so approving it later replays exactly
-        what fired — including across a daemon restart, and including the conversation it belonged to, so a visitor's chat stays one thread
-        rather than becoming a second card.
+        what fired — and it survives a daemon restart. The snapshot keeps the conversation it belonged to, too, so a visitor's chat stays one
+        thread rather than becoming a second card.
     </p>
 
     <h3>Chores</h3>
@@ -144,20 +150,20 @@ const triggers = [
     <h3>Gates</h3>
     <p>
         A <strong>gate</strong> turns a finished run into a release decision, for a pipeline that has no way to sign in. It reads exactly one
-        declared field off one named step and compares it against the values that mean ship it — an allowlist, never a blocklist, because a
-        model that answers "mostly-pass" or "pass with notes" must not ship, and nobody should have had to enumerate the ways it can hedge.
-        The gate's webhook carries its own token, minted on save.
+        declared field off one named step and compares it against the values that mean ship it — an allowlist, never a blocklist. A model that
+        answers "mostly-pass" or "pass with notes" must not ship, and nobody should have had to enumerate the ways it can hedge. The gate's
+        webhook carries its own token, minted on save.
     </p>
     <p>
-        Keeping the gate separate from the design is the point: what a run does stays the graph's business, so today's release check can be
-        an acceptance sweep and next month's a security review, without the gate ever learning what either of them is.
+        Keeping the gate separate from the design is the point. What a run does stays the graph's business, so today's release check can be an
+        acceptance sweep and next month's a security review, without the gate ever learning what either of them is.
     </p>
 
     <h2>Loops</h2>
     <p>
-        A loop is started <em>against a conversation</em> — "keep going until this is true" — and it has no editor and no id of its own,
-        because it isn't a thing you maintain: it converges or it gives up, and then it's history. The conversation need not exist yet, which
-        is what lets "run this until it's green" be the first thing you ever say to a new agent.
+        A loop is started <em>against a conversation</em> — "keep going until this is true". It has no editor and no id of its own, because it
+        isn't a thing you maintain: it converges or it gives up, and then it's history. The conversation need not exist yet, which is what lets
+        "run this until it's green" be the first thing you ever say to a new agent.
     </p>
     <p>
         It uses the same vocabulary as a workflow step — a goal, an output, checks — plus one question of its own: whether each iteration
@@ -171,10 +177,11 @@ const triggers = [
     </p>
     <p>Every loop that has run is kept, with its iteration history — because "why did it stop at four?" is the question a loop gets read for.</p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/parallel-agents/">Parallel agents</a>: what each of these opens — an isolated conversation you review and land.</li>
-        <li><a href="/docs/doorbell/">Doorbell</a>: a listener automation with a chat widget on the front of it.</li>
-        <li><a href="/docs/capabilities/">Capabilities</a>: connect the system whose events you want to wake on.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "what each of these opens — an isolated conversation you review and land." },
+            { href: "/docs/doorbell/", title: "Doorbell", why: "a listener automation with a chat widget on the front of it." },
+            { href: "/docs/capabilities/", title: "Capabilities", why: "connect the system whose events you want to wake on." },
+        ]}
+    />
 </DocsLayout>

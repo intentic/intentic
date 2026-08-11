@@ -1,7 +1,7 @@
 import sitemap from "@astrojs/sitemap";
-import { lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
+import { docsSearch, lastModForUrl, llmsText } from "@intentic-dev/astro-integrations";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
-import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import { docsHref, docsPages, docsPlacements } from "@intentic-dev/site-content/docs";
 import { landingContent } from "@intentic-dev/site-content/landing";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
@@ -111,6 +111,18 @@ export default defineConfig({
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/"] },
             ],
+        }),
+        /* The docs search index, rebuilt from the pages that were just written — it replaces the near-empty file
+         * the /docs/search.json route emits in a build. Driven by the docs TREE, so a page the sidebar cannot
+         * reach is never indexed and the shelf a result names is the one the reader navigates by. */
+        docsSearch({
+            pages: docsPlacements.map(({ page, section }) => ({
+                id: page.id,
+                url: docsHref(page.id),
+                title: page.title,
+                section: section.label,
+                blurb: page.blurb,
+            })),
         }),
         // Submission runs at build:done, which on a deploy box is BEFORE the upload — so the first build after
         // the key file changes can be refused (403) while the old file is still live. astro-indexnow retries

@@ -1,0 +1,238 @@
+---
+import DocsLayout from "../../components/DocsLayout.astro";
+
+/* THE WORDS THESE DOCS USE AS IF YOU KNEW THEM.
+ *
+ * Written because an audit counted "daemon" 92 times across 14 pages with no definition anywhere, and found
+ * "land", "worktree" and "harness" each first used a whole shelf before the page that explains them. A reader
+ * meeting a load-bearing word for the first time on page two has two choices, and both are bad: guess, or go
+ * hunting. Searching for "glossary" returned nothing.
+ *
+ * GROUPED, NOT ALPHABETICAL. Nobody reads a glossary end to end; they arrive at one word. But the words come in
+ * families — everything about a running sandbox, everything about several agents at once — and a reader who
+ * looked up "worktree" almost always wants "land" next. Alphabetical order would put those eight rows apart.
+ * Within a group the order is the order you meet them.
+ *
+ * EVERY DEFINITION LINKS TO THE PAGE THAT OWNS IT. A glossary that explains something fully is a page competing
+ * with the page it summarises, and the two drift. One sentence of what it is, one of why it matters, then the
+ * link — the definition here should be enough to keep reading, never a substitute for the page. */
+
+interface Term {
+    /** The word as the docs write it, including the "/ verb" form where both are used. */
+    word: string;
+    /** What it is — one sentence, no jargon that is not itself in this list. */
+    what: string;
+    /** Where it is explained properly. Omitted for the few words no single page owns. */
+    href?: string;
+    /** The page's name, for the link. */
+    page?: string;
+}
+
+interface Family {
+    label: string;
+    /** Why these words belong together — the thing they are all about. */
+    about: string;
+    terms: Term[];
+}
+
+const families: Family[] = [
+    {
+        label: "The pieces",
+        about: "The two tiers, and the things that make up the half that runs on your hardware.",
+        terms: [
+            {
+                word: "Sandbox",
+                what: "One Docker container on your own machine, holding one agent, its workspace and everything it can reach. It is the whole product surface — chat, files, terminals, capabilities — and the only tier that ever sees your code.",
+                href: "/docs/architecture/",
+                page: "Architecture",
+            },
+            {
+                word: "Daemon",
+                what: "The program inside the sandbox that everything talks to. It serves the HTTP API, verifies who you are against Google directly, runs the agent, and owns the files and git history. When these docs say the daemon enforces something, they mean it is enforced by the container on your hardware rather than by a screen you could bypass.",
+                href: "/docs/sandbox-api/",
+                page: "HTTP API",
+            },
+            {
+                word: "The platform",
+                what: "The thin hub at intentic.dev: your account and your sandbox's address, and nothing else. It sits off the command path, so it cannot drive your sandbox and a breach of it reaches no code.",
+                href: "/docs/architecture/",
+                page: "Architecture",
+            },
+            {
+                word: "Tunnel",
+                what: "The outbound-only Cloudflare connection a cloudflared container dials from your machine, which is how a browser anywhere reaches your sandbox with no inbound port opened.",
+                href: "/docs/architecture/",
+                page: "Architecture",
+            },
+            {
+                word: "Workspace",
+                what: "The /work directory inside the sandbox: your repos, and the files the agent reads and writes. It lives in a named Docker volume, so it survives every update, rebuild and rollback.",
+                href: "/docs/docker/",
+                page: "Docker setup",
+            },
+            {
+                word: "Slug",
+                what: "The short name every Docker object for a sandbox is derived from — the first label of its public hostname, so my-box in my-box.intentic.dev. It is what you substitute into the container, volume and network names.",
+                href: "/docs/docker/",
+                page: "Docker setup",
+            },
+            {
+                word: "Setup code",
+                what: "A short-lived code the setup screen mints and puts inside the install command for you. Your machine redeems it once for the real connection token, which is why no long-lived secret lands in your shell history.",
+                href: "/docs/quickstart/#setup-codes",
+                page: "Quickstart",
+            },
+        ],
+    },
+    {
+        label: "Doing the work",
+        about: "What an agent run is, and the words for running several at once.",
+        terms: [
+            {
+                word: "Conversation",
+                what: "One thread of work with the agent, addressable and resumable by an id you choose. A sandbox holds many, and each one keeps its own transcript.",
+                href: "/docs/parallel-agents/",
+                page: "Parallel agents",
+            },
+            {
+                word: "Turn",
+                what: "One request to the agent and the work it does in reply. It runs detached inside the daemon, so closing the tab, reloading, or watching from a second device changes nothing about it.",
+                href: "/docs/sandbox-api/#drive-an-agent",
+                page: "HTTP API",
+            },
+            {
+                word: "Worktree",
+                what: "A second checkout of one of your repos, on its own branch, which an isolated conversation is given so it can edit files without colliding with anything else. It is a standard git feature, not an intentic one.",
+                href: "/docs/parallel-agents/",
+                page: "Parallel agents",
+            },
+            {
+                word: "Land / landing",
+                what: "Taking what an agent did in its worktree and applying it to your main tree as uncommitted changes. Nothing is merged and your main branch does not move — landing hands you a diff to review, and doing it twice is safe.",
+                href: "/docs/parallel-agents/",
+                page: "Parallel agents",
+            },
+            {
+                word: "Fleet",
+                what: "All the conversations in a sandbox seen at once, on the board that sorts them by whether they need you, are still working, or are done.",
+                href: "/docs/parallel-agents/",
+                page: "Parallel agents",
+            },
+            {
+                word: "Harness",
+                what: "The agentic loop that serves a turn — the thing that decides how the model plans, calls tools and asks you questions. It is a separate choice from the model: the same model behaves differently under each, so the picker asks for both.",
+                href: "/docs/models/",
+                page: "Models & accounts",
+            },
+        ],
+    },
+    {
+        label: "Work that runs without you",
+        about: "The three unattended shapes, and the two words that qualify them.",
+        terms: [
+            {
+                word: "Automation",
+                what: "A wake-up: something outside the sandbox — a clock, a webhook, a message, a change in the workspace — starts a fresh run on its own.",
+                href: "/docs/automations/#automation-workflow-or-loop",
+                page: "Automations, workflows & loops",
+            },
+            {
+                word: "Workflow",
+                what: "Several agents run in a set order, each handing on to the next. Authored once, run repeatedly.",
+                href: "/docs/automations/#automation-workflow-or-loop",
+                page: "Automations, workflows & loops",
+            },
+            {
+                word: "Loop",
+                what: "One agent kept going until its goal is actually met, rather than stopping after a single turn.",
+                href: "/docs/automations/#automation-workflow-or-loop",
+                page: "Automations, workflows & loops",
+            },
+            {
+                word: "Guard",
+                what: "A shell one-liner run in the workspace before a wake, which has to succeed for the run to proceed. It is how an automation stays quiet when there is nothing to do.",
+                href: "/docs/automations/",
+                page: "Automations, workflows & loops",
+            },
+            {
+                word: "Chore",
+                what: "An automation marked as maintenance of your own codebase, rather than a reaction to something outside it. The distinction is what lets the sandbox report what it keeps an eye on.",
+                href: "/docs/automations/",
+                page: "Automations, workflows & loops",
+            },
+        ],
+    },
+    {
+        label: "Reaching out, and letting in",
+        about: "How a sandbox gains tools, and how anything other than you gets in.",
+        terms: [
+            {
+                word: "Capability",
+                what: "One connected outside system or tool, added in a click: the credential is stored in your sandbox, the environment variables reach the agent's shell, and a cheatsheet teaches it to drive the thing.",
+                href: "/docs/capabilities/",
+                page: "Capabilities",
+            },
+            {
+                word: "Extension",
+                what: "Code that adds to the product itself — views, file renderers, commands, settings, whole capability cards — declared in a manifest the owner approves before any of it runs.",
+                href: "/docs/extensions/",
+                page: "Extensions",
+            },
+            {
+                word: "Overlay",
+                what: "The approved list of extra things baked into your sandbox's image — a package, a language toolchain, an SDK. Changing it needs a rebuild you approve, because changing what the container contains is your call and not an extension's.",
+                href: "/docs/docker/",
+                page: "Docker setup",
+            },
+            {
+                word: "Control token",
+                what: "The credential a program presents instead of signing in — a CI job, a script, an editor bridge. Minted with a fixed scope, shown once, revocable one at a time.",
+                href: "/docs/sandbox-api/#how-a-call-is-authorized",
+                page: "HTTP API",
+            },
+            {
+                word: "Role",
+                what: "What an invited person may do in your sandbox: maintainer, collaborator or viewer. The daemon enforces it on every route, so it is not a matter of which buttons the screen shows.",
+                href: "/docs/access/",
+                page: "Access & sharing",
+            },
+        ],
+    },
+];
+---
+
+<DocsLayout
+    pageId="glossary"
+    heading="Glossary"
+    lead="These docs use a handful of words as though you already had them. Here is each one in a sentence, with the page that explains it properly. Grouped by family rather than alphabetically: someone who just looked up worktree usually wants land next."
+>
+    {
+        families.map((family) => (
+            <Fragment>
+                <h2>{family.label}</h2>
+                <p>{family.about}</p>
+                <table>
+                    <thead>
+                        <tr><th>Word</th><th>What it means</th></tr>
+                    </thead>
+                    <tbody>
+                        {family.terms.map((term) => (
+                            <tr>
+                                <td><strong>{term.word}</strong></td>
+                                <td>
+                                    {term.what}
+                                    {term.href && (
+                                        <Fragment>
+                                            {" "}
+                                            <a href={term.href}>{term.page}</a>
+                                        </Fragment>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </Fragment>
+        ))
+    }
+</DocsLayout>

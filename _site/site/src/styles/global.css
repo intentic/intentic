@@ -197,6 +197,31 @@
         background: transparent !important;
     }
 
+    /* ── Docs rail scroll edge ───────────────────────────── */
+    /* The rail scrolls inside itself, and its 27 rows overflow a 1366×768 laptop by about 260px — the whole
+       "Build on it" shelf. Nothing said so: no fade, no shadow, and an overlay scrollbar that appears only once
+       you are already scrolling, so a list that continues looked like a list that had ended.
+
+       The fade is on whichever edge has something behind it, which is why this is three rules and not one: a
+       permanent fade at the foot would dim the last row of a rail that is fully scrolled, and read as a bug.
+       The attributes come from DocsLayout's scroll handler. */
+    [data-rail-scroll] {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-line-strong) transparent;
+    }
+    [data-rail-scroll][data-overflow-top][data-overflow-bottom] {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2rem, #000 calc(100% - 2.5rem), transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 2rem, #000 calc(100% - 2.5rem), transparent 100%);
+    }
+    [data-rail-scroll][data-overflow-top]:not([data-overflow-bottom]) {
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2rem);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 2rem);
+    }
+    [data-rail-scroll][data-overflow-bottom]:not([data-overflow-top]) {
+        -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent 100%);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent 100%);
+    }
+
     /* ── Docs prose (.docs-body) ─────────────────────────── */
     .docs-body {
         font-size: 0.95rem;

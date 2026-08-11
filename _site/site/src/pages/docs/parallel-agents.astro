@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The mechanics behind the fleet board. This page exists because "run a separate agent for each job" was a
  * product claim and an FAQ answer with nothing underneath it — the words isolation, worktree and land appeared
@@ -33,10 +34,11 @@ const lanes = [
     heading="Parallel agents"
     lead="Several agents working at once, each in its own checkout of your repos, none of them able to overwrite another's edits — and a review step before any of it reaches the tree you work in."
 >
+    <h2>One sandbox, many conversations</h2>
     <p>
-        One sandbox, many conversations. Press <strong>New agent</strong> and you get a fresh <em>isolated</em> conversation: it runs in its
-        own git worktree of every repo in your workspace, on its own branch. That is the default, and it is what makes running five agents at
-        once a normal afternoon rather than a merge disaster.
+        Press <strong>New agent</strong> and you get a fresh <em>isolated</em> conversation: it runs in its own git worktree of every repo in
+        your workspace, on its own branch. That is the default, and it is what makes running five agents at once a normal afternoon rather
+        than a merge disaster.
     </p>
 
     <h2>What an isolated conversation gets</h2>
@@ -123,8 +125,8 @@ const lanes = [
     <p>
         If the patch cannot apply — you edited the same lines, or an overlapping file is dirty — then <strong>nothing lands for that
         repo</strong> and the card says so. The worktree keeps everything, and landing again works the moment you have resolved your side.
-        Work that already reached the main tree by another road is specifically not treated as a conflict: an agent that committed onto the
-        main line itself, or a branch you merged by hand, resolves as "already there" rather than stranding the card on a refusal nobody
+        Work that already reached the main tree by another road is specifically not treated as a conflict. An agent that committed onto the
+        main line itself, or a branch you merged by hand, resolves as "already there" — rather than stranding the card on a refusal nobody
         could act on.
     </p>
 
@@ -136,7 +138,7 @@ const lanes = [
         never expressed an opinion follows the sandbox wherever you point it next.
     </p>
     <p>
-        It is a sandbox setting rather than a browser preference for a specific reason: agents opened by an automation, a webhook or a chat
+        It is a sandbox setting rather than a browser preference for a specific reason. Agents opened by an automation, a webhook or a chat
         message finish their turns with nobody in the room, and a preference held in a browser could not govern them.
     </p>
 
@@ -165,7 +167,7 @@ const lanes = [
     </table>
     <p>
         Finished agents are archived automatically after three days by default (<strong>Sandbox → Agent</strong>). That sweep is on where
-        almost everything else is off, because a finished card is not a row in a list — it holds a full checkout of every repo, so a lane that
+        almost everything else is off, because a finished card is not a row in a list: it holds a full checkout of every repo. A lane that
         grows forever is disk that grows forever.
     </p>
 
@@ -180,9 +182,10 @@ const lanes = [
         Reach for the shared tree when you are working <em>with</em> the agent on what is in front of you.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/automations/">Automations &amp; workflows</a>: agents that start themselves, and multi-step runs.</li>
-        <li><a href="/docs/sandbox-api/">HTTP API</a>: start an isolated turn, watch it, and land it from a script.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/automations/", title: "Automations & workflows", why: "agents that start themselves, and multi-step runs." },
+            { href: "/docs/sandbox-api/", title: "HTTP API", why: "start an isolated turn, watch it, and land it from a script." },
+        ]}
+    />
 </DocsLayout>

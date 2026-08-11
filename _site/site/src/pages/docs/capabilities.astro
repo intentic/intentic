@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The user-facing half of capabilities. The manifest page already covers CONTRIBUTING a card; nothing covered
  * adding one, which is the step between "I have a sandbox" and "it can do my job". */
@@ -54,6 +55,7 @@ const shapes = [
     heading="Capabilities"
     lead="How an agent gets reach: the tools it can run, the systems it can query, the machines it can operate — each added in a click, with the credential stored in your sandbox and never in your repo."
 >
+    <h2>What a fresh sandbox can't do yet</h2>
     <p>
         A fresh sandbox can read and write your code. It cannot yet look at your error tracker, query your database, open a pull request, or
         deploy anything. Capabilities are how you close that gap, one connection at a time, on the
@@ -103,9 +105,9 @@ const shapes = [
     <h2>Adding one</h2>
     <p>
         Pick a card and you get two things side by side: a <strong>guide</strong> and a <strong>form</strong>. The guide is the part that
-        usually costs the time — where to create the credential, which scopes it needs, and a deep link straight to the right settings page
-        (at the provider, or at your own instance if you're self-hosting one). The form is the fields that connection needs, with secrets
-        masked.
+        usually costs the time — where to create the credential, and which scopes it needs. It carries a deep link straight to the right
+        settings page, at the provider or at your own instance if you're self-hosting one. The form is the fields that connection needs, with
+        secrets masked.
     </p>
     <p>
         Saving applies it, and you watch it happen: provisioning runs as a real terminal job with its output on screen, rather than a spinner
@@ -136,8 +138,8 @@ const shapes = [
     <h2>Where the credentials live</h2>
     <p>
         In your sandbox, in a file the agent is specifically not allowed to read. The manifest of active capabilities sits in your
-        workspace's control-plane directory and is on the daemon's secret denylist, so the generic file routes answer "not found" for it —
-        an agent cannot read its own credential store out through the file API, and neither can an extension.
+        workspace's control-plane directory and is on the daemon's secret denylist, so the generic file routes answer "not found" for it. An
+        agent cannot read its own credential store out through the file API, and neither can an extension.
     </p>
     <p>
         Nothing goes to the intentic platform. The platform holds your identity and your sandbox's address; every credential here is one your
@@ -155,9 +157,10 @@ const shapes = [
         <li><strong>One bad entry costs only itself.</strong> If a stored connection can't be read — a hand-edit, a format that moved — it is skipped and reported by name, never rewritten away, and every other capability keeps working.</li>
     </ul>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/automations/">Automations &amp; workflows</a>: have the agent act on what a connected system tells it.</li>
-        <li><a href="/docs/autonomous-employees/">Autonomous employees</a>: the narrative version — specialise one sandbox until it does a job on its own.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/automations/", title: "Automations & workflows", why: "have the agent act on what a connected system tells it." },
+            { href: "/docs/autonomous-employees/", title: "Autonomous employees", why: "the narrative version — specialise one sandbox until it does a job on its own." },
+        ]}
+    />
 </DocsLayout>

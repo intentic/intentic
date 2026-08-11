@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
+import DocsRelated from "../../../components/DocsRelated.astro";
 
 const install = `mkdir acme-incidents && cd acme-incidents
 npm init -y
@@ -200,9 +201,9 @@ const workspace = `.intentic/workspace-extensions/
 
     <h2>Optional: give it a backend</h2>
     <p>
-        When the view needs more than the daemon's routes offer — a client for somebody else's API, work that outlives the tab — add a
-        second bundle and name it in the manifest as <code>"server": "dist/server.js"</code> (with
-        <code>"engines": &#123; "intentic": "^2.1.0" &#125;</code>). It exports one function:
+        Sometimes the view needs more than the daemon's routes offer — a client for somebody else's API, or work that outlives the tab. Add a
+        second bundle and name it in the manifest as <code>"server": "dist/server.js"</code>, with
+        <code>"engines": &#123; "intentic": "^2.1.0" &#125;</code>. It exports one function:
     </p>
     <DocsCodeBlock code={server} lang="typescript" title="src/server.ts" />
     <p>
@@ -227,8 +228,8 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <p>
         This is the path to hand your <strong>agent</strong>, and the reason it exists. "Build me a rail view that lists our incidents" is a
-        thing you can now ask for and have five minutes later, because the agent writes files into the workspace and the sandbox picks them
-        up — no publish, no install, and nothing to clone from a machine that doesn't have it yet.
+        thing you can now ask for and have five minutes later: the agent writes files into the workspace and the sandbox picks them up. No
+        publish, no install, and nothing to clone from a machine that doesn't have it yet.
     </p>
 
     <h3>The loop</h3>
@@ -246,10 +247,11 @@ const workspace = `.intentic/workspace-extensions/
         from, so they survive the move — and every other sandbox can have it too.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments.</li>
-        <li><a href="/docs/sandbox-api/host/">Host API reference</a>: every member of the <code>api</code> object above — the typed daemon client, workspace files and diffs, documents, models, routing.</li>
-        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a>: list it so other people can install it in one click.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments." },
+            { href: "/docs/sandbox-api/host/", title: "Host API reference", why: "every member of the <code>api</code> object above — the typed daemon client, workspace files and diffs, documents, models, routing." },
+            { href: "/docs/extensions/publish/", title: "Publish & the marketplace", why: "list it so other people can install it in one click." },
+        ]}
+    />
 </DocsLayout>

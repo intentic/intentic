@@ -1,5 +1,6 @@
 ---
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The provider/harness/account axes, which are three different questions the UI asks in one picker and which
  * nothing outside the code explained. The harness one especially: "why does Codex behave differently under
@@ -32,6 +33,7 @@ const others = [
     heading="Models & accounts"
     lead="Which model serves a turn is four questions, not one: the provider, the account, the agentic loop it runs in, and the model itself. The picker asks all four; this is what each of them changes."
 >
+    <h2>Whose credentials these are</h2>
     <p>
         Every credential here belongs to your sandbox. You connect your own subscription and turns spend
         <em>your</em> allowance — intentic never resells inference, and the platform never holds the token.
@@ -98,9 +100,9 @@ const others = [
         at all — all three run that loop whatever you pick. Only <strong>Codex and Grok</strong> have a native runtime to switch away from.
     </p>
     <p>
-        The choice is worth making because the loops genuinely differ in what they support, and the app tells you rather than letting you
-        find out mid-turn: a runtime with no mid-turn steering, no clarifying questions, no per-tool approvals, no MCP tools or no
-        reasoning-effort control has those limitations listed against it, and the composer hides the controls that runtime would ignore.
+        The choice is worth making, because the loops genuinely differ in what they support — and the app tells you rather than letting you
+        find out mid-turn. A runtime that lacks mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort
+        control has those limitations listed against it, and the composer hides the controls that runtime would ignore.
     </p>
 
     <h2>Per-turn controls</h2>
@@ -131,6 +133,15 @@ const others = [
     </ul>
 
     <h2>What it costs</h2>
+    {/* SAYS WHICH MONEY THIS IS. The docs discussed spend in three places and never once said what intentic itself
+        charges, so a reader searching the docs for "pricing" or "cost" landed on a ledger of inference spend and
+        could reasonably read it as a bill from us. Three lines, and the ambiguity is gone. */}
+    <p>
+        Two different kinds of money, and only one of them is a bill. <strong>intentic itself is free</strong> — every sandbox, every
+        capability and team sharing, with no tiers and no card. What a turn costs is <em>your</em> provider subscription being spent, because
+        the credential is yours and intentic never resells inference. The one optional charge anywhere is the membership that runs premium
+        extensions, described in <a href="/docs/extensions/economics/">The creator pool</a>.
+    </p>
     <p>
         <strong>Sandbox → Usage</strong> reports the durable spend ledger: a row is appended when a turn ends, grouped by day, provider,
         account and model, with cache hit rates alongside. Rows are written daemon-side and never edited, so it is a record of what was
@@ -142,9 +153,10 @@ const others = [
         account, so a fleet that has quietly stopped working says why.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/automations/">Automations &amp; workflows</a>: where pinning an account and a model actually pays off.</li>
-        <li><a href="/docs/access/">Access &amp; sharing</a>: who else may spend this sandbox's allowance.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/automations/", title: "Automations & workflows", why: "where pinning an account and a model actually pays off." },
+            { href: "/docs/access/", title: "Access & sharing", why: "who else may spend this sandbox's allowance." },
+        ]}
+    />
 </DocsLayout>

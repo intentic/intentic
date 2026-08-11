@@ -2,6 +2,7 @@
 import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
 import DocsIndexTable, { type DocsIndexRow } from "../../../components/DocsIndexTable.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
+import DocsRelated from "../../../components/DocsRelated.astro";
 
 /* The daemon's route surface as a page. Every row of `groups` says what the group is FOR rather than
  * enumerating its routes: the enumeration is what dates fastest, and the daemon already advertises its own
@@ -224,7 +225,7 @@ const groups = [
     </table>
     <p>
         Worth saying plainly: at <code>drive</code> and above, a stolen token is the agent's reach, because driving an agent means editing
-        files and running commands in this sandbox. <code>read</code> is the one that is genuinely narrower, which is why it exists
+        files and running commands in this sandbox. <code>read</code> is the one rung that is genuinely narrower, which is why it exists
         separately rather than as a politeness. A token presented on a route outside its scope gets a <code>403</code> that says so, rather
         than a confusing <code>401</code>.
     </p>
@@ -242,7 +243,10 @@ const groups = [
         <tbody>
             <tr><td>Input on GET</td><td>The query string.</td></tr>
             <tr><td>Input on everything else</td><td>A JSON body — including <code>DELETE</code>, which sends its parameters in the body rather than the query.</td></tr>
-            <tr><td>Path parameters</td><td>Written <code>{"{repo}"}</code>, <code>{"{id}"}</code> in the contract, URL-encoded in the request. <code>root</code> is the workspace repo itself.</td></tr>
+            {/* set:text, not {"{repo}"}: an expression inside a <code> inside a <table> makes the Astro compiler
+                emit an unclosed <code> after the table, and every heading, paragraph and table to the end of the
+                page renders as code. Checked by assertNoCodeBleed — see lib/docs-headings.ts. */}
+            <tr><td>Path parameters</td><td>Written <code set:text="{repo}" />, <code set:text="{id}" /> in the contract, URL-encoded in the request. <code>root</code> is the workspace repo itself.</td></tr>
             <tr><td>Output</td><td>JSON, except the byte routes and the streams below.</td></tr>
         </tbody>
     </table>
@@ -251,14 +255,14 @@ const groups = [
     <h2>Drive an agent</h2>
     <p>
         The reason most scripts are here. A turn executes as a <strong>detached daemon-side run</strong>: starting it acks with a run id, and
-        any number of clients render it by attaching — so a reload, a second window, another device, or your script all watch the same work
+        any number of clients render it by attaching. So a reload, a second window, another device and your script all watch the same work
         identically, and nothing is lost if the caller goes away.
     </p>
     <DocsCodeBlock code={turn} lang="bash" title="Start a turn and watch it" />
     <p>
         <code>conversationId</code> is yours to choose and is what makes a run resumable and addressable later. <code>isolated: true</code>
         runs the turn in that conversation's own git worktree instead of the shared tree, which is what lets several agents work at once
-        without colliding; the work reaches your main tree only when something calls <code>land</code>.
+        without colliding. The work reaches your main tree only when something calls <code>land</code>.
     </p>
 
     <h2>The route surface</h2>
@@ -305,8 +309,8 @@ const groups = [
         </tbody>
     </table>
     <p>
-        Those change pushes are not a nicety. An intentic workspace is file-first — the agent edits files and moves git refs with its own
-        tools, out of band from every HTTP route — so without them a client is only ever as fresh as the last thing someone clicked.
+        Those change pushes are not a nicety. An intentic workspace is file-first: the agent edits files and moves git refs with its own
+        tools, out of band from every HTTP route. Without them a client is only ever as fresh as the last thing someone clicked.
     </p>
 
     <h2>Routes that aren't JSON</h2>
@@ -318,7 +322,7 @@ const groups = [
             <tr><td><code>GET /workspace/raw</code></td><td>A file's bytes with a content type by extension — how images and PDFs are previewed, where the text route would corrupt them.</td></tr>
             <tr><td><code>GET /workspace/media</code></td><td>A streamed byte range for audio and video. A media element cannot send a header, so this takes a path-scoped ticket minted by <code>POST /workspace/media-ticket</code>.</td></tr>
             <tr><td><code>POST /workspace/upload</code></td><td>Raw bytes to <code>?path=</code>, in parts via <code>?offset=</code> so a large file stays under the edge's body cap.</td></tr>
-            <tr><td><code>GET /extensions/{"{id}"}/bundle</code></td><td>An installed extension's ESM bundle, as bytes.</td></tr>
+            <tr><td><code set:text="GET /extensions/{id}/bundle" /></td><td>An installed extension's ESM bundle, as bytes.</td></tr>
         </tbody>
     </table>
 
@@ -338,22 +342,23 @@ const groups = [
 
     <h2>Open on purpose</h2>
     <p>
-        A handful of routes check no bearer, because the caller provably cannot present one: <code>/health</code>, the web-chat widget's
-        routes, an automation's webhook fire, a CI provider's webhook, a workflow gate, and the enrollment routes a new computer redeems a
-        one-time pairing token on. Each carries its own narrower check instead.
+        A handful of routes check no bearer, because the caller provably cannot present one. They are <code>/health</code>, the web-chat
+        widget's routes, an automation's webhook fire, a CI provider's webhook, a workflow gate, and the enrollment routes a new computer
+        redeems a one-time pairing token on. Each carries its own narrower check instead.
     </p>
 
     <h2>Old daemon, new client</h2>
     <p>
         Your browser is routinely newer than the daemon it talks to — a released app plane serves every sandbox, whatever image each user
-        last pulled. That stays supported, and it is why <code>hello</code> advertises route names: a client compares that list against the
+        last pulled. That stays supported, and it is why <code>hello</code> advertises route names. A client compares that list against the
         contract it was built with, so a route the daemon predates surfaces as a named gap instead of a <code>404</code> nobody can
         attribute. Pin nothing; ask.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/sandbox-api/host/">Host API</a>: the same daemon from inside the app, typed, for an extension's views.</li>
-        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: how an extension declares which of these routes it may call.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/sandbox-api/host/", title: "Host API", why: "the same daemon from inside the app, typed, for an extension's views." },
+            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "how an extension declares which of these routes it may call." },
+        ]}
+    />
 </DocsLayout>

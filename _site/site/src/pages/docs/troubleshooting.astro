@@ -1,0 +1,224 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE PAGE THE DOCS DID NOT HAVE.
+ *
+ * An audit searched this site for "troubleshoot" and for "not working" and got nothing back, on a product whose
+ * hard parts are Docker, a tunnel and somebody else's credentials. All the failure-mode writing that existed was
+ * one paragraph on the Doorbell page, and it is the best paragraph on the site — so this page is built to its
+ * shape, deliberately: SYMPTOM as the heading, in the words a reader would use; the cause in a sentence; the fix;
+ * and where the product already says so, because most of these announce themselves and the reader has not
+ * necessarily looked.
+ *
+ * NOTHING HERE IS INVENTED. Every entry is a failure this product's own docs or run contract describe. A guess in
+ * a troubleshooting page is worse than a gap: it sends someone to rebuild a container over a problem they did not
+ * have.
+ *
+ * SYMPTOM HEADINGS, not causes ("The workspace never opens", not "Tunnel misconfiguration"). A reader arriving
+ * here cannot name the cause — that is the whole reason they are here — and the section rail and the search index
+ * both read these headings. */
+
+const twoContainers = `# Both should be "Up". Two per sandbox, always.
+docker ps -a --filter name=intentic-sandbox
+
+# The sandbox's own answer, from any machine. No credential needed.
+curl https://sandbox-<id>.intentic.dev/health
+
+{ "ok": true, "sandboxId": "…", "boot": { … }, "announce": { … } }`;
+
+const logs = `# What the daemon said while it came up.
+docker logs --tail 200 intentic-sandbox-<SLUG>
+
+# And the connector, if /health never answers from outside the machine.
+docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
+---
+
+<DocsLayout
+    pageId="troubleshooting"
+    heading="Troubleshooting"
+    lead="What tends to go wrong, what causes it, and what to do — starting with the two checks that settle most of it. Every symptom here is one this product actually produces."
+>
+    <h2>The two checks worth making first</h2>
+    <p>
+        If something is not working and you can't yet tell which half broke, start here. A sandbox is two containers and one outbound tunnel,
+        and almost everything below is one of those three not being where you think it is — so ask them directly rather than reading the app.
+    </p>
+    <DocsCodeBlock code={twoContainers} lang="bash" title="On the machine hosting the sandbox" />
+    <p>
+        Your sandbox's exact address is on <strong>Sandbox → Overview</strong>. If <code>/health</code> answers with
+        <code>"ok": true</code>, the daemon is alive and the tunnel is up, and the problem is above that line — a session, an account, a
+        permission. If it does not answer, the problem is below it, and the logs are the next stop.
+    </p>
+    <DocsCodeBlock code={logs} lang="bash" title="When /health says nothing" />
+    <p>
+        Your <a href="/docs/glossary/">slug</a> is the first label of that hostname. In the
+        <a href="/download/">desktop app</a> the same logs are a button, next to start, stop and update.
+    </p>
+
+    <h2>Bringing one up</h2>
+
+    <h3>The install command stopped and asked about Docker</h3>
+    <p>
+        You ran it without <code>sudo</code> on a machine that has no Docker Engine. Installing Docker is the one step that needs root, and
+        the script will not escalate on its own — so it stops and names your two options instead: re-run it with <code>sudo</code>, or
+        install Docker yourself and re-run it without. Everything after that step is a docker or curl call your own user can make.
+    </p>
+
+    <h3>The setup code no longer works</h3>
+    <p>
+        Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the sandbox's setup screen and a fresh code is
+        minted into a fresh command; nothing else is lost, and the sandbox you already created is still the same sandbox. Re-running a command
+        whose code is still valid is also safe — see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.
+    </p>
+
+    <h3>docker run says the port is already in use</h3>
+    <p>
+        The container publishes a loopback listener at a port derived from your sandbox's id, and something else on the machine holds it. That
+        port is only a shortcut for a browser on this same machine, so it is safe to drop: re-run
+        <a href="/docs/quickstart/#docker-run">step 4</a> with <code>--no-local-publish</code> and the sandbox works over its tunnel as usual.
+        The scripted install paths do this for you — they retry without the port rather than failing.
+    </p>
+
+    <h3>The workspace never opens</h3>
+    <p>
+        The daemon announces its URL to the platform on boot, and your browser then probes the sandbox directly until it reports healthy. So a
+        workspace that never opens means one of those two halves is missing. Run the checks above: if both containers are up but
+        <code>/health</code> answers only on the host, the connector is the piece that has not come up, and its log says why.
+    </p>
+
+    <h3>A capability the image was supposed to carry isn't there</h3>
+    <p>
+        An <em>optional</em> image fragment that this host cannot satisfy — a GPU fragment on a machine with no NVIDIA runtime — is skipped
+        rather than failing the launch, and the sandbox records that it couldn't. So the container is healthy and the tool is genuinely
+        absent. Required fragments behave the opposite way, and stop the launch.
+    </p>
+
+    <h2>It was working yesterday</h2>
+
+    <h3>Every browser session stopped verifying at once</h3>
+    <p>
+        That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session for this sandbox
+        stops verifying — including yours. Your own browser silently re-establishes from the Google credential it already holds, so it looks
+        like nothing happened locally while everyone else is signed out. That is the intended shape of it.
+    </p>
+
+    <h3>An update left the sandbox worse</h3>
+    <p>
+        An update that cannot come up healthy puts your previous sandbox back by itself, so a failed update is not something you have to
+        recover from. An update that came up healthy and is simply worse is a rollback you ask for — <code>/work</code> and your history
+        survive both, because they live in named volumes rather than in the container. See
+        <a href="/docs/updates/">Updates &amp; rollback</a>.
+    </p>
+
+    <h3>A notice says a settings file cannot be read</h3>
+    <p>
+        Usually that is an older version looking at a file a newer one wrote, and the notice will say so rather than asking you to repair a
+        file that isn't broken. Update again and it reads fine.
+    </p>
+
+    <h3>The app offers no update or rebuild button</h3>
+    <p>
+        A sandbox can never recreate its own container, so something on the host has to do it. Without the desktop app that is a command you
+        paste on the machine; the platform prints the exact one on your <strong>Sandbox</strong> and <strong>Environment</strong> cards when
+        it applies. <a href="/docs/docker/">Docker setup</a> has them all.
+    </p>
+
+    <h2>The agent</h2>
+
+    <h3>Unattended runs error every time and chats are fine</h3>
+    <p>
+        This is the commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the
+        provider's first unless something pinned one. When that first account runs out of headroom — or belongs to an organisation that turned
+        the plan off — every automation, Doorbell and nightly workflow errors against it until a person reads the row.
+    </p>
+    <p>
+        The sandbox keeps the last refusal per provider and shows it beside the account on <strong>Sandbox → Agent</strong>, which is where
+        this becomes obvious. The fix is to <strong>pin the account</strong> on the automation, and it is worth doing on every surface that
+        starts work while nobody is watching. See <a href="/docs/models/">Models &amp; accounts</a>.
+    </p>
+
+    <h3>An automation records runs as skipped and never wakes</h3>
+    <p>
+        A <a href="/docs/glossary/">guard</a> is doing its job. A guard is a shell one-liner run in the workspace before the wake: exit 0 and
+        the agent wakes, anything else and the run is recorded as skipped. A guard that can never exit 0 — a path that moved, a command the
+        image no longer has — reads exactly like an automation that stopped firing.
+    </p>
+
+    <h3>Fires are queued and nothing runs</h3>
+    <p>
+        <strong>Require approval</strong> is on for that automation, which holds every fire until you approve it. That is different from
+        <strong>Hold for a while</strong>, which runs the fire itself once the hold elapses. An explicit "ask me" always wins over a hold, so
+        an automation carrying both waits for you. <a href="/docs/automations/">Automations, workflows &amp; loops</a> covers the queue.
+    </p>
+
+    <h3>The Doorbell is installed and stays silent</h3>
+    <p>
+        Nearly always the allowed origin. <code>https://example.com</code> and <code>https://www.example.com</code> are different origins, the
+        site redirects one to the other, and the browser ends up on the one you did not list. List both. The install panel names the origin it
+        turned away and offers to add it — <a href="/docs/doorbell/">Doorbell</a> has the detail.
+    </p>
+
+    <h2>Landing work</h2>
+
+    <h3>Nothing landed and the card says conflict</h3>
+    <p>
+        The agent's patch could not apply to your main tree: you edited the same lines, or an overlapping file is dirty. Nothing lands for
+        that repo, and the card says so rather than landing half of it. The worktree keeps everything, so resolve your side and land again —
+        it works the moment the tree is clean. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
+    </p>
+
+    <h3>Work is already in main and the card still wants to land</h3>
+    <p>
+        Work that reached the main tree by another road is not treated as a conflict. An agent that committed onto the main line itself, or a
+        branch you merged by hand, resolves as "already there" — so landing it is a no-op rather than a refusal. Landing twice is safe by
+        design.
+    </p>
+
+    <h3>Finished agents disappeared</h3>
+    <p>
+        Finished agents are archived after three days by default, on <strong>Sandbox → Agent</strong>. That sweep is on where almost
+        everything else is off, because a finished card holds a full checkout of every repo — a lane that grew forever would be disk that grew
+        forever.
+    </p>
+
+    <h2>Extensions and capabilities</h2>
+
+    <h3>An extension is installed and one of its surfaces is missing</h3>
+    <p>
+        A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and a
+        route it did not declare throws. So a missing surface usually means the manifest and the code disagree. When an extension's manifest
+        grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences — approval never transfers to powers you did
+        not approve. See <a href="/docs/extensions/manifest/">Manifest reference</a>.
+    </p>
+
+    <h3>One capability vanished and the rest still work</h3>
+    <p>
+        A stored connection that cannot be read — a hand-edit, a format that moved — is skipped and reported <em>by name</em>, never
+        rewritten away, and every other capability keeps working. Reconnect that one card. <a href="/docs/capabilities/">Capabilities</a>
+        covers where the credential lives.
+    </p>
+
+    <h3>An extension was switched off on its own</h3>
+    <p>
+        Its registry listing is marked <code>blocked</code> — known-malicious or known-broken. The advisory on the installed row carries the
+        registry's recorded reason. Disabling is the one automatic action the trust model permits, because it runs no new code and reverses
+        with a click. <a href="/docs/extensions/publish/">Publish &amp; marketplace</a> states the whole model.
+    </p>
+
+    <h2>When none of this is it</h2>
+    <p>
+        The daemon keeps its own debug logs — terminal captures, CLI run logs and <code>daemon.log</code> — and they are reachable over the
+        API and in the desktop app. Your files are never the thing at risk while you dig: <code>/work</code> and your history are named Docker
+        volumes, and removing, updating or rebuilding a container does not touch them.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/docker/", title: "Docker setup", why: "what every install path created, and the update, rebuild and cleanup commands." },
+            { href: "/docs/glossary/", title: "Glossary", why: "the words above, if any of them were doing unexplained work." },
+            { href: "/docs/sandbox-api/#failures", title: "HTTP API", why: "every status the API returns and what it actually means." },
+        ]}
+    />
+</DocsLayout>

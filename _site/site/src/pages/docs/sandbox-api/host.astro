@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
+import DocsRelated from "../../../components/DocsRelated.astro";
 
 /* The IntenticApi surface as a page. Deliberately a reference and not a tutorial — "Build an extension" is the
  * tutorial, and it links here for everything it deliberately did not use. */
@@ -77,6 +78,7 @@ const packages = [
     heading="Host API"
     lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object — the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
 >
+    <h2>How the API reaches your code</h2>
     <p>
         There is no ambient global and no client you construct. The API arrives as the argument to
         <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
@@ -169,9 +171,9 @@ const packages = [
     <p>
         A badge is a claim on someone's attention, so the bar is high: it must mean "something happened here you don't know about", never
         "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose
-        <em>size</em> is what you act on; <code>mark</code> is a glyph for a pending action where the size changes nothing;
-        <code>tone</code> is <code>info</code> (the resting tone), <code>warning</code> (a risk being carried) or <code>danger</code>
-        (something is broken — stay sparing, its value is that it is rare).
+        <em>size</em> is what you act on, and <code>mark</code> is a glyph for a pending action where the size changes nothing.
+        <code>tone</code> is <code>info</code> at rest, <code>warning</code> for a risk being carried, or <code>danger</code> for something
+        broken — stay sparing with that one, because its value is that it is rare.
     </p>
     <p>
         <code>badge</code> is read inside the host's own computed and runs on every render of every surface that draws tiles, so it must be
@@ -335,10 +337,11 @@ const packages = [
         at runtime, and bundling your own copy forks reactivity and the query cache.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/sandbox-api/">HTTP API</a>: the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser.</li>
-        <li><a href="/docs/extensions/build/">Build an extension</a>: the same surface as a walkthrough, ending in a real install.</li>
-        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: every contribution point these registrations have to match.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/sandbox-api/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
+            { href: "/docs/extensions/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
+            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
+        ]}
+    />
 </DocsLayout>

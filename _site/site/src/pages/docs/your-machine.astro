@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* Three different connections that all live on Sandbox → Computers and are constantly confused: syncing your
  * files INTO the sandbox, letting the agent operate your machine, and driving the sandbox's agents from your
@@ -39,6 +40,7 @@ const scopes = [
     heading="Your own machine"
     lead="Three connections between a sandbox and a computer you own — your files going in, the agent reaching out, and your editor driving the agents. They point in different directions, which is the thing to get straight."
 >
+    <h2>The three connections</h2>
     <p>All three live on <strong>Sandbox → Computers</strong>.</p>
     <table>
         <thead>
@@ -53,9 +55,9 @@ const scopes = [
 
     <h2>Desktop sync</h2>
     <p>
-        Pick a folder, press Enable, and you get a one-liner carrying a single-use pairing token. Run it and a small resident agent installs
-        on your machine doing two things: keeping that folder in step with the sandbox's workspace, and mirroring the sandbox's ports onto
-        your localhost — so a dev server running in the sandbox opens in your own browser at the address you'd expect.
+        Pick a folder, press Enable, and you get a one-liner carrying a single-use pairing token. Run it and a small resident agent installs on
+        your machine, doing two things: keeping that folder in step with the sandbox's workspace, and mirroring the sandbox's ports onto your
+        localhost. So a dev server running in the sandbox opens in your own browser at the address you'd expect.
     </p>
     <p>
         There is no Google sign-in on the laptop. The pairing token is the whole exchange, and it is single-use.
@@ -113,8 +115,8 @@ const scopes = [
         editor has open.
     </p>
     <p>
-        The token is shown once — the sandbox stores only its hash — and it is scoped to one conversation: the bridge can run a turn, answer
-        a question it parked on, read transcripts and search the tree, and it deliberately cannot see the fleet or land work. Treat it like a
+        The token is shown once — the sandbox stores only its hash — and it is scoped to one conversation. The bridge can run a turn, answer
+        a question it parked on, read transcripts and search the tree; it deliberately cannot see the fleet or land work. Treat it like a
         password anyway, because within that scope it can edit files and run commands here. The card lists <em>every</em> control token
         against the sandbox rather than only the ones it minted, so a revoke surface can't hide the token somebody made elsewhere.
     </p>
@@ -126,9 +128,10 @@ const scopes = [
         capabilities; see <a href="/docs/capabilities/">Capabilities</a>.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/access/">Access &amp; sharing</a>: who else may connect a machine, and what a member is offered.</li>
-        <li><a href="/docs/sandbox-api/">HTTP API</a>: control tokens, their scopes, and minting one without the UI.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/access/", title: "Access & sharing", why: "who else may connect a machine, and what a member is offered." },
+            { href: "/docs/sandbox-api/", title: "HTTP API", why: "control tokens, their scopes, and minting one without the UI." },
+        ]}
+    />
 </DocsLayout>

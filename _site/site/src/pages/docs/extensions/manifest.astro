@@ -118,7 +118,12 @@ const processes = `"processes": [
         grant to one must never quietly widen the other.
     </p>
     <ul>
-        <li><code>sandbox</code> — the routes the <strong>UI half</strong> may call. Every door in <code>api.sandbox</code> is checked against it — the typed <code>rpc</code> client resolves to a method and a concrete path and is gated on that, exactly as <code>request</code> and <code>json</code> are — so a call to anything not covered throws. An extension has no ambient client to your daemon.</li>
+        <li>
+            <code>sandbox</code> — the routes the <strong>UI half</strong> may call. Every door in <code>api.sandbox</code> is checked against
+            it, so a call to anything not covered throws. That includes the typed <code>rpc</code> client, which resolves to a method and a
+            concrete path and is gated on that exactly as <code>request</code> and <code>json</code> are. An extension has no ambient client
+            to your daemon.
+        </li>
         <li><code>daemon</code> — the routes the <strong>backend half</strong> may call through <code>api.daemon</code>, enforced daemon-side against its minted token.</li>
     </ul>
     <DocsCodeBlock code={permissions} lang="json" title="A route allowlist" />
@@ -214,7 +219,7 @@ const processes = `"processes": [
     </table>
     <p>
         Only the id and label are declared, deliberately. A viewer takes files over and a command can claim a global shortcut, so those are
-        approved field by field; a document provider takes nothing over — it adds an icon to rows it has something for, and every such row is
+        approved field by field. A document provider takes nothing over: it adds an icon to rows it has something for, and every such row is
         evidence the owner can see. So the manifest gates <em>whether</em> you may mark up the tree at all, and the per-row wording stays with
         your provider, which is the only thing that knows what it found.
     </p>
@@ -267,8 +272,11 @@ const processes = `"processes": [
             <tr><td><code>catalog</code></td><td>The card: <code>name</code>, <code>description</code> (one line — the grid clamps it at two), <code>category</code>, an optional brand <code>logo</code> or fallback <code>icon</code>, a <code>hint</code> paragraph the form prints in full and the catalog search reads, and a <code>guide</code> walking the user through creating the credential.</td></tr>
             <tr><td><code>fields</code></td><td>The config form: <code>key</code>, <code>label</code>, and flags for <code>secret</code>, <code>optional</code>, <code>multiline</code>, <code>options</code>, and a <code>when</code> gate. A <code>boolean</code> field renders as a quiet opt-in switch; <code>hint</code> puts a line under one control; <code>value</code> bakes a fixed value in without rendering anything; <code>rebuild</code> chips a field whose value only lands at the next image rebuild; <code>totp</code> marks an authenticator seed — see below.</td></tr>
             <tr><td><code>loginUrl</code>, <code>homeUrl</code></td><td><code>browser</code> only, both optional: where the sign-in window opens, and where the connected profile opens once it has one. A card either pins them or declares a field that supplies them — leaving both out is what the one generic "browser session" card does, so users can connect a site nobody shipped a card for.</td></tr>
-            <tr><td><code>env</code></td><td>Environment variables for the agent, templated over the fields: <code>{"${field}"}</code> substitutes, <code>{"${field:uri}"}</code> percent-encodes.</td></tr>
-            <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool. Two placeholders are substituted when a user adds it: <code>{"${id}"}</code> becomes the name they chose, and <code>{"${tools}"}</code> becomes the built-in note for that kind (how to drive the shared browser, what a connected computer's tools are).</td></tr>
+            {/* set:text, not {"${field}"}: an expression inside a <code> inside a <table> makes the Astro compiler
+                emit an unclosed <code> after the table, and every heading, paragraph and table to the end of the
+                page renders as code. Checked by assertNoCodeBleed — see lib/docs-headings.ts. */}
+            <tr><td><code>env</code></td><td>Environment variables for the agent, templated over the fields: <code set:text="${field}" /> substitutes, <code set:text="${field:uri}" /> percent-encodes.</td></tr>
+            <tr><td><code>skill</code></td><td>Path to the <code>SKILL.md</code> that teaches the agent the tool. Two placeholders are substituted when a user adds it: <code set:text="${id}" /> becomes the name they chose, and <code set:text="${tools}" /> becomes the built-in note for that kind (how to drive the shared browser, what a connected computer's tools are).</td></tr>
             <tr><td><code>fragment</code></td><td>Optional image fragment installing the client binary. <code>cli</code> only.</td></tr>
         </tbody>
     </table>

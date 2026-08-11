@@ -1,5 +1,6 @@
 ---
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
 
 /* Roles were taught in exactly one place — the invite form's blurbs — and nowhere a person deciding whether to
  * share a sandbox could read them first. */
@@ -65,8 +66,8 @@ const roles = [
     <p>They draw three real fences rather than mirroring the navigation:</p>
     <ul>
         <li><strong>Credentials never delegate.</strong> Secrets — even their names, even the inventory — stay with the owner. A secrets page that greets every invitee is an invitation to ask for the values.</li>
-        <li><strong>What leaves the sandbox needs a maintainer.</strong> Landing into the main tree, publishing, the raw terminal.</li>
-        <li><strong>Driving agents is the collaborator's whole grant.</strong> Everything below it — watching the fleet, reading files and transcripts — is the viewer tier.</li>
+        <li><strong>What leaves the sandbox needs a maintainer.</strong> <a href="/docs/glossary/">Landing</a> into the main tree, publishing, the raw terminal.</li>
+        <li><strong>Driving agents is the collaborator's whole grant.</strong> Everything below it — watching the <a href="/docs/glossary/">fleet</a>, reading files and transcripts — is the viewer tier.</li>
     </ul>
 
     <h2>Inviting someone</h2>
@@ -114,9 +115,10 @@ const roles = [
         people.
     </p>
 
-    <h2>Next</h2>
-    <ul>
-        <li><a href="/docs/parallel-agents/">Parallel agents</a>: why a collaborator driving an agent can't disturb your tree.</li>
-        <li><a href="/docs/your-machine/">Your own machine</a>: connecting a computer, and the editor bridge.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "why a collaborator driving an agent can't disturb your tree." },
+            { href: "/docs/your-machine/", title: "Your own machine", why: "connecting a computer, and the editor bridge." },
+        ]}
+    />
 </DocsLayout>

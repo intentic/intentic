@@ -4,6 +4,11 @@ Read every documentation page as a visitor would: in a browser, on a desktop and
 navigation, using the search, and measuring the prose. 21 pages, 28,997 words, about 2 hours 12 minutes of
 reading end to end.
 
+> **Status: the nine-item work order at the foot of this document has been carried out.** The findings below are
+> left as written, as the record of what was wrong; each row of the work order now carries its outcome, and
+> "After" at the very end has the re-measured numbers. Two pages were added (Glossary, Troubleshooting), so the
+> site is 23 pages now.
+
 ---
 
 ## Verdict
@@ -253,17 +258,51 @@ Two habits worth softening rather than removing:
 
 ## Suggested order of work
 
-| # | Fix | Effort |
+| # | Fix | Effort | Outcome |
+| --- | --- | --- | --- |
+| 1 | Un-break the HTTP API and manifest pages — move the placeholder snippets out of the table cells | small | Done, and differently: the placeholders stayed in their cells and became `<code set:text="…" />`. The trigger was narrowed to *an Astro expression inside a `<code>` inside a `<table>`*, which makes the compiler emit an unclosed `<code>`. `assertNoCodeBleed` now fails the build if any heading, paragraph or table renders inside a `<code>`. |
+| 2 | Index the finished page rather than its source, so tables become searchable and no source leaks into a snippet | medium | Done. A `docsSearch` integration builds the index from the rendered pages in dist; under `astro dev` the `search.json` route asks the dev server for the same pages, so one extractor serves both. All 352 table rows indexed, no leaks. |
+| 3 | Number the quickstart's install routes as one step, and move the setup-code reference detail out of step 1 | small | Done. The page is now 1 · Sign in → 2 · Pick how you install it (the four routes as `h3` inside it) → 3 · Check what came up. Step 1 is 247 words, was ~450; the contingency detail is an appendix, "More about setup codes". |
+| 4 | Give the sidebar a visible scroll edge, or collapse shelves you are not in | small | Done, without collapsing (the component argues against it, for good reasons). A mask fades whichever edge has content behind it, the scrollbar is styled rather than overlay-only, and the rail scrolls the page you are on into view — so a Build-on-it page no longer opens a rail with no marked row in it. |
+| 5 | Make the menu label and the page title agree on all five pages | small | Done. The rule is now written on `DocsLayout`'s `heading` prop: the h1 must start with the tree's `title`, with the descriptive form living in `meta.title` and the sentence in `lead`. The Automations row gained "loops" and still sets on one line. |
+| 6 | Pull the seven orphaned intros under a real heading — starting with Automations | small | Done — all seven. The Automations distinction table is now "Automation, workflow or loop?", first in its own table of contents and linkable. The two reference pages that open with an index table are left alone on purpose. |
+| 7 | Define *daemon*, *land*, *worktree*, *slug*, *harness* once, early, and link to them | medium | Done. A **Glossary** page on the first shelf, 23 terms in four families, each ending at the page that owns it. First uses of daemon, worktree, harness, landing and fleet link to it; chore, guard and slug were already defined where they first appear, so they were left. |
+| 8 | Split the 69 sentences over 40 words; retire the "Next" sections that duplicate the footer | medium | Done. Zero prose sentences over 40 words. The ten `## Next` lists became a `DocsRelated` component — kept, because they are curated cross-links with reasons, but renamed "Related pages" (the automatic footer already says "next") and excluded from the section rail. |
+| 9 | Add a troubleshooting page, modelled on the Doorbell page's failure-mode writing | medium | Done. **Troubleshooting**, last on "Run a sandbox": symptom as the heading in the reader's own words, then cause, fix, and where the product already says so. Every entry is a failure this product's own docs or run contract describe. |
+
+Two P3 gaps were closed while nearby: **backups** now have a section on Docker setup (the honest version — they are
+ordinary named volumes and there is no intentic backup service to describe), and **what intentic costs** now opens
+the Models page's "What it costs", because a reader searching the docs for cost landed on a ledger of inference
+spend with nothing saying the product itself is free.
+
+The one item deliberately not attempted: **Architecture is thin for its position** (574 words, half of it restating
+the overview). That is a writing commission rather than a fix, and it wants someone who can decide what the page is
+*for* now that a Glossary sits beside it.
+
+---
+
+## After
+
+Re-measured on the built site. Prose only — `<p>` and `<li>` inside the article, so tables, code blocks and
+embedded diagrams are excluded, and a paragraph never runs into the code-block caption after it.
+
+| Measure | Before | After |
 | --- | --- | --- |
-| 1 | Un-break the HTTP API and manifest pages — move the placeholder snippets out of the table cells | small |
-| 2 | Index the finished page rather than its source, so tables become searchable and no source leaks into a snippet | medium |
-| 3 | Number the quickstart's install routes as one step, and move the setup-code reference detail out of step 1 | small |
-| 4 | Give the sidebar a visible scroll edge, or collapse shelves you are not in | small |
-| 5 | Make the menu label and the page title agree on all five pages | small |
-| 6 | Pull the seven orphaned intros under a real heading — starting with Automations | small |
-| 7 | Define *daemon*, *land*, *worktree*, *slug*, *harness* once, early, and link to them | medium |
-| 8 | Split the 69 sentences over 40 words; retire the "Next" sections that duplicate the footer | medium |
-| 9 | Add a troubleshooting page, modelled on the Doorbell page's failure-mode writing | medium |
+| Pages that render prose as code | 2 | 0 |
+| Table rows missing from the search index | 90 of 235 | 0 of 352 |
+| Sections leaking page source into previews | 16 | 0 |
+| Pages whose menu label and h1 disagree | 5 | 0 |
+| Pages with content above the first heading | 9 | 2, both by design |
+| Pages with a rail entry that describes no content | 10 | 0 |
+| Sentences over 40 words | 69 | 0 |
+| Sentences over 30 words | 19% | 8% |
+| Average sentence | 18.7 words | 13.9 words |
+| Dead links and anchors | 0 | 0 of 763 |
+| `troubleshoot`, `glossary`, `backup` | no results | all resolve |
+
+Three of these are now build-time assertions rather than things to re-check by hand: a heading trapped inside a
+`<code>`, a hand-written index table pointing at a heading that no longer exists, and — already there before this
+work — the anchors on the two reference pages.
 
 ---
 

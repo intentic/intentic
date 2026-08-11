@@ -65,3 +65,37 @@ export interface LatestRelease {
 
 /** The newest published release, or null when the API cannot be read at build time. */
 export function latestRelease(): Promise<LatestRelease | null>;
+
+export interface SearchBlock {
+    /** Section heading, or "" for the prose above the first one. */
+    heading: string;
+    /** The id the renderer gave that heading, or "" when there is none to link to. */
+    anchor: string;
+    text: string;
+}
+
+export interface SearchEntry {
+    url: string;
+    title: string;
+    /** Shelf label, so a result can say which part of the docs it is from. */
+    section: string;
+    blurb: string;
+    blocks: SearchBlock[];
+}
+
+export interface DocsSearchPage {
+    id: string;
+    url: string;
+    title: string;
+    section: string;
+    blurb: string;
+}
+
+/** Split one rendered docs page into heading-led blocks. */
+export function blocksFromPage(html: string): SearchBlock[];
+
+/** Assemble the docs search index from pages and a source of each page's rendered HTML. */
+export function docsSearchIndex(pages: DocsSearchPage[], htmlFor: (page: DocsSearchPage) => string | undefined): SearchEntry[];
+
+/** Write dist/docs/search.json from the docs pages that were just built. */
+export function docsSearch(options: { pages: DocsSearchPage[] }): AstroIntegration;

@@ -38,7 +38,7 @@ const sources = `// A repo of its own
 
 <DocsLayout
     pageId="extensions/publish"
-    heading="Publish & the marketplace"
+    heading="Publish & marketplace"
     lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
 >
     <h2>The shape of it</h2>
@@ -69,8 +69,8 @@ const sources = `// A repo of its own
     <DocsCodeBlock code={registry} lang="json" title=".claude-plugin/marketplace.json" />
     <p>
         The file format is Claude Code's plugin-marketplace format, deliberately. <code>kind</code> and <code>trust</code> are intentic's own
-        markers and Claude Code ignores fields it doesn't know, so <strong>one registry repo can serve both</strong>, and a team that already
-        publishes agent plugins lists its intentic extensions in the same file rather than standing up a second thing.
+        markers, and Claude Code ignores fields it doesn't know. So <strong>one registry repo can serve both</strong>: a team that already
+        publishes agent plugins lists its intentic extensions in the same file, rather than standing up a second thing.
     </p>
     <p>
         An entry's <code>name</code> is <code>publisher.name</code> read from your manifest, not a label the registry picks. That is the same
@@ -145,24 +145,29 @@ const sources = `// A repo of its own
         <li><strong>The manifest grew</strong>, with a new route, a new process, a new PATH entry or a badge it didn't have: the update <strong>re-asks</strong>, and the dialog computes the powers diff for you — every addition as a plain sentence. Approval never transfers to powers you didn't approve. The owner's own agent can also read the code diff between the two commits before the click.</li>
     </ul>
     <p>
-        After a swap the daemon watches for a minute that what the new version declared actually came up; the version it replaced is kept one
+        After a swap the daemon watches for a minute that what the new version declared actually came up. The version it replaced is kept one
         back, so <strong>revert is one click</strong> — after a failed health check, or simply because the update made things worse. Your
         settings survive all of it: they're stored on the daemon under <code>publisher.name</code>, not in the checkout, so an update, a
         revert, or a remove and re-add keeps them.
     </p>
     <p>
         Nothing auto-updates by default. On a machine the owner owns, silently changing the code that runs against their repos and
-        credentials is not a convenience. What the owner can do is opt <em>single extensions</em> up a ladder: <strong>notify</strong> (the
-        badge waits), <strong>agent-prepared</strong> (their agent reads the diff the moment a release is listed, so deciding means opening
-        a finished review), or <strong>auto</strong> — applied unattended only when the listing is human-verified, the powers didn't grow,
-        validation passes and the health watch stays green, with an automatic revert when it doesn't.
+        credentials is not a convenience. What the owner can do is opt <em>single extensions</em> up a ladder:
     </p>
+    <ul>
+        <li><strong>Notify</strong> — the badge waits for you.</li>
+        <li><strong>Agent-prepared</strong> — their agent reads the diff the moment a release is listed, so deciding means opening a finished review.</li>
+        <li>
+            <strong>Auto</strong> — applied unattended, but only when four things hold: the listing is human-verified, the powers didn't grow,
+            validation passes, and the health watch stays green. It reverts itself when they don't.
+        </li>
+    </ul>
     <p>
-        Delisting protects people browsing; the same daily comparison protects the people who already installed: a listing marked
-        <code>blocked</code> raises an advisory on the installed row with the registry's recorded reason, and by default the extension is
-        switched off automatically — the one automatic action the model permits, because disabling runs no new code and reverses with a
-        click. A listing marked <code>securityFix</code> promotes the update badge from ambient to loud, because there the old version is
-        the dangerous one.
+        Delisting protects people browsing. The same daily comparison protects the people who already installed: a listing marked
+        <code>blocked</code> raises an advisory on the installed row, carrying the registry's recorded reason, and by default the extension is
+        switched off. That is the one automatic action the model permits, because disabling runs no new code and reverses with a click. A
+        listing marked <code>securityFix</code> promotes the update badge from ambient to loud, because there the old version is the dangerous
+        one.
     </p>
 
     <h2>Trust, stated honestly</h2>
@@ -188,9 +193,9 @@ const sources = `// A repo of its own
         </tbody>
     </table>
     <p>
-        Each listing states which of these it has had, in a <code>trust</code> field: <strong>listed</strong> means the pointer resolves and
-        nobody read the code, which is the honest default; <strong>verified</strong> means somebody read the source at that commit;
-        <strong>blocked</strong> means known-malicious or known-broken, with the reason alongside. A blocked entry <em>stays in the file</em>
+        Each listing states which of these it has had, in a <code>trust</code> field. <strong>Listed</strong> means the pointer resolves and
+        nobody read the code — the honest default. <strong>Verified</strong> means somebody read the source at that commit.
+        <strong>Blocked</strong> means known-malicious or known-broken, with the reason alongside. A blocked entry <em>stays in the file</em>
         rather than being deleted. Removing the row would hide it from people browsing and tell the people who already installed it nothing,
         which is backwards.
     </p>
@@ -206,10 +211,10 @@ const sources = `// A repo of its own
         registry no share of whatever you charge for your own repository elsewhere.
     </p>
     <p>
-        There is one paid path, and it is <strong>opt-in</strong>. A publisher can mark an extension <strong>premium</strong> — one
-        <code>tier</code> field on the registry entry; members on a monthly membership can run premium extensions, and a published share of
-        that membership money forms a monthly creator pool, split by the use people actually keep, on a public ledger. It is an addition
-        with its own opt-in, never a retroactive term on the free listings — <a href="/docs/extensions/economics/">The creator pool</a>
+        There is one paid path, and it is <strong>opt-in</strong>. A publisher marks an extension <strong>premium</strong> with one
+        <code>tier</code> field on the registry entry. Members on a monthly membership can then run premium extensions, and a published share
+        of that membership money forms a monthly creator pool — split by the use people actually keep, on a public ledger. It is an addition
+        with its own opt-in, never a retroactive term on the free listings. <a href="/docs/extensions/economics/">The creator pool</a>
         states the whole deal, and the <a href="/extensions/">extensions page</a> draws the flow.
     </p>
 

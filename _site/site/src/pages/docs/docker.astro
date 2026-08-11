@@ -37,6 +37,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     heading="Docker setup"
     lead="A sandbox is a Docker container on your own machine. This page is the anatomy behind every install path: what gets created, where your data lives, what the container is and isn't allowed to do, and how to update or remove it."
 >
+    <h2>Install commands are on Quickstart</h2>
     <p>
         Looking for the commands that bring one up? Those are on <a href="/docs/quickstart/">Quickstart</a>, which covers all four routes —
         desktop app, setup command, Docker Compose, and plain <code>docker run</code>. Everything below is what those routes have in common.
@@ -113,6 +114,18 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         removed and recreated — which is exactly why update and rebuild can swap the image underneath a sandbox without touching your files.
     </p>
 
+    {/* WRITTEN BECAUSE THE DOCS DID NOT SAY IT. Searching these docs for "backup" returned nothing, on a product
+        whose central promise is that your files are yours and outlive everything. There is no intentic backup
+        feature to describe, and inventing one would be worse than the gap — so this says the true thing: the
+        volumes are ordinary Docker volumes and your own tooling already knows how to copy one. */}
+    <h3>Backing them up</h3>
+    <p>
+        There is no intentic backup service, and there is nothing for one to do: these are ordinary named Docker volumes, so whatever you
+        already use to back up a volume works here. <code>intentic-workspace-&lt;slug&gt;</code> is the whole workspace and
+        <code>intentic-history-&lt;slug&gt;</code> is its history; <code>intentic-docker-&lt;slug&gt;</code> is a rebuildable cache and worth
+        skipping. Your repos' own remotes are the other half of this, and the better half — anything pushed is already off the machine.
+    </p>
+
     <h2>Ports: none inbound, one on loopback</h2>
     <p>
         Nothing is published to the network. The sandbox is reached over a private Cloudflare tunnel that the connector dials
@@ -120,7 +133,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         <code>8787</code> and preview servers on <code>5173</code>; neither is bound on your machine.
     </p>
     <p>
-        The one exception is a shortcut, not an opening: a browser on the <em>same machine</em> shouldn't have to travel to Cloudflare and
+        The one exception is a shortcut, not an opening. A browser on the <em>same machine</em> shouldn't have to travel to Cloudflare and
         back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id.
         Nobody announces that address — your browser computes the same number from the token it already holds. If something else already
         holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
@@ -133,7 +146,8 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     </p>
     <ul>
         <li><strong><code>SYS_ADMIN</code></strong> — lets the daemon give each isolated agent turn its own mount namespace, so a
-        conversation's worktree can stand in for <code>/work</code>. Without it, isolated turns quietly stop being isolated.</li>
+        conversation's <a href="/docs/glossary/">worktree</a> can stand in for <code>/work</code>. Without it, isolated turns quietly stop
+        being isolated.</li>
         <li><strong><code>SYS_PTRACE</code></strong> — lets the daemon be diagnosed in the one place it ever misbehaves: production. When
         PID 1 stalls, the question is what it's blocked in, and answering it needs a stack.</li>
     </ul>
@@ -194,8 +208,8 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <p>
         Each has a PowerShell twin for Windows: add <code>.ps1</code> to the path (<code>/update.ps1</code>, <code>/rebuild.ps1</code>,
         <code>/cleanup.ps1</code>, <code>/connect.ps1</code>). The platform surfaces the exact update and rebuild commands on your Sandbox and
-        Environment cards when they apply — and in the <a href="/download/">desktop app</a> they are buttons instead, because a sandbox can
-        never recreate its own container and something has to do it on the host.
+        Environment cards when they apply. In the <a href="/download/">desktop app</a> they are buttons instead — a sandbox can never recreate
+        its own container, and something has to do it on the host.
     </p>
 
     <h2>Moving between install paths</h2>

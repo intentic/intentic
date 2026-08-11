@@ -1,6 +1,6 @@
 ---
 import { docsHref, docsNeighbours, docsPage } from "@intentic-dev/site-content/docs";
-import { extractDocsContent } from "../lib/docs-headings";
+import { assertNoCodeBleed, extractDocsContent } from "../lib/docs-headings";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import DocsSearch from "./DocsSearch.astro";
 import DocsSearchField from "./DocsSearchField.astro";
@@ -11,6 +11,17 @@ import Nav from "./Nav.astro";
 
 interface Props {
     pageId: string;
+    /**
+     * The page's h1. It MUST start with the page's title in the docs tree — ideally be exactly it.
+     *
+     * Five pages used to be called one thing in the rail and another on the page: you clicked "Updates & rollback"
+     * and arrived at "Updates: what we promise never breaks", clicked "Overview" and arrived at "intentic
+     * documentation". A reader cannot tell that from a mistake, and it makes the rail untrustworthy for the one
+     * job it has. Three places carry the three lengths a page name needs, and none of them is this one: the tree's
+     * `title` is the short name the rail, breadcrumb and previous/next use, the tree's `meta.title` is the
+     * descriptive form for the browser tab and search engines, and `lead` below is the sentence. Two pages append
+     * a "· subtitle" here, which still reads as the same page; anything else does not.
+     */
     heading: string;
     lead: string;
     /**
@@ -32,7 +43,9 @@ const page = docsPage(pageId);
  *
  * Safe to re-emit with set:html because these pages are static — no client islands anywhere under /docs/, so the
  * string is final HTML and not a hydration boundary. */
-const { html, headings } = extractDocsContent(await Astro.slots.render("default"));
+const rendered = await Astro.slots.render("default");
+assertNoCodeBleed(rendered, pageId);
+const { html, headings } = extractDocsContent(rendered);
 
 const absent = (requireAnchors ?? []).filter((anchor) => !headings.some((entry) => entry.id === anchor));
 if (absent.length > 0) {
@@ -77,7 +90,7 @@ const { section, prev, next } = docsNeighbours(pageId);
                     gap above the rail and reserved 144px of height for it. Twenty rows need that space — with the
                     old numbers the whole "Build on it" shelf sat below the rail's own scroll on a 1000px-tall
                     viewport, which is exactly the orientation this rewrite exists to give back. */}
-                <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto pb-2 lg:block" id="docs-sidebar">
+                <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto pb-2 lg:block" id="docs-sidebar" data-rail-scroll>
                     <DocsSidebar pageId={pageId}>
                         {/* Hidden on narrow screens: its compact twin is already in the row above, and two
                             search controls one scroll apart is a bar with no shape. */}
@@ -170,10 +183,40 @@ const { section, prev, next } = docsNeighbours(pageId);
     <script>
         const toggle = document.getElementById("docs-sidebar-toggle");
         const sidebar = document.getElementById("docs-sidebar");
-        toggle?.addEventListener("click", () => {
-            const open = sidebar?.classList.toggle("!block");
-            toggle.setAttribute("aria-expanded", String(!!open));
-        });
+
+        /* Tell the reader the rail continues. Twenty-seven rows do not fit a laptop viewport, and the shelf that
+           falls off the bottom is the last one — so a reader who never scrolls the rail never learns that a
+           quarter of the documentation exists. The CSS fades whichever edge has something behind it. */
+        if (sidebar) {
+            const edges = () => {
+                // A pixel of slack: sub-pixel layout makes a container scrolled fully to its end report a
+                // fractional gap, which would leave the fade on for ever.
+                sidebar.toggleAttribute("data-overflow-top", sidebar.scrollTop > 1);
+                sidebar.toggleAttribute("data-overflow-bottom", Math.ceil(sidebar.scrollTop + sidebar.clientHeight) < sidebar.scrollHeight - 1);
+            };
+
+            // Measured on open, not only at load: on a phone the rail starts display:none, where it has no height
+            // to overflow and every edge looks settled.
+            toggle?.addEventListener("click", () => {
+                const open = sidebar.classList.toggle("!block");
+                toggle.setAttribute("aria-expanded", String(open));
+                if (open) {
+                    sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+                    edges();
+                }
+            });
+
+            /* And put the page you are on in view. The rail's job is "where am I", and on a Build-on-it page the
+               marked row was below the fold — so the rail opened showing four shelves, none of them yours.
+               `nearest` scrolls only when it has to, so the common case does not move. */
+            sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+
+            edges();
+            sidebar.addEventListener("scroll", edges, { passive: true });
+            // The rail's height is the viewport's, so a resize is the only other thing that changes whether it
+            // overflows.
+            window.addEventListener("resize", edges);
+        }
     </script>
 
     {/* Scroll-spy for the section rail. Marks the section whose heading last crossed the top of the reading area,

@@ -75,6 +75,41 @@ function anchorMarkup(id: string): string {
 }
 
 /**
+ * Fail the build if a `<code>` has swallowed the rest of the page.
+ *
+ * WHY THIS EXISTS. An Astro expression inside a `<code>` inside a `<table>` — `<code>{"{repo}"}</code>`, the
+ * ordinary way to print a literal brace — makes the compiler emit an opening `<code>` it never closes, just after
+ * the table. Every heading, paragraph and table from there to the foot of the page then renders in the monospace
+ * face, and the tail of it on the dark code background. It shipped that way on the two longest reference pages,
+ * which are the two people arrive at from search with a specific question.
+ *
+ * It is invisible in the source, invisible in a diff, and the open and close tag counts still balance, so nothing
+ * downstream notices. The fix at each site is `<code set:text="{repo}" />`; this is the guard that makes forgetting
+ * it loud.
+ */
+export function assertNoCodeBleed(html: string, pageId: string): void {
+    // One pass, tracking how deep we are inside <code>. Cheaper and more honest than a parser: the artifact we are
+    // hunting is precisely a depth that never returns to zero.
+    let depth = 0;
+    const tags = /<(\/?)code[\s>]|<(h[23]|p|table)[\s>]/g;
+    for (let match = tags.exec(html); match !== null; match = tags.exec(html)) {
+        if (match[2] !== undefined) {
+            if (depth > 0) {
+                const at = html.slice(Math.max(0, match.index - 120), match.index + 60).replace(/\s+/g, " ");
+                throw new Error(
+                    `/docs/${pageId}/: a <code> has swallowed the page — <${match[2]}> is rendering as code.\n` +
+                        `  An expression inside a <code> inside a <table> does this. Use <code set:text="…" /> there.\n` +
+                        `  Near: …${at}…`,
+                );
+            }
+            continue;
+        }
+        depth += match[1] === "/" ? -1 : 1;
+        if (depth < 0) depth = 0;
+    }
+}
+
+/**
  * Give every prose heading an id and an anchor, and report the headings found.
  *
  * @param html The page's rendered content, from `Astro.slots.render("default")`.

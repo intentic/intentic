@@ -81,6 +81,21 @@ export const docsSections: DocsSection[] = [
                             datePublished: "2026-07-23",
                         },
                     },
+                    {
+                        /* ON THE FIRST SHELF, because the words are load-bearing from the second page onwards.
+                         * "daemon" appeared 92 times across 14 pages and was defined nowhere; "land", "worktree"
+                         * and "harness" were each first used a shelf before the page that explains them, and
+                         * searching for "glossary" returned nothing at all. */
+                        id: "glossary",
+                        title: "Glossary",
+                        blurb: "Every word these docs use as if you knew it",
+                        meta: {
+                            title: "Glossary · intentic docs",
+                            description:
+                                "What intentic means by daemon, sandbox, workspace, conversation, worktree, landing, fleet, harness, capability, slug, overlay, control token, chore and guard.",
+                            datePublished: "2026-08-11",
+                        },
+                    },
                 ],
             },
         ],
@@ -152,6 +167,22 @@ export const docsSections: DocsSection[] = [
                             datePublished: "2026-08-07",
                         },
                     },
+                    {
+                        /* LAST ON THE SHELF THAT OWNS THE MACHINE, because that is where the failures are: Docker, a
+                         * tunnel, and somebody else's credentials. The docs had no such page at all — "troubleshoot"
+                         * and "not working" both returned nothing — and the agent-side symptoms on it are here
+                         * rather than on a second page because a reader who cannot tell which half broke is exactly
+                         * the reader who needs it. */
+                        id: "troubleshooting",
+                        title: "Troubleshooting",
+                        blurb: "What goes wrong, what causes it, what to do",
+                        meta: {
+                            title: "Troubleshooting · intentic docs",
+                            description:
+                                "Fix a sandbox that never came up, a workspace that won't open, unattended runs that error, work that won't land, and extensions or capabilities that went quiet.",
+                            datePublished: "2026-08-11",
+                        },
+                    },
                 ],
             },
         ],
@@ -187,8 +218,13 @@ export const docsSections: DocsSection[] = [
                     },
                     {
                         id: "automations",
-                        title: "Automations & workflows",
-                        blurb: "Work that starts without you, and multi-step runs",
+                        /* NAMES ALL THREE, though it is the longest row in the rail. "Automations & workflows"
+                         * never said "loops", so a reader after "run this until it's green" had no reason to open
+                         * the one page that answers them — and loops are a third of it. It still sets on one line
+                         * at the rail's width; "Updates: what we promise never breaks" below is the length that
+                         * does not. */
+                        title: "Automations, workflows & loops",
+                        blurb: "Work that starts without you, multi-step runs, and repeating until it's right",
                         meta: {
                             title: "Automations, workflows & loops · intentic docs",
                             description:

@@ -1,6 +1,7 @@
 ---
 import DocsCodeBlock from "../../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../../components/DocsLayout.astro";
+import DocsRelated from "../../../components/DocsRelated.astro";
 
 const manifest = `{
     "publisher": "acme",
@@ -114,8 +115,8 @@ const agentPoints = [
     </p>
     <p>
         The grouping never taxes the small case: a manifest with one section filled in is complete, installs the same way, and shows the
-        owner a one-line approval instead of a four-line one. And the parts that are portable stay portable — the <code>agent</code>
-        contribution <em>is</em> a standard agent-plugin directory (skills, subagents, hooks, MCP servers) that works in other harnesses
+        owner a one-line approval instead of a four-line one. And the parts that are portable stay portable. The <code>agent</code>
+        contribution <em>is</em> a standard agent-plugin directory — skills, subagents, hooks, MCP servers — that works in other harnesses
         unchanged, and a registry file is the same marketplace format those harnesses already read. The envelope wraps the standard; it
         doesn't fork it.
     </p>
@@ -146,8 +147,8 @@ const agentPoints = [
         <li>
             <strong>Daemon reach is an allowlist — for both halves.</strong> Neither the UI bundle nor the backend has an ambient client to
             your daemon. Each declares the routes it calls as <code>"GET /logs"</code>-style entries, in two separate lists because they run
-            as different principals, and everything undeclared is refused — so "what can this thing actually touch" is a list you can read
-            in the diff.
+            as different principals, and everything undeclared is refused. So "what can this thing actually touch" is a list you can read in
+            the diff.
         </li>
     </ul>
     <p>
@@ -157,9 +158,9 @@ const agentPoints = [
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Most of the product you already use is extensions — over twenty-five of them: Activity, Automations, Memory, Knowledge,
-        Deployments, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google
-        Workspace connection, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
+        Most of the product you already use is extensions — over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
+        Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google Workspace
+        connection, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
         compiles against, and a lint rule fails the build if one of them reaches into app internals instead.
     </p>
     <p>
@@ -181,10 +182,11 @@ const agentPoints = [
         everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
     </p>
 
-    <h2>Where to go next</h2>
-    <ul>
-        <li><a href="/docs/extensions/build/">Build an extension</a>: a working rail view, from empty directory to installed.</li>
-        <li><a href="/docs/extensions/manifest/">Manifest reference</a>: every contribution point and every field.</li>
-        <li><a href="/docs/extensions/publish/">Publish &amp; the marketplace</a>: get yours listed, and how updates and trust work.</li>
-    </ul>
+    <DocsRelated
+        links={[
+            { href: "/docs/extensions/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },
+            { href: "/docs/extensions/manifest/", title: "Manifest reference", why: "every contribution point and every field." },
+            { href: "/docs/extensions/publish/", title: "Publish & the marketplace", why: "get yours listed, and how updates and trust work." },
+        ]}
+    />
 </DocsLayout>
