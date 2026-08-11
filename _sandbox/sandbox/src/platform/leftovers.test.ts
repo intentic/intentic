@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { leftoverProcesses, parsePpid, parseStamp, type ScannedProcess, stampOf, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
+import { BOOT_ID, daemonPidOf, leftoverProcesses, parsePpid, parseStamp, type ScannedProcess, stampOf, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
 
 const environ = (...pairs: string[]): string => `${pairs.join("\0")}\0`;
 
@@ -11,8 +11,10 @@ const tree = (owner: string, boot = "boot-a"): ScannedProcess[] => [
     { pid: 102, ppid: 101, stamp: { bootId: boot, owner } },
 ];
 
+// The default is the state this sweep exists for: every other daemon that ever ran here is gone.
 const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}) => ({
     bootId: "boot-a",
+    bootLive: () => false,
     ownerLive: () => false,
     panePids: new Set<number>(),
     ...overrides,
@@ -52,6 +54,21 @@ test("nothing goes while the turn is still live", () => {
 test("a stamp from a previous daemon life is reclaimable without asking whose it was", () => {
     const previous = leftoverProcesses(tree("conv-1", "boot-earlier"), policy({ ownerLive: () => true }));
     expect(previous.map((entry) => entry.reason)).toEqual(["previous-boot", "previous-boot", "previous-boot"]);
+});
+
+/* The 2026-08-11 incident, as a rule: a dev run of this daemon booted beside the live one and read 27 of its
+ * processes — four agent turns and the translator — as a dead life's leavings. A foreign boot id says only that
+ * someone else started them; whether that someone is still there is the whole question. */
+test("a co-tenant daemon's processes are not leftovers, however foreign their stamp", () => {
+    const theirs = tree("conv-1", "boot-of-a-live-daemon");
+    expect(leftoverProcesses(theirs, policy({ bootLive: (boot) => boot === "boot-of-a-live-daemon" }))).toEqual([]);
+});
+
+test("the boot id carries the pid to ask about, and answers undefined for anything else", () => {
+    expect(daemonPidOf(BOOT_ID)).toBe(process.pid);
+    expect(daemonPidOf("boot-a")).toBeUndefined();
+    expect(daemonPidOf(".mzk3-1f4")).toBeUndefined();
+    expect(daemonPidOf("0.mzk3-1f4")).toBeUndefined();
 });
 
 test("unstamped processes are never touched — a sandbox is somebody's machine too", () => {

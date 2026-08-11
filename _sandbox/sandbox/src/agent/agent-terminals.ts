@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
+import { AGENT_SESSION_ENV } from "../platform/container-owner.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
@@ -149,7 +150,17 @@ export const bashTmuxHooks = (
                          * lands unquoted in the shell line every Bash command flows through. */
                         const delegation = isDelegationCommand(redirected) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id);
                         const command = delegation ? stampDelegationTitle(redirected, input.tool_use_id) : redirected;
-                        const stamp = delegation ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} ` : "";
+                        /* WHATEVER THIS COMMAND FORKS IS BORN KNOWING IT CAME FROM A CONVERSATION. An env prefix
+                         * on the command itself, like the delegation id above and for the same reason: it rides
+                         * inside the namespace hop, on the process tree, so a server the agent starts — and the
+                         * children of that — carry it however deep they go and whatever spawned them.
+                         *
+                         * What reads it is the daemon (platform/container-owner.ts), about ITSELF: this repo is
+                         * the sandbox, so `tsx src/main.ts` to see a change work is an ordinary thing for an
+                         * agent to run, and twice on 2026-08-11 that second daemon's first sweep killed every
+                         * turn in flight. A daemon that can see it was started from a conversation knows it is a
+                         * run of the code rather than this sandbox's daemon, and claims nothing. */
+                        const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${delegation ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} ` : ""}`;
                         // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
                         // where the server and the pane logs are. The polite prefix goes with the command
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.

@@ -83,7 +83,19 @@ The **per-project AI-agent dev daemon** — a Docker image that runs as the proj
   [src/platform/leftovers.ts](src/platform/leftovers.ts) stamps each one with WHOSE turn it is, so the provider
   CLI's MCP servers and their headless browsers — three levels down, and nothing here holds a handle on them —
   can be reclaimed once that turn has finished. Anything under a tmux pane is exempt: that has a watcher, and
-  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy.
+  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy. A stamp
+  from another daemon is only a leftover once that daemon is provably gone — the stamp carries its pid, because
+  a container can hold two daemons and "not mine" is not "abandoned".
+- [src/platform/container-owner.ts](src/platform/container-owner.ts) — which daemon this one is. This repository
+  is the sandbox, so an agent working in it runs the daemon from source to watch a change work, and everything
+  held once per container (HOME, the tmux server, the process sweep, the translator, the platform registration,
+  the scheduler, the drafts publisher, the CI hooks) is claimed rather than assumed. A daemon that finds a live
+  claim — or finds `INTENTIC_AGENT_SESSION` on itself, the badge
+  [src/agent/agent-terminals.ts](src/agent/agent-terminals.ts) puts on every command a conversation runs, which
+  everything forked from one inherits — comes up a GUEST: it serves its own routes, converges only roots nobody
+  else holds, and sweeps nothing. Two incidents wrote this: 2026-07-31, where a dev run took the live sandbox's
+  git access down, and 2026-08-11, where one killed four agent turns mid-answer and did it again 26 minutes
+  later from roots that were safely under `/tmp`.
 - The four change feeds that keep the browser fresh without it ever asking twice, all riding the one `/events`
   stream: [src/workspace/workspace-watch.ts](src/workspace/workspace-watch.ts) (files),
   [src/workspace/repo-watch.ts](src/workspace/repo-watch.ts) (the repo set),

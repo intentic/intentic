@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Logger } from "pino";
+import { pidAlive } from "./pid-alive.js";
 
 /* LEFTOVERS — everything a turn started, reclaimed once nobody owns it any more.
  *
@@ -23,9 +24,14 @@ import type { Logger } from "pino";
  * name a conversation nothing will ever report live, which is honest: bounded to maxTurns 1 and toolless, one that
  * outlives its grace window is broken by construction.
  *
- * THE BOOT ID is what makes a daemon's death survivable. Nothing this process started may outlive it — the
- * turn journal already reasons this way about turns, and their processes are the same fact one layer down — so a
- * stamp from another life needs no owner lookup at all. It is reclaimable the moment it is seen.
+ * THE BOOT ID is what makes a daemon's DEATH survivable. Nothing a daemon started may outlive it — the turn
+ * journal already reasons this way about turns, and their processes are the same fact one layer down — so a
+ * stamp from a life that has ENDED needs no owner lookup at all: it is reclaimable the moment it is seen.
+ *
+ * Ended is the load-bearing word, and it is asked of the pid the boot id carries rather than assumed from the id
+ * not matching. Two daemons in one container is a thing that happens — a dev run of this very file, a test
+ * harness, an update racing its predecessor — and to each of them every process of the other's is stamped with
+ * an id that is not theirs. Reading that as "a dead life's leavings" is how a sweep kills work in flight.
  *
  * WHAT IS DELIBERATELY EXEMPT is anything under a tmux pane. A pane is a place with a watcher: the user has a tab
  * on it, the terminals list shows it, and terminal-session.ts already ages it out on a policy that knows about
@@ -42,9 +48,25 @@ import type { Logger } from "pino";
 // colon, so an owner that ever grows a colon of its own still parses (the boot id cannot: it is minted here).
 export const WORKLOAD_ENV = "INTENTIC_WORKLOAD";
 
-/* This daemon's life, minted once at import. Not persisted anywhere: its whole job is to be different from
- * whatever the last life used, and a value nobody can predict is the cheapest way to guarantee that. */
-export const BOOT_ID = `${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+/* This daemon's life, minted once at import: its pid, then a value nobody can predict, so no two lives can ever
+ * share one. Not persisted anywhere — the whole job of the second half is to differ from whatever the last life
+ * used.
+ *
+ * THE PID IS IN THERE so a stamp can be asked the only question that makes reclaiming safe: is the daemon that
+ * minted this still running? A sandbox is a machine people start daemons on — a dev run from source, a test
+ * harness, a restart racing its predecessor — and "not my boot id" says nothing about whether the process on the
+ * other end of it is alive. On 2026-08-11 it was: a dev run's first sweep read 27 of the live daemon's processes
+ * as a dead life's leavings and killed them, taking four agent turns and the translator down with them. */
+export const BOOT_ID = `${process.pid}.${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+
+// The daemon a stamp was minted by, for the liveness question above. Undefined for anything that did not come
+// out of BOOT_ID (a hand-set env var, a stamp from before the pid was in there) — which reads as "no daemon to
+// ask about" and leaves the process to the ownership rules below.
+export const daemonPidOf = (bootId: string): number | undefined => {
+    const dot = bootId.indexOf(".");
+    const pid = dot <= 0 ? Number.NaN : Number(bootId.slice(0, dot));
+    return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+};
 
 // The env a spawned workload gets, to be spread into the child's environment. Owner is the conversation the work
 // belongs to; a flow with no conversation of its own passes one of the two reserved names below.
@@ -97,6 +119,10 @@ export interface Leftover {
 
 export interface LeftoverPolicy {
     readonly bootId: string;
+    // Whether the daemon that minted a FOREIGN boot id is still running — the difference between a previous
+    // life's orphan and a co-tenant's working process. Injected like ownerLive: the sweep owns the pid check
+    // (and the one case only it can see, a boot id carrying this very pid from a life that has ended).
+    readonly bootLive: (bootId: string) => boolean;
     // Whether this owner still has work in flight. Injected because the answer lives in the turn registry, and
     // this module deliberately knows nothing about turns.
     readonly ownerLive: (owner: string) => boolean;
@@ -126,7 +152,7 @@ const underPane = (pid: number, parents: ReadonlyMap<number, number>, panePids: 
 
 /* The pure decision: which stamped processes nobody owns, and why. No clock — the grace window belongs to the
  * sweep, which is the only thing that can say how long a pid has been in this state. */
-export const leftoverProcesses = (scanned: readonly ScannedProcess[], { bootId, ownerLive, panePids }: LeftoverPolicy): Leftover[] => {
+export const leftoverProcesses = (scanned: readonly ScannedProcess[], { bootId, bootLive, ownerLive, panePids }: LeftoverPolicy): Leftover[] => {
     const parents = new Map(scanned.map((entry) => [entry.pid, entry.ppid]));
     const leftovers: Leftover[] = [];
     for (const { pid, stamp } of scanned) {
@@ -134,7 +160,12 @@ export const leftoverProcesses = (scanned: readonly ScannedProcess[], { bootId, 
             continue;
         }
         if (stamp.bootId !== bootId) {
-            leftovers.push({ pid, owner: stamp.owner, reason: "previous-boot" });
+            // Someone else's, and the only thing that decides which someone: a daemon still running is a daemon
+            // whose processes are its own business, whatever it has its roots on. Only a life that ended leaves
+            // leftovers.
+            if (!bootLive(stamp.bootId)) {
+                leftovers.push({ pid, owner: stamp.owner, reason: "previous-boot" });
+            }
             continue;
         }
         if (!ownerLive(stamp.owner)) {
@@ -201,6 +232,15 @@ const GRACE_MS = 3 * 60_000;
 // signals are a window apart by construction: `killed` remembers what has already been asked nicely.
 const signalFor = (pid: number, asked: ReadonlySet<number>): NodeJS.Signals => (asked.has(pid) ? "SIGKILL" : "SIGTERM");
 
+/* Is the daemon behind a foreign boot id still running? Two ways to answer no, and the second is the one that
+ * keeps a restart able to clean up after itself: a container hands its daemon the same pid every time (docker's
+ * init makes it pid 7 on every boot), so a stamp naming THIS pid under another boot id came from this pid's
+ * previous life — which has ended, by definition, since this one is running. */
+const daemonAlive = (bootId: string): boolean => {
+    const pid = daemonPidOf(bootId);
+    return pid !== undefined && pid !== process.pid && pidAlive(pid);
+};
+
 export interface LeftoverSweep {
     readonly sweep: () => Promise<void>;
     readonly stop: () => void;
@@ -229,7 +269,7 @@ export const startLeftoverSweep = ({ ownerLive, panePids, logger, graceMs = GRAC
         running = true;
         try {
             const [scanned, panes] = await Promise.all([scanProcesses(), panePids().catch(() => new Map<number, string>())]);
-            const leftovers = leftoverProcesses(scanned, { bootId: BOOT_ID, ownerLive, panePids: new Set(panes.keys()) });
+            const leftovers = leftoverProcesses(scanned, { bootId: BOOT_ID, bootLive: daemonAlive, ownerLive, panePids: new Set(panes.keys()) });
             const seen = new Set(leftovers.map((entry) => entry.pid));
             for (const pid of unownedSince.keys()) {
                 if (!seen.has(pid)) {

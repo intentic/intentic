@@ -280,7 +280,7 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
 // the registered key behind its ssh alias, or the insteadOf rewrite that routes them onto the https credential.
 // With the credential written and NEITHER route present, `git push` answers `Permission denied (publickey)`
 // under a card reading active; that is precisely the state another daemon repointing ~/.ssh/intentic-hosts
-// leaves behind (platform/home-owner.ts), and reporting it is how the owner learns to re-add rather than
+// leaves behind (platform/container-owner.ts), and reporting it is how the owner learns to re-add rather than
 // reading the failure as the remote's fault. So the status asks for the transport, not just the token.
 export const gitAccessWired = async (host: GitHost): Promise<boolean> => {
     const current = await readFile(credentialsPath(), "utf8").catch(() => "");

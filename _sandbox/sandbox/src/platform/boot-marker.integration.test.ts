@@ -43,6 +43,19 @@ test("a fatal-error report left by the dead pid is named in the death certificat
     expect(JSON.stringify(lines[0])).toContain("died on a fatal error");
 });
 
+test("a marker whose owner is still running is a co-tenant, not a corpse — and its record is left alone", async () => {
+    const { dir, lines, logger } = await setup();
+    const owner = JSON.stringify({ state: "running", pid: process.pid, startedAt: 1_000 });
+    await writeFile(join(dir, "daemon-exit.json"), owner);
+    const marker = claimBootMarker(dir, logger);
+    expect(JSON.stringify(lines[0])).toContain("another live daemon owns this history root");
+    expect(await readFile(join(dir, "daemon-exit.json"), "utf8")).toBe(owner);
+
+    // And its exit hook stays a no-op: this run's end says nothing about the run that owns the marker.
+    marker.markExited(0);
+    expect(await readFile(join(dir, "daemon-exit.json"), "utf8")).toBe(owner);
+});
+
 test("a clean previous exit stays quiet", async () => {
     const { dir, lines, logger } = await setup();
     await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "exited", pid: 4242, startedAt: 1_000, endedAt: 2_000, exitCode: 0 }));

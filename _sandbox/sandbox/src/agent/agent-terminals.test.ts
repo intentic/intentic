@@ -9,6 +9,10 @@ import { bashTmuxHooks } from "./agent-terminals.js";
 // only bind under contention, and agent builds are what has starved the daemon) and run as ONE bash -c tree.
 const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
 
+// …and born carrying the conversation it came from, which every process it forks inherits: what lets a daemon
+// an agent started from source see that it is a run of the code and not this sandbox's own (container-owner.ts).
+const born = (inner: string): string => `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} ${inner}`;
+
 // The whole line the hook emits. `-c` carries the agent's OWN command for the output filter — cleaner matching
 // and the un-cleaned-commands report are both properties of that line, and neither survives the wrapping that
 // follows it. Then the session, the wrapped command the pane actually runs, and the window name.
@@ -46,12 +50,12 @@ const rewritten = async (toolInput: unknown, hooks?: ReturnType<typeof bashTmuxH
 
 test("wraps the command in tmux-run under the session's agent-* tmux session, demoted", async () => {
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" });
-    expect(command).toBe(wrap("echo hi", demoted("echo hi"), "say-hi"));
+    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "say-hi"));
 });
 
 test("single-quotes in the command survive the rewrite", async () => {
     const command = await rewritten({ command: "echo 'a b'" });
-    expect(command).toBe(wrap("echo 'a b'", demoted("echo 'a b'"), "run"));
+    expect(command).toBe(wrap("echo 'a b'", born(demoted("echo 'a b'")), "run"));
 });
 
 test("keeps the tool input's other fields", async () => {
@@ -70,13 +74,13 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
 test("forwards env key NAMES as sorted -e flags before the session — never values", async () => {
     const hooks = bashTmuxHooks(["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);
-    expect(command).toBe(wrap("echo hi", demoted("echo hi"), "say-hi", "-e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP "));
+    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "say-hi", "-e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP "));
 });
 
 test("drops env keys that are not plain identifiers — they land unquoted in every rewritten command", async () => {
     const hooks = bashTmuxHooks(["PATH", "bad key", "1BAD", "A=B"]);
     const command = await rewritten({ command: "echo hi" }, hooks);
-    expect(command).toBe(wrap("echo hi", demoted("echo hi"), "run", "-e PATH "));
+    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "run", "-e PATH "));
 });
 
 test("agentSessionName derives the same agent-* name the hook routes commands through", () => {
@@ -94,7 +98,7 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
     // Without this, `sed -i` would rewrite the shared tree while the same turn's Edit tool wrote to the worktree.
     expect(command).toBe(
-        wrap("sed -i s/a/b/ x.ts", `nsenter --mount=/proc/4321/ns/mnt --wd=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`, "edit"),
+        wrap("sed -i s/a/b/ x.ts", born(`nsenter --mount=/proc/4321/ns/mnt --wd=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`), "edit"),
     );
 });
 
@@ -149,14 +153,31 @@ test("the Bash rewrite leaves the shared subtrees and any path that merely start
     expect(await rewrite("ls ./workspace")).toContain("./workspace");
 });
 
+/* THE BADGE IS ON EVERY COMMAND, not just the interesting ones: what reads it is a process nobody here knows
+ * about — a server, a test harness, a `tsx src/main.ts` of this very daemon — deciding whether it is allowed to
+ * behave like this sandbox's own. Twice on 2026-08-11 a daemon started from a session swept the live one's
+ * processes and took four turns down with it, so "was I started from inside a conversation" has to be a
+ * question anything forked from here can answer, however many levels down it sits. */
+test("every command is born carrying the conversation that ran it, ahead of the namespace hop", async () => {
+    expect(await rewritten({ command: "echo hi" })).toContain(born("nice"));
+
+    // An env assignment is a shell construct: placed after nsenter it would be exec'd as a program name.
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" };
+    const anchored = await rewritten(
+        { command: "pnpm exec tsx src/main.ts" },
+        bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }),
+    );
+    expect(anchored).toContain(born("nsenter"));
+});
+
 test("a delegation gets its tool call id stamped into the pane environment; ordinary commands do not", async () => {
     // The stamp rides INSIDE the wrapped command (ahead of the demotion), so the delegate's own process tree —
     // and therefore its hooks — inherits it wherever the pane runs (delegation-signals.ts reads it back).
     const codex = "codex exec --sandbox danger-full-access 'fix the tests'";
-    expect(await rewritten({ command: codex })).toBe(wrap(codex, `INTENTIC_DELEGATION_ID=tu-1 ${demoted(codex)}`, "run"));
+    expect(await rewritten({ command: codex })).toBe(wrap(codex, born(`INTENTIC_DELEGATION_ID=tu-1 ${demoted(codex)}`), "run"));
     // Mentioning codex is not delegating to it.
     const grep = "grep -r 'codex exec' src/";
-    expect(await rewritten({ command: grep })).toBe(wrap(grep, demoted(grep), "run"));
+    expect(await rewritten({ command: grep })).toBe(wrap(grep, born(demoted(grep)), "run"));
 });
 
 /* An opencode delegation is stamped twice over, because the two halves reach the delegate by different doors:

@@ -231,11 +231,15 @@ survive reconnects. Its subsystems:
   `~/.git-credentials`) is re-derived from the manifest at boot by
   [`restoreConnectorGitAccess`](_sandbox/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
   `reconnectVpns`. Every one of these HOME-level convergences — the ssh dir, the `~/.claude` session stores,
-  `authorized_keys`, the git credentials — runs only for the daemon holding the container's HOME claim
-  ([`claimContainerHome`](_sandbox/sandbox/src/platform/home-owner.ts)): HOME is shared by every process in the
-  container, so a SECOND daemon started inside it (a dev run rooted under `/tmp`) otherwise repoints all of it
-  at its own empty roots and takes the live sandbox's git access, transcripts and desktop enrollment down
-  without an error anywhere.
+  `authorized_keys`, the git credentials — runs only for the daemon holding the container claim
+  ([`claimContainer`](_sandbox/sandbox/src/platform/container-owner.ts)), and so does everything else there is
+  only one of per container: the process sweep, the tmux session sweep, the translator, the platform announce,
+  the scheduler, the drafts publisher and the CI hooks. A container can hold more than one daemon — this
+  repository IS the daemon, so a run of it from source is an ordinary thing for an agent to do — and the second
+  one otherwise repoints HOME at its own empty roots (taking the live sandbox's git access, transcripts and
+  desktop enrollment down without an error anywhere) and reclaims every process the live daemon started as a
+  dead life's leavings, which on 2026-08-11 killed four agent turns mid-answer, twice. A guest daemon serves its
+  own routes and owns nothing that was here before it.
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
   ([environment/](_sandbox/sandbox/src/environment/)).
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
