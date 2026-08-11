@@ -10,11 +10,11 @@ import type { RegistryEntry } from "@intentic/registry";
 import { loadGallery, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
 /* The extension gallery: the official registry repository, rendered. Built from its two JSON files at build
- * time (src/lib/registry.ts), so this page has no backend behind it — curation is pull requests over there
+ * time (src/lib/registry.ts), so this page has no backend behind it: curation is pull requests over there
  * and a deploy is how the result reaches the web.
  *
  * A DISCOVERY SURFACE, and the layout now says so: the listings come first. This page used to open with the
- * site's heaviest economics — the spend diamond, two spend cards, the revenue ring — before showing a single
+ * site's heaviest economics: the spend diamond, two spend cards, the revenue ring: before showing a single
  * listing, which put the marketplace below the fold of its own page. The whole economy lives at /earn/ now;
  * what stays here is one band of headline figures and the lifecycle strip, each linking out.
  *
@@ -43,7 +43,7 @@ const groups = [
 ].filter((group) => group.entries.length > 0);
 
 /* The nightly scan's cold answer at the pinned commit, folded to a browser's one question: will it load?
- * Absent checks say nothing — a listing repointed since last night, or a registry with no scanner — and the
+ * Absent checks say nothing: a listing repointed since last night, or a registry with no scanner, and the
  * card renders as it always did. This is evidence, not endorsement: "loads" and "somebody read it" are
  * different claims, made by different parties, and the page keeps them apart. */
 const loadsProblem = (entry: RegistryEntry): string | undefined => {
@@ -63,17 +63,17 @@ const scannedNote =
 
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
-/* The three headline figures of the economy — the WHOLE of the money story this page tells. Everything they
+/* The three headline figures of the economy: the WHOLE of the money story this page tells. Everything they
  * summarize (the spend cards, the diamond, the revenue ring, the fine print) is /earn/'s job; a band that
  * grew past one row would be the old page growing back. */
 const moneyFigures = [
     { term: `$${pool.priceUsd}/mo`, detail: "one membership, every premium extension" },
-    { term: `${n(pool.dailyCredits)}/day`, detail: "credits — installs donate them, service runs spend them" },
+    { term: `${n(pool.dailyCredits)}/day`, detail: "credits: installs donate them, service runs spend them" },
     { term: `${creatorSharePct}%`, detail: "of every spent credit reaches its creator" },
 ];
 
 /* The lead figure: what an extension actually is, and how it meets the core. Drawn as a vertical architecture
- * — one extension is a container that bundles any of four contribution surfaces (Capabilities, UI, Automations,
+ *: one extension is a container that bundles any of four contribution surfaces (Capabilities, UI, Automations,
  * Backend) and plugs, through one public interface, into the kernel every sandbox already has (Files, Events,
  * Agents, Secrets, Processes). Glyph paths are shared and positioned by gGlyph. */
 const gGlyph = (paths: string, x: number, y: number, size = 18) =>
@@ -107,7 +107,7 @@ const extensions = [
 const CORE = { x: 12, y: 170, w: 496, h: 68 };
 const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90, y: CORE.y + 36 }));
 
-/* THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here — the same list
+/* THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here: the same list
  * drives this strip and the API overview's, so the two cannot drift. The Earn chip wears the accent because it
  * is the one that leaves the developer's track for the economy's own page; Update after it is what makes the
  * strip a cycle rather than a line. */
@@ -127,7 +127,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                     A small core. Everything else plugs in.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    The core is what every sandbox always has; building blocks add the rest — even the features that ship built in.
+                    The core is what every sandbox always has; building blocks add the rest: even the features that ship built in.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
                     <a class="btn btn-primary" href={apiHref("build")}>Build one</a>
@@ -138,7 +138,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
 
         {/* The money, in one row: almost everything below installs free, and the whole economy behind the
             Premium badges is /earn/'s page to tell. This band exists so the badge is never the first a
-            visitor hears of it — and it is the ONLY economics on the page. */}
+            visitor hears of it, and it is the ONLY economics on the page. */}
         <section class="border-b border-line bg-canvas/60" aria-label="How premium extensions are paid for">
             <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
                 {
@@ -181,7 +181,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                             {group.entries.map((entry) => (
                                 <article class="card flex flex-col gap-3 p-6">
                                     <div class="flex items-center gap-3">
-                                        {/* The author's mark over its initials — see markInitials for why this
+                                        {/* The author's mark over its initials: see markInitials for why this
                                             page draws two tiers where the app draws three. The image sits OVER
                                             the letters rather than instead of them, so a slug that 404s at
                                             build time reveals the tier below instead of a hole. */}
@@ -260,7 +260,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                             viewBox="0 0 520 256"
                             class="mt-3 h-auto w-full max-w-[600px] text-link"
                             role="img"
-                            aria-label="Several extensions — each bundling some of four surfaces (Capabilities, UI, Automations, Backend) — plug into the one core every sandbox has: Files, Events, Agents, Secrets and Processes."
+                            aria-label="Several extensions bundle Capabilities, UI, Automations or Backend surfaces and plug into the core every sandbox has: Files, Events, Agents, Secrets and Processes."
                         >
                             {/* ===== the core: the kernel every sandbox has ===== */}
                             <rect x={CORE.x} y={CORE.y} width={CORE.w} height={CORE.h} rx="16" fill="color-mix(in srgb, var(--color-content) 4%, transparent)" stroke="var(--color-line-strong)" stroke-width="1.5" />
@@ -314,7 +314,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
 
             <section aria-labelledby="lifecycle-heading">
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout — and around again</h2>
+                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout, and around again</h2>
                     <p class="text-xs text-subtle">Delivered once. Paid when people choose it. Renewed when you maintain it.</p>
                 </div>
 

@@ -2,7 +2,7 @@
 import DocsLayout from "../../components/DocsLayout.astro";
 
 /* THE COMPATIBILITY CONTRACT, said to users. Every sentence on this page is a tested property, not an
- * aspiration — the promises are drilled nightly against real published images (verify-update-survival.sh),
+ * aspiration: the promises are drilled nightly against real published images (verify-update-survival.sh),
  * the breaking-change flow is enforced in CI (prepass.mjs invariants 5 and 6, contract.lock.json), and the
  * lanes are how the release pipeline actually publishes (release-images.sh, promote-stable.sh). Change the
  * mechanics and this page changes in the same commit, or it becomes marketing. */
@@ -11,13 +11,13 @@ import DocsLayout from "../../components/DocsLayout.astro";
 <DocsLayout
     pageId="updates"
     heading="Updates & rollback"
-    lead="intentic ships several times a day. These are the promises every one of those updates keeps — what an update can never touch, how you find out when something will change, and the way back when one turns out badly."
+    lead="intentic ships several times a day. These are the promises every one of those updates keeps: what an update can never touch, how you find out when something will change, and the way back when one turns out badly."
 >
     <h2>The promises</h2>
     <ul>
         <li>
-            <strong>Your files are never touched.</strong> Everything in your workspace — code, notes, agent history — lives outside the
-            software that updates. Updating, rolling back, and rebuilding all keep it, and we drill exactly that against real releases every
+            <strong>Your files are never touched.</strong> Your code, notes and agent history live outside the
+            software that updates. Updating, rolling back and rebuilding all keep them, and we test that against real releases every
             night: a sandbox is updated, rolled back, and force-failed mid-update, and the files must come through all three.
         </li>
         <li>
@@ -37,32 +37,32 @@ import DocsLayout from "../../components/DocsLayout.astro";
         </li>
         <li>
             <strong>Nothing we ship can take your data hostage.</strong> The sandbox runs on your hardware and your state is plain files on
-            your disk. Stop updating, roll back, or leave entirely — everything you made is already yours, readable without us.
+            your disk. Stop updating, roll back, or leave entirely: everything you made is already yours, readable without us.
         </li>
     </ul>
 
     <h2>The two lanes</h2>
     <p>
-        Every release lands on the <strong>beta</strong> lane the moment it publishes. The <strong>stable</strong> lane — the default, and
-        what every download link serves — only moves onto a release after it has soaked on beta for about two days with nothing superseding
+        Every release lands on the <strong>beta</strong> lane the moment it publishes. The <strong>stable</strong> lane is the default and
+        serves every download link. It moves onto a release only after it has soaked on beta for about two days with nothing superseding
         it. We run beta ourselves, so a bad release is caught by the people who made it, not by you.
     </p>
     <p>
-        Your sandbox shows its lane on the update card. Moving to beta is one command on the machine that runs your sandbox — and moving
+        Your sandbox shows its lane on the update card. Moving to beta is one command on the machine that runs your sandbox, and moving
         back is the same command with <code>stable</code>:
     </p>
     <pre><code>ic sandbox update --channel beta</code></pre>
 
     <h2>What can change freely</h2>
     <p>
-        The circle of promises is deliberately small, and everything outside it can improve without ceremony: how screens look, how features
+        The promise is narrow. Everything outside it can improve without ceremony: how screens look, how features
         work internally, defaults for things you haven't set. A changelog entry tells you when a change is worth noticing; the warning
-        treatment is reserved for the changes that take something away — so that when you see one, it means it.
+        treatment is reserved for the changes that take something away. So that when you see one, it means it.
     </p>
 
     <h2>If an update went badly anyway</h2>
     <p>
-        Open the update card and take the rollback it offers — your files stay as they are now, only the software moves back. If a settings
+        Open the update card and take the rollback it offers: your files stay as they are now, only the software moves back. If a settings
         file then reads as unreadable, that's usually the older version looking at a newer file, and the notice will say so rather than
         asking you to fix a file that isn't broken; updating again reads it fine.
     </p>

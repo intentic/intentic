@@ -12,7 +12,7 @@ export interface LandingSectionIntro {
 }
 
 /**
- * A screenshot, named by the shot `_tools/e2e/shots/capture.mts` wrote — `fleet-board` is
+ * A screenshot, named by the shot `_tools/e2e/shots/capture.mts` wrote: `fleet-board` is
  * `_site/site/src/assets/product/fleet-board.png`. Only the name and the alt text are content: the file's
  * pixel size, format and variants belong to the build, which reads them off the file itself.
  */
@@ -23,12 +23,12 @@ export interface ShotImage {
 
 /** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
 export interface HeroShot extends ShotImage {
-    /** The pill in the frame's title bar — where in the app this shot was taken. */
+    /** The pill in the frame's title bar. Where in the app this shot was taken. */
     frameLabel: string;
 }
 
-/* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image — it is the
- * LCP, and this page ships almost no JavaScript — and the press is a link to the demo's own page, where an IDE
+/* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image because it
+ * is the LCP and this page ships almost no JavaScript. The press links to the demo's own page, where an IDE
  * gets the whole viewport instead of a hole cut in a marketing page. */
 export interface HeroDemo {
     /** On the frame itself. Says where the press goes, because "Play" on a screenshot could mean a video. */
@@ -38,9 +38,9 @@ export interface HeroDemo {
 }
 
 /**
- * One verb in the tour — the home page's single telling of what the product does. Each maps 1:1 to a page
+ * One verb in the tour: the home page's single telling of what the product does. Each maps 1:1 to a page
  * in the Features menu and carries ONE line plus one proof: a real browser screenshot (`shot`, named like a
- * `ShotImage` and framed with the route it was taken on) OR, for Automate, the list of events it wakes on —
+ * `ShotImage` and framed with the route it was taken on) OR, for Automate, the list of events it wakes on.
  * because there is no honest screenshot of an automations screen and a mockup would be the one lie here.
  * The first item leads the section at full width; the rest are compact cards.
  */
@@ -54,7 +54,7 @@ export interface VerbTourItem {
 
 /**
  * The ownership ledger: what sits on your hardware, against everything the platform holds. Two columns
- * of nouns rather than three paragraphs of argument — the claim is a comparison, so the shape that makes
+ * of nouns rather than three paragraphs of argument: the claim is a comparison, so the shape that makes
  * it is a comparison.
  *
  * `platform.never` is one sentence rather than a list on purpose. As three more rows it made the
@@ -75,7 +75,7 @@ export interface LandingContent {
         shot: HeroShot;
         demo: HeroDemo;
     };
-    /* The one telling of what you do with the product, in the same five verbs as the Features menu — so the
+    /* The one telling of what you do with the product, in the same five verbs as the Features menu. So the
      * home page and the feature pages read as one product. It replaces the old "loop" beats and "extend"
      * bento, which between them said the same powers three times over. */
     verbs: LandingSectionIntro & { items: VerbTourItem[]; cta: string };
@@ -87,15 +87,15 @@ export interface LandingContent {
      * says "paste this command on your machine".
      *
      * The cards come from `about.ts`, shared with /about/, and the commit numbers are measured from git
-     * at build time — never authored. The band has no slot that can render a zero: an empty social-proof
+     * at build time: never authored. The band has no slot that can render a zero: an empty social-proof
      * counter is the one thing here that would cost more trust than it buys. */
     trust: { eyebrow: string; cta: string };
     /* Step 3 is "paste this in a terminal", and that is the likeliest place on this page to lose somebody who
-     * has read all of it — not because the command does more than an installer would, but because it arrives
+     * has read all of it: not because the command does more than an installer would, but because it arrives
      * with none of an installer's affordances. `desktop` is the way out, and it sits BESIDE the command rather
      * than above it: there is no macOS build, so a download offered first reads as a gap to a third of the
      * audience, while the same download offered next to a one-liner that works everywhere reads as the
-     * shortcut it is. It stays secondary for the same reason the hero has one button — the app is a window
+     * shortcut it is. It stays secondary for the same reason the hero has one button: the app is a window
      * around this install, not a second product to choose between. */
     connect: LandingSectionIntro & {
         steps: LandingFact[];
@@ -106,7 +106,7 @@ export interface LandingContent {
 }
 
 // One claim, proven once: your agents run on hardware you own, keep running when you look away, and
-// any browser — or a phone — reopens onto the same fleet, with nothing reaching your tree until you
+// any browser, including a phone, reopens onto the same fleet, with nothing reaching your tree until you
 // have read the diff. The hero states it; the five verbs show it; the bands below answer the objections
 // it raises (who owns what, what it costs, who builds it) and then hand you the one command to start.
 export const landingContent: LandingContent = {
@@ -120,7 +120,7 @@ export const landingContent: LandingContent = {
     hero: {
         headlineLines: ["Workstation for your agents.", "A window for you."],
         // Plain, high-signal words: the three differentiators are ownership (your hardware), persistence
-        // (survives the browser closing) and control (nothing lands unread) — name exactly those and stop.
+        // (survives the browser closing) and control (nothing lands unread): name exactly those and stop.
         // "Close the browser", not "log off": nothing is ended for the runs to continue.
         subhead: "Agents that run on your hardware, keep going when you close the browser, and land nothing until you review.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
@@ -136,17 +136,17 @@ export const landingContent: LandingContent = {
     },
     // The tour: five verbs, each said once, each a picture instead of a paragraph. Order matches the
     // Features menu. Orchestrate leads at full width because the board is the product's face; the other
-    // four are compact cards. Automate carries its trigger list, not a screenshot — it is diagram-led
+    // four are compact cards. Automate carries its trigger list, not a screenshot: it is diagram-led
     // everywhere, because no honest capture of an automations screen exists.
     verbs: {
         eyebrow: "What you do",
         heading: "Run a fleet. Stay in control.",
-        sub: "Ten agents at once, wired into your systems, woken by events, and reviewed change by change before anything lands.",
+        sub: "Run ten agents at once, connect them to your systems, start them from events and review every change before it lands.",
         items: [
             {
-                verb: "Orchestrate",
+                verb: "Run",
                 href: productHref("orchestrate"),
-                line: "Run ten agents at once. The board sorts the fleet into who's blocked, who's running, who's done — and surfaces the one that needs you.",
+                line: "Run ten agents at once. The board shows who is blocked, running or done, and brings the agent that needs you to the front.",
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -154,9 +154,9 @@ export const landingContent: LandingContent = {
                 },
             },
             {
-                verb: "Empower",
+                verb: "Connect",
                 href: productHref("empower"),
-                line: "Give an agent GitHub, Postgres, Stripe, Discord or any MCP server — it sees and acts, keys kept safe.",
+                line: "Give an agent access to GitHub, Postgres, Stripe, Discord or any MCP server. It can use them while the keys stay in your sandbox.",
                 shot: {
                     name: "capabilities",
                     alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -166,11 +166,11 @@ export const landingContent: LandingContent = {
             {
                 verb: "Automate",
                 href: productHref("automate"),
-                line: "Agents that start themselves — on an event you choose, under a guard command you write, each run a fresh session you can watch.",
+                line: "Start agents from an event you choose and a guard command you write. Each run opens a fresh session you can watch.",
                 triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
             },
             {
-                verb: "Supervise",
+                verb: "Review",
                 href: productHref("supervise"),
                 line: "It plans first and you approve; finished work waits on its own branch until you have read every hunk of the diff.",
                 shot: {
@@ -180,9 +180,9 @@ export const landingContent: LandingContent = {
                 },
             },
             {
-                verb: "Delegate",
+                verb: "Host",
                 href: productHref("delegate"),
-                line: "Give the workspace its own server and hand off the running — it stays on your hardware, you keep control.",
+                line: "Give the workspace its own server and hand off day-to-day operation. It stays on your hardware and under your control.",
                 shot: {
                     name: "sandbox-overview",
                     alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",
@@ -192,13 +192,13 @@ export const landingContent: LandingContent = {
         ],
         cta: "Every feature, in detail",
     },
-    // The claim here is a COMPARISON — your hardware holds everything, the platform holds two fields — so
+    // The claim here is a COMPARISON: your hardware holds everything while the platform holds two fields, so
     // it is made as one: two columns of nouns, side by side, where the asymmetry is the argument and needs
     // no prose to carry it.
     ownership: {
         eyebrow: "Ownership",
         heading: "Your code never leaves your machine.",
-        sub: "An agent with your keys is only safe if you own where it runs. Here is exactly what sits on each side.",
+        sub: "An agent with your keys is safest when you own where it runs. Here is what stays on your hardware and what the platform stores.",
         ledger: {
             yours: {
                 label: "Your machine",
@@ -216,7 +216,7 @@ export const landingContent: LandingContent = {
                 holds: ["Your email address", "Your sandbox's URL"],
                 never: "No code, no keys, and no way to command your agents.",
             },
-            footnote: "Your browser holds the token that drives the sandbox, not the platform. It's all MIT on GitHub — check it.",
+            footnote: "Your browser, not the platform, holds the token that drives the sandbox. The full source is MIT-licensed on GitHub.",
         },
     },
     economics: {
@@ -236,7 +236,7 @@ export const landingContent: LandingContent = {
             "Free, whole: every sandbox, capability and shared workspace included.",
         ],
     },
-    // The name, bio, links and cards all live in about.ts — shared with /about/, so the two surfaces
+    // The name, bio, links and cards all live in about.ts: shared with /about/, so the two surfaces
     // cannot drift. Only the band's own framing is here.
     trust: {
         eyebrow: "About the creator",
@@ -260,17 +260,17 @@ export const landingContent: LandingContent = {
                 body: "A one-liner starts the sandbox on your machine. Docker installs if missing, with your say-so.",
             },
         ],
-        commandNote: "Nothing deployed, nothing exposed. Just a workspace your agents can call home.",
+        commandNote: "This deploys nothing and opens no inbound ports. It creates a workspace for your agents.",
         desktop: {
             lead: "Rather not touch a terminal?",
             cta: "Get the app for Windows or Linux",
             // Says what it IS, so nobody reads it as a different product: the same install with a window
-            // around it. The Mac reader is not stranded — the command above is what the app runs anyway.
+            // around it. The Mac reader is not stranded: the command above is what the app runs anyway.
             note: "The app runs this very command for you: it puts Docker in place if the machine has none, starts the sandbox, and opens your workspace when it answers.",
         },
     },
     finalCta: {
         heading: "Put ten agents to work. Come back whenever.",
-        sub: "One command to a live sandbox on your hardware. Free — and nothing lands until you have read the diff.",
+        sub: "One command starts a live sandbox on your hardware. It is free, and nothing lands until you have read the diff.",
     },
 };

@@ -5,13 +5,13 @@ import { githubUrl } from "@intentic-dev/site-content/site";
 
 /* The one claim on this site that does not ask the reader to trust anybody.
  *
- * Everything else in the trust section is an argument — the platform cannot reach your code, the person is
+ * Everything else in the trust section is an argument: the platform cannot reach your code, the person is
  * real, the source is readable. Those are worth making, and none of them is checkable in the thirty seconds
  * somebody spends deciding whether to run an installer. This is: three commands, run on their machine,
  * against a public transparency log, that answer whether the bytes they downloaded came from the source
  * they can read. We are not a party to the check.
  *
- * The score is MEASURED, never authored — the same rule TrustCards applies to the commit count, and here it
+ * The score is MEASURED, never authored: the same rule TrustCards applies to the commit count, and here it
  * matters more, because a security number typed by the people it grades is not evidence of anything. When
  * the API cannot be read at build time the block still renders: the commands are the substance, the score is
  * the summary. It never renders a placeholder number and never renders a zero. */
@@ -56,7 +56,7 @@ npm audit signatures`;
         }
     </div>
 
-    <DocsCodeBlock code={commands} lang="bash" title="needs the GitHub CLI — no account" />
+    <DocsCodeBlock code={commands} lang="bash" title="needs the GitHub CLI: no account" />
 
     <p class="max-w-copy text-sm leading-relaxed text-muted">
         What a signature cannot tell you is whether the source itself is worth trusting. That part is the reading, and it is why{" "}

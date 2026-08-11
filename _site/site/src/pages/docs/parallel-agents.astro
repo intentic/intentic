@@ -4,10 +4,10 @@ import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
 /* The mechanics behind the fleet board. This page exists because "run a separate agent for each job" was a
- * product claim and an FAQ answer with nothing underneath it — the words isolation, worktree and land appeared
+ * product claim and an FAQ answer with nothing underneath it: the words isolation, worktree and land appeared
  * nowhere in the docs a reader could reach. */
 
-const layout = `/work                     the shared tree — what you see in the Workspace view
+const layout = `/work                     the shared tree: what you see in the Workspace view
   api/                    a repo
   web/                    another repo
 
@@ -25,14 +25,14 @@ const lanes = [
         holds: `Agents that stopped and need you: a plan to approve, a question to answer, a tool permission to grant, a land that hit a conflict.`,
     },
     { name: `Active`, holds: `Turns that are running, or conversations you have open and are working in.` },
-    { name: `Finished`, holds: `Everything that ran to completion — landed, or holding work that is ready for you to land.` },
+    { name: `Finished`, holds: `Everything that ran to completion: landed, or holding work that is ready for you to land.` },
 ];
 ---
 
 <DocsLayout
     pageId="parallel-agents"
     heading="Parallel agents"
-    lead="Several agents working at once, each in its own checkout of your repos, none of them able to overwrite another's edits — and a review step before any of it reaches the tree you work in."
+    lead="Several agents working at once, each in its own checkout of your repos, none of them able to overwrite another's edits, and a review step before any of it reaches the tree you work in."
 >
     <h2>One sandbox, many conversations</h2>
     <p>
@@ -50,28 +50,28 @@ const lanes = [
     <DocsCodeBlock code={layout} lang="bash" title="One conversation's checkout" />
     <p>
         The checkouts live outside <code>/work</code>, so they never show up in your file tree, your search, or the workspace history. Git
-        object stores are shared — a worktree costs a checkout, not a clone. The composition is frozen when it is created: a repo you clone
+        object stores are shared: a worktree costs a checkout, not a clone. The composition is frozen when it is created: a repo you clone
         into the workspace later doesn't retroactively join a conversation that is already running.
     </p>
 
     <h3>The agent sees its worktree as /work</h3>
     <p>
-        Every absolute path an agent inherits — from a memory, a <code>CLAUDE.md</code>, a message you wrote quoting a file, its own earlier
-        turn — says <code>/work</code>. So the turn runs in its own mount namespace where its worktree <em>is</em> the workspace root:
+        Every absolute path an agent inherits: from a memory, a <code>CLAUDE.md</code>, a message you wrote quoting a file, its own earlier
+        turn: says <code>/work</code>. So the turn runs in its own mount namespace where its worktree <em>is</em> the workspace root:
     </p>
     <DocsCodeBlock code={mount} lang="bash" title="Inside an isolated turn" />
     <p>
         The agent cannot take a wrong turn into the shared tree by accident, and nothing has to be remembered or refused. Writing to the main
-        tree is still possible for an agent that genuinely means it — comparing against main, reading a sibling repo — it is just no longer
-        what happens by mistake. Two things are deliberately shared rather than copied: your daemon state (chat transcripts, attachments) and
+        tree is still possible when the agent needs to compare against main or read a sibling repo. It just no longer happens by mistake.
+        Two things are shared instead of copied: your daemon state (chat transcripts, attachments) and
         the installed dependency trees, without which a worktree could not resolve an import.
     </p>
 
     <h3>It is rebased before every turn</h3>
     <p>
         A conversation can sit for hours between turns while the main line moves under it. So before a turn starts, the daemon rebases the
-        branch onto the current main line. If the rebase would conflict it is rolled back and the turn runs from where it was — a branch that
-        cannot be moved cleanly simply isn't moved. This is why a resumed conversation reads today's code instead of writing a delta against
+        branch onto the current main line. If the rebase would conflict it is rolled back and the turn runs from where it was: a branch that
+        cannot be moved cleanly stays where it was. This is why a resumed conversation reads today's code instead of writing a delta against
         a base that no longer exists.
     </p>
 
@@ -96,7 +96,7 @@ const lanes = [
         </tbody>
     </table>
     <p>
-        The lanes are projections of what each agent is actually doing, not a status you set — so dragging a card doesn't assign a lane, it
+        The lanes are projections of what each agent is actually doing, not a status you set. So dragging a card doesn't assign a lane, it
         runs the action that would cause one. Dropping onto <strong>Finished</strong> lands a card that is ready, stops one that is running,
         or opens conflict resolution on one that is stuck. A drop with no action behind it is refused and the card springs back, which is the
         honest answer: there is no way to make an agent "be running" without sending it a message. A separate discard zone appears while a
@@ -106,7 +106,7 @@ const lanes = [
     <h2>Reviewing the work</h2>
     <p>
         Open an agent and you get its <strong>cumulative</strong> output: everything the conversation has done since its branch was cut, per
-        repo, as one flat change set with each file marked landed or not. It is deliberately not a staged/unstaged view — a worktree you
+        repo, as one flat change set with each file marked landed or not. This is not a staged/unstaged view: a worktree you
         never checked out has no index you could stage into.
     </p>
 
@@ -123,10 +123,10 @@ const lanes = [
 
     <h3>When it conflicts</h3>
     <p>
-        If the patch cannot apply — you edited the same lines, or an overlapping file is dirty — then <strong>nothing lands for that
+        If the patch cannot apply because you edited the same lines or an overlapping file is dirty, then <strong>nothing lands for that
         repo</strong> and the card says so. The worktree keeps everything, and landing again works the moment you have resolved your side.
         Work that already reached the main tree by another road is specifically not treated as a conflict. An agent that committed onto the
-        main line itself, or a branch you merged by hand, resolves as "already there" — rather than stranding the card on a refusal nobody
+        main line itself, or a branch you merged by hand, resolves as "already there": rather than stranding the card on a refusal nobody
         could act on.
     </p>
 
@@ -174,8 +174,8 @@ const lanes = [
     <h2>Conversations that aren't isolated</h2>
     <p>
         Not every conversation wants a branch. A chat you restore from the History menu runs on the shared <code>/work</code> tree, in the
-        tree you are looking at — its tab reads "New chat" rather than "New agent". These have no branch, so there is nothing to land and
-        nothing to discard; their edits are simply your working tree, the way an agent in a terminal would work.
+        tree you are looking at: its tab reads "New chat" rather than "New agent". These have no branch, so there is nothing to land and
+        nothing to discard; their edits are your working tree, the way an agent in a terminal would work.
     </p>
     <p>
         Reach for isolation when you want work you can review before it touches anything, or when you want more than one agent going at once.

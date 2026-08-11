@@ -4,8 +4,8 @@ import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* The IntenticApi surface as a page. Deliberately a reference and not a tutorial — "Build an extension" is the
- * tutorial, and it links here for everything it deliberately did not use. */
+/* The IntenticApi surface as a reference page. "Build an extension" is the tutorial, and it links here for
+ * everything it does not use. */
 
 const activate = `import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host.js";
@@ -78,14 +78,14 @@ const packages = [
     book={apiBook}
     pageId="host"
     heading="Host API"
-    lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object — the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
+    lead="The same daemon, from inside the app. An extension's activate() is handed one IntenticApi object: the authenticated transport, the workspace facts, and every surface of the shell it may contribute to."
 >
     <h2>How the API reaches your code</h2>
     <p>
         There is no ambient global and no client you construct. The API arrives as the argument to{" "}
         <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
         route allowlist in your manifest. If you are writing your first extension, start with{" "}
-        <a href="/api/build/">Build an extension</a> — this page is the reference it links back to.
+        <a href="/api/build/">Build an extension</a>: this page is the reference it links back to.
     </p>
 
     <h2>Getting the handle</h2>
@@ -100,7 +100,7 @@ const packages = [
         off, which is what makes turning it off actually unwind it rather than leave tiles behind.
     </p>
 
-    <h2>api.sandbox — talking to the daemon</h2>
+    <h2>api.sandbox: talking to the daemon</h2>
     <p>
         Auth is injected host-side; an extension never sees a token. Reach is scoped: every door here is checked against your manifest's{" "}
         <code>permissions.sandbox</code> allowlist, so a call to an undeclared method and path throws rather than reaching the whole daemon.
@@ -118,7 +118,7 @@ const packages = [
                     answers the declared output shape, both checked when you build.
                 </td>
             </tr>
-            <tr><td><code>json&lt;T&gt;(path, init?)</code></td><td>A path-based call, parsed as JSON. The escaping, the query encoding and the shape of the answer are all yours to get right — prefer <code>rpc</code>.</td></tr>
+            <tr><td><code>json&lt;T&gt;(path, init?)</code></td><td>A path-based call, parsed as JSON. The escaping, the query encoding and the shape of the answer are all yours to get right: prefer <code>rpc</code>.</td></tr>
             <tr><td><code>request(path, init?)</code></td><td>The raw <code>Response</code>, for the byte routes and the streams.</td></tr>
             <tr><td><code>key(...parts)</code></td><td>A cache key scoped to the active sandbox. The required prefix for every query key you write, so caches never bleed across a sandbox switch.</td></tr>
             <tr><td><code>reachable()</code></td><td>Whether the sandbox is answering. Reactive inside a computed, so it drives a query's <code>enabled</code>.</td></tr>
@@ -131,7 +131,7 @@ const packages = [
         routes behind <code>rpc</code> are the ones on the <a href="/api/http/">HTTP API</a> page.
     </p>
 
-    <h2>api.workspace — repos, files and diffs</h2>
+    <h2>api.workspace: repos, files and diffs</h2>
     <table>
         <thead>
             <tr><th>Member</th><th>What it does</th></tr>
@@ -139,19 +139,19 @@ const packages = [
         <tbody>
             <tr><td><code>repos()</code>, <code>capabilities()</code></td><td>The detection facts: what each repo under /work contains, and which integrations the owner connected. Reactive.</td></tr>
             <tr><td><code>onDidChange(listener)</code></td><td>Those facts changed.</td></tr>
-            <tr><td><code>onDidChangeRefs(listener)</code></td><td>A git ref moved in one of these repos — a commit, a branch, a checkout, a rebase. The one signal no file watcher can give you, and the one that matters for work the user did not do.</td></tr>
-            <tr><td><code>file(path)</code>, <code>readJson&lt;T&gt;(path)</code></td><td>Read a workspace file, or read it as a JSON object. Both answer <code>undefined</code> when it is absent — for <code>readJson</code>, also when it is truncated or hand-mangled, because one bad file must never blank the surface reading it.</td></tr>
+            <tr><td><code>onDidChangeRefs(listener)</code></td><td>A git ref moved in one of these repos: a commit, a branch, a checkout, a rebase. The one signal no file watcher can give you, and the one that matters for work the user did not do.</td></tr>
+            <tr><td><code>file(path)</code>, <code>readJson&lt;T&gt;(path)</code></td><td>Read a workspace file, or read it as a JSON object. Both answer <code>undefined</code> when it is absent: for <code>readJson</code>, also when it is truncated or hand-mangled, because one bad file must never blank the surface reading it.</td></tr>
             <tr><td><code>write(path, body)</code></td><td>Create or replace a workspace file. Throws on failure, unlike the reads: a write that silently did nothing would lose what the caller was told was saved.</td></tr>
             <tr><td><code>openDiff(payload)</code>, <code>fillDiff(payload)</code></td><td>Open a diff in the shell's editor tab strip, beside the files it is about. Open it <code>pending</code> and fill it later when the content is slow to compute.</td></tr>
         </tbody>
     </table>
     <p>
         Keep durable state in the workspace rather than in settings. It survives a reload, it is shared across the owner's browsers, and the
-        agent writing into it out of band is usually the whole point. The file routes still need declaring —
+        agent writing into it out of band is usually the whole point. The file routes still need declaring.
         <code>api.workspace.file</code> removes the encoding, not the grant.
     </p>
 
-    <h2>api.views — the sidebar surfaces</h2>
+    <h2>api.views: the sidebar surfaces</h2>
     <p>
         A view registers once and produces one <strong>activation</strong> per sidebar element, decided by <code>detect()</code> against the
         facts. Activate on evidence, not names: "this repo has a vitest config" survives a rename, "this repo is called api" does not.
@@ -165,7 +165,7 @@ const packages = [
             <tr><td><code>detect(repos, capabilities)</code></td><td>Returns one activation per element: a stable <code>key</code> (the route segment), a <code>title</code>, an optional <code>icon</code>, the <code>repo</code> it is rooted at, and any extra <code>props</code>. Called on every facts poll; a throwing detect just contributes nothing that round.</td></tr>
             <tr><td><code>badge(activation)</code></td><td>What the tile says without being opened. Needs <code>"badge": true</code> in the manifest.</td></tr>
             <tr><td><code>fallback</code></td><td>This view's activations are dropped for repos a non-fallback view already claimed.</td></tr>
-            <tr><td><code>auxiliary</code></td><td>Adds a surface <em>beside</em> whatever else serves the repo instead of claiming it — a test runner, a docs browser.</td></tr>
+            <tr><td><code>auxiliary</code></td><td>Adds a surface <em>beside</em> whatever else serves the repo instead of claiming it: a test runner, a docs browser.</td></tr>
             <tr><td><code>view()</code></td><td>Lazily imported root component, rendered with <code>repo</code> and your props bound.</td></tr>
         </tbody>
     </table>
@@ -175,7 +175,7 @@ const packages = [
         "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose{" "}
         <em>size</em> is what you act on, and <code>mark</code> is a glyph for a pending action where the size changes nothing.{" "}
         <code>tone</code> is <code>info</code> at rest, <code>warning</code> for a risk being carried, or <code>danger</code> for something
-        broken — stay sparing with that one, because its value is that it is rare.
+        broken: stay sparing with that one, because its value is that it is rare.
     </p>
     <p>
         <code>badge</code> is read inside the host's own computed and runs on every render of every surface that draws tiles, so it must be
@@ -200,12 +200,12 @@ const packages = [
                     row's icon, tooltip and tab title, or nothing.
                 </td>
             </tr>
-            <tr><td><code>documents.open(id, path)</code></td><td>Open one of your own documents as if its row icon had been clicked — for the directories with no row, like the workspace root.</td></tr>
+            <tr><td><code>documents.open(id, path)</code></td><td>Open one of your own documents as if its row icon had been clicked: for the directories with no row, like the workspace root.</td></tr>
         </tbody>
     </table>
     <p>
         <code>documents.detect</code> is called for every visible directory row on every render of the tree. Like <code>badge</code>, it
-        must be a lookup and never a fetch, and the state it reads has to outlive the view being unmounted — so it belongs in module state
+        must be a lookup and never a fetch, and the state it reads has to outlive the view being unmounted. So it belongs in module state
         owned by <code>activate()</code>.
     </p>
 
@@ -217,7 +217,7 @@ const packages = [
         <tbody>
             <tr><td><code>commands.register(command, handler)</code></td><td>Must match a <code>contributes.commands</code> entry. That is also where its palette title and any global shortcut are declared, because a shortcut is consequential enough for the owner to have approved it.</td></tr>
             <tr><td><code>commands.execute(command, ...args)</code></td><td>Run one, yours or another extension's.</td></tr>
-            <tr><td><code>settings.get(key)</code>, <code>set(key, value)</code></td><td>Your own declared settings — string, number or boolean. Persisted daemon-side, keyed by <code>publisher.name</code>, so they survive an update, a remove and re-add, or a re-clone.</td></tr>
+            <tr><td><code>settings.get(key)</code>, <code>set(key, value)</code></td><td>Your own declared settings: string, number or boolean. Persisted daemon-side, keyed by <code>publisher.name</code>, so they survive an update, a remove and re-add, or a re-clone.</td></tr>
             <tr><td><code>settings.onDidChange(listener)</code></td><td>Someone changed one, possibly in another browser.</td></tr>
         </tbody>
     </table>
@@ -230,7 +230,7 @@ const packages = [
         <tbody>
             <tr><td><code>processes.status/start/stop(name)</code></td><td>Your own declared background processes. A name the manifest never declared is refused.</td></tr>
             <tr><td><code>terminal.open(session)</code></td><td>Aim the shell's one terminal panel at a tmux session and focus it. <code>setOpen(open)</code> shows or hides the panel without focusing anything.</td></tr>
-            <tr><td><code>chat.openSession(sessionId)</code></td><td>Open the tab for a stored conversation — for a run history or an audit row, where "why did it do that" is only answerable by reading the transcript.</td></tr>
+            <tr><td><code>chat.openSession(sessionId)</code></td><td>Open the tab for a stored conversation: for a run history or an audit row, where "why did it do that" is only answerable by reading the transcript.</td></tr>
             <tr>
                 <td><code>chat.composeWorkflow(workflowId)</code></td>
                 <td>
@@ -242,10 +242,10 @@ const packages = [
         </tbody>
     </table>
 
-    <h2>api.models — which model a run will spend</h2>
+    <h2>api.models, which model a run will spend</h2>
     <p>
         The picker is not a widget: it is a live read of every connected provider's catalog, which credentials the sandbox actually holds,
-        and what each model can do. An extension that rendered its own control could only offer a worse list — and would happily offer
+        and what each model can do. An extension that rendered its own control could only offer a worse list, and would happily offer
         models the sandbox has no credential for, which is a run that fails minutes later.
     </p>
     <table>
@@ -254,14 +254,14 @@ const packages = [
         </thead>
         <tbody>
             <tr><td><code>agentRun()</code></td><td>What a run opens on when nobody has chosen: the sandbox's Agent-runs model, falling back to the owner's own chat setting. Reactive.</td></tr>
-            <tr><td><code>describe(selection)</code></td><td>Name a selection you already hold — a pin read back from disk arrives as bare ids and has to be rendered before anyone opens the picker. Reactive, so a disconnected account changes what a stored pin says about itself.</td></tr>
-            <tr><td><code>pick(&#123; anchor, ... &#125;)</code></td><td>Open the picker over an element — a popover on desktop, a sheet on mobile. Resolves with the pick, or <code>undefined</code> if dismissed.</td></tr>
+            <tr><td><code>describe(selection)</code></td><td>Name a selection you already hold: a pin read back from disk arrives as bare ids and has to be rendered before anyone opens the picker. Reactive, so a disconnected account changes what a stored pin says about itself.</td></tr>
+            <tr><td><code>pick(&#123; anchor, ... &#125;)</code></td><td>Open the picker over an element: a popover on desktop, a sheet on mobile. Resolves with the pick, or <code>undefined</code> if dismissed.</td></tr>
         </tbody>
     </table>
     <p>
         A <code>PickedModel</code> covers the whole choice: <code>provider</code>, <code>model</code>, a display <code>label</code>, and
-        optionally which connected <code>account</code> and which <code>harness</code>. The last two are pins, and absent — "whatever the
-        daemon resolves" — is the state most callers want, because it is what keeps a saved choice working after an account is disconnected.
+        optionally which connected <code>account</code> and which <code>harness</code>. The last two are pins. Leaving them absent lets the
+        daemon choose, which keeps a saved choice working after an account is disconnected.
         Pin the account when the surface starts <em>unattended</em> runs: nobody is watching at 6am, and a first account that has run out of
         headroom is a run that errors every time until someone reads the row.
     </p>
@@ -275,21 +275,21 @@ const packages = [
             <tr><td><code>navigate(path)</code></td><td>Send the shell to an app path, like <code>/capabilities</code>.</td></tr>
             <tr><td><code>route.query()</code></td><td>The current URL query, flattened. Reactive: read it inside a computed and your view re-renders when the URL moves.</td></tr>
             <tr><td><code>route.setQuery(patch, &#123; push &#125;)</code></td><td>Merge a patch in; a key set to <code>undefined</code> is removed. Replaces the history entry by default, pushes when asked.</td></tr>
-            <tr><td><code>theme.mode()</code>, <code>onDidChange</code></td><td><code>light</code> or <code>dark</code>, for the rare case CSS variables can't cover — a canvas, a chart palette.</td></tr>
+            <tr><td><code>theme.mode()</code>, <code>onDidChange</code></td><td><code>light</code> or <code>dark</code>, for the rare case CSS variables can't cover: a canvas, a chart palette.</td></tr>
         </tbody>
     </table>
     <p>
         A view's own route space is the query, not the path: <code>/ext/:ext/:key?</code> is the whole route and <code>:key</code> already
-        means "which activation". So a view with internal navigation — an open document, a selected run — puts that state in the query,
+        means "which activation". A view with internal navigation puts state such as an open document or selected run in the query,
         which is what lets a reload keep it and a link carry it. Derive from the URL rather than mirroring it into a ref; back and forward
         then work for free.
     </p>
 
-    <h2 id="backend">The backend half — activateServer()</h2>
+    <h2 id="backend">The backend half: activateServer()</h2>
     <p>
         An extension with a manifest <code>server</code> entry has a second, smaller surface. The bundle exports{" "}
-        <code>activateServer(api, context)</code>, and the daemon's backend host — one supervised node process shared by every enabled
-        backend — imports it and calls it once per host start. There is no deactivate: retirement is the host process ending, which is the
+        <code>activateServer(api, context)</code>. The daemon's backend host is one supervised node process shared by every enabled
+        backend. It imports the bundle and calls it once per host start. There is no deactivate. Retirement is the host process ending, the
         one teardown that cannot leak.
     </p>
     <table>
@@ -298,16 +298,16 @@ const packages = [
         </thead>
         <tbody>
             <tr><td><code>routes.mount(handler)</code></td><td>Serve your extension's own <code>/x/&lt;id&gt;/…</code> namespace. The daemon proxies requests here through its ordinary auth, with the prefix already stripped, so your handler sees your own paths and never an unauthenticated request. Return <code>undefined</code> for "not mine" and the host answers 404 for you. A second mount replaces the first.</td></tr>
-            <tr><td><code>daemon.request(path)</code>, <code>daemon.json(path)</code></td><td>The backend's authenticated transport into the daemon's own routes — its <code>api.sandbox</code>. Auth is a minted per-extension token injected here, and every call is checked against the manifest's <code>permissions.daemon</code> allowlist.</td></tr>
-            <tr><td><code>workspaceRoot</code></td><td>The workspace root, absolute. The backend is full-trust code in the sandbox, so files are plain <code>node:fs</code> under this path — no file service in between. Durable state belongs in workspace files, same rule as the UI half.</td></tr>
-            <tr><td><code>extensionDir</code></td><td>Your own checkout, absolute — where your bundled assets sit.</td></tr>
+            <tr><td><code>daemon.request(path)</code>, <code>daemon.json(path)</code></td><td>The backend's authenticated transport into the daemon's own routes: its <code>api.sandbox</code>. Auth is a minted per-extension token injected here, and every call is checked against the manifest's <code>permissions.daemon</code> allowlist.</td></tr>
+            <tr><td><code>workspaceRoot</code></td><td>The workspace root, absolute. The backend is full-trust code in the sandbox, so files are plain <code>node:fs</code> under this path: no file service in between. Durable state belongs in workspace files, same rule as the UI half.</td></tr>
+            <tr><td><code>extensionDir</code></td><td>Your own checkout, absolute. Where your bundled assets sit.</td></tr>
             <tr><td><code>log(message)</code></td><td>A line in the daemon's log, attributed to your extension.</td></tr>
-            <tr><td><code>context.extensionId</code></td><td>Your routing id — the <code>/x/&lt;id&gt;</code> segment your UI half calls.</td></tr>
+            <tr><td><code>context.extensionId</code></td><td>Your routing id: the <code>/x/&lt;id&gt;</code> segment your UI half calls.</td></tr>
         </tbody>
     </table>
     <p>
-        The surface is deliberately small because the trust model is full trust: installs are owner-only and sha-pinned, and the backend runs
-        as the same user the daemon does. What the API mediates is exactly the two things a path cannot carry — your route namespace, and
+        The surface stays small because the trust model is full trust: installs are owner-only and sha-pinned, and the backend runs
+        as the same user the daemon does. What the API mediates is exactly the two things a path cannot carry: your route namespace, and
         your declared reach into the daemon.
     </p>
 
@@ -315,7 +315,7 @@ const packages = [
     <p>
         <code>api.apiVersion</code> is the host's extension-API version, and it is what your manifest's <code>engines.intentic</code> range
         is checked against <em>before</em> your code is loaded. Current API: <strong>2.1.0</strong>. Additive surface is a minor bump,
-        breaking is a major — so <code>"^2.0.0"</code> is the range you want, or <code>"^2.1.0"</code> if you ship a backend.
+        breaking is a major. So <code>"^2.0.0"</code> is the range you want, or <code>"^2.1.0"</code> if you ship a backend.
     </p>
 
     <h2>The packages</h2>

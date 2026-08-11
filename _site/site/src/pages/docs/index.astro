@@ -4,7 +4,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
 /* The overview's job is to ROUTE, not to summarise.
  *
- * It used to end in thirteen cards — one per page in the tree, each captioned with that page's meta description.
+ * It used to end in thirteen cards: one per page in the tree, each captioned with that page's meta description.
  * That was the longest thing on the page, it restated the sidebar sitting three inches to its left, and the
  * captions were written for search results rather than for someone choosing. A reader scrolled a wall to learn
  * what a glance at the rail already told them.
@@ -55,7 +55,7 @@ const questions: Record<string, string> = {
 
 const missing = docsSections.filter((section) => questions[section.label] === undefined).map((section) => section.label);
 if (missing.length > 0) {
-    throw new Error(`docs/index.astro: no question written for shelf — ${missing.join(`, `)}`);
+    throw new Error(`docs/index.astro: no question written for shelf: ${missing.join(`, `)}`);
 }
 
 /** Every page on a shelf, flattened, so a row can list what is behind it without the reader guessing. */
@@ -93,8 +93,8 @@ const contentsOf = (label: string): string[] => {
 
     <h2>Get one running</h2>
     <p>
-        Every route starts the same way — <a href="/docs/quickstart/#setup-code">sign in, and the setup screen hands you a finished command
-        with your setup code already in it</a> — and every route ends with the same two containers on your machine. They differ only in who
+        Every route starts the same way: <a href="/docs/quickstart/#setup-code">sign in, and the setup screen hands you a finished command
+        with your setup code already in it</a>, and every route ends with the same two containers on your machine. They differ only in who
         types the docker commands.
     </p>
     <table>
@@ -167,7 +167,7 @@ const contentsOf = (label: string): string[] => {
                 <span class="text-sm text-muted">“I want to extend it, or drive it from my own code.”</span>
             </div>
             <p class="mt-2 text-xs leading-relaxed text-subtle">
-                A separate book, at /api — the extension lifecycle end to end, the manifest reference, the host API and the sandbox's own
+                A separate book, at /api: the extension lifecycle end to end, the manifest reference, the host API and the sandbox's own
                 HTTP API.
             </p>
         </a>

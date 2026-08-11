@@ -62,7 +62,7 @@ const layers = [
 
 const checks = [
     { field: `manifest`, what: `The manifest at that commit parses, or the reason it doesn't, verbatim.` },
-    { field: `bundle`, what: `The entry bundle exists and can load where it would be installed — or "none", for an extension that ships no UI.` },
+    { field: `bundle`, what: `The entry bundle exists and can load where it would be installed, or "none", for an extension that ships no UI.` },
     { field: `engines`, what: `The app version range the manifest declares. A raw fact, not a verdict: the scan doesn't know which version you run.` },
 ];
 ---
@@ -71,7 +71,7 @@ const checks = [
     book={apiBook}
     pageId="verify"
     heading="Verification & trust"
-    lead="A listing carries one of three words, and each is a different party making a different promise. This page is about exactly what each one claims — and, just as importantly, what none of them claims."
+    lead="A listing carries one of three words, and each comes from a different party making a different promise. This page explains what each one claims and what none of them claims."
 >
     <h2>The three words a listing can carry</h2>
     <p>
@@ -109,7 +109,7 @@ const checks = [
     <h2>What the nightly scan checks</h2>
     <p>
         Separate from admission, a nightly job re-derives a handful of compatibility facts from your pinned commit, as a stranger holding
-        nothing but the pointer. It answers the browser's narrower question — <em>will this thing load?</em> — and it is why a gallery card
+        nothing but the pointer. It answers the browser's narrower question, <em>will this thing load?</em>, and is why a gallery card
         can show a <strong>✓ loads</strong> mark that nobody typed.
     </p>
     <table>
@@ -121,7 +121,7 @@ const checks = [
         </tbody>
     </table>
     <p>
-        Each answer is bound to the sha it was read from. Repoint your listing at a new commit and the checks simply <strong>disappear</strong>{" "}
+        Each answer is bound to the sha it was read from. Repoint your listing at a new commit and the checks <strong>disappear</strong>{" "}
         from the card until the next scan, rather than yesterday's verdict describing today's code. An absent check says nothing at all, which
         is the honest thing for it to say.
     </p>
@@ -184,7 +184,7 @@ const checks = [
     <ul>
         <li>
             <strong>Blocked</strong> raises an advisory on the installed row, quoting the registry's recorded reason, and by default switches
-            the extension off. That is the one automatic action the model permits — disabling runs no new code and reverses with a click.
+            the extension off. That is the one automatic action the model permits: disabling runs no new code and reverses with a click.
         </li>
         <li>
             <strong>Security fix</strong> is the mirror image: a flag on your new entry saying its commit fixes a security problem in earlier

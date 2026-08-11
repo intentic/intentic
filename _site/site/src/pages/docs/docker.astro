@@ -3,7 +3,7 @@ import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 
 /* THE ANATOMY PAGE, not a fifth install path. Quickstart owns "how do I get one running" for all four
- * routes; this page owns "what did that create, and how do I live with it" — the object names every route
+ * routes; this page owns "what did that create, and how do I live with it": the object names every route
  * derives identically, where the data sits, the capability posture, and the lifecycle helpers.
  *
  * The names, ports and flags below come from @intentic/sandbox-run (the run contract) and were rendered from
@@ -20,7 +20,7 @@ curl -fsSL https://intentic.dev/cleanup | sh
 curl -fsSL https://intentic.dev/cleanup | sh -s -- <SLUG>      # one, by slug
 curl -fsSL https://intentic.dev/cleanup | sh -s -- --all -y    # every one, no prompt
 
-# Update (pull the latest :stable and recreate in place) and rebuild (apply an
+# Update (pull :stable and recreate in place) and rebuild (apply an
 # approved overlay). The platform hands you the exact command on the matching card.
 curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>
 curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>`;
@@ -39,7 +39,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
 >
     <h2>Install commands are on Quickstart</h2>
     <p>
-        Looking for the commands that bring one up? Those are on <a href="/docs/quickstart/">Quickstart</a>, which covers all four routes —
+        Looking for the commands that bring one up? Those are on <a href="/docs/quickstart/">Quickstart</a>, which covers all four routes:
         desktop app, setup command, Docker Compose, and plain <code>docker run</code>. Everything below is what those routes have in common.
     </p>
 
@@ -54,15 +54,15 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
 
     <h2>Installing Docker</h2>
     <p>
-        The desktop app and the setup command both install Docker for you if it's missing, and both ask first — it's a root-level change
+        The desktop app and the setup command both install Docker for you if it's missing, and both ask first: it's a root-level change
         beyond the sandbox itself, so it is never silent. On Linux that's <code>get.docker.com</code>; on Windows it's Docker Desktop via{" "}
         <code>winget</code>, and a first WSL2 setup may want a reboot. In an unattended run set <code>INSTALL_DOCKER=1</code> to pre-consent,
-        or <a href="https://docs.docker.com/get-docker/">install Docker yourself</a> beforehand and every path will simply use it.
+        or <a href="https://docs.docker.com/get-docker/">install Docker yourself</a> beforehand and every path will use it.
     </p>
 
     <h2>What gets created</h2>
     <p>
-        Two containers, three named volumes, one network — all derived from your sandbox's <strong>slug</strong>, which is the first label of
+        Two containers, three named volumes, one network: all derived from your sandbox's <strong>slug</strong>, which is the first label of
         its public hostname (<code>my-box</code> in <code>my-box.intentic.dev</code>). Every install path derives these identically, which is
         what lets several sandboxes share a machine and lets one move between paths later.
     </p>
@@ -88,17 +88,17 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
             <tr>
                 <td>Volume</td>
                 <td><code>intentic-workspace-&lt;slug&gt;</code></td>
-                <td><code>/work</code> — your repos and files</td>
+                <td><code>/work</code>: your repos and files</td>
             </tr>
             <tr>
                 <td>Volume</td>
                 <td><code>intentic-history-&lt;slug&gt;</code></td>
-                <td><code>/history</code> — version history and snapshots</td>
+                <td><code>/history</code>: version history and snapshots</td>
             </tr>
             <tr>
                 <td>Volume</td>
                 <td><code>intentic-docker-&lt;slug&gt;</code></td>
-                <td><code>/var/lib/docker</code> — the in-sandbox engine's own storage</td>
+                <td><code>/var/lib/docker</code>: the in-sandbox engine's own storage</td>
             </tr>
             <tr>
                 <td>Network</td>
@@ -111,19 +111,19 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <p>
         <code>/history</code> is a <strong>separate volume mounted outside <code>/work</code></strong>, and that is deliberate: an agent{" "}
         <code>rm -rf</code>-ing its workspace cannot reach the history that would let you recover from it. Both survive a container being
-        removed and recreated — which is exactly why update and rebuild can swap the image underneath a sandbox without touching your files.
+        removed and recreated, which is exactly why update and rebuild can swap the image underneath a sandbox without touching your files.
     </p>
 
     {/* WRITTEN BECAUSE THE DOCS DID NOT SAY IT. Searching these docs for "backup" returned nothing, on a product
         whose central promise is that your files are yours and outlive everything. There is no intentic backup
-        feature to describe, and inventing one would be worse than the gap — so this says the true thing: the
+        feature to describe, and inventing one would be worse than the gap. So this says the true thing: the
         volumes are ordinary Docker volumes and your own tooling already knows how to copy one. */}
     <h3>Backing them up</h3>
     <p>
         There is no intentic backup service, and there is nothing for one to do: these are ordinary named Docker volumes, so whatever you
         already use to back up a volume works here. <code>intentic-workspace-&lt;slug&gt;</code> is the whole workspace and{" "}
         <code>intentic-history-&lt;slug&gt;</code> is its history; <code>intentic-docker-&lt;slug&gt;</code> is a rebuildable cache and worth
-        skipping. Your repos' own remotes are the other half of this, and the better half — anything pushed is already off the machine.
+        skipping. Your repos' own remotes are the other half of this, and the better half: anything pushed is already off the machine.
     </p>
 
     <h2>Ports: none inbound, one on loopback</h2>
@@ -135,7 +135,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <p>
         The one exception is a shortcut, not an opening. A browser on the <em>same machine</em> shouldn't have to travel to Cloudflare and
         back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id.
-        Nobody announces that address — your browser computes the same number from the token it already holds. If something else already
+        Nobody announces that address: your browser computes the same number from the token it already holds. If something else already
         holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
     </p>
 
@@ -145,10 +145,10 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         is host access.
     </p>
     <ul>
-        <li><strong><code>SYS_ADMIN</code></strong> — lets the daemon give each isolated agent turn its own mount namespace, so a
+        <li><strong><code>SYS_ADMIN</code></strong>: lets the daemon give each isolated agent turn its own mount namespace, so a
         conversation's <a href="/docs/glossary/">worktree</a> can stand in for <code>/work</code>. Without it, isolated turns quietly stop
         being isolated.</li>
-        <li><strong><code>SYS_PTRACE</code></strong> — lets the daemon be diagnosed in the one place it ever misbehaves: production. When
+        <li><strong><code>SYS_PTRACE</code></strong>: lets the daemon be diagnosed in the one place it ever misbehaves: production. When
         PID 1 stalls, the question is what it's blocked in, and answering it needs a stack.</li>
     </ul>
     <p>
@@ -160,7 +160,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <p>
         Some work needs Docker <em>inside</em> the sandbox: <code>pnpm db:up</code>, a <code>docker compose</code> stack, a local database.
         The image bakes its own Docker Engine, dormant until you add the <strong>docker capability</strong>, which flips a single privileged
-        directive and wakes it. The agent's containers then live entirely inside the sandbox's own engine — still no host socket, so nothing
+        directive and wakes it. The agent's containers then live entirely inside the sandbox's own engine: still no host socket, so nothing
         it starts can touch the machine outside.
     </p>
     <p>
@@ -176,7 +176,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         without your sign-off. Typical additions: a database client like <code>psql</code>, a headless browser, or your language toolchain.
     </p>
     <p>
-        A few capabilities need more than a layer — WireGuard needs a tun device, the nested engine needs <code>--privileged</code>, GPU
+        A few capabilities need more than a layer: WireGuard needs a tun device, the nested engine needs <code>--privileged</code>, GPU
         passthrough needs <code>--gpus</code>. Those ride in as allowlisted <code>#&nbsp;intentic:runtime</code> directive lines in the same
         approved overlay, so an overlay can't smuggle arbitrary docker flags. A host that can't satisfy an <em>optional</em> one (a machine
         with no NVIDIA runtime) starts the sandbox without it rather than failing the launch, and records that it couldn't.
@@ -190,7 +190,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <DocsCodeBlock code={runContract} lang="bash" title="Ask the image" />
     <p>
         It reads your environment from stdin (NUL-framed, because a private key is multi-line), filters it to the vars a sandbox is allowed
-        to receive, and prints the complete, correctly quoted command — or the raw argv with <code>--format json</code>. That is the
+        to receive, and prints the complete, correctly quoted command, or the raw argv with <code>--format json</code>. That is the
         supported way to run a sandbox from your own scripts; <a href="/docs/quickstart/#docker-run">Quickstart</a> has it as a worked
         example.
     </p>
@@ -202,13 +202,13 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         <li><strong>Update</strong> pulls the latest <code>:stable</code> image and recreates the container in place, preserving{" "}
         <code>/work</code> and <code>/history</code>.</li>
         <li><strong>Rebuild</strong> applies an owner-approved environment overlay, with its hash as the trust anchor.</li>
-        <li><strong>Cleanup</strong> removes a sandbox's containers, named volumes, and networks — which <em>does</em> delete its data, so it
+        <li><strong>Cleanup</strong> removes a sandbox's containers, named volumes, and networks, which <em>does</em> delete its data, so it
         confirms first and never wipes everything unless you ask.</li>
     </ul>
     <p>
         Each has a PowerShell twin for Windows: add <code>.ps1</code> to the path (<code>/update.ps1</code>, <code>/rebuild.ps1</code>,{" "}
         <code>/cleanup.ps1</code>, <code>/connect.ps1</code>). The platform surfaces the exact update and rebuild commands on your Sandbox and
-        Environment cards when they apply. In the <a href="/download/">desktop app</a> they are buttons instead — a sandbox can never recreate
+        Environment cards when they apply. In the <a href="/download/">desktop app</a> they are buttons instead: a sandbox can never recreate
         its own container, and something has to do it on the host.
     </p>
 

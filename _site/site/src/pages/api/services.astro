@@ -6,14 +6,14 @@ import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* THE PROVIDER'S PAGE — the plumbing behind the service lane of /earn/, which keeps the economics and shows
+/* THE PROVIDER'S PAGE. This is the plumbing behind the service lane of /earn/, which keeps the economics and shows
  * the chat flow. This page holds only what a provider implements, and every technical claim on it mirrors the
  * platform's own forward and the demo upstream that verifies it, so the reference cannot drift from what the
  * forward actually sends. */
 
 const verify = `import { createHmac, timingSafeEqual } from "node:crypto";
 
-// x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}") — reject anything older than a few minutes.
+// x-intentic-signature = HMAC-SHA256(secret, "{timestamp}.{body}"); reject anything older than a few minutes.
 export function verifyIntenticSignature(body: string, timestamp: string, signature: string, secret: string): boolean {
     if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
     const expected = createHmac("sha256", secret).update(\`\${timestamp}.\${body}\`).digest("hex");
@@ -39,21 +39,21 @@ content-type: application/json
     book={apiBook}
     pageId="services"
     heading="Offer a service"
-    lead="A service is not an extension: no manifest, no bundle, no repo pointer. It is one HTTPS endpoint the platform forwards metered, signed calls to — if you can verify a webhook, you can be in the catalog."
+    lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. If you can verify a webhook, you can be in the catalog."
 >
     <h2>What a service is for</h2>
     <p>
-        Most tools should be free extensions. A <strong>service</strong> is for the case where every run costs <em>you</em> real money —
-        a paid data API, heavy compute, a licensed corpus — so giving it away per-run would mean paying to be used. Services are priced in
+        Most tools should be free extensions. A <strong>service</strong> is for cases where every run costs <em>you</em> real money, such as
+        a paid data API, heavy compute or a licensed corpus. Giving it away per run would mean paying to be used. Services are priced in
         credits, per run, and the member's agent offers them in chat with the price shown before anything is spent. What that looks like
-        from the member's seat — the offer, the yes, the receipt — is drawn on <a href="/earn/">Earn</a>; this page is your side of it.
+        from the member's seat is shown on <a href="/earn/">Earn</a>. This page covers the provider's side.
     </p>
 
     <h2>The shape of a run</h2>
     <p>
         The platform is the intermediary, and the whole exchange is one HTTP round trip: it spends the member's credits atomically, forwards
         the caller's JSON to your endpoint with a signature, and relays your JSON answer verbatim. <strong>JSON in, JSON out, up to a
-        minute, no streaming</strong> — v1 is sized for research-and-answer services rather than live feeds. Two things you never handle:
+        minute, with no streaming</strong>. Version 1 is sized for research-and-answer services rather than live feeds. You never handle
         the user's identity (you are never told who ran it) and their money (credits are the platform's ledger, not your checkout).
     </p>
     <DocsCodeBlock code={exchange} lang="http" title="One metered run, on the wire" />
@@ -61,8 +61,8 @@ content-type: application/json
     <h2>Verify the signature</h2>
     <p>
         What you get instead of issuing API keys: every forwarded call carries <code>x-intentic-timestamp</code> and{" "}
-        <code>x-intentic-signature</code>, an HMAC over <code>{"{timestamp}.{body}"}</code> with the secret you were issued at onboarding —
-        the same scheme Stripe signs webhooks with. Verify it and drop everything else, and nobody can run up your upstream bill but the
+        <code>x-intentic-signature</code>, an HMAC over <code>{"{timestamp}.{body}"}</code> with the secret you were issued at onboarding.
+        It uses the same scheme as Stripe webhooks. Verify it and drop everything else, and nobody can run up your upstream bill but the
         platform. The timestamp check makes a replayed capture die of old age.
     </p>
     <DocsCodeBlock code={verify} lang="typescript" title="The whole verification" />
@@ -72,23 +72,22 @@ content-type: application/json
         The line is <strong>whether you answered</strong>, not whether the caller liked the answer:
     </p>
     <ul>
-        <li><strong>Any completed response below 500 is served.</strong> That includes your 4xx — "your query was malformed" is an answer, the member pays for it, and it is relayed to them verbatim. Validate loudly; it is the paid, honest thing to do.</li>
-        <li><strong>A 5xx, a timeout or a dead socket refunds automatically.</strong> Credits were spent atomically before the call and come straight back; the member is told the run cost nothing. You are simply not paid for failing to serve.</li>
+        <li><strong>Any completed response below 500 is served.</strong> That includes your 4xx. "Your query was malformed" is an answer, so the member pays for it and receives it verbatim. Validate loudly; it is the paid, honest thing to do.</li>
+        <li><strong>A 5xx, a timeout or a dead socket refunds automatically.</strong> Credits were spent atomically before the call and come straight back; the member is told the run cost nothing. You are not paid for failing to serve.</li>
     </ul>
 
     <h2>Pricing &amp; the split</h2>
     <p>
         You publish one number: <strong>credits per run</strong>. Every surface shows it before the run, and a refusal for lack of credits
-        tells the member what's left and when it resets — so price your real cost plus margin, not a teaser. {creatorSharePct}% of every
+        tells the member what's left and when it resets. Price your real cost plus margin, not a teaser. {creatorSharePct}% of every
         spent credit's dollar value is yours; the split, your run counts and your earnings are on the public ledger, per service, for
-        anyone to read. The whole economy — what a credit is worth, why the model is unfarmable — is stated once on{" "}
-        <a href="/earn/">Earn</a>.
+        anyone to read. <a href="/earn/">Earn</a> explains what a credit is worth and why the model is unfarmable.
     </p>
 
     <h2>Getting onboarded, honestly</h2>
     <p>
         There is no self-serve provider signup yet: the first services are onboarded by hand, which buys each one a real conversation about
-        pricing and shape. Bring an endpoint that answers the exchange above and <a href={discordUrl}>say hello on Discord</a> — you'll
+        pricing and shape. Bring an endpoint that answers the exchange above and <a href={discordUrl}>say hello on Discord</a>. You'll
         leave with a secret and a listing. The catalog's own <code>demo-research</code> service is the living reference: its upstream is
         run by the platform and verifies exactly the signature on this page, so what this page documents is what the forward actually sends.
     </p>
@@ -96,7 +95,7 @@ content-type: application/json
     <DocsRelated
         links={[
             { href: "/earn/", title: "Earn", why: "the economy your price plugs into, and the chat flow your service is offered in." },
-            { href: "/api/publish/", title: "Publish & registries", why: "shipping an extension instead — the free, unmetered kind of listing." },
+            { href: "/api/publish/", title: "Publish & registries", why: "shipping a free, unmetered extension instead." },
         ]}
     />
 </DocsLayout>

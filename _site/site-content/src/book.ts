@@ -2,12 +2,12 @@
  *
  * There are two, and the split is by WHO IS READING rather than by subject: /docs is written for someone using
  * intentic, /api for someone building on it. That is the same cut code.visualstudio.com makes, and it exists
- * because the two readers share almost no vocabulary — one is deciding whether to trust an extension, the other
- * is deciding what to put in its manifest — while a single rail forced them to scroll past each other's work.
+ * because the two readers share almost no vocabulary: one is deciding whether to trust an extension, the other
+ * is deciding what to put in its manifest, while a single rail forced them to scroll past each other's work.
  *
  * Everything below is the shape both books share. The trees themselves are docs.ts and api.ts, and every derived
- * surface — the rail, the top bar, the footer, the breadcrumb, previous/next, page metadata, the sitemap and the
- * search index — is computed from them here, so a page can only ever appear where its book says it does.
+ * surface, including the rail, top bar, footer, breadcrumb, previous/next links, page metadata, sitemap and
+ * search index, is computed from them here. A page can only appear where its book says it does.
  */
 
 export interface BookPage {
@@ -15,16 +15,16 @@ export interface BookPage {
     id: string;
     /** Sidebar + breadcrumb label. */
     title: string;
-    /** One line of scent in the nav menu — shorter than meta.description, which is written for search results. */
+    /** One line of scent in the nav menu: shorter than meta.description, which is written for search results. */
     blurb: string;
     /**
-     * <title>, meta description and publication date. Descriptions stay under 160 characters — past that
+     * <title>, meta description and publication date. Descriptions stay under 160 characters: past that
      * a search result truncates mid-sentence and the page loses whatever the tail was carrying.
      * dateModified is not here: it comes from the page's git history at build time.
      */
     meta: { title: string; description: string; datePublished: string };
     /**
-     * Pages that live UNDER this one — same shelf, indented in the rail. Only for real route nesting, never as
+     * Pages that live UNDER this one: same shelf, indented in the rail. Only for real route nesting, never as
      * an editorial grouping: that is what a group's label is for, and conflating the two is how "Manifest
      * reference" once came to look like a peer of "Extensions".
      */
@@ -40,7 +40,7 @@ export interface BookGroup {
 
 export interface BookSection {
     label: string;
-    /** Who arrives at this shelf and what they want — rendered under the label, in the rail and on the index. */
+    /** Who arrives at this shelf and what they want: rendered under the label, in the rail and on the index. */
     audience: string;
     /** The page this shelf's nav row points at. Always a real page, so no menu row is a dead heading. */
     entry: string;
@@ -55,7 +55,7 @@ export interface Book {
     sections: BookSection[];
 }
 
-/** A page with the shelf it sits on — what prev/next and search results need to say where they are. */
+/** A page with the shelf it sits on: what prev/next and search results need to say where they are. */
 export interface BookPlacement {
     page: BookPage;
     section: BookSection;
@@ -88,10 +88,10 @@ export function bookPlacement(book: Book, id: string): BookPlacement | undefined
 }
 
 /**
- * THE TOP BAR'S MENU and the footer's column for a book — one row per shelf, never one per page.
+ * THE TOP BAR'S MENU and the footer's column for a book: one row per shelf, never one per page.
  *
  * Deriving from SHELVES rather than pages is the whole bargain: there are a handful, a new page never adds a
- * row, and the menu cannot describe a shape the rail has stopped having — which is exactly how the two came to
+ * row, and the menu cannot describe a shape the rail has stopped having, which is exactly how the two came to
  * disagree when this was nineteen hand-written rows. Each href is the shelf's own entry page, so no row is a
  * dead heading.
  */

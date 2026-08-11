@@ -1,8 +1,8 @@
-// ponytail: standalone theme module (not inlined) — reused by any code block, keeps pages clean.
+// ponytail: standalone theme module (not inlined): reused by any code block, keeps pages clean.
 // Untyped literal: shiki is only a transitive dep (bundled by Astro's <Code>), so its types aren't
-// importable here — the <Code theme={...}> call site type-checks this object's shape instead.
+// importable here: the <Code theme={...}> call site type-checks this object's shape instead.
 // Warm, low-chroma syntax theme keyed to the intentic palette (OKLch tokens approximated as hex).
-// Keywords carry the single brand-orange signal; everything else is warm neutrals/tans — code reads
+// Keywords carry the single brand-orange signal; everything else is warm neutrals/tans: code reads
 // as "engineered terminal", not a rainbow. Background is transparent so the .code-window frame shows.
 export const intenticWarm = {
     name: "intentic-warm",

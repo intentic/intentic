@@ -9,7 +9,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * enumerating its routes: the enumeration is what dates fastest, and the daemon already advertises its own
  * (the /events hello frame), which is the copy that cannot go stale. */
 
-/* The page index. This is the longest page on the site — about nine screens — and almost nobody arrives to read
+/* The page index. This is the longest page on the site: about nine screens, and almost nobody arrives to read
  * it. They arrive holding one question: how do I authenticate, what does a 409 mean, is there a stream for this.
  * Eleven prose sections answered all of those and surfaced none of them.
  *
@@ -29,7 +29,7 @@ const sections: DocsIndexRow[] = [
         what: `Where input rides, what comes back, and the one convention that covers every route.`,
     },
     { anchor: `drive-an-agent`, label: `Drive an agent`, code: false, what: `Start a turn, follow it, and pick the conversation it lands in.` },
-    { anchor: `the-route-surface`, label: `The route surface`, code: false, what: `Every route group and what it's for — the map of the whole API.` },
+    { anchor: `the-route-surface`, label: `The route surface`, code: false, what: `Every route group and what it's for: the map of the whole API.` },
     { anchor: `streams`, label: `Streams`, code: false, what: `The server-sent event feeds, and the frames each one emits.` },
     { anchor: `routes-that-arent-json`, label: `Routes that aren't JSON`, code: false, what: `File bytes, archives and images, and how to ask for them.` },
     { anchor: `failures`, label: `Failures`, code: false, what: `Every status this API returns and what it actually means.` },
@@ -50,17 +50,17 @@ const mint = `curl -X POST "$SANDBOX/system/control/tokens" \\
 
 const call = `SANDBOX=https://sandbox-a1b2c3d4e5f6.intentic.dev
 
-# GET — input rides the query string
+# GET: input rides the query string
 curl "$SANDBOX/workspace/file?path=README.md" \\
   -H "x-intentic-control: $INTENTIC_TOKEN"
 
-# Everything else — input rides the JSON body, including DELETE
+# Everything else: input rides the JSON body, including DELETE
 curl -X POST "$SANDBOX/git/root/commit" \\
   -H "x-intentic-control: $INTENTIC_TOKEN" \\
   -H "content-type: application/json" \\
   -d '{"message":"fix the flaky test"}'`;
 
-const turn = `# Start a turn. It answers as soon as the run exists — the work is detached.
+const turn = `# Start a turn. It answers as soon as the run exists: the work is detached.
 curl -X POST "$SANDBOX/agent" \\
   -H "x-intentic-control: $INTENTIC_TOKEN" \\
   -H "content-type: application/json" \\
@@ -87,18 +87,18 @@ data: {"kind":"workspaceChanged","paths":["src/app.ts","README.md"]}
 data: {"kind":"refsChanged","repos":["root"]}`;
 
 /* Scope is chosen at mint and stored WITH the token rather than derived from the caller, because the daemon
- * cannot tell an editor from a CLI from a CI job — they are all "a program holding a secret", so the only
+ * cannot tell an editor from a CLI from a CI job: they are all "a program holding a secret", so the only
  * honest moment to decide how far one reaches is when a person mints it. */
 const scopes = [
     {
         name: `editor`,
-        reach: `One conversation — run a turn, answer a card it parked on, read transcripts, search the tree.`,
+        reach: `One conversation: run a turn, answer a card it parked on, read transcripts, search the tree.`,
         note: `What an ACP editor bridge holds. It cannot see the fleet or land work.`,
     },
     {
         name: `read`,
-        reach: `Observation only — the fleet, past sessions, workspace search, listening ports.`,
-        note: `The one rung that is genuinely narrow, and the reason the ladder has a bottom.`,
+        reach: `Observation only: the fleet, past sessions, workspace search, listening ports.`,
+        note: `The limited scope at the bottom of the ladder.`,
     },
     {
         name: `drive`,
@@ -116,10 +116,10 @@ const scopes = [
 // most people are here for, and the provider plumbing last, because almost nobody calls it directly.
 const groups = [
     { name: `agent`, about: `One conversation: run a turn, attach to it, reply, steer, stop, rewind.` },
-    { name: `agents`, about: `The fleet — every registered conversation, its cumulative diff, and landing or discarding its work.` },
+    { name: `agents`, about: `The fleet: every registered conversation, its cumulative diff, and landing or discarding its work.` },
     { name: `sessions`, about: `Past conversations and their transcripts.` },
     { name: `workspace`, about: `The /work tree: read and write files, search, health, classification, cloning, dependency setup.` },
-    { name: `git`, about: `Per-repo git for every repo under /work — status, log, stage, commit, branch, stash, rebase, push.` },
+    { name: `git`, about: `Per-repo git for every repo under /work: status, log, stage, commit, branch, stash, rebase, push.` },
     { name: `history`, about: `Daemon-owned snapshots of the workspace, with diff and restore.` },
     { name: `system`, about: `Identity, the live event stream, terminals, browsers, subagents, presence, sessions.` },
     { name: `capabilities`, about: `The connected integrations, and the streamed apply that provisions one.` },
@@ -127,19 +127,19 @@ const groups = [
     { name: `settings`, about: `Per-sandbox agent settings, token-savings reporting, the built-in system prompts.` },
     { name: `extensions`, about: `Installed extensions, their approved manifests, and their settings.` },
     { name: `automations`, about: `Scheduled and event-driven wake-ups, plus the owner's approval queue.` },
-    { name: `workflows`, about: `Multi-session designs — create, edit, delete, run.` },
+    { name: `workflows`, about: `Multi-session designs: create, edit, delete, run.` },
     { name: `loops`, about: `Run a conversation again until its goal is met: start, stop, list.` },
     { name: `chores`, about: `What every repo currently measures, and what has been done about it.` },
     { name: `prepush`, about: `The pre-push check: start it, poll its state, cancel it.` },
-    { name: `ci`, about: `Pipelines on the workspace repos' remotes — runs, rerun, cancel, and open an agent on a failure.` },
+    { name: `ci`, about: `Pipelines on the workspace repos' remotes: runs, rerun, cancel, and open an agent on a failure.` },
     { name: `panels`, about: `Per-repository dev servers, and the content facts extensions detect on.` },
     { name: `ports`, about: `Listening TCP ports, and forwarding one through the preview proxy.` },
-    { name: `public`, about: `The workspace outbox — publish a file to a public address, or withdraw it.` },
+    { name: `public`, about: `The workspace outbox: publish a file to a public address, or withdraw it.` },
     { name: `memory`, about: `The agent's persistent memory notes: read, write, delete.` },
     { name: `drafts`, about: `Agent-proposed posts awaiting approval.` },
     { name: `activity`, about: `The append-only audit feed of what the agent did.` },
     { name: `usage`, about: `The durable spend ledger, grouped by day, provider, account and model.` },
-    { name: `logs`, about: `Daemon-owned debug logs — terminal captures, CLI run logs, daemon.log.` },
+    { name: `logs`, about: `Daemon-owned debug logs: terminal captures, CLI run logs, daemon.log.` },
     { name: `push`, about: `Web-push notification subscriptions for this sandbox.` },
     { name: `inventory`, about: `The deploy config's managed hosts and services.` },
     { name: `intentic`, about: `Run the in-sandbox intentic CLI and stream its output.` },
@@ -147,7 +147,7 @@ const groups = [
     { name: `komodo`, about: `A connected Komodo orchestrator: stacks, deployments, servers, builds, logs.` },
     { name: `claude`, about: `Claude subscription OAuth, and the Claude accounts this sandbox holds.` },
     { name: `grok`, about: `xAI subscription OAuth and its connected account.` },
-    { name: `translator`, about: `The routed subscriptions — Codex, Gemini, Grok and Kimi under the Claude Code harness.` },
+    { name: `translator`, about: `The routed subscriptions: Codex, Gemini, Grok and Kimi under the Claude Code harness.` },
     { name: `codex, gemini, kimi, endpoints`, about: `A model-catalog route each, for the model picker.` },
 ];
 ---
@@ -156,7 +156,7 @@ const groups = [
     book={apiBook}
     pageId="http"
     heading="HTTP API"
-    lead="Everything your sandbox does, it does over one HTTP API on hardware you own. The browser is only its first client — an extension, a script or a CI job calls the same routes with the same credential."
+    lead="Everything your sandbox does, it does over one HTTP API on hardware you own. The browser is only its first client: an extension, a script or a CI job calls the same routes with the same credential."
     requireAnchors={sections.map((section) => section.anchor)}
 >
     <p>
@@ -170,14 +170,14 @@ const groups = [
     <h2>Where it is</h2>
     <p>
         Each sandbox answers on its own hostname, <code>https://sandbox-&lt;id&gt;.&lt;zone&gt;</code>, over its private Cloudflare tunnel.
-        The app shows the exact URL on <strong>Sandbox → Overview</strong>. One route is deliberately open — <code>/health</code>, the "is a
+        The app shows the exact URL on <strong>Sandbox → Overview</strong>. One route stays open: <code>/health</code>, the "is a
         daemon there" probe every launch script and readiness loop makes.
     </p>
     <DocsCodeBlock code={health} lang="bash" title="Any machine" />
     <p>
         The sandbox id in that answer is how a caller proves it reached <em>this</em> daemon rather than something else on the same port.
         On the machine running the sandbox there is also <code>https://local-&lt;id&gt;.&lt;zone&gt;</code>, a public DNS name that resolves
-        to <code>127.0.0.1</code> — a real certificate on a loopback address, so a browser on that machine skips the round trip to
+        to <code>127.0.0.1</code>: a real certificate on a loopback address, so a browser on that machine skips the round trip to
         Cloudflare and back.
     </p>
 
@@ -199,7 +199,7 @@ const groups = [
     <h3>A program, anywhere</h3>
     <p>
         Anything outside a browser presents a <strong>control token</strong> in the <code>x-intentic-control</code> header instead. A control
-        token is shown to you exactly once at mint — the daemon keeps only its hash — and it can be revoked individually at any time.
+        token is shown once when minted. The daemon keeps only its hash, and you can revoke it at any time.
     </p>
     <DocsCodeBlock code={mint} lang="bash" title="Minting one as the owner" />
     <p>
@@ -227,7 +227,7 @@ const groups = [
     </table>
     <p>
         Worth saying plainly: at <code>drive</code> and above, a stolen token is the agent's reach, because driving an agent means editing
-        files and running commands in this sandbox. <code>read</code> is the one rung that is genuinely narrower, which is why it exists
+        files and running commands in this sandbox. <code>read</code> has a smaller scope, which is why it exists
         separately rather than as a politeness. A token presented on a route outside its scope gets a <code>403</code> that says so, rather
         than a confusing <code>401</code>.
     </p>
@@ -244,10 +244,10 @@ const groups = [
         </thead>
         <tbody>
             <tr><td>Input on GET</td><td>The query string.</td></tr>
-            <tr><td>Input on everything else</td><td>A JSON body — including <code>DELETE</code>, which sends its parameters in the body rather than the query.</td></tr>
+            <tr><td>Input on everything else</td><td>A JSON body: including <code>DELETE</code>, which sends its parameters in the body rather than the query.</td></tr>
             {/* set:text, not {"{repo}"}: an expression inside a <code> inside a <table> makes the Astro compiler
                 emit an unclosed <code> after the table, and every heading, paragraph and table to the end of the
-                page renders as code. Checked by assertNoCodeBleed — see lib/docs-headings.ts. */}
+                page renders as code. Checked by assertNoCodeBleed: see lib/docs-headings.ts. */}
             <tr><td>Path parameters</td><td>Written <code set:text="{repo}" />, <code set:text="{id}" /> in the contract, URL-encoded in the request. <code>root</code> is the workspace repo itself.</td></tr>
             <tr><td>Output</td><td>JSON, except the byte routes and the streams below.</td></tr>
         </tbody>
@@ -321,7 +321,7 @@ const groups = [
             <tr><th>Route</th><th>Why it's different</th></tr>
         </thead>
         <tbody>
-            <tr><td><code>GET /workspace/raw</code></td><td>A file's bytes with a content type by extension — how images and PDFs are previewed, where the text route would corrupt them.</td></tr>
+            <tr><td><code>GET /workspace/raw</code></td><td>A file's bytes with a content type by extension: how images and PDFs are previewed, where the text route would corrupt them.</td></tr>
             <tr><td><code>GET /workspace/media</code></td><td>A streamed byte range for audio and video. A media element cannot send a header, so this takes a path-scoped ticket minted by <code>POST /workspace/media-ticket</code>.</td></tr>
             <tr><td><code>POST /workspace/upload</code></td><td>Raw bytes to <code>?path=</code>, in parts via <code>?offset=</code> so a large file stays under the edge's body cap.</td></tr>
             <tr><td><code set:text="GET /extensions/{id}/bundle" /></td><td>An installed extension's ESM bundle, as bytes.</td></tr>
@@ -336,9 +336,9 @@ const groups = [
         <tbody>
             <tr><td><code>400</code></td><td>The input didn't match the declared shape, or a path escaped the workspace.</td></tr>
             <tr><td><code>401</code></td><td>No credential, or one that doesn't verify. Indistinguishable, on purpose.</td></tr>
-            <tr><td><code>403</code></td><td>A real credential that may not go there — an identity that isn't a member, a member below the route's role floor (the answer names the tier), or a control token outside its scope.</td></tr>
+            <tr><td><code>403</code></td><td>A real credential that may not go there: an identity that isn't a member, a member below the route's role floor (the answer names the tier), or a control token outside its scope.</td></tr>
             <tr><td><code>404</code></td><td>No such route on this daemon, or no such thing. Also the answer for the daemon's own credential files, which are not readable through the file API.</td></tr>
-            <tr><td><code>413</code></td><td>Too large — the file routes are bounded so one open log can't stall the daemon.</td></tr>
+            <tr><td><code>413</code></td><td>Too large: the file routes are bounded so one open log can't stall the daemon.</td></tr>
         </tbody>
     </table>
 
@@ -351,7 +351,7 @@ const groups = [
 
     <h2>Old daemon, new client</h2>
     <p>
-        Your browser is routinely newer than the daemon it talks to — a released app plane serves every sandbox, whatever image each user
+        Your browser is routinely newer than the daemon it talks to: a released app plane serves every sandbox, whatever image each user
         last pulled. That stays supported, and it is why <code>hello</code> advertises route names. A client compares that list against the
         contract it was built with, so a route the daemon predates surfaces as a named gap instead of a <code>404</code> nobody can
         attribute. Pin nothing; ask.

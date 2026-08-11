@@ -13,13 +13,13 @@ import Nav from "./Nav.astro";
 interface Props {
     /**
      * Which book this page belongs to. Omitted means /docs, which is most of them; the authoring pages pass
-     * apiBook. It decides the rail, the breadcrumb root and which shelf previous/next walks — everything that
+     * apiBook. It decides the rail, the breadcrumb root and which shelf previous/next walks: everything that
      * would otherwise have to be repeated per page and could therefore disagree with the tree.
      */
     book?: Book;
     pageId: string;
     /**
-     * The page's h1. It MUST start with the page's title in the docs tree — ideally be exactly it.
+     * The page's h1. It MUST start with the page's title in the docs tree: ideally be exactly it.
      *
      * Five pages used to be called one thing in the rail and another on the page: you clicked "Updates & rollback"
      * and arrived at "Updates: what we promise never breaks", clicked "Overview" and arrived at "intentic
@@ -32,7 +32,7 @@ interface Props {
     heading: string;
     lead: string;
     /**
-     * Heading ids this page links to internally — from a hand-written index table, say. Checked against the
+     * Heading ids this page links to internally: from a hand-written index table, say. Checked against the
      * headings actually rendered, so renaming a heading breaks the build instead of leaving a dead link nobody
      * notices. A dead in-page link is invisible in a screenshot and invisible in a diff; it is only visible to
      * the reader who clicks it and goes nowhere.
@@ -49,7 +49,7 @@ const bookRoot = bookHref(book, "");
  * knowledge exists: the page's markup is authored per-page, and the layout is the one component that sees all of
  * it. See lib/docs-headings.ts for what the pass does and why it is not authored per heading.
  *
- * Safe to re-emit with set:html because these pages are static — no client islands anywhere under /docs/, so the
+ * Safe to re-emit with set:html because these pages are static: no client islands anywhere under /docs/, so the
  * string is final HTML and not a hydration boundary. */
 const rendered = await Astro.slots.render("default");
 assertNoCodeBleed(rendered, pageId);
@@ -57,7 +57,7 @@ const { html, headings } = extractDocsContent(rendered);
 
 const absent = (requireAnchors ?? []).filter((anchor) => !headings.some((entry) => entry.id === anchor));
 if (absent.length > 0) {
-    throw new Error(`${bookHref(book, pageId)}: index links to headings that do not exist — #${absent.join(`, #`)}`);
+    throw new Error(`${bookHref(book, pageId)}: index links to headings that do not exist: #${absent.join(`, #`)}`);
 }
 
 // The same trail the reader sees, handed to BaseLayout so the BreadcrumbList can't drift from it.
@@ -76,7 +76,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
     <main class="flex-1">
         {/* Three columns where there is room for three: rail, prose, sections. The prose column is `min-w-0`
             and the outer grid caps at 96rem, so adding the third column widens the page rather than squeezing
-            the reading measure — which .docs-body caps in characters regardless. */}
+            the reading measure, which .docs-body caps in characters regardless. */}
         <div
             class="mx-auto grid max-w-6xl gap-10 px-6 pt-28 pb-20 lg:grid-cols-[15rem_1fr] lg:gap-14 lg:pt-32 xl:max-w-[96rem] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]"
         >
@@ -98,7 +98,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     <DocsSearchField variant="compact" />
                 </div>
                 {/* top-20 / 6rem, not top-28 / 9rem: the fixed nav is 65px, so the old offset left 63px of dead
-                    gap above the rail and reserved 144px of height for it. Twenty rows need that space — with the
+                    gap above the rail and reserved 144px of height for it. Twenty rows need that space: with the
                     old numbers the whole "Build on it" shelf sat below the rail's own scroll on a 1000px-tall
                     viewport, which is exactly the orientation this rewrite exists to give back. */}
                 <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto pb-2 lg:block" id="docs-sidebar" data-rail-scroll>
@@ -122,7 +122,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                             pageId && (
                                 <Fragment>
                                     <li aria-hidden="true">›</li>
-                                    {/* The shelf, so the trail says which part of the docs this is — the one
+                                    {/* The shelf, so the trail says which part of the docs this is: the one
                                         thing a breadcrumb is for that "Docs › Page" was not doing. */}
                                     {section && (
                                         <Fragment>
@@ -155,7 +155,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     scrolling the whole page.
 
                     Skipped on a page that authored its own index table. `requireAnchors` is exactly the signal
-                    that it did, and that table is this list plus a description column — stacking both put two
+                    that it did, and that table is this list plus a description column: stacking both put two
                     tables of contents back to back on a phone, the second one strictly worse than the first. */}
                 {requireAnchors === undefined && <DocsToc headings={headings} variant="inline" />}
 
@@ -201,7 +201,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         const sidebar = document.getElementById("docs-sidebar");
 
         /* Tell the reader the rail continues. Twenty-seven rows do not fit a laptop viewport, and the shelf that
-           falls off the bottom is the last one — so a reader who never scrolls the rail never learns that a
+           falls off the bottom is the last one. So a reader who never scrolls the rail never learns that a
            quarter of the documentation exists. The CSS fades whichever edge has something behind it. */
         if (sidebar) {
             const edges = () => {
@@ -211,7 +211,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 sidebar.toggleAttribute("data-overflow-bottom", Math.ceil(sidebar.scrollTop + sidebar.clientHeight) < sidebar.scrollHeight - 1);
             };
 
-            // Measured on open, not only at load: on a phone the rail starts display:none, where it has no height
+            // Measured on open as well as load: on a phone the rail starts display:none, where it has no height
             // to overflow and every edge looks settled.
             toggle?.addEventListener("click", () => {
                 const open = sidebar.classList.toggle("!block");
@@ -223,7 +223,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
             });
 
             /* And put the page you are on in view. The rail's job is "where am I", and on a Build-on-it page the
-               marked row was below the fold — so the rail opened showing four shelves, none of them yours.
+               marked row was below the fold. So the rail opened showing four shelves, none of them yours.
                `nearest` scrolls only when it has to, so the common case does not move. */
             sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
 
@@ -243,7 +243,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         so the "current" band is a strip near the top of the reading area. Without that, three headings sit on
         screen at once near the foot of a short section and the highlight flickers between them.
 
-        It lives here rather than in DocsToc because the rail and its inline twin are two renders of one list —
+        It lives here rather than in DocsToc because the rail and its inline twin are two renders of one list :
         the behaviour belongs to the page, which this component is exactly one of. */}
     <script>
         const links = new Map<string, HTMLElement>();

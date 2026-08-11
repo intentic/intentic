@@ -102,7 +102,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         if (url.pathname === "/incidents") {
             return Response.json({ open: 3 });
         }
-        return undefined; // "not mine" — the host answers 404 for you
+        return undefined; // "not mine": the host answers 404 for you
     });
 };`;
 
@@ -203,13 +203,13 @@ const workspace = `.intentic/workspace-extensions/
 
     <h2>Optional: give it a backend</h2>
     <p>
-        Sometimes the view needs more than the daemon's routes offer — a client for somebody else's API, or work that outlives the tab. Add a
+        Sometimes the view needs more than the daemon's routes offer: a client for somebody else's API, or work that outlives the tab. Add a
         second bundle and name it in the manifest as <code>"server": "dist/server.js"</code>, with{" "}
         <code>"engines": &#123; "intentic": "^2.1.0" &#125;</code>. It exports one function:
     </p>
     <DocsCodeBlock code={server} lang="typescript" title="src/server.ts" />
     <p>
-        Your UI half calls its own namespace with <code>api.sandbox</code> and no extra permission — the backend is your own code from the
+        Your UI half calls its own namespace with <code>api.sandbox</code> and no extra permission: the backend is your own code from the
         same approved checkout. The backend's reach the <em>other</em> way, into the daemon's routes via <code>api.daemon</code>, is the
         manifest's <code>permissions.daemon</code> allowlist. Bundle the server self-contained: everything except node builtins goes in,
         because the installed checkout has no <code>node_modules</code>. The{" "}
@@ -224,7 +224,7 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <DocsCodeBlock code={workspace} lang="bash" title="Inside your sandbox" />
     <p>
-        Everything else is identical, deliberately: the same manifest, the same <code>activate()</code>, the same contribution points, the
+        Everything else stays the same: the manifest, <code>activate()</code>, contribution points, and the
         same row on <strong>Sandbox → Extensions</strong> with the same on/off switch and settings form. A workspace extension is not a
         lesser kind of extension; it is the same kind that skipped the courier.
     </p>
@@ -238,7 +238,7 @@ const workspace = `.intentic/workspace-extensions/
     <ul>
         <li><strong>Edit, then reload.</strong> A workspace extension's identity is its bytes, not a commit, so rebuilding the bundle is the whole update. Press the reload button on the Extensions tab and the new code is running; there is nothing to re-add and no page refresh.</li>
         <li><strong>Appearing and disappearing are just files.</strong> Creating the directory installs it and deleting the directory removes it. The tab follows the filesystem live.</li>
-        <li><strong>Mistakes are named.</strong> A directory that isn't a valid extension — no manifest, a manifest that doesn't parse, a <code>publisher.name</code> something else already owns — is listed under <em>Not loadable</em> with the reason, rather than silently ignored. Nothing here can shadow a baked or installed extension.</li>
+        <li><strong>Mistakes are named.</strong> An invalid extension directory appears under <em>Not loadable</em> with the reason. This includes a missing or unreadable manifest and a <code>publisher.name</code> that something else already owns. Nothing here can shadow a baked or installed extension.</li>
         <li><strong>The usual timing applies.</strong> Views, viewers, commands, settings and connector cards land at once; <code>agent</code> and <code>bin</code> from the agent's next turn; an <code>environment</code> fragment at the next image rebuild.</li>
     </ul>
 
@@ -246,13 +246,13 @@ const workspace = `.intentic/workspace-extensions/
     <p>
         When it turns out to be good, move the directory into a repository, commit the built bundle, and install it the sha-pinned way from
         step 6. Its identity, its switch and its stored settings all key off <code>publisher.name</code> rather than where the code came
-        from, so they survive the move — and every other sandbox can have it too.
+        from, so they survive the move, and every other sandbox can have it too.
     </p>
 
     <DocsRelated
         links={[
             { href: "/api/manifest/", title: "Manifest reference", why: "the contribution points this page didn't use, capability cards, processes, listeners, agent plugins, image fragments." },
-            { href: "/api/host/", title: "Host API reference", why: "every member of the <code>api</code> object above — the typed daemon client, workspace files and diffs, documents, models, routing." },
+            { href: "/api/host/", title: "Host API reference", why: "every member of the <code>api</code> object above: the typed daemon client, workspace files and diffs, documents, models, routing." },
             { href: "/api/publish/", title: "Publish & registries", why: "list it so other people can install it in one click." },
         ]}
     />

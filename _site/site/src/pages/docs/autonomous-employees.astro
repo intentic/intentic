@@ -31,7 +31,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <h2>2 · Install its tools</h2>
     <p>
         Tell the agent what the job runs on and let it propose an environment layer: a database client, a headless browser, a language
-        toolchain, whatever the work needs. You approve the layer and it's baked into the image and genuinely installed, not described in a
+        toolchain, whatever the work needs. You approve the layer, then it is installed in the image instead of only being described in a
         prompt. The mechanics are in <a href="/docs/docker/">Docker setup</a>; the rule is that an agent can never change its own environment
         without your sign-off.
     </p>
@@ -86,8 +86,8 @@ import DocsLayout from "../../components/DocsLayout.astro";
     </p>
     <ul>
         <li>
-            <strong>A new sandbox</strong> is a new worker — its own tools, systems, budget and code. Reach for it when the job is
-            different or simply needs to be kept apart: a migrations agent and a support triager have no business sharing an
+            <strong>A new sandbox</strong> is a new worker: its own tools, systems, budget and code. Reach for it when the job is
+            different or needs to be kept apart: a migrations agent and a support triager have no business sharing an
             environment.
         </li>
         <li>
@@ -106,7 +106,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
         <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
             <li>
                 <strong>Chaining</strong> is composition of real primitives (one automation firing another's webhook), not a drag-and-drop
-                graph builder. It's powerful and scriptable; it isn't a visual canvas.
+                graph builder. It is scriptable and composable, but it is not a visual canvas.
             </li>
             <li>Every agent's <strong>credentials stay in its sandbox</strong>. Nothing you connect is relayed through the platform.</li>
         </ul>

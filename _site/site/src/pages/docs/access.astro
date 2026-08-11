@@ -2,13 +2,13 @@
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* Roles were taught in exactly one place — the invite form's blurbs — and nowhere a person deciding whether to
+/* Roles were taught in exactly one place: the invite form's blurbs, and nowhere a person deciding whether to
  * share a sandbox could read them first. */
 
 const roles = [
     {
         name: `Viewer`,
-        can: `Watch everything — agents, chats, files, the workspace. Change nothing.`,
+        can: `Watch everything: agents, chats, files, the workspace. Change nothing.`,
         why: `Safe to be generous with: every read is attributed and nothing it can do alters the sandbox.`,
     },
     {
@@ -32,12 +32,12 @@ const roles = [
 <DocsLayout
     pageId="access"
     heading="Access & sharing"
-    lead="A sandbox has one owner and any number of invited people, each on a tier that decides what they can do. The daemon enforces it — the tiers are not a UI convention."
+    lead="A sandbox has one owner and any number of invited people, each on a tier that decides what they can do. The daemon enforces it: the tiers are not a UI convention."
 >
     <h2>How the owner is decided</h2>
     <p>
         Trust on first use. The first verified identity to reach a new sandbox becomes its owner, and the daemon remembers it. Nobody is
-        assigned an owner, and the intentic platform cannot name one for you — it holds your identity and your sandbox's address, and has no
+        assigned an owner, and the intentic platform cannot name one for you: it holds your identity and your sandbox's address, and has no
         way to reach in.
     </p>
     <p>
@@ -65,9 +65,9 @@ const roles = [
     </table>
     <p>They draw three real fences rather than mirroring the navigation:</p>
     <ul>
-        <li><strong>Credentials never delegate.</strong> Secrets — even their names, even the inventory — stay with the owner. A secrets page that greets every invitee is an invitation to ask for the values.</li>
+        <li><strong>Credentials stay with the owner.</strong> Invitees cannot see secrets, their names or their inventory.</li>
         <li><strong>What leaves the sandbox needs a maintainer.</strong> <a href="/docs/glossary/">Landing</a> into the main tree, publishing, the raw terminal.</li>
-        <li><strong>Driving agents is the collaborator's whole grant.</strong> Everything below it — watching the <a href="/docs/glossary/">fleet</a>, reading files and transcripts — is the viewer tier.</li>
+        <li><strong>Collaborators can drive agents.</strong> Viewers can watch the <a href="/docs/glossary/">fleet</a> and read files and transcripts.</li>
     </ul>
 
     <h2>Inviting someone</h2>
@@ -81,7 +81,7 @@ const roles = [
         recorded anywhere. It fails closed. Removing someone is the same list.
     </p>
     <p>
-        Roles are resolved fresh on every request rather than at sign-in, so a re-grade — or a removal — applies on that person's very next
+        Roles are resolved on every request instead of only at sign-in, so a role change or removal applies on that person's next
         action, not whenever they next open the app.
     </p>
 
@@ -89,7 +89,7 @@ const roles = [
     <p>
         Everyone sees who is here now: a live roster of connected browsers with the view each is on, the conversation they have active, and
         whether they've gone idle. Presence is per browser tab and lasts exactly as long as its connection, so there is nothing to time out
-        and no clocks to compare. Each person's tier is on the roster too — which is how everyone can see who may do what, and how a tab
+        and no clocks to compare. Each person's tier is on the roster too, which is how everyone can see who may do what, and how a tab
         knows its own role without asking a question only the owner may ask.
     </p>
 
@@ -102,14 +102,14 @@ const roles = [
 
     <h2>Programs, not people</h2>
     <p>
-        Anything without a sign-in — a CI job, an editor bridge, a script — uses a <strong>control token</strong> instead of a role. Those
+        Programs without a sign-in, such as CI jobs, editor bridges and scripts, use a <strong>control token</strong> instead of a role. Those
         carry their own scopes, are minted by the owner, and are revocable one at a time. See{" "}
         <a href="/api/http/">the HTTP API</a>.
     </p>
 
     <h2>If you lose a laptop</h2>
     <p>
-        <strong>Sign out everywhere</strong> re-keys the session signer, so every browser session for this sandbox stops verifying at once —
+        <strong>Sign out everywhere</strong> re-keys the session signer, so every browser session for this sandbox stops verifying at once,
         including your own, which then silently re-establishes from the Google credential it already holds. That is what makes it a button
         rather than a support procedure. Control tokens are revoked separately, per token, because they are held by programs rather than
         people.

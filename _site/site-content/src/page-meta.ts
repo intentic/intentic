@@ -38,7 +38,7 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-02",
     },
     /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
-     * Releases at build time (site/src/lib/changelog.ts) — only the framing is authored here, exactly like the
+     * Releases at build time (site/src/lib/changelog.ts): only the framing is authored here, exactly like the
      * gallery below. The description says "what changed" rather than naming versions: the page is read by
      * someone deciding whether to update, not by someone auditing a version history. */
     "/changelog/": {

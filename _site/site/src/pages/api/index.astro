@@ -17,11 +17,11 @@ const manifest = `{
     }
 }`;
 
-// The contribution points, split by which half of the sandbox they extend — the distinction the page is built on.
+// The contribution points, split by which half of the sandbox they extend: the distinction the page is built on.
 const uiPoints = [
     { name: "views", what: "A tile in the left rail, a per-repo panel in the Workspace tree, or a tab on the Sandbox hub." },
     { name: "viewers", what: "A renderer for a file type: the host fetches the bytes, your component draws them." },
-    { name: "documents", what: "A per-directory page in the Workspace tree — an icon on the rows your provider can explain, opened as a tab." },
+    { name: "documents", what: "A per-directory page in the Workspace tree: an icon on the rows your provider can explain, opened as a tab." },
     { name: "commands", what: "An entry in the command palette, optionally with a global keyboard shortcut." },
     { name: "settings", what: "Typed settings the host renders and stores for you, including secrets and env vars for the agent." },
     { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
@@ -46,9 +46,9 @@ const agentPoints = [
     <h2>The whole lifecycle</h2>
     <p>
         Seven steps carry an extension from an empty directory to a payout and around again, and they are not all yours.
-        The author's steps have a page each — the code on this shelf, the process on the Ship shelf, and the money on its
+        The author's steps have a page each: the code on this shelf, the process on the Ship shelf, and the money on its
         own page, because the economy has two audiences. Two steps happen on the other side of the listing, to the person
-        installing, and are documented where that person reads. Worth knowing both halves — what you publish is only ever
+        installing, and are documented where that person reads. Worth knowing both halves: what you publish is only ever
         met as what somebody else installs.
     </p>
     {/* One row per step, and it FOLDS on a narrow screen: below `sm` the description drops to a second line
@@ -124,41 +124,41 @@ const agentPoints = [
     <p>
         An extension can also ship a <strong>backend</strong>: a manifest <code>server</code> entry naming a bundle of real server code. It
         runs beside the daemon, serves the extension's own route namespace behind the daemon's ordinary auth, and reaches the daemon's own
-        routes only through a second declared allowlist. That is what lets an extension be a whole product — a client for somebody else's
-        API, work that outlives the browser tab — while its reach stays a list the owner read and approved.
+        routes only through a second declared allowlist. That is what lets an extension be a whole product: a client for somebody else's
+        API, work that outlives the browser tab, while its reach stays a list the owner read and approved.
     </p>
 
     <h2>One format, any subset</h2>
     <p>
         Everything above ships in <strong>one envelope</strong>. There is no separate skill-pack format, theme format, connector format or
-        app format — there is one manifest, and every part of it is optional. What you fill in is what your extension is:
+        app format: there is one manifest, and every part of it is optional. What you fill in is what your extension is:
     </p>
     <table>
         <thead><tr><th>You fill in</th><th>What you've made</th></tr></thead>
         <tbody>
             <tr><td><code>agent</code> only</td><td>A skill pack. No code runs anywhere; the agent learns something.</td></tr>
-            <tr><td><code>capabilities</code> only</td><td>A connector: a card, a config form, env vars and a cheatsheet — data, not code.</td></tr>
+            <tr><td><code>capabilities</code> only</td><td>A connector: a card, a config form, env vars and a cheatsheet: data, not code.</td></tr>
             <tr><td><code>entry</code> + views</td><td>A UI extension, like an editor plugin.</td></tr>
             <tr><td><code>processes</code> + <code>listener</code></td><td>A realtime gateway that wakes the agent, the way Discord and IMAP do.</td></tr>
             <tr><td><code>entry</code> + <code>server</code> + <code>agent</code> + <code>bin</code></td><td>A whole product: its screen, its backend, its skills, its CLI.</td></tr>
         </tbody>
     </table>
     <p>
-        One envelope because the things it groups succeed or fail together. A user installs a <em>product</em> — "deployments", "knowledge",
-        "Reddit research" — not a skill here, a view there and a background process somewhere third. One install is one identity, one trust
+        One envelope because the things it groups succeed or fail together. A user installs a <em>product</em>: "deployments", "knowledge",
+        "Reddit research": not a skill here, a view there and a background process somewhere third. One install is one identity, one trust
         decision, one on/off switch that unwires all of it, one row a marketplace can list and attribute. Split those across four package
         kinds and every one of those sentences needs four answers.
     </p>
     <p>
         The grouping never taxes the small case: a manifest with one section filled in is complete, installs the same way, and shows the
         owner a one-line approval instead of a four-line one. And the parts that are portable stay portable. The <code>agent</code>{" "}
-        contribution <em>is</em> a standard agent-plugin directory — skills, subagents, hooks, MCP servers — that works in other harnesses
+        contribution <em>is</em> a standard agent-plugin directory with skills, subagents, hooks and MCP servers that work in other harnesses
         unchanged, and a registry file is the same marketplace format those harnesses already read. The envelope wraps the standard; it
         doesn't fork it.
     </p>
     <p>
         The one deliberate limit: an extension contributes <em>cards and code</em>, never <em>privilege</em>. The handlers that grant real
-        power — running the sandbox privileged, joining a private network, installing other extensions — stay in the core, and a manifest
+        power stays in the core. Examples include running the sandbox privileged, joining a private network and installing other extensions. A manifest
         that tries to name one fails to parse. Shared surfaces stay core too: the model picker, the terminal, the chat are things an
         extension asks the shell for, so every extension offers the same, current list instead of five worse copies of it.
     </p>
@@ -199,14 +199,14 @@ const agentPoints = [
         credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the exact source is audited.
     </p>
     <p>
-        What those mechanics <em>guarantee</em> — and the three words a listing can carry, <strong>listed</strong>, <strong>verified</strong>{" "}
-        and <strong>blocked</strong> — is <a href="/api/verify/">Verification &amp; trust</a>. What they look like from the other side, at the
+        <a href="/api/verify/">Verification &amp; trust</a> explains what those mechanics guarantee and what <strong>listed</strong>,{" "}
+        <strong>verified</strong> and <strong>blocked</strong> mean. What they look like from the other side, at the
         moment somebody clicks install, is <a href="/docs/extensions/">Install &amp; manage extensions</a>.
     </p>
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Most of the product you already use is extensions — over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
+        Most of the product you already use is extensions: over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
         Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google Workspace
         connection, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
         compiles against, and a lint rule fails the build if one of them reaches into app internals instead.
@@ -222,7 +222,7 @@ const agentPoints = [
         <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
         <li>
             <strong>Written in the workspace</strong>: a directory under <code>.intentic/workspace-extensions/</code>, run straight from
-            where it sits. No clone, no install step, no publishing — see <a href="/api/build/#workspace">Build an extension</a>.
+            where it sits. No clone, no install step, no publishing: see <a href="/api/build/#workspace">Build an extension</a>.
         </li>
     </ul>
     <p>

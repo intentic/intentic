@@ -1,7 +1,7 @@
 {
     "name": "intentic",
     "short_name": "intentic",
-    "description": "Specialized coding agents, each with its own sandbox — the libraries, dev-tools, integrations, and context its job needs, on hardware you own.",
+    "description": "Specialized coding agents run on hardware you own. Each sandbox contains the libraries, developer tools, integrations and context its job needs.",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#181614",

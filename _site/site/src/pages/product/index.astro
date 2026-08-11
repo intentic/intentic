@@ -8,16 +8,16 @@ import Nav from "../../components/Nav.astro";
 import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 
 /* The features index: every verb as a card, in the order the menu lists them. It is what the mega-menu is a
- * shortcut to — and the page a search engine, a shared link or a touch device lands on.
+ * shortcut to, and the page a search engine, a shared link or a touch device lands on.
  *
- * One flat ordered set, no group bands: the shelf is five verbs now, and a verb is its own grouping — the
+ * One flat ordered set, no group bands: the shelf is five verbs now, and a verb is its own grouping: the
  * run/environment/extend headers that once sorted seven surfaces would be more scaffolding than the cards
  * under them. Order is the array's, which is the menu's. */
 ---
 
 <BaseLayout
     title="Features · intentic"
-    description="What you do with intentic: orchestrate a fleet of agents, empower them with your systems, automate them on events, supervise every change, and delegate the whole workspace to a machine you own."
+    description="Run a fleet of agents, connect them to your systems, start them from events, review every change and host the workspace on a machine you own."
 >
     <Nav />
     <main class="flex-1">
@@ -29,7 +29,7 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
                     What you do with a fleet of agents.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    Orchestrate them, connect them, automate them, supervise them, and give them a machine of their own.
+                    Run them, connect them, automate them, review their work and host them on your own machine.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
                     <a class="btn btn-primary" href={APP_URL}>Get started free</a>
@@ -39,13 +39,13 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
         </section>
 
         <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
-            {/* Two across, and never wider than the shot really is — same reasoning as the landing's gallery: at
+            {/* Two across, and never wider than the shot really is: same reasoning as the landing's gallery: at
                 three the thumbnail rendered a 1072 CSS px interface at a third size, and the one portrait shot
                 stretched to a blurry 1.6×. */}
             <div class="grid gap-6 sm:grid-cols-2">
                 {
                     productPages.map((page) => {
-                        // A diagram-led page (Automate) has no screenshot — its card carries a mini-diagram, not a
+                        // A diagram-led page (Automate) has no screenshot: its card carries a mini-diagram, not a
                         // mockup. Everything else is a real capture, capped at half its own pixels.
                         const image = page.hero ? shotAsset(page.hero.name) : undefined;
                         const cap = image ? `${image.width / 2}px` : undefined;

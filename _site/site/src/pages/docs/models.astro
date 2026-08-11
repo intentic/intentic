@@ -10,14 +10,14 @@ const providers = [
     {
         name: `Claude Code`,
         connect: `A Claude subscription`,
-        note: `The sandbox owns the credential — you sign in to Anthropic, not to intentic.`,
+        note: `The sandbox owns the credential: you sign in to Anthropic, not to intentic.`,
     },
     { name: `Codex`, connect: `A ChatGPT subscription`, note: `Runs on your ChatGPT plan through the bundled translator.` },
     { name: `Grok`, connect: `A SuperGrok subscription`, note: `Signs in with xAI's device-code flow; there is no key to paste.` },
     { name: `Kimi Code`, connect: `A Kimi Code subscription`, note: `Served under the Claude Code loop.` },
     {
         name: `Google`,
-        connect: `A Google sign-in — no subscription`,
+        connect: `A Google sign-in: no subscription`,
         note: `Labelled for the account rather than the model family: this one channel vends Gemini's models alongside Claude and GPT-OSS. The useful answer for anyone who has connected nothing yet.`,
     },
 ];
@@ -36,7 +36,7 @@ const others = [
     <h2>Whose credentials these are</h2>
     <p>
         Every credential here belongs to your sandbox. You connect your own subscription and turns spend{" "}
-        <em>your</em> allowance — intentic never resells inference, and the platform never holds the token.
+        <em>your</em> allowance. intentic never resells inference, and the platform never holds the token.
     </p>
 
     <h2>Providers</h2>
@@ -77,8 +77,8 @@ const others = [
 
     <h2>Several accounts of one provider</h2>
     <p>
-        A sandbox can hold more than one account per provider — a work Claude and a personal one, two ChatGPT
-        seats — and a turn can name which serves it. Absent, it takes the provider's first.
+        A sandbox can hold more than one account per provider: a work Claude and a personal one, two ChatGPT
+        seats, and a turn can name which serves it. Absent, it takes the provider's first.
     </p>
     <p>
         Naming one matters most where nobody is watching. An automation, a Doorbell, a nightly workflow: when the first account runs out of
@@ -88,7 +88,7 @@ const others = [
 
     <h2>The harness</h2>
     <p>
-        The harness is the <strong>agentic loop</strong> that serves the turn, and it is a different axis from the provider — the same model
+        The harness is the <strong>agentic loop</strong> that serves the turn, and it is a different axis from the provider: the same model
         behaves differently under each, which is why the picker asks separately.
     </p>
     <ul>
@@ -97,23 +97,23 @@ const others = [
     </ul>
     <p>
         For most providers there is nothing to choose: Claude is always its own Claude Code loop, and Kimi and Google have no native runtime
-        at all — all three run that loop whatever you pick. Only <strong>Codex and Grok</strong> have a native runtime to switch away from.
+        at all: all three run that loop whatever you pick. Only <strong>Codex and Grok</strong> have a native runtime to switch away from.
     </p>
     <p>
-        The choice is worth making, because the loops genuinely differ in what they support — and the app tells you rather than letting you
+        The choice matters because the loops support different features, and the app tells you before you
         find out mid-turn. A runtime that lacks mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort
         control has those limitations listed against it, and the composer hides the controls that runtime would ignore.
     </p>
 
     <h2>Per-turn controls</h2>
     <p>
-        Beyond the model there is reasoning effort, extended thinking, and a fast-speed request — each offered only where the runtime
+        Beyond the model there is reasoning effort, extended thinking, and a fast-speed request: each offered only where the runtime
         actually honours it. A conversation remembers what its last turn ran with, so opening it again seeds the composer from{" "}
         <em>that</em> conversation rather than from whatever another tab last picked.
     </p>
     <p>
         Permission modes are the other half of this. A runtime that reports the full axis gets per-tool approval cards; one that doesn't gets
-        propose-then-approve or run, and nothing in between — the container is the isolation boundary there, and every tool call inside it is
+        propose-then-approve or run, and nothing in between: the container is the isolation boundary there, and every tool call inside it is
         pre-approved.
     </p>
 
@@ -121,13 +121,13 @@ const others = [
     <p>Two settings on <strong>Sandbox → Agent</strong> decide what runs when nobody picked:</p>
     <ul>
         <li>
-            <strong>Agent runs.</strong> The model for unattended work — an automation's wake, a chore, a documentation or acceptance run,
+            <strong>Agent runs.</strong> The model for unattended work: an automation's wake, a chore, a documentation or acceptance run,
             the fix a failed pre-push check proposes. Pinned rather than derived, because that work has to read a failing suite or a
             container log and repair something, and a wrong guess is billed in whole sessions.
         </li>
         <li>
             <strong>Quick helpers.</strong> The model behind one-click helpers that aren't a conversation, like autofilling a commit message.
-            Defaults to <strong>Auto</strong>, which resolves from whatever accounts are connected at the moment it's read — so it can never
+            Defaults to <strong>Auto</strong>, which resolves from whatever accounts are connected at the moment it's read. So it can never
             name a provider you have no credential for, and it improves by itself when you connect one.
         </li>
     </ul>
@@ -137,7 +137,7 @@ const others = [
         charges, so a reader searching the docs for "pricing" or "cost" landed on a ledger of inference spend and
         could reasonably read it as a bill from us. Three lines, and the ambiguity is gone. */}
     <p>
-        Two different kinds of money, and only one of them is a bill. <strong>intentic itself is free</strong> — every sandbox, every
+        Two different kinds of money, and only one of them is a bill. <strong>intentic itself is free</strong>: every sandbox, every
         capability and team sharing, with no tiers and no card. What a turn costs is <em>your</em> provider subscription being spent, because
         the credential is yours and intentic never resells inference. The one optional charge anywhere is the membership that runs premium
         extensions, described on <a href="/earn/">Earn</a>.
@@ -146,10 +146,10 @@ const others = [
         <strong>Sandbox → Usage</strong> reports the durable spend ledger: a row is appended when a turn ends, grouped by day, provider,
         account and model, with cache hit rates alongside. Rows are written daemon-side and never edited, so it is a record of what was
         actually spent rather than an estimate. Individual agent cards carry their own cost and token counts, and a workflow step can be
-        capped in dollars — the one resource you cannot recover after an unattended fan-out.
+        capped in dollars: the one resource you cannot recover after an unattended fan-out.
     </p>
     <p>
-        When a provider refuses a turn — a spent allowance, a plan switched off — the last refusal per provider is kept and shown beside the
+        When a provider refuses a turn because an allowance is spent or a plan is off, the last refusal is kept and shown beside the
         account, so a fleet that has quietly stopped working says why.
     </p>
 

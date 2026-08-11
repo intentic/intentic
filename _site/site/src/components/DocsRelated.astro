@@ -2,7 +2,7 @@
 /* The curated "and now this" list at the foot of a page.
  *
  * WHY IT IS NOT CALLED "NEXT" ANY MORE. Ten pages ended with a `## Next` list, and every page already ends with an
- * automatic previous/next footer underneath it — so two things called "next" sat one above the other, naming
+ * automatic previous/next footer underneath it. So two things called "next" sat one above the other, naming
  * different pages. They are different things and both are wanted: the footer walks the SHELF in order, and this
  * one crosses shelves for a reason ("connect the system whose events you want to wake on"). Only the label was
  * lying, so the label changed.
@@ -18,7 +18,7 @@
 export interface DocsRelatedLink {
     /** Absolute path, with an anchor where the reason points at one section. */
     href: string;
-    /** The page's own name — the docs tree's title, so the reader recognises the row they will land on. */
+    /** The page's own name: the docs tree's title, so the reader recognises the row they will land on. */
     title: string;
     /** Why THIS reader would want it, in a clause. Inline markup allowed; it is the only part that carries any. */
     why: string;

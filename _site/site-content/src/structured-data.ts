@@ -7,7 +7,7 @@ import { APP_URL, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG
 // then resolve "the publisher" to the same node as "the organization" rather than reconciling two
 // differently-shaped copies of it.
 //
-// @ids are anchored on the canonical origin — SITE_URL + "/" — so they match the <link rel="canonical">
+// @ids are anchored on the canonical origin: SITE_URL + "/". So they match the <link rel="canonical">
 // exactly. A page's own nodes hang off its URL: <url>#webpage, <url>#breadcrumb, <url>#article.
 
 const ORIGIN = `${SITE_URL}/`;
@@ -39,7 +39,7 @@ export interface PageGraphOptions {
     dateModified?: string;
     /** Home is implicit and prepended; pass the trail below it. */
     breadcrumbs?: BreadcrumbEntry[];
-    /** Renders the page as a TechArticle alongside its WebPage — for documentation. */
+    /** Renders the page as a TechArticle alongside its WebPage: for documentation. */
     article?: boolean;
     /** Present ⇒ the page node is a FAQPage carrying these as its mainEntity. */
     faq?: FaqEntry[];
@@ -64,7 +64,7 @@ function organizationNode() {
 
 /* The founder, with the profiles that make him checkable. `sameAs` is the part that matters: it is how a
  * search or answer engine resolves this Person to one it already has a file on, which is the whole point
- * of a trust section — the claim is not "trust me", it is "here is who I am, go look". */
+ * of a trust section: the claim is not "trust me", it is "here is who I am, go look". */
 function founderNode() {
     return {
         "@type": "Person",
@@ -167,7 +167,7 @@ export function buildPageGraph(opts: PageGraphOptions) {
 
 /**
  * `/about/` as a ProfilePage about the founder. It is a distinct type from WebPage because the page's
- * subject is a person rather than the product — which is what tells an answer engine that the entity
+ * subject is a person rather than the product, which is what tells an answer engine that the entity
  * behind this domain is the one already described at those `sameAs` URLs.
  */
 export function buildProfilePageSchema(path: string) {
@@ -198,7 +198,7 @@ export function buildSoftwareAppSchema() {
             description: "Free and MIT open source: unlimited sandboxes, with every capability, the agent and automations included.",
         },
         // Ordered the way the landing page argues: run many in parallel, on your hardware, nothing
-        // landing unread — then the reasons those agents are any good.
+        // landing unread, then the reasons those agents are any good.
         featureList: [
             "Run a fleet of coding agents in parallel, one isolated git worktree each",
             "One Docker sandbox per agent, on hardware you own",

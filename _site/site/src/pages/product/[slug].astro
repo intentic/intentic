@@ -26,7 +26,7 @@ const next = productPages[(index + 1) % productPages.length];
 
 /* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be
  * three screens tall. Sit it in a narrow centred column instead. A diagram-led page (Automate) has no shot at
- * all — it leads with a figure in a medium centred column. */
+ * all: it leads with a figure in a medium centred column. */
 const heroShot = page.hero;
 const heroImage = heroShot ? shotAsset(heroShot.name) : undefined;
 const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
@@ -88,7 +88,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                         const shot = block.shot === undefined ? undefined : { ...block.shot, image: shotAsset(block.shot.name) };
                         const wideShot = shot !== undefined && shot.image.width > shot.image.height ? shot : undefined;
                         const narrowShot = shot !== undefined && wideShot === undefined ? shot : undefined;
-                        // Only a narrow visual — a phone shot or a drawn figure — earns the alternating side-by-side.
+                        // Only a narrow visual, such as a phone shot or a drawn figure, earns the alternating side-by-side.
                         // A landscape shot and a prose-only block both span the column instead: the shot because it is
                         // real interface at full size, the prose-only block so it isn't halved against an empty gutter.
                         const sideVisual = narrowShot !== undefined || block.figure !== undefined;

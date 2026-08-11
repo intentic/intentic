@@ -5,7 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* One template, one page per comparison — a new comparison is an entry in an array and its nav row, footer
+/* One template, one page per comparison: a new comparison is an entry in an array and its nav row, footer
  * link, page meta, OG card and llms.txt entry all follow from it.
  *
  * The order is the argument, and it is table-forward: the one-line answer, then the head-to-head table as the
@@ -68,14 +68,14 @@ const host = new URL(page.url).host;
                 </div>
             </section>
 
-            <!-- Head to head: the centrepiece. Only the rows that go the other way are marked — a scorecard
+            <!-- Head to head: the centrepiece. Only the rows that go the other way are marked: a scorecard
                  with a tick on every row is one nobody believes. The "where you agree" line rides above it so
                  the concession is read before the contrast. -->
             <section class="fade-in border-b border-line py-14 lg:py-16">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
                     <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
                     <p class="text-2xs text-subtle">
-                        {theirRows} of {page.table.length} rows go to {page.name} — <span class="text-primary-400">▸</span> marks them
+                        {theirRows} of {page.table.length} rows go to {page.name}: <span class="text-primary-400">▸</span> marks them
                     </p>
                 </div>
                 <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
@@ -106,7 +106,7 @@ const host = new URL(page.url).host;
                 </table>
             </section>
 
-            <!-- What it comes down to: the one or two distinctions that survive the table. Compact by design —
+            <!-- What it comes down to: the one or two distinctions that survive the table. Compact by design,
                  the table already carried the detail, this is the thing to remember. -->
             <section class="fade-in border-b border-line py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What it comes down to</h2>
@@ -142,7 +142,7 @@ const host = new URL(page.url).host;
                 <p class="mt-6 max-w-copy text-sm leading-relaxed text-subtle">
                     Checked against{" "}
                     <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>{" "}
-                    the week this shipped — these products move fast. Spot something out of date?{" "}
+                    the week this shipped. These products move fast. Spot something out of date?{" "}
                     <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>{" "}
                     and it is fixed in the next build.
                 </p>

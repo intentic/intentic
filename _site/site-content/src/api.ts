@@ -1,21 +1,21 @@
 import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 
-/* /api — written for somebody BUILDING ON intentic, the way code.visualstudio.com/api is. Everything here has
+/* /api: written for somebody BUILDING ON intentic, the way code.visualstudio.com/api is. Everything here has
  * one reader: an author. The person installing what they made reads /docs.
  *
  * TWO SHELVES, AND THEY ARE THE TWO JOBS. "Build" is the code: the format, the APIs, a working extension, and
  * the reference you open at a field name. "Ship" is the process: getting a pointer into a registry, what the
  * trust words claim, and staying listed release after release. The old single "lifecycle" shelf braided the
- * two — a reader after a manifest field scrolled through registry policy to reach it — and its last row was
+ * two: a reader after a manifest field scrolled through registry policy to reach it, and its last row was
  * money, which belongs to neither.
  *
- * THE MONEY IS NOT IN THIS BOOK, deliberately. The economy — membership, credits, the pool, the split, the
- * ledger — has TWO audiences: the member spending credits and the creator earning them. Filed here it read as
+ * THE MONEY IS NOT IN THIS BOOK. The economy: membership, credits, the pool, the split, the
+ * ledger has TWO audiences: the member spending credits and the creator earning them. Filed here it read as
  * a step of publishing and served only half its readers; it now lives at /earn/, top-level, and Ship's
  * lifecycle strip points out to it the same way it points out to /docs for the installer's steps.
  *
  * Inside Build, the guide and the reference stay DIFFERENT KINDS OF READING: the guide is walked once, front
- * to back, by someone shipping their first extension; the reference is never walked at all — it is opened at
+ * to back, by someone shipping their first extension; the reference is never walked at all: it is opened at
  * a field name by someone who already shipped one. The "Reference" group label is what keeps a forty-row
  * route table from making the getting-started guide look like reference material. */
 export const apiBook: Book = {
@@ -47,7 +47,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Build an extension · intentic API",
                                 description:
-                                    "Author an intentic extension end to end: manifest, activate(), a rail view — then a sha-pinned install, or run it straight from your workspace.",
+                                    "Build an intentic extension from manifest to rail view, then install it by pinned commit or run it straight from your workspace.",
                                 datePublished: "2026-07-31",
                             },
                         },
@@ -74,7 +74,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Extension host API reference · intentic API",
                                 description:
-                                    "Every member of the IntenticApi object — the typed daemon client, views, documents, commands, models, routing — and the backend's activateServer surface.",
+                                    "Every member of the IntenticApi object, including the typed daemon client, views, documents, commands, models and routing, plus the backend's activateServer surface.",
                                 datePublished: "2026-08-07",
                             },
                         },
@@ -97,8 +97,8 @@ export const apiBook: Book = {
             ],
         },
         {
-            /* Named for the JOURNEY rather than the noun. "Publishing" as a shelf label put the reader in a
-             * category; "Ship" tells them the rows under it are in order and that following them is the point —
+            /* Named for the flow rather than the noun. "Publishing" as a shelf label put the reader in a
+             * category; "Ship" tells them the rows under it are in order and that following them is the point.
              * list it, understand what the trust words claim, then keep it alive release after release. */
             label: "Ship",
             audience: "From your repo to the marketplace, and staying listed.",
@@ -119,8 +119,8 @@ export const apiBook: Book = {
                         },
                         {
                             /* ITS OWN PAGE, though it was four paragraphs inside the publishing guide. "Verified" is a
-                             * claim two different people act on — an author deciding whether it is worth pursuing, and
-                             * a user deciding whether to install — and buried under a heading about registries it was
+                             * claim two different people act on: an author deciding whether it is worth pursuing, and
+                             * a user deciding whether to install, and buried under a heading about registries it was
                              * unfindable to both. Searching "verified" returned the gallery and nothing else. */
                             id: "verify",
                             title: "Verification & trust",
@@ -133,10 +133,10 @@ export const apiBook: Book = {
                             },
                         },
                         {
-                            /* Last of the extension's run, because it is the step that repeats: everything above
-                             * happens once per extension, this happens once per release. It existed only as fragments
-                             * — updates inside the publishing guide, the donation cadence inside the money page, going
-                             * bad inside trust — so "how do I stay listed and keep earning" had no page to be asked of. */
+                            /* Last in the extension's run because it is the step that repeats: everything above happens
+                             * once per extension; this happens once per release. It existed only as fragments in the
+                             * publishing guide, money page and trust page. So "how do I stay listed and keep earning"
+                             * had no page to be asked of. */
                             id: "maintain",
                             title: "Maintain & grow",
                             blurb: "Ship updates, stay ranked, and what sustained revenue rests on",
@@ -148,7 +148,7 @@ export const apiBook: Book = {
                             },
                         },
                         {
-                            /* THE SECOND KIND OF THING YOU CAN SHIP — not an extension at all: no manifest, no
+                            /* THE SECOND KIND OF THING YOU CAN SHIP. It is not an extension: no manifest, no
                              * bundle, no repo pointer, just an HTTPS endpoint the platform forwards metered calls
                              * to. It closes the shelf rather than joining the run above it, because the four pages
                              * above are one artifact's lifecycle and this is a different artifact. Before it, the
@@ -177,14 +177,14 @@ export function apiHref(id: string): string {
     return bookHref(apiBook, id);
 }
 
-/* THE SEVEN STEPS, in order, with the page that owns each — the strip the API overview and the gallery both
+/* THE SEVEN STEPS, in order, with the page that owns each: the strip the API overview and the gallery both
  * draw.
  *
  * It exists as data because two very different surfaces render it and they were drifting: the gallery drew
  * grey chips that were not links while the docs described a lifecycle with no picture of it anywhere. Three of
- * the seven deliberately point OUT of this book: Discover and Install into /docs, because they are what the
+ * the seven point OUT of this book: Discover and Install into /docs, because they are what the
  * reader on the other side of the listing does, and Earn to the top-level /earn/, because the economy is a
- * system of its own with two audiences. The last step loops — Update is what makes the revenue renewable —
+ * system of its own with two audiences. The last step loops because Update makes the revenue renewable,
  * which is why it comes after Earn rather than before it. */
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
     { step: "Build", href: apiHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },

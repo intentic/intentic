@@ -1,15 +1,15 @@
 import type { ShotImage } from "./landing";
 
-/* The feature pages: one page per VERB — what you do with the workspace, not what a surface is called.
+/* The feature pages: one page per VERB: what you do with the workspace, not what a surface is called.
  *
  * The shelf used to list surfaces (Fleet board, Chat & plan mode, Review & land, the editor…), and half of
  * those read as table stakes any agentic editor has, so the menu undersold the product. It now names five
- * outcomes — Orchestrate, Empower, Automate, Supervise, Delegate — and each page folds the relevant surfaces
+ * outcomes: Orchestrate, Empower, Automate, Supervise, Delegate, and each page folds the relevant surfaces
  * underneath it as proof. See docs/marketing/landing-blueprint.md ("The feature pages") for the mapping.
  *
  * Every `src` here is still a file the screenshot harness wrote from the demo build
  * (`_tools/e2e/shots/capture.mts`), so a claim on these pages is a screen you can open in the live demo.
- * Where a surface has no honest screenshot yet, the page carries a DIAGRAM instead — never a mockup of a
+ * Where a surface has no honest screenshot yet, the page carries a DIAGRAM instead: never a mockup of a
  * screen that doesn't exist. Automate has no captured screen at all, so it is diagram-led: its hero is the
  * triggers figure, not an invented UI.
  */
@@ -19,11 +19,11 @@ export type ShotFrame = "browser" | "phone" | "bare";
 
 export interface ProductShot extends ShotImage {
     frame: ShotFrame;
-    /** The pill in the browser frame's title bar — where in the app this was taken. */
+    /** The pill in the browser frame's title bar. Where in the app this was taken. */
     label?: string;
 }
 
-/** A figure drawn in markup rather than screenshotted — the parts of the story that have no single screen. */
+/** A figure drawn in markup rather than screenshotted: the parts of the story that have no single screen. */
 export type ProductFigure =
     | "worktrees"
     | "shared-surfaces"
@@ -43,7 +43,7 @@ export interface ProductBlock {
     figure?: ProductFigure;
 }
 
-/** One verifiable number or fact under the hero — never an estimate, never a benchmark we didn't run. */
+/** One verifiable number or fact under the hero: never an estimate, never a benchmark we didn't run. */
 export interface ProductFact {
     value: string;
     label: string;
@@ -51,7 +51,7 @@ export interface ProductFact {
 
 export interface ProductPage {
     slug: string;
-    /** Menu label and page eyebrow — the verb. */
+    /** Menu label and page eyebrow: the verb. */
     navLabel: string;
     /** The one line of scent under the label in the mega-menu. */
     menuBlurb: string;
@@ -59,7 +59,7 @@ export interface ProductPage {
     sub: string;
     /**
      * The hero visual. A page leads with a real screenshot (`hero`) OR, where the surface has no honest
-     * screenshot, a diagram (`heroFigure`) — exactly one is set. Automate is the only diagram-led page:
+     * screenshot, a diagram (`heroFigure`): exactly one is set. Automate is the only diagram-led page:
      * there is no captured automations screen, and a mockup would be the one lie on the shelf.
      */
     hero?: ProductShot;
@@ -76,7 +76,7 @@ const PUBLISHED = "2026-08-09";
 export const productPages: ProductPage[] = [
     {
         slug: "orchestrate",
-        navLabel: "Orchestrate",
+        navLabel: "Run",
         menuBlurb: "Run ten agents at once and see which one needs you",
         heading: "Run the whole fleet. Get pulled in only when one needs you.",
         sub: "One agent is a chat window. Ten need a control surface: who is running, who is blocked, what each has changed and spent.",
@@ -102,7 +102,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Every card carries the receipts",
-                body: "Model, branch, turns, tokens, cost and the diff so far — without opening a transcript.",
+                body: "See the model, branch, turns, tokens, cost and current diff without opening a transcript.",
                 shot: {
                     name: "mobile-fleet",
                     alt: "The same fleet board on a phone: agent cards stacked in one column with model, branch, cost and diff stats.",
@@ -111,12 +111,12 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Isolated by construction",
-                body: "Each agent works in its own git worktree — they never collide, and nothing lands until you say so.",
+                body: "Each agent works in its own git worktree, so agents never collide and nothing lands until you approve it.",
                 figure: "worktrees",
             },
         ],
         meta: {
-            title: "Orchestrate · intentic",
+            title: "Run a fleet · intentic",
             description:
                 "Run ten coding agents at once and see which needs you: attention lanes, per-agent cost and diffs, one git worktree each, the whole fleet on one board.",
             datePublished: PUBLISHED,
@@ -124,10 +124,10 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "empower",
-        navLabel: "Empower",
-        menuBlurb: "Wire agents into your systems — they see and act",
+        navLabel: "Connect",
+        menuBlurb: "Connect agents to the systems they need",
         heading: "An agent is only as useful as what it can reach.",
-        sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server — each a real tool, its key kept in your sandbox.",
+        sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Each connection uses a real tool and keeps its key in your sandbox.",
         hero: {
             name: "capabilities",
             alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -141,7 +141,7 @@ export const productPages: ProductPage[] = [
         ],
         blocks: [
             {
-                title: "Adding one tells you exactly what it will do",
+                title: "See what a connection adds before you save it",
                 body: "Before you paste a token, the card shows what it adds: a new skill, a secret, and the tool it installs.",
                 shot: {
                     name: "capability-github",
@@ -162,7 +162,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Talk to it where your team already works",
-                body: "Connect Discord or Slack and the agent joins in — @mention it, and it works and reports back there.",
+                body: "Connect Discord or Slack, then @mention the agent to start work and receive its reply in the same place.",
                 figure: "teammate",
             },
             {
@@ -181,9 +181,9 @@ export const productPages: ProductPage[] = [
             },
         ],
         meta: {
-            title: "Empower · intentic",
+            title: "Connect agents · intentic",
             description:
-                "Wire an agent to GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH, CI/CD or any MCP server — and onto your own website. Each capability installs a real tool; the credential never leaves your sandbox.",
+                "Connect an agent to GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH, CI/CD, any MCP server or your own website. Each capability installs a real tool, and its credential never leaves your sandbox.",
             datePublished: PUBLISHED,
         },
     },
@@ -191,7 +191,7 @@ export const productPages: ProductPage[] = [
         slug: "automate",
         navLabel: "Automate",
         menuBlurb: "Agents that start themselves on an event, and act",
-        heading: "Agents that start themselves — on a schedule, or an event.",
+        heading: "Agents that start on a schedule or event.",
         sub: "A push, alert, payment, email, chat or cron wakes an agent. A guard you write vets each run, and you watch it.",
         // Diagram-led: there is no captured automations screen, and a mockup would be the one lie on the
         // shelf. The triggers figure IS the hero; a real screen (the fleet board) carries a block below.
@@ -204,7 +204,7 @@ export const productPages: ProductPage[] = [
         blocks: [
             {
                 title: "A persona with permissions, not a free-for-all",
-                body: "Each wake runs as a persona you set — model, tools, limits — vetoed by your guard before a token is spent.",
+                body: "Each wake uses the persona, model, tools and limits you set. Your guard can stop it before a token is spent.",
                 bullets: [
                     "Wake on a GitHub push, a Sentry alert, a Stripe payment, inbound email, a Discord message, or cron",
                     "The guard is your code: it decides, per event, whether this one is worth an agent",
@@ -228,16 +228,16 @@ export const productPages: ProductPage[] = [
         meta: {
             title: "Automate · intentic",
             description:
-                "Wake an agent on a schedule or an event — a push, an alert, a payment, an email, a chat message or cron — under permissions you set and a guard command you write. Every run is a fresh session you can watch.",
+                "Wake an agent from a push, alert, payment, email, chat message, cron schedule or another event. You set its permissions and guard command, and every run opens a fresh session you can watch.",
             datePublished: PUBLISHED,
         },
     },
     {
         slug: "supervise",
-        navLabel: "Supervise",
+        navLabel: "Review",
         menuBlurb: "It proposes, you approve, and nothing lands unread",
         heading: "It proposes. You approve. Nothing lands until you've read the diff.",
-        sub: "Every agent plans first, then waits. You approve or reject — and nothing lands until you've read every hunk.",
+        sub: "Every agent plans first, then waits. You approve or reject the plan, and nothing lands until you have read every hunk.",
         hero: {
             name: "chat-plan",
             alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
@@ -255,12 +255,12 @@ export const productPages: ProductPage[] = [
                 bullets: [
                     "Thinking, tool calls and to-dos stream as they happen, never summarised after the fact",
                     "Steer mid-turn: a message lands in the running turn instead of queuing behind it",
-                    "The same conversation on your phone — an agent that stops at 11pm is one tap from unblocked",
+                    "Continue the same conversation on your phone and unblock an agent with one tap",
                 ],
             },
             {
                 title: "Permission is a dial, not a switch",
-                body: "A mode pill sets how far the agent may go on its own, per turn — strict on a migration, loose on a changelog.",
+                body: "A mode pill sets how far the agent may go on each turn. Keep it strict for a migration and loose for a changelog.",
             },
             {
                 title: "Reviewed by file, not by wall of text",
@@ -284,12 +284,12 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "One workspace, two operators",
-                body: "You and the agent share one workspace — the editor, files and terminal it uses are what you open.",
+                body: "You and the agent share one workspace. You open the same editor, files and terminal it uses.",
                 figure: "shared-surfaces",
             },
         ],
         meta: {
-            title: "Supervise · intentic",
+            title: "Review agent work · intentic",
             description:
                 "Co-pilot your agents: every one starts in plan mode, permission is a per-turn dial, finished work is reviewed diff by diff before it lands, and you steer by curating the context it loads.",
             datePublished: PUBLISHED,
@@ -297,9 +297,9 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "delegate",
-        navLabel: "Delegate",
+        navLabel: "Host",
         menuBlurb: "Give it a server of its own and hand off the job",
-        heading: "Delegate the running. Keep the owning.",
+        heading: "Host the work. Keep control.",
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Hand off the running, and keep full control.",
         hero: {
             name: "sandbox-overview",
@@ -340,7 +340,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "What the platform actually holds",
-                body: "Your identity, the sandbox URL, and teammate access — not your code, keys or transcripts.",
+                body: "It stores your identity, sandbox URL and teammate access. It does not store your code, keys or transcripts.",
                 figure: "platform-boundary",
             },
             {
@@ -355,7 +355,7 @@ export const productPages: ProductPage[] = [
             },
         ],
         meta: {
-            title: "Delegate · intentic",
+            title: "Host agent work · intentic",
             description:
                 "Run the sandbox on a server you own and hand it end-to-end operation: an image overlay you approve, a private tunnel your browser dials, a spend ledger the platform never sees, and the platform off the command path.",
             datePublished: PUBLISHED,

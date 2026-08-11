@@ -7,12 +7,12 @@ import { DEMO_PATH } from "./site";
 /* The site's navigation, as data.
  *
  * Three menus, and all are grouped: a flat list of ten docs pages made "Manifest reference" a peer of
- * "Overview", and the product used to be five anchors into one long page — nothing you could link to, rank,
+ * "Overview", and the product used to be five anchors into one long page: nothing you could link to, rank,
  * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
  * opens on, which the mega-menu previews.
  *
  * Compare is NOT in the bar, and that is the deliberate omission here. The hub's own headline is "Most of
- * these are not competitors" — a reframe, and a reframe only lands on somebody who already had the doubt.
+ * these are not competitors": a reframe, and a reframe only lands on somebody who already had the doubt.
  * A permanent tab announces the doubt to everyone else, naming a field of rivals to a visitor who had not
  * thought to look for one. The bar is also the site's scarcest space, spent best on what people RETURN to
  * (Features, Docs) or act on (Get started); a comparison is read once, by someone search already sent
@@ -20,10 +20,10 @@ import { DEMO_PATH } from "./site";
  *
  * It stays reachable in the two places that matter: a full column in the footer, sitewide, which is what
  * keeps every comparison page linked; and the home page FAQ, where the row that asks the question links the
- * hub — the moment the doubt actually forms, rather than before it.
+ * hub: the moment the doubt actually forms, rather than before it.
  *
  * Download is the second deliberate omission, and for a different reason. The app is not a way INTO the
- * product — both roads end at the same signed-in workspace, and what it replaces is one step, the terminal
+ * product: both roads end at the same signed-in workspace, and what it replaces is one step, the terminal
  * command that puts a sandbox on your machine. A permanent tab beside "Get started free" therefore offers
  * two openings where there is one, and most of the people who take it are first-timers clicking the most
  * concrete-sounding word in the bar: they get a longer road to the same place, a binary to install before
@@ -31,7 +31,7 @@ import { DEMO_PATH } from "./site";
  * returning reader installing on a second machine, who is the case FOR the tab, arrives rarely.
  *
  * So it lives where the need is instead: the Resources column of the footer, sitewide, and the band of the
- * home page that asks for a terminal — beside the command, at the moment the hesitation lands.
+ * home page that asks for a terminal: beside the command, at the moment the hesitation lands.
  */
 
 export interface MenuItem {
@@ -62,14 +62,14 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-/* Every feature page as a menu row, in the shelf's own order — five verbs (Orchestrate, Empower, Automate,
+/* Every feature page as a menu row, in the shelf's own order: five verbs (Orchestrate, Empower, Automate,
  * Supervise, Delegate) rather than a list of surfaces, so the menu reads as what you DO with a fleet, not the
  * furniture any editor has.
  *
  * ONE COLUMN, no group labels: a verb is its own grouping, so the run/environment/extend headers that once
  * sorted seven surfaces would be more scaffolding than the rows under them. What the menu is FOR is the
- * preview rail beside it — a visitor who has installed nothing seeing the real surfaces — and Automate carries
- * no shot because it is diagram-led (no captured automations screen), so its row simply has no preview. */
+ * preview rail beside it: a visitor who has installed nothing seeing the real surfaces, and Automate carries
+ * no shot because it is diagram-led (no captured automations screen), so its row has no preview. */
 const productItems = (): MenuItem[] =>
     productPages.map((page) => ({
         label: page.navLabel,
@@ -81,7 +81,7 @@ const productItems = (): MenuItem[] =>
 export const navEntries: NavEntry[] = [
     {
         /* "Features", not "Product": the site's own copy says free and open source, MIT on GitHub, platform
-         * included — and a bar that then says "Product" is reading from a SaaS vendor's script beside it. The
+         * included, and a bar that then says "Product" is reading from a SaaS vendor's script beside it. The
          * URLs stay /product/*, because a label is a word and a URL is a promise other people have already
          * linked to. */
         type: "menu",
@@ -96,26 +96,26 @@ export const navEntries: NavEntry[] = [
         type: "menu",
         label: "Docs",
         prefix: "/docs",
-        // One unlabelled column of four destinations — see docsDestinations for why this is not the tree.
+        // One unlabelled column of four destinations: see docsDestinations for why this is not the tree.
         sections: [{ items: [...docsDestinations] }],
         // The changelog as the panel's action rather than a seventh link in the bar. It is the same question
-        // the docs answer — what does this thing do — asked about the last two weeks of it, and it was the
+        // the docs answer to "what does this thing do?" asked about the last two weeks of it, and it was the
         // one row of the bar a visitor reads once a release.
         //
         // Points at OUR page rather than at the GitHub releases it used to: a visitor asking what changed wants
         // the handful of things they would notice, and what they got was every commit in the range, subject
         // lines and all. The exhaustive list is still one click further on (/changelog/ links each entry to its
-        // release), which is the right order — the readable answer first, the audit trail behind it.
+        // release), which is the right order: the readable answer first, the audit trail behind it.
         action: { label: "Changelog", href: "/changelog/" },
     },
-    /* The authoring book, its own entry in the bar rather than a shelf inside Docs — the split this whole tree
+    /* The authoring book, its own entry in the bar rather than a shelf inside Docs: the split this whole tree
      * exists to make. Two rows, one per shelf, and the reason a reader picks one over the other is the audience
      * line under each: Build is the code, Ship is the process. "Developers" rather than "API" because the menu
      * holds both jobs, and a bar that says "API" over registry policy is promising reference it isn't holding.
      * The URLs stay /api/*, because a label is a word and a URL is a promise other people have already linked to.
      *
      * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an
-     * author arrives with — what does a listed extension actually look like — and the row it would otherwise
+     * author arrives with: what does a listed extension actually look like, and the row it would otherwise
      * be is already two items to the right in this same bar. */
     {
         type: "menu",
@@ -132,7 +132,7 @@ export const navEntries: NavEntry[] = [
         href: "/extensions/",
         prefix: "/extensions",
     },
-    /* The economy, top-level — the one system on the site with two audiences. A member asking what the
+    /* The economy, top-level: the one system on the site with two audiences. A member asking what the
      * membership buys and a creator asking what the split is are both sent to one page, and neither should
      * have to look for money inside a developer menu. It sits beside Extensions because they are two halves
      * of one story: what's listed, and how what's listed is paid for. */
@@ -142,7 +142,7 @@ export const navEntries: NavEntry[] = [
         href: "/earn/",
         prefix: "/earn",
     },
-    // Last of the text links, where a bar conventionally keeps it — and in the bar at all because "who is
+    // Last of the text links, where a bar conventionally keeps it, and in the bar at all because "who is
     // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container
     // on their own machine and hand it real credentials. That reader will not go looking in the footer.
     {

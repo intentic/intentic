@@ -5,7 +5,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
 /* THE STEP THAT REPEATS. Everything else on this shelf happens once per extension; this page is what happens
- * once per release, and it existed only as fragments before — updates inside the publishing guide, the
+ * once per release, and it existed only as fragments before: updates inside the publishing guide, the
  * donation cadence inside the money page, going bad inside trust. The reader it serves has already shipped:
  * their question is not "how do I list" but "what does release two cost me, and what does it earn". */
 
@@ -14,19 +14,19 @@ const update = `# The whole release process:
 git push
 
 # 2. open a pull request against the registry pointing at the new sha
-#    (or wait — the nightly topic scan opens it for you)`;
+#    (or wait: the nightly topic scan opens it for you)`;
 ---
 
 <DocsLayout
     book={apiBook}
     pageId="maintain"
     heading="Maintain & grow"
-    lead="A listing is not a launch, it's the start of a cycle: ship a release, get re-checked, stay ranked, and — if you're premium — earn again. This page is release two and every one after it."
+    lead="A listing starts a cycle. Ship a release, get checked again, keep your rank and, for premium extensions, earn again. This page covers release two and every one after it."
 >
     <h2>Shipping an update</h2>
     <p>
         Open another pull request against the registry with the new sha. That is the entire release process: the version in your manifest is
-        what users see, and the sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong — and if your repo
+        what users see, and the sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong, and if your repo
         carries the <code>intentic-extension</code> topic, the nightly scan opens the pull request for you, same as it did the first time.
     </p>
     <DocsCodeBlock code={update} lang="bash" title="Release two" />
@@ -61,22 +61,22 @@ git push
     <h2>Staying ranked</h2>
     <p>
         The <a href="/extensions/">gallery</a> and in-app discovery rank <strong>verified</strong> listings first and order by stars within
-        each tier — both facts read back off your source host nightly, never edited by hand. Three things keep a listing healthy in that
+        each tier: both facts read back off your source host nightly, never edited by hand. Three things keep a listing healthy in that
         ordering:
     </p>
     <ul>
         <li><strong>Stay loadable.</strong> The nightly scan re-checks your manifest and bundle at the pinned commit; a card that stops loading says so in public until you fix it.</li>
-        <li><strong>Pursue verification.</strong> It is the one rank input that is a decision rather than a metric — <a href="/api/verify/">Verification &amp; trust</a> says what it claims and how to get it.</li>
+        <li><strong>Pursue verification.</strong> It is the one rank input that is a decision rather than a metric: <a href="/api/verify/">Verification &amp; trust</a> says what it claims and how to get it.</li>
         <li><strong>Don't go quiet on a problem.</strong> A listing that goes bad is blocked and its installers advisories-notified; the trust page covers how that unwinds and how a fixed sha returns.</li>
     </ul>
 
     <h2>Updates are the revenue cadence</h2>
     <p>
         For a premium listing, maintenance and revenue are the same motion. An install donates once; <strong>an update can donate again, at
-        most once a month per install</strong> — so a maintained extension can earn up to twelve donations a year from every install it keeps,
+        most once a month per install</strong>. So a maintained extension can earn up to twelve donations a year from every install it keeps,
         and an abandoned one earns exactly once. The cap is also the guard: shipping meaningless updates to farm the cadence is{" "}
-        <strong>delisting grounds</strong>, stated on the row like every other trust decision. The whole economy — credits, the split, the
-        public ledger — is on <a href="/earn/">Earn</a>.
+        <strong>delisting grounds</strong>, stated on the row like every other trust decision. <a href="/earn/">Earn</a>{" "} explains the credits,
+        split and public ledger.
     </p>
 
     <DocsRelated

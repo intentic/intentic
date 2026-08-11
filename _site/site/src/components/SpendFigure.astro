@@ -1,14 +1,14 @@
 ---
 import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
 
-/* THE SPEND DIAMOND — one membership at the top, the two ways a credit can leave in the middle, the one payout
+/* THE SPEND DIAMOND: one membership at the top, the two ways a credit can leave in the middle, the one payout
  * rule at the bottom. The shape IS the argument: two different middles, a shared source and a shared rule,
  * which is exactly why "your total support is capped at what you paid" holds for both at once. A diamond says
  * that without a sentence.
  *
  * TWO LAYOUTS, ONE SOURCE. A 560-wide viewBox squeezed into a phone renders its labels at seven pixels, which
  * is a diagram nobody can read pretending to be one they can. So the geometry is data, stated twice at two
- * aspect ratios, and the markup below is written once against it — the portrait variant narrows the canvas
+ * aspect ratios, and the markup below is written once against it: the portrait variant narrows the canvas
  * instead of shrinking the type, so the same 11pt label lands at 11 real pixels on a phone and 11 on a
  * desktop. What does NOT change between them is the fork: the two lanes stay side by side at every width,
  * because lanes stacked in a column stop reading as a branch and the branch is the whole point.
@@ -75,7 +75,7 @@ const glyph = (paths: string, x: number, y: number, size: number) =>
 
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
-const label = `One membership funds a daily allowance of ${n(pool.dailyCredits)} credits. It can be spent two ways — installing a premium extension, which donates ${n(
+const label = `One membership funds a daily allowance of ${n(pool.dailyCredits)} credits. It can be spent two ways: installing a premium extension, which donates ${n(
     pool.donationCredits,
 )} credits once, or running a premium service, which costs the price that service publishes, per run. Either way ${creatorSharePct}% of the credit's value reaches its creator.`;
 ---

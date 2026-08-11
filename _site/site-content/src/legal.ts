@@ -31,7 +31,7 @@ export const privacyDoc: LegalDoc = {
         },
         {
             heading: "What we collect",
-            paragraphs: ["The platform is deliberately minimal. It stores your identity and where your sandboxes are, nothing more:"],
+            paragraphs: ["The platform stores only your identity and the location of your sandboxes:"],
             list: [
                 "Account data: your name, email address, and avatar, received from Google when you sign in.",
                 "Session data: a session token plus the IP address and browser user agent of each sign-in, kept for security. Expired sessions are purged automatically.",
@@ -77,7 +77,7 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "Your rights",
             paragraphs: [
-                "You can access, correct, export, and erase your data at any time: Settings offers self-service data export and account deletion. You additionally have the rights to restriction, objection, and portability under the GDPR, and to lodge a complaint with the Polish supervisory authority (UODO, uodo.gov.pl) or your local data protection authority.",
+                "You can access, correct, export, and erase your data at any time: Settings offers self-service data export and account deletion. You also have the rights to restriction, objection, and portability under the GDPR, and to lodge a complaint with the Polish supervisory authority (UODO, uodo.gov.pl) or your local data protection authority.",
                 `For anything else, write to ${LEGAL_CONTACT_EMAIL}.`,
             ],
         },

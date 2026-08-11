@@ -6,8 +6,8 @@ import DocsRelated from "../../components/DocsRelated.astro";
 
 /* THE LIST STEP, and only it.
  *
- * This page used to carry five jobs — how to list, what the installer sees, how updates behave, the trust model,
- * and money — which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
+ * This page used to carry five jobs: how to list, what the installer sees, how updates behave, the trust model,
+ * and money, which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
  * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
  * the trust vocabulary on /api/verify/, the release cycle on /api/maintain/, and the money at /earn/. What is
  * left is the one thing an author does here: get a pointer to their repository into a registry. */
@@ -79,7 +79,7 @@ const sources = `// A repo of its own
     </p>
     <DocsCodeBlock code={registry} lang="json" title=".claude-plugin/marketplace.json" />
     <p>
-        The file format is Claude Code's plugin-marketplace format, deliberately. <code>kind</code> and <code>trust</code> are intentic's own
+        The file uses Claude Code's plugin-marketplace format. <code>kind</code> and <code>trust</code> are intentic's own
         markers, and Claude Code ignores fields it doesn't know. So <strong>one registry repo can serve both</strong>: a team that already
         publishes agent plugins lists its intentic extensions in the same file, rather than standing up a second thing.
     </p>
@@ -91,7 +91,7 @@ const sources = `// A repo of its own
     <p>
         A second file sits beside it. <code>registry.generated.json</code> is written by the registry's nightly job and holds only facts read
         back off the source host: stars, and the last push date. It is separate so a nightly refresh never conflicts with an open pull
-        request, and so a review diff shows the decision being made rather than a churn of star counts. It deliberately carries no "latest
+        request, and so a review diff shows the decision being made rather than a churn of star counts. It carries no "latest
         upstream commit": the approved sha is the one that runs, and advertising a newer one would invite a click that skips the review.
     </p>
 
@@ -118,7 +118,7 @@ const sources = `// A repo of its own
             <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an{" "}
             <code>intentic-extension.json</code> at its root. A nightly job resolves your latest commit first, checks the manifest and shipped
             bundle at that exact sha, and <strong>opens the pull request for you</strong>. That is the whole submission process. Your <code>logo</code> or{" "}
-            <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared — a listing
+            <code>icon</code> is copied across with it, so the gallery card and the in-app browse row wear the mark you declared. A listing
             that declares neither shows its initials.
         </li>
         <li>
@@ -139,14 +139,14 @@ const sources = `// A repo of its own
         request that looks legitimate.
     </p>
     <p>
-        Listing is free and stays cut-free. The one paid path — a <code>premium</code> tier that draws from the creator pool — is opt-in,
+        Listing is free and stays cut-free. Publishers can opt into a paid <code>premium</code> tier that draws from the creator pool,
         one field on your entry, and the whole economy is stated once on <a href="/earn/">Earn</a>.
     </p>
 
     <h2>What the person installing sees</h2>
     <p>
-        Your manifest, rendered as plain English rather than as JSON: <em>this extension adds a tile to your rail</em>,{" "}
-        <em>reads your workspace logs</em>, <em>runs a background process</em>, <em>puts a tool on your agent's PATH</em> — one line per
+        The install dialog renders your manifest in plain English. It lists <em>this extension adds a tile to your rail</em>,{" "}
+        <em>reads your workspace logs</em>, <em>runs a background process</em> or <em>puts a tool on your agent's PATH</em>, one line per
         declared contribution, with the route allowlist spelled out underneath, at one specific commit.
     </p>
     <p>
@@ -160,8 +160,8 @@ const sources = `// A repo of its own
         Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
         private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the{" "}
         <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from{" "}
-        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. And so does the whole{" "}
-        <a href="/api/maintain/">update lifecycle</a> — the badges, the powers diff, the kept previous version and one-click revert, the
+        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. The{" "}
+        <a href="/api/maintain/">update lifecycle</a> also works now: the badges, powers diff, kept previous version, one-click revert,
         health watch, blocked-listing advisories, and the per-extension update policies.
     </p>
     <p>

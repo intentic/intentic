@@ -1,6 +1,6 @@
 import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 
-/* /docs — written for somebody USING intentic. The authoring book is api.ts, and the line between them is the
+/* /docs: written for somebody USING intentic. The authoring book is api.ts, and the line between them is the
  * reader: a person installing an extension is doing an ordinary product task, a person writing one is not.
  *
  * SHELVED BY WHO IS READING, not by lifecycle stage. Sorting by stage ("Get started", "Guides", "Extend",
@@ -9,8 +9,8 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
  * READER: I want to know what this is; I run the machine this thing lives on; I want to wire my own systems into
  * it; I do the day's work in it.
  *
- * WHY AN "INTEGRATIONS" SHELF. Three pages were answering one question — how does an outside thing get into this
- * sandbox? — from two different shelves. A connector, somebody else's extension and your own laptop are the same
+ * WHY AN "INTEGRATIONS" SHELF. Three pages were answering one question: how does an outside thing get into this
+ * sandbox?: from two different shelves. A connector, somebody else's extension and your own laptop are the same
  * decision made about three kinds of outsider, and a reader who has just wired up GitHub is the reader most
  * likely to want the other two.
  *
@@ -126,8 +126,8 @@ export const docsBook: Book = {
                         },
                         {
                             /* LAST ON THE SHELF THAT OWNS THE MACHINE, because that is where the failures are: Docker, a
-                             * tunnel, and somebody else's credentials. The docs had no such page at all — "troubleshoot"
-                             * and "not working" both returned nothing — and the agent-side symptoms on it are here
+                             * tunnel, and somebody else's credentials. The docs had no such page at all: "troubleshoot"
+                             * and "not working" both returned nothing, and the agent-side symptoms on it are here
                              * rather than on a second page because a reader who cannot tell which half broke is exactly
                              * the reader who needs it. */
                             id: "troubleshooting",
@@ -215,7 +215,7 @@ export const docsBook: Book = {
                             id: "automations",
                             /* NAMES ALL THREE, though it is the longest row in the rail. "Automations & workflows"
                              * never said "loops", so a reader after "run this until it's green" had no reason to open
-                             * the one page that answers them — and loops are a third of it. It still sets on one line
+                             * the one page that answers them, and loops are a third of it. It still sets on one line
                              * at the rail's width; "Updates: what we promise never breaks" below is the length that
                              * does not. */
                             title: "Automations, workflows & loops",
@@ -287,8 +287,8 @@ export const docsBook: Book = {
     ],
 };
 
-/* Only what a consumer outside this module actually reads. Everything ELSE a page needs — the placement of one
- * id, its neighbours, the page itself — is asked of `book.ts` with `docsBook` in hand, because the layout takes
+/* Only what a consumer outside this module actually reads. Everything ELSE a page needs, such as the placement
+ * of an id, its neighbours and the page itself, is asked of `book.ts` with `docsBook` in hand because the layout takes
  * the book as a prop and cannot know which of two per-book helper sets to call. */
 export const docsSections = docsBook.sections;
 export const docsPages = bookPages(docsBook);

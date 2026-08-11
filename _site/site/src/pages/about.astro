@@ -20,11 +20,11 @@ import Nav from "../components/Nav.astro";
 import TrustCards from "../components/TrustCards.astro";
 import VerifyDownload from "../components/VerifyDownload.astro";
 
-/* Who builds intentic — the depth behind the landing page's `#trust` band.
+/* Who builds intentic: the depth behind the landing page's `#trust` band.
  *
  * It exists for two readers. A human deciding whether to run a container on their own machine and hand
  * it real credentials, and the machines (Google, LLM answer engines) that establish who is behind a
- * domain — which is what the ProfilePage graph in BaseLayout is for. The band converts; this page is
+ * domain, which is what the ProfilePage graph in BaseLayout is for. The band converts; this page is
  * where the CV can be specific enough to be checkable.
  *
  * Everything here is already public on github.com/radarsu, linkedin.com/in/radarsu and radarsu.com.
@@ -78,7 +78,7 @@ import VerifyDownload from "../components/VerifyDownload.astro";
         <section class="mx-auto max-w-5xl px-6 pb-16">
             <h2 class="text-lg font-semibold tracking-tight text-content">Open source, before this</h2>
             <p class="mt-3 max-w-copy text-sm leading-relaxed text-muted">
-                Libraries that shipped and got used on their own, before intentic — the easiest thing here to check.
+                Libraries that shipped and got used on their own, before intentic: the easiest thing here to check.
             </p>
             <div class="mt-6 grid gap-4 sm:grid-cols-2">
                 {
@@ -142,7 +142,7 @@ import VerifyDownload from "../components/VerifyDownload.astro";
          *
          * Deferred to interaction rather than done on load because the cheapest harvesters render the page
          * and scrape the DOM; the ones that also move a pointer or focus a link are a different class of
-         * effort. Nothing is lost if it never runs — the address is already readable in the markup. */
+         * effort. Nothing is lost if it never runs: the address is already readable in the markup. */
         const target = document.getElementById("contact-email");
         const user = target?.dataset.user;
         const domain = target?.dataset.domain;

@@ -21,7 +21,7 @@ interface Props {
 
 const { content, noindex } = Astro.props;
 
-// FAQPage structured data is flat — the topic bands are a reading aid for the page, not part of the schema.
+// FAQPage structured data is flat: the topic bands are a reading aid for the page, not part of the schema.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
 const icon = (paths: string) =>
@@ -86,7 +86,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                         wraps inside its own box, and the balanced heading wrap splits it evenly instead of
                         leaving the last word alone under a full line. The display step is 44px rather than
                         48px because the column is 592px at every width from xl up (max-w-7xl caps the
-                        container, so it never grows) and the longest line measures 629px at 48px — it
+                        container, so it never grows) and the longest line measures 629px at 48px: it
                         wrapped on desktop. */}
                     <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-[2.75rem]">
                         {content.hero.headlineLines.map((line) => (
@@ -170,7 +170,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
              home page and the feature pages read as one product. It replaces the old four-beat "loop" and
              six-tile "extend" bands, which between them said the same powers three times over. Orchestrate
              leads at full width because the board is the product's face; the other four are compact cards,
-             each a cropped real screen — or, for Automate, its trigger list, because there is no honest
+             each a cropped real screen or, for Automate, its trigger list, because there is no honest
              screenshot of an automations screen and a mockup would be the one lie on the page. -->
         <section class="border-t border-line" id="verbs">
             <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
@@ -433,12 +433,12 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                 <p class="mt-3 text-xs text-subtle">{content.connect.commandNote}</p>
 
                 {/* The alternative to step 3, sitting under step 3 rather than in place of it. This band is
-                    where the page asks for a terminal, and a terminal is where it loses people — so the way
-                    out belongs here, at the moment the hesitation lands, not only in the top bar.
+                    where the page asks for a terminal, and a terminal is where it loses people. So the way
+                    out belongs here, at the moment the hesitation lands, as well as in the top bar.
 
                     Secondary, and narrower than the code window above it: the app is a window around that same
                     install, not a rival to it, and the hero already spends the page's one primary button. The
-                    width is the CONTENT's — a note at its readable measure, the button beside it — because at
+                    width is the CONTENT's: a note at its readable measure, the button beside it because at
                     the band's full 77rem the two sat half a metre apart with nothing between them. The
                     platforms are named on the button because there is no macOS build: a reader on a Mac
                     learns that here, with the one-liner that does work still on screen, not after a click. */}
@@ -508,7 +508,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                 </div>
 
                 {/* The one place on this page a visitor is holding an unanswered question, so it is the one
-                    place the community belongs — not the hero and not the final CTA, where it would compete
+                    place the community belongs: not the hero and not the final CTA, where it would compete
                     with the thing we actually want them to do. Two doors rather than one, because the reader
                     who bounced off the FAQ has one of two problems and Issues only ever fitted the second:
                     a question wants a person, a bug wants a record. Discord leads because it is the lighter

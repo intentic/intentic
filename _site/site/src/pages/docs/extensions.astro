@@ -2,7 +2,7 @@
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* THE INSTALLER'S HALF of the extension lifecycle — discover and install — and a page that did not exist.
+/* THE INSTALLER'S HALF of the extension lifecycle: discover and install, and a page that did not exist.
  *
  * Everything on it was previously written inside the PUBLISHING guide, under headings addressed to an author:
  * "what the person installing sees", "updates". So the reader doing the most common thing anybody does with an
@@ -10,7 +10,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * Authoring is the other half, and it is /api.
  *
  * WRITTEN AS A DECISION, not as a feature list. The order is the order the reader meets it: where these come
- * from, what the dialog is telling them, how to read a listing, then living with one — updates, withdrawal,
+ * from, what the dialog is telling them, how to read a listing, then living with one: updates, withdrawal,
  * money. Every section that describes a protection also says what it does not protect against, because the one
  * failure this page could cause is a reader installing something on the strength of a feeling. */
 
@@ -36,7 +36,7 @@ const policies = [
     },
     {
         policy: `Auto`,
-        what: `Applied unattended — but only when four things hold at once, and it reverts itself when they stop.`,
+        what: `Applied unattended, but only when four things hold at once, and it reverts itself when they stop.`,
         who: `Extensions you'd rather not think about, from listings somebody has actually read.`,
     },
 ];
@@ -45,17 +45,17 @@ const policies = [
 <DocsLayout
     pageId="extensions"
     heading="Extensions"
-    lead="Most of what your sandbox can do arrives as an extension — including the parts that shipped with it. This is how to find one, read what it may touch before you say yes, and stay in control of it afterwards."
+    lead="Most of what your sandbox can do arrives as an extension: including the parts that shipped with it. This is how to find one, read what it may touch before you say yes, and stay in control of it afterwards."
 >
     <h2>What you're installing</h2>
     <p>
         An extension is one package that can add several kinds of thing at once: a screen in your rail, a connector card in your
-        capabilities, a command-line tool for the agent, a background process, or all of them together. That is deliberate — you install a{" "}
+        capabilities, a command-line tool for the agent, a background process, or all of them together. They belong together because you install a{" "}
         <em>product</em> ("deployments", "knowledge", "Reddit research"), not a skill here and a view there, so it is one identity, one trust
         decision, and one switch that unwires all of it.
     </p>
     <p>
-        Most of the product you already use is extensions — over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
+        Most of the product you already use is extensions: over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
         Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google Workspace
         connection, the connector catalog. They're built against the same public interface a third-party one uses, which is worth knowing for
         a practical reason rather than a philosophical one: there is no privileged internal path, so a third-party extension can be as good as
@@ -73,7 +73,7 @@ const policies = [
             and the same list is browsable inside the app at <strong>Capabilities → Add → Extension</strong>. One click installs from there.
         </li>
         <li>
-            <strong>A repo URL.</strong> No registry required. Paste a git URL and a commit into the same dialog and it installs — which is how
+            <strong>A repo URL.</strong> No registry required. Paste a git URL and a commit into the same dialog and it installs, which is how
             a company runs internal extensions that are published nowhere.
         </li>
         <li>
@@ -82,14 +82,14 @@ const policies = [
         </li>
     </ul>
     <p>
-        All four land in the same list on <strong>Sandbox → Extensions</strong>, with one on/off switch each — so "what is running in here" is
+        All four land in the same list on <strong>Sandbox → Extensions</strong>, with one on/off switch each. So "what is running in here" is
         one screen regardless of how any of it arrived.
     </p>
 
     <h2>What the install dialog is telling you</h2>
     <p>
         Extension code runs in your browser and on your machine, so the install makes its declared host integrations legible{" "}
-        <em>before</em> approval. The dialog is the extension's manifest rendered as plain English — one line per thing it declared, with the
+        <em>before</em> approval. The dialog is the extension's manifest rendered as plain English: one line per thing it declared, with the
         exact daemon routes it may call through the extension API spelled out underneath:
     </p>
     <table>
@@ -116,7 +116,7 @@ const policies = [
     <p>
         Installing from anywhere but your own workspace takes a full 40-character commit sha, never a branch. The code you read about is the
         code that runs; if the author force-pushes their branch tomorrow, nothing on your machine changes. It also means an update is always an
-        explicit, visible act — there is no mechanism by which the code quietly becomes different code.
+        explicit, visible act: there is no mechanism by which the code quietly becomes different code.
     </p>
     <p>
         Your own workspace extensions are pinned to nothing, for the same reason your own repositories aren't: there is no upstream that could
@@ -129,13 +129,13 @@ const policies = [
         other signal on the card:
     </p>
     <ul>
-        <li><strong>Listed</strong> — in the official registry, the exact source passed the deterministic scan and adversarial agent audit. No human source review is claimed.</li>
-        <li><strong>Verified</strong> — somebody read the source at that exact commit. A newer commit is unverified again until re-read.</li>
-        <li><strong>Blocked</strong> — known-malicious or known-broken, with the reason recorded for installed-extension advisories.</li>
+        <li><strong>Listed</strong>: in the official registry, the exact source passed the deterministic scan and adversarial agent audit. No human source review is claimed.</li>
+        <li><strong>Verified</strong>: somebody read the source at that exact commit. A newer commit is unverified again until re-read.</li>
+        <li><strong>Blocked</strong>: known-malicious or known-broken, with the reason recorded for installed-extension advisories.</li>
     </ul>
     <p>
         A separate <strong>✓ loads</strong> mark means a nightly job re-checked the pinned commit and it would install. That is evidence, not
-        endorsement — "it loads" and "somebody read it" are different claims by different parties, and the gallery keeps them apart. Stars are
+        endorsement: "it loads" and "somebody read it" are different claims by different parties, and the gallery keeps them apart. Stars are
         just the source repo's stars.
     </p>
     <p>
@@ -152,7 +152,7 @@ const policies = [
         left half-connected, which is why "turn it off and see" is a reasonable first move when something is behaving oddly.
     </p>
     <p>
-        Settings — including secrets and any environment variables the extension asked the agent for — are stored by the daemon under the
+        The daemon stores settings, secrets and requested environment variables under the
         extension's identity rather than inside its checkout. They survive an update, a revert, and even a remove followed by a re-add.
     </p>
 
@@ -160,7 +160,7 @@ const policies = [
     <p>
         Because what you installed is a commit and a listing carries one, "there's a newer version" is a comparison your sandbox makes for
         itself: daily, and whenever you have the Extensions tab open. A newer pinned commit badges the row. What happens when you click depends
-        on one thing only — whether the new version wants more than the old one did:
+        on one thing only: whether the new version wants more than the old one did:
     </p>
     <ul>
         <li>
@@ -169,7 +169,7 @@ const policies = [
             install, and nothing is left running the version you replaced.
         </li>
         <li>
-            <strong>It wants more than before</strong> — a new route, a new process, a new PATH entry, a badge it didn't have — and the update{" "}
+            <strong>It wants more than before.</strong> A new route, process, PATH entry or badge means the update{" "}
             <strong>asks again</strong>. The dialog computes the difference for you and states every addition as a plain sentence. Approval
             never transfers to powers you didn't approve. You can also ask your own agent to read the code diff between the two commits before
             deciding.
@@ -177,7 +177,7 @@ const policies = [
     </ul>
     <p>
         After a swap the daemon watches for a minute that what the new version declared actually came up. The version it replaced is kept one
-        back, so <strong>revert is one click</strong> — after a failed health check, or simply because the update made things worse.
+        back, so <strong>revert is one click</strong>: after a failed health check, or because the update made things worse.
     </p>
 
     <h3>Nothing updates itself unless you say so</h3>
@@ -208,7 +208,7 @@ const policies = [
 
     <h3>When a listing is withdrawn</h3>
     <p>
-        The same daily comparison protects people who already installed something, not only people browsing. A listing marked{" "}
+        The same daily comparison protects existing installs as well as people browsing. A listing marked{" "}
         <strong>blocked</strong> raises an advisory on your installed row carrying the registry's recorded reason, and by default the extension
         is <strong>switched off</strong>. That is the one thing that happens without asking you, because disabling runs no new code and reverses
         with a click.
@@ -220,16 +220,16 @@ const policies = [
 
     <h2>Premium extensions</h2>
     <p>
-        Almost everything is free — free to publish, free to install, with no cut taken from anyone. A publisher may mark a single extension{" "}
+        Almost everything is free. Publishing and installing cost nothing, and no cut is taken. A publisher may mark a single extension{" "}
         <strong>premium</strong>, and both the gallery and the app badge it before you click: installing one needs a monthly membership and
-        donates a published number of your credits to its creator. Nothing about it is ever metered or telemetered. The whole economy —
-        the membership, credits, the split, the public ledger — is one page: <a href="/earn/">Earn</a>.
+        donates a published number of your credits to its creator. Nothing about it is ever metered or telemetered. The membership, credits,
+        split and public ledger are all explained on <a href="/earn/">Earn</a>.
     </p>
 
     <DocsRelated
         links={[
             { href: "/docs/capabilities/", title: "Capabilities", why: "many extensions arrive as a connector card; this is what a connector actually gives the agent." },
-            { href: "/api/", title: "Extension API", why: "build one yourself — a workspace directory is already an extension." },
+            { href: "/api/", title: "Extension API", why: "build one yourself: a workspace directory is already an extension." },
             { href: "/docs/troubleshooting/", title: "Troubleshooting", why: "an extension that installed but went quiet, and how to tell which half broke." },
         ]}
     />

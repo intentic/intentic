@@ -5,17 +5,17 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 
-/* THE DOWNLOAD PAGE — the answer to the one objection the quickstart raises.
+/* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises.
  *
  * Setting a sandbox up means running a command in a terminal, and that is where the flow is most often
  * abandoned: not because the command does more than an installer would, but because it arrives with none of
- * an installer's affordances — no publisher, no preview, no file list, no uninstaller. The app is those
+ * an installer's affordances: no publisher, no preview, no file list, no uninstaller. The app is those
  * affordances, so this page's job is to say what it is, be honest that it is the same thing underneath, and
  * hand over a file.
  *
  * The URLs are the site worker's vanity paths (worker.ts): a locally-staged installer if one exists, else a
- * redirect to the newest release's asset. No version in the LINKS — one that needs a bump every release is
- * one that eventually 404s — but the version is stated beside them, because the two are not the same promise:
+ * redirect to the newest release's asset. No version in the LINKS: one that needs a bump every release is
+ * one that eventually 404s, but the version is stated beside them, because the two are not the same promise:
  * a stable link is how the page keeps working, and a stated version is how somebody knows what they are about
  * to install and whether this project shipped anything this year. It is read, never typed (latestRelease),
  * and the page renders without it rather than with a stale one. */
@@ -164,7 +164,7 @@ const does = [
                     </p>
                     <p class="max-w-copy text-sm text-muted">
                         It updates itself, and removing it removes only the app: your sandbox, its files and its history stay in Docker
-                        until you remove them yourself. Every update keeps the same promises —
+                        until you remove them yourself. Every update keeps the same promises.
                         <a href="/docs/updates/" class="text-link hover:underline">what we promise never breaks</a>.
                     </p>
                 </div>

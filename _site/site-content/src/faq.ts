@@ -2,13 +2,13 @@ import { compareHref } from "./compare";
 import { docsHref } from "./docs";
 
 export interface FaqItem {
-    /** Anchor id — a question is linkable on its own (`/#can-intentic-read-my-secrets`). */
+    /** Anchor id: a question is linkable on its own (`/#can-intentic-read-my-secrets`). */
     id: string;
     question: string;
     /** Each entry is a paragraph of the answer. */
     answer: string[];
     /**
-     * A page carrying the long answer. Rendered under the paragraphs and deliberately absent from the
+     * A page carrying the long answer. Rendered under the paragraphs and absent from the
      * FAQPage schema: the answer above has to stand on its own, because a rich result shows the text and
      * not the link.
      */
@@ -29,7 +29,7 @@ export interface FaqGroup {
     items: FaqItem[];
 }
 
-// The objection bank from docs/marketing/messaging.md — answers verified against intentic-app and the engine repo.
+// The objection bank from docs/marketing/messaging.md: answers verified against intentic-app and the engine repo.
 export const faqGroups: FaqGroup[] = [
     {
         id: "faq-what-it-is",
@@ -40,7 +40,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "close-the-browser",
                 question: "What happens when I close the browser?",
                 answer: [
-                    "Nothing, to the runs. The agents live on your machine, not in the tab — terminals survive the disconnect, and turns finish without you.",
+                    "Nothing happens to the runs. The agents live on your machine, not in the tab. Terminals stay open and turns finish without you.",
                     "Reopen from any device, including a phone, and the same fleet is there, sorted by who now needs you.",
                 ],
             },
@@ -74,8 +74,8 @@ export const faqGroups: FaqGroup[] = [
                 id: "sandbox-or-persona",
                 question: "Should I start a new sandbox or add a new persona?",
                 answer: [
-                    "Go by what's different. A sandbox is a whole workspace of its own — its tools, the systems it's connected to, its budget and its code. Start a new one when the job is genuinely different, or when you want that work kept apart with its spend on its own tab.",
-                    "A persona is who a sandbox is when it posts to the outside world: it ties together the logins that are the same someone, so the agent speaks as that account and no others. Add one — no new sandbox needed — when the work is the same but you want a different face for it, like posting as a brand account alongside your own.",
+                    "Go by what's different. A sandbox has its own tools, connected systems, budget and code. Start a new one for a different job, or when you want to keep the work and its spending separate.",
+                    "A persona sets who a sandbox speaks as when it posts outside intentic. It groups the logins that belong to the same identity. Add one to the same sandbox when the work stays the same but the posting identity changes, such as a brand account beside your own.",
                 ],
                 more: { label: "Specialize a sandbox, then grow a team", href: docsHref("autonomous-employees") },
             },
@@ -111,7 +111,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "is-any-of-it-paid",
                 question: "Is any of it paid?",
                 answer: [
-                    "No. Every sandbox, every capability and team sharing are free — no tiers, no limits, no card.",
+                    "No. Every sandbox, every capability and team sharing are free. There are no tiers, limits or card details.",
                     "All of intentic is MIT on GitHub, platform included. You pay your own model provider, directly.",
                 ],
             },
@@ -150,7 +150,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "can-intentic-read-my-secrets",
                 question: "Can intentic read my secrets?",
                 answer: [
-                    "No. Your capability credentials live inside your sandbox and the platform never receives them. The connection secrets it does hold — the ones that pair a browser to a sandbox — are encrypted at rest with AES-256-GCM.",
+                    "No. Your capability credentials live inside your sandbox and the platform never receives them. It stores only the connection secrets that pair a browser with a sandbox, encrypted at rest with AES-256-GCM.",
                     "Secret files like .env are denylisted from the file relay, so they never leave the sandbox.",
                 ],
             },
@@ -158,8 +158,8 @@ export const faqGroups: FaqGroup[] = [
                 id: "open-source",
                 question: "Is it open source?",
                 answer: [
-                    "Yes, all of it. intentic is MIT on GitHub — the sandbox, the CLI, the workspace and the hosted platform, developed in one public repo — so you can read every line that touches your code before you run it.",
-                    "The platform adds accounts and the connection layer. It stays off the command path, and now you can check that for yourself rather than take our word for it.",
+                    "Yes, all of it. The sandbox, CLI, workspace and hosted platform are MIT-licensed and developed in one public GitHub repo. You can read every line that touches your code before you run it.",
+                    "The platform adds accounts and the connection layer while staying off the command path. The public source lets you verify that yourself.",
                 ],
             },
             {

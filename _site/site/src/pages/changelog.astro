@@ -8,18 +8,18 @@ import { loadChangelog } from "../lib/changelog";
 
 /* WHAT SHIPPED, said to the people it shipped for.
  *
- * Every line on this page was written as its own change landed — a sentence in the commit that made it, drafted
+ * Every line on this page was written as its own change landed: a sentence in the commit that made it, drafted
  * against the diff and carried through the release (src/lib/changelog.ts explains the path and why the Release
  * body is the one editable copy). Nothing is composed here at release time and nothing is composed here at
  * build time; this page is a reader.
  *
  * MOST RELEASES ARE NOT ON IT, and that is the feature. Intentic publishes around three releases a day, and the
- * overwhelming majority of them move something nobody outside the project could see — a refactor, a test, a
+ * overwhelming majority of them move something nobody outside the project could see: a refactor, a test, a
  * build fix. Those carry no note, so they have no entry, and what is left is the short list of changes somebody
  * would actually want to know about. A changelog that listed all ninety would be a log, not a changelog.
  *
  * The version numbers are here because the app reports one: somebody arriving from the update prompt is holding
- * a number and wants to know what is in the gap. They are deliberately quiet in the design for everyone else. */
+ * a number and wants to know what is in the gap. They stay quiet in the design for everyone else. */
 
 const meta = getPageMeta("/changelog/");
 const { entries, unavailable } = await loadChangelog();
@@ -36,12 +36,12 @@ const dateline = (iso: string): string =>
             <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">What's new</h1>
             <p class="mt-4 max-w-copy text-lg leading-relaxed text-muted">
                 Every release that changed something you'd notice, newest first. Releases that only moved things
-                around under the hood aren't listed — there are a lot of those, and none of them are news.
+                around under the hood aren't listed: there are a lot of those, and none of them are news.
             </p>
             <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
                 Every release, including the ones that aren't here, is on{" "}
                 <a href={githubReleasesUrl} class="underline hover:text-content" rel="noopener" target="_blank">GitHub</a>{" "}
-                with its full commit list and downloads. Whatever a release changes, some things it never touches —
+                with its full commit list and downloads. Read{" "}
                 <a href="/docs/updates/" class="underline hover:text-content">what we promise never breaks</a>.
             </p>
         </section>
@@ -63,13 +63,13 @@ const dateline = (iso: string): string =>
             )
         }
 
-        {/* Genuinely nothing to show yet — the notes start with the first release published after the feature
+        {/* Nothing to show yet: the notes start with the first release published after the feature
             landed, and until then this page is honest about being empty rather than looking broken. */}
         {
             !unavailable && entries.length === 0 && (
                 <section class="mx-auto max-w-3xl px-6 pb-16">
                     <p class="rounded-lg border border-line p-4 text-sm leading-relaxed text-muted">
-                        Nothing here yet — the next release with a user-facing change will be the first entry.
+                        Nothing here yet: the next release with a user-facing change will be the first entry.
                     </p>
                 </section>
             )
@@ -101,7 +101,7 @@ const dateline = (iso: string): string =>
                                     </span>
                                 )}
                             </div>
-                            {/* What this release takes away, above what it adds — the same order the update
+                            {/* What this release takes away, above what it adds: the same order the update
                                 card shows them in, because it is the order a reader needs them in. */}
                             {entry.breaking.length > 0 && (
                                 <ul class="mt-4 space-y-3">

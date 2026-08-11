@@ -10,7 +10,7 @@ import {
 } from "@intentic/registry";
 import fallback from "./registry.fallback.json";
 
-/* The gallery's data, read at BUILD time from the registry repository — so `/extensions/` is a static page
+/* The gallery's data, read at BUILD time from the registry repository. So `/extensions/` is a static page
  * cut from a JSON file, exactly like `/product/` and `/compare/`, with no backend, no database and no admin
  * panel behind it. Curation happens as pull requests over there; a deploy is how it reaches the web.
  *
@@ -23,7 +23,7 @@ const RAW_BASE = `${OFFICIAL_REGISTRY_URL.replace("https://github.com/", "https:
 
 export interface Gallery {
     entries: RegistryEntry[];
-    /** When the scanner last read the source hosts — the page dates its star counts rather than implying they're live. */
+    /** When the scanner last read the source hosts: the page dates its star counts rather than implying they're live. */
     scannedAt: string | undefined;
     /** True when the vendored copy was used, so a preview build can say so instead of looking current. */
     stale: boolean;
@@ -60,25 +60,25 @@ export const loadGallery = async (): Promise<Gallery> => {
         }
         return { ...fromFiles(rawFile, await fetchText(REGISTRY_FACTS_FILE)), stale: false };
     } catch (error) {
-        console.warn(`[registry] live read failed (${String(error)}) — building the gallery from the vendored copy`);
+        console.warn(`[registry] live read failed (${String(error)}): building the gallery from the vendored copy`);
         return { ...fromFiles(JSON.stringify(fallback.file), JSON.stringify(fallback.facts)), stale: true };
     }
 };
 
-// github.com/owner/repo for the card's "source" link — the resolved pointer minus git's .git suffix.
+// github.com/owner/repo for the card's "source" link: the resolved pointer minus git's .git suffix.
 export const sourceHref = (entry: RegistryEntry): string | undefined => entry.install?.url.replace(/\.git$/, "");
 
 /* THE CARD'S MARK, and what this page can and cannot draw of it.
  *
- * A registry row carries the two tiers the manifest declares — a simple-icons `logo` and an `icon` from the
- * app's own set — and this page can honour only the first. The second is a name in a vocabulary that exists as
+ * A registry row carries the two tiers the manifest declares: a simple-icons `logo` and an `icon` from the
+ * app's own set, and this page can honour only the first. The second is a name in a vocabulary that exists as
  * bundled Iconify data inside @intentic/ui, a Vue design system; a static marketing page has no dependency on
  * it and should not grow one to draw ~90 glyphs it would then ship to every visitor. So the glyph tier
  * DEGRADES here to the tier below it, and every card without a logo wears its initials.
  *
- * The initials rule is deliberately the same as `initialsOf` in @intentic/ui and deliberately a second copy of
+ * The initials rule matches `initialsOf` in @intentic/ui and remains a second copy of
  * it: there is no dependency edge from this site to that package, and one shouldn't be added for eight lines
- * of string handling. Keep them in step by hand — "acme.jira" → AJ on both sides. */
+ * of string handling. Keep them in step by hand: "acme.jira" → AJ on both sides. */
 export const markInitials = (name: string): string => {
     const words = name.split(/[\s._@-]+/).filter((word) => word !== "");
     const [first, second] = words;

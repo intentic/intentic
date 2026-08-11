@@ -1,6 +1,6 @@
 import { githubReleasesUrl } from "@intentic-dev/site-content/site";
 
-/* THE CHANGELOG'S DATA, read at BUILD time from the published GitHub Releases — the same bargain the extension
+/* THE CHANGELOG'S DATA, read at BUILD time from the published GitHub Releases: the same bargain the extension
  * gallery makes next door (registry.ts): a static page cut from somebody else's JSON, with no backend behind it.
  *
  * THE RELEASE BODY IS THE SOURCE, and that is the whole design rather than an implementation detail. Notes are
@@ -13,27 +13,35 @@ import { githubReleasesUrl } from "@intentic-dev/site-content/site";
  *
  * NO FALLBACK COPY, unlike the gallery. A gallery a fortnight stale is still a gallery; a changelog a fortnight
  * stale is wrong in the one way a changelog must not be. When the read fails the page says so and points at the
- * releases page, which is honest and still builds — a marketing site must not go red because api.github.com had
+ * releases page, which is honest and still builds: a marketing site must not go red because api.github.com had
  * a bad minute. */
 
 const RELEASES_API = "https://api.github.com/repos/intentic/intentic/releases?per_page=100";
 
 // The headings publish-github.sh writes, and the contract between the two files. Everything under each, up to
-// the next heading, is the release's user-facing notes — and its breaking sentences, when a commit declared a
+// the next heading, is the release's user-facing notes, and its breaking sentences, when a commit declared a
 // break (`Breaking-Note:` trailers, the rare sibling of `Release-Note:`).
 const WHATS_NEW_HEADING = /^##\s+What's new\s*$/i;
 const BREAKING_HEADING = /^##\s+Breaking changes\s*$/i;
 
+const naturalPunctuation = (text: string): string =>
+    text
+        .replace(/ \u2014 (and|or|but|which|while) /g, ", $1 ")
+        .replace(/ \u2014 so /g, ". So ")
+        .replace(/ \u2014 because /g, " because ")
+        .replace(/ \u2014 /g, ": ")
+        .replace(/\u2014/g, ":");
+
 export interface ChangelogEntry {
-    /** The plain release version, no `v` — what the app reports as its own and compares against. */
+    /** The plain release version, no `v`: what the app reports as its own and compares against. */
     version: string;
     /** ISO 8601, for the dateline and for `<time datetime>`. */
     publishedAt: string;
     /** This release's page on GitHub, where the full technical notes and the downloads are. */
     url: string;
-    /** The user-facing lines, in the order the release lists them. Never empty — see loadChangelog. */
+    /** The user-facing lines, in the order the release lists them. Never empty: see loadChangelog. */
     notes: string[];
-    /** What this release takes away — the "Breaking changes" lines. Empty for almost every release. */
+    /** What this release takes away: the "Breaking changes" lines. Empty for almost every release. */
     breaking: string[];
 }
 
@@ -51,12 +59,12 @@ const sectionBullets = (body: string, heading: RegExp): string[] => {
     const notes: string[] = [];
     for (const line of lines.slice(start + 1)) {
         const trimmed = line.trim();
-        // The next heading of any level ends the section — "### Features" is where the commit-subject list starts.
+        // The next heading of any level ends the section: "### Features" is where the commit-subject list starts.
         if (trimmed.startsWith("#")) {
             break;
         }
         if (trimmed.startsWith("- ")) {
-            notes.push(trimmed.slice(2).trim());
+            notes.push(naturalPunctuation(trimmed.slice(2).trim()));
         }
     }
     return notes.filter((note) => note !== "");
@@ -85,7 +93,7 @@ const toEntry = (release: GithubRelease): ChangelogEntry | undefined => {
     const notes = parseNotes(body);
     const breaking = parseBreaking(body);
     // A release nobody outside the project would notice is not an entry. At three releases a day this is most of
-    // them, and listing them anyway — "1.184.1: nothing to report" — is the noise the notes exist to replace. A
+    // them. Listing them as "1.184.1: nothing to report" is the noise the notes exist to replace. A
     // release that only breaks is still an entry: that is the one page must not go quiet about.
     return notes.length === 0 && breaking.length === 0 ? undefined : { version: tag.replace(/^v/, ""), publishedAt, url, notes, breaking };
 };
@@ -116,7 +124,7 @@ export const loadChangelog = async (): Promise<Changelog> => {
         entries.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
         return { entries, unavailable: false };
     } catch (error) {
-        console.warn(`[changelog] live read failed (${String(error)}) — the page will point at ${githubReleasesUrl}`);
+        console.warn(`[changelog] live read failed (${String(error)}): the page will point at ${githubReleasesUrl}`);
         return { entries: [], unavailable: true };
     }
 };

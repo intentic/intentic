@@ -1,13 +1,13 @@
 ---
 import type { DocsHeading } from "../lib/docs-headings";
 
-/* "On this page" — the list of the current page's own sections.
+/* "On this page": the list of the current page's own sections.
  *
  * THE PROBLEM IT SOLVES: the HTTP API page is about nine screens tall with eleven major sections, the manifest
  * reference is twelve field groups, and neither had any way to move inside it. Reference material is not read
  * top to bottom; someone arrives wanting "Failures" or "contributes.settings" and scrolled blind to find it.
  *
- * TWO PLACEMENTS, ONE LIST, and they are rendered at DIFFERENT POINTS IN THE PAGE — which is why this takes a
+ * TWO PLACEMENTS, ONE LIST, and they are rendered at DIFFERENT POINTS IN THE PAGE, which is why this takes a
  * variant rather than deciding for itself. The rail is the grid's third column, so on a narrow screen it stacks
  * BELOW the article: a section list at the foot of a nine-screen page is worse than none, because you only reach
  * it once you no longer need it. The inline twin therefore renders inside the article, under the header, where
@@ -17,7 +17,7 @@ import type { DocsHeading } from "../lib/docs-headings";
  * the first sentence, and <details> works with no JavaScript at all.
  *
  * SUPPRESSED UNDER THREE HEADINGS: a page with two sections has a table of contents you can already see.
- * The behaviour — scroll-spy, anchor copying — lives in DocsLayout, which renders once per page.
+ * The behaviour, including scroll-spy and anchor copying, lives in DocsLayout, which renders once per page.
  */
 
 interface Props {
@@ -38,7 +38,7 @@ const indent = (heading: DocsHeading): string => (heading.level === 3 ? "pl-5" :
 {
     worthIt &&
         (variant === `rail` ? (
-            // `hidden xl:block` — it appears only when there is room for a third column without squeezing the
+            // `hidden xl:block`: it appears only when there is room for a third column without squeezing the
             // prose, which is the one thing on the page that must not get narrower.
             <aside class="hidden xl:block" data-docs-toc>
                 {/* Same offset as the shelf rail, so the two columns line up and both get the full height. */}

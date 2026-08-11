@@ -7,11 +7,11 @@ import { type Book, type BookPage, bookHref } from "@intentic-dev/site-content/b
  * "Manifest reference" sitting at the same indent as "Extensions" so the tree's real shape was invisible. A
  * reader could not tell from the rail which of two adjacent rows was a chapter and which was a page inside one.
  *
- * NOTHING COLLAPSES. A book's rows across its labelled shelves fit a viewport — which is part of why there are
- * two books — and a collapsing rail costs a click on every visit to see where you are, the thing a sidebar
+ * NOTHING COLLAPSES. A book's rows across its labelled shelves fit a viewport, which is part of why there are
+ * two books, and a collapsing rail costs a click on every visit to see where you are, the thing a sidebar
  * exists to tell you. The shelf you are on is marked instead, so orientation is free.
  *
- * NO AUDIENCE LINES HERE, though the shelves carry them. Rendered in the rail they cost about 180px — enough
+ * NO AUDIENCE LINES HERE, though the shelves carry them. Rendered in the rail they cost about 180px: enough
  * that on a 1000px-tall viewport the last shelf fell below the rail's own scroll, which is the opposite of what
  * this rewrite was for. They are a CHOOSING aid, so they belong where someone is choosing: the index states each
  * as a question, and the top bar's menu carries them under each row. Once you are inside a book, the label plus
@@ -26,7 +26,7 @@ interface Props {
 const { book, pageId } = Astro.props;
 
 // Two MUTUALLY EXCLUSIVE class sets rather than a base plus an override. Tailwind resolves a conflict by
-// stylesheet order, not by the order classes appear on the element — and `border-transparent`/`text-muted`
+// stylesheet order, not by the order classes appear on the element, and `border-transparent`/`text-muted`
 // are emitted after `border-primary-500`/`text-content`, so a base carrying them beat the active pair and
 // the current page rendered identically to every other row.
 const rowBase = "block border-l-2 py-1 text-sm transition-colors";
@@ -40,7 +40,7 @@ const isActiveShelf = (pages: BookPage[]): boolean => pages.some((page) => page.
 
 const flatten = (pages: BookPage[]): BookPage[] => pages.flatMap((page) => [page, ...(page.children ?? [])]);
 
-/* A group whose label repeats its own first row shows it twice — an Extensions group leading with the Extensions
+/* A group whose label repeats its own first row shows it twice: an Extensions group leading with the Extensions
  * page made the rail read "Extensions / Extensions / Build an extension". The label is there to separate a run
  * from its neighbours, and a parent row with indented children already does that, so it is dropped in that case.
  * "Worked examples" survives, because no page is called that. */

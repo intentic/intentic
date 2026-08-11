@@ -28,7 +28,7 @@ const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPT
 const datePublished = meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;
 
-// A page with a breadcrumb trail is a page inside the documentation — which is also what makes it an
+// A page with a breadcrumb trail is a page inside the documentation, which is also what makes it an
 // article rather than a site page, so the two travel together instead of as two props that can disagree.
 const breadcrumbs = Astro.props.breadcrumbs;
 const isArticle = breadcrumbs !== undefined && breadcrumbs.length > 0;
@@ -36,7 +36,7 @@ const isArticle = breadcrumbs !== undefined && breadcrumbs.length > 0;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
 // The card astro-opengraph-images will write for this page, named by the same function the integration uses to
-// find it — the two MUST agree or the build fails, which is the point: a page can no longer advertise an image
+// find it: the two MUST agree or the build fails, which is the point: a page can no longer advertise an image
 // nobody generated. `path` rather than Astro.url so the name is the built (always-slashed) one in dev too.
 const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
 const defaultOgPath = perPageOgAvailable && meta ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";

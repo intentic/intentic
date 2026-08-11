@@ -19,7 +19,7 @@ function isActive(entry: NavEntry): boolean {
 }
 
 /* A menu row points at ONE page, so it lights up only on that page. The trigger above matches a prefix because
- * a whole menu is "current"; a row must not — /docs/ is a prefix of every docs page, which made "Overview" the
+ * a whole menu is "current"; a row must not: /docs/ is a prefix of every docs page, which made "Overview" the
  * current row everywhere under Docs, and "Extensions" current on each of its three children.
  * The trailing slash is "always" in a build and "ignore" in dev, so it is not part of the comparison. */
 const bare = (path: string): string => path.replace(/\/+$/, "");
@@ -29,9 +29,9 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 <nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
     <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         {/* The wordmark is what a phone paints largest before the hero image arrives, so it IS the LCP on
-            every page here — hence eager and fetchpriority=high, ahead of the stylesheet's other requests.
+            every page here: hence eager and fetchpriority=high, ahead of the stylesheet's other requests.
             `shrink-0` because the links row does not wrap: without it a bar one link too full pays for the
-            overflow out of the BRAND, silently — the wordmark rendered at 50px of its 126 before this. */}
+            overflow out of the BRAND, silently: the wordmark rendered at 50px of its 126 before this. */}
         <a href="/" class="flex shrink-0 items-center no-underline">
             <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} loading="eager" fetchpriority="high" class="h-6 w-auto" />
         </a>
@@ -47,7 +47,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
         {/* The bar swaps to the hamburger at 64rem, not the 48rem it used to: six links, the repo mark and the
             CTA need ~900px of the 1280 this row ever gets, and at 48rem they had 768 to share with the
-            wordmark. A tablet gets the overlay — the same navigation, laid out for a width that can hold it.
+            wordmark. A tablet gets the overlay: the same navigation, laid out for a width that can hold it.
             Which of the two shows is decided ONLY by the media query in this file's <style> and the matching
             one in MobileNav: an Astro scoped rule is unlayered and so outranks any Tailwind `max-lg:hidden`
             here however specific that looks, and a second spelling of the breakpoint is a second answer at
@@ -69,7 +69,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                 </button>
 
                                 {/* The panel. Its column count follows the section count, so Product reads as
-                                    its three shelves and Docs as one narrow column of destinations — and the
+                                    its three shelves and Docs as one narrow column of destinations, and the
                                     preview rail exists only where there are screenshots to preview. */}
                                 <div class:list={["menu-panel", { "has-preview": preview.length > 0 }]}>
                                     <div class="menu-sections" style={`--menu-columns:${entry.sections.length}`}>
@@ -99,7 +99,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                     {preview.length > 0 && (
                                         <div class="menu-preview">
                                             {preview.map(({ href, shot }, i) => (
-                                                /* A fixed 34rem box — the menu only exists from lg up, so
+                                                /* A fixed 34rem box: the menu only exists from lg up, so
                                                    this is one width, not a viewport formula. The rail asks
                                                    for 170% below, but Tailwind's `img { max-width: 100% }`
                                                    holds it to the box, and `sizes` follows what paints. */
@@ -168,7 +168,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                 </a>
             </li>
 
-            {/* The community mark, beside the repo mark and before the CTA — code, then people, then act.
+            {/* The community mark, beside the repo mark and before the CTA: code, then people, then act.
                 Icon-only for the same reason GitHub is: this bar is already six labels and a button wide, and
                 a seventh WORD is what pushes the wordmark into shrinking. An aria-label carries the meaning a
                 glyph cannot, and the title tooltip names it for the sighted reader who does not know the mark. */}
@@ -250,7 +250,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
     /* The two marks are glyphs, not words, and a word's 14px of side padding around a 16px icon reads as a
        gap rather than a button: at that padding the pair sits as far apart as two menu labels, which is how
        GitHub and Discord stop looking like one cluster of marks and start looking like two orphaned links.
-       Tighter here, so the pair reads as a pair — and 20px of the bar's width comes back with it, which is
+       Tighter here, so the pair reads as a pair, and 20px of the bar's width comes back with it, which is
        what keeps a seventh item affordable. Still 34×32, comfortably over the 24px target floor. */
     .nav-link.icon {
         padding: 8px 9px;
@@ -290,7 +290,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         width: max-content;
         max-width: min(94vw, 78rem);
         /* Opaque, not "nearly": the panel sits over the hero's white 3xl heading, and on a canvas this dark
-           even 3% bleed lifts that text ~8/255 — which the blur then spreads into a legible ghost across the
+           even 3% bleed lifts that text ~8/255, which the blur then spreads into a legible ghost across the
            menu. The translucency belongs to the nav BAR, which content is meant to scroll under; a menu has
            to be readable. Nothing behind it means backdrop-filter buys only a compositing layer. */
         background: var(--color-canvas);
@@ -406,7 +406,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         color: var(--color-link);
     }
 
-    /* The rail: every product shot stacked, one visible. Cropped to a wide strip — the panel is selling the
+    /* The rail: every product shot stacked, one visible. Cropped to a wide strip: the panel is selling the
        surface at a glance, and the whole 1240px-tall board would shrink to nothing here. It is 34rem because
        the shots are 1072 CSS px of real interface: a rail much narrower than that renders the app's own text
        too small to read, which is all a preview has to do. */
@@ -422,7 +422,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
     /* Zoomed to its top-left corner rather than fitted: a whole surface scaled to fit the rail is a grey
        rectangle, while its first lanes are recognisably the screen the row leads to. 170% of a 34rem rail is
-       ~925px of a 1072px-wide shot — near enough to native that the lane headers and card titles read. */
+       ~925px of a 1072px-wide shot: near enough to native that the lane headers and card titles read. */
     .menu-preview-shot {
         position: absolute;
         top: 0;
@@ -497,7 +497,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                 if (event.pointerType !== "touch") openMenu(item);
             });
 
-            // Leaving closes — unless the keyboard is inside the panel, in which case a stray mouse
+            // Leaving closes: unless the keyboard is inside the panel, in which case a stray mouse
             // movement must not yank the rows out from under whoever is tabbing through them.
             item.addEventListener("pointerleave", (event) => {
                 const keyboardInside = item.contains(document.activeElement) && document.activeElement !== trigger;
@@ -526,7 +526,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             open.querySelector(".nav-link")?.focus();
         });
 
-        // Anything pressed outside the menus — the page, a plain nav link — is a dismissal.
+        // Anything pressed outside the menus, such as the page or a plain nav link, dismisses them.
         document.addEventListener("pointerdown", (event) => {
             if (!event.target?.closest?.(".nav-item.has-menu")) openMenu(null);
         });

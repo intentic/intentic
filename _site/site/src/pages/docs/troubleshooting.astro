@@ -8,8 +8,8 @@ import DocsRelated from "../../components/DocsRelated.astro";
  *
  * An audit searched this site for "troubleshoot" and for "not working" and got nothing back, on a product whose
  * hard parts are Docker, a tunnel and somebody else's credentials. All the failure-mode writing that existed was
- * one paragraph on the Doorbell page, and it is the best paragraph on the site — so this page is built to its
- * shape, deliberately: SYMPTOM as the heading, in the words a reader would use; the cause in a sentence; the fix;
+ * one paragraph on the Doorbell page, and it is the best paragraph on the site. This page follows its shape:
+ * SYMPTOM as the heading, in the words a reader would use; the cause in a sentence; the fix;
  * and where the product already says so, because most of these announce themselves and the reader has not
  * necessarily looked.
  *
@@ -18,7 +18,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * have.
  *
  * SYMPTOM HEADINGS, not causes ("The workspace never opens", not "Tunnel misconfiguration"). A reader arriving
- * here cannot name the cause — that is the whole reason they are here — and the section rail and the search index
+ * here cannot name the cause: that is the whole reason they are here, and the section rail and the search index
  * both read these headings. */
 
 const twoContainers = `# Both should be "Up". Two per sandbox, always.
@@ -39,17 +39,17 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 <DocsLayout
     pageId="troubleshooting"
     heading="Troubleshooting"
-    lead="What tends to go wrong, what causes it, and what to do — starting with the two checks that settle most of it. Every symptom here is one this product actually produces."
+    lead="What tends to go wrong, what causes it, and what to do: starting with the two checks that settle most of it. Every symptom here is one this product actually produces."
 >
     <h2>The two checks worth making first</h2>
     <p>
         If something is not working and you can't yet tell which half broke, start here. A sandbox is two containers and one outbound tunnel,
-        and almost everything below is one of those three not being where you think it is — so ask them directly rather than reading the app.
+        and almost everything below is one of those three not being where you think it is. So ask them directly rather than reading the app.
     </p>
     <DocsCodeBlock code={twoContainers} lang="bash" title="On the machine hosting the sandbox" />
     <p>
         Your sandbox's exact address is on <strong>Sandbox → Overview</strong>. If <code>/health</code> answers with{" "}
-        <code>"ok": true</code>, the daemon is alive and the tunnel is up, and the problem is above that line — a session, an account, a
+        <code>"ok": true</code>, the daemon is alive and the tunnel is up, and the problem is above that line: a session, an account, a
         permission. If it does not answer, the problem is below it, and the logs are the next stop.
     </p>
     <DocsCodeBlock code={logs} lang="bash" title="When /health says nothing" />
@@ -63,7 +63,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>The install command stopped and asked about Docker</h3>
     <p>
         You ran it without <code>sudo</code> on a machine that has no Docker Engine. Installing Docker is the one step that needs root, and
-        the script will not escalate on its own — so it stops and names your two options instead: re-run it with <code>sudo</code>, or
+        the script will not escalate on its own. So it stops and names your two options instead: re-run it with <code>sudo</code>, or
         install Docker yourself and re-run it without. Everything after that step is a docker or curl call your own user can make.
     </p>
 
@@ -71,7 +71,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the sandbox's setup screen and a fresh code is
         minted into a fresh command; nothing else is lost, and the sandbox you already created is still the same sandbox. Re-running a command
-        whose code is still valid is also safe — see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.
+        whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.
     </p>
 
     <h3>docker run says the port is already in use</h3>
@@ -79,7 +79,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         The container publishes a loopback listener at a port derived from your sandbox's id, and something else on the machine holds it. That
         port is only a shortcut for a browser on this same machine, so it is safe to drop: re-run{" "}
         <a href="/docs/quickstart/#docker-run">step 4</a> with <code>--no-local-publish</code> and the sandbox works over its tunnel as usual.
-        The scripted install paths do this for you — they retry without the port rather than failing.
+        The scripted install paths do this for you: they retry without the port rather than failing.
     </p>
 
     <h3>The workspace never opens</h3>
@@ -91,8 +91,8 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>A capability the image was supposed to carry isn't there</h3>
     <p>
-        An <em>optional</em> image fragment that this host cannot satisfy — a GPU fragment on a machine with no NVIDIA runtime — is skipped
-        rather than failing the launch, and the sandbox records that it couldn't. So the container is healthy and the tool is genuinely
+        An <em>optional</em> image fragment that this host cannot satisfy, such as a GPU fragment on a machine with no NVIDIA runtime, is skipped
+        instead of failing the launch. The sandbox records the skip, so the container is healthy and the tool is
         absent. Required fragments behave the opposite way, and stop the launch.
     </p>
 
@@ -101,14 +101,14 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>Every browser session stopped verifying at once</h3>
     <p>
         That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session for this sandbox
-        stops verifying — including yours. Your own browser silently re-establishes from the Google credential it already holds, so it looks
+        stops verifying: including yours. Your own browser silently re-establishes from the Google credential it already holds, so it looks
         like nothing happened locally while everyone else is signed out. That is the intended shape of it.
     </p>
 
     <h3>An update left the sandbox worse</h3>
     <p>
         An update that cannot come up healthy puts your previous sandbox back by itself, so a failed update is not something you have to
-        recover from. An update that came up healthy and is simply worse is a rollback you ask for — <code>/work</code> and your history
+        recover from. An update that came up healthy but works worse is a rollback you ask for: <code>/work</code> and your history
         survive both, because they live in named volumes rather than in the container. See{" "}
         <a href="/docs/updates/">Updates &amp; rollback</a>.
     </p>
@@ -131,8 +131,8 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>Unattended runs error every time and chats are fine</h3>
     <p>
         This is the commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the
-        provider's first unless something pinned one. When that first account runs out of headroom — or belongs to an organisation that turned
-        the plan off — every automation, Doorbell and nightly workflow errors against it until a person reads the row.
+        provider's first unless something pinned one. When that first account runs out of headroom, or belongs to an organisation that turned
+        the plan off: every automation, Doorbell and nightly workflow errors against it until a person reads the row.
     </p>
     <p>
         The sandbox keeps the last refusal per provider and shows it beside the account on <strong>Sandbox → Agent</strong>, which is where
@@ -143,8 +143,8 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>An automation records runs as skipped and never wakes</h3>
     <p>
         A <a href="/docs/glossary/">guard</a> is doing its job. A guard is a shell one-liner run in the workspace before the wake: exit 0 and
-        the agent wakes, anything else and the run is recorded as skipped. A guard that can never exit 0 — a path that moved, a command the
-        image no longer has — reads exactly like an automation that stopped firing.
+        the agent wakes, anything else and the run is recorded as skipped. A guard that can never exit 0: a path that moved, a command the
+        image no longer has: reads exactly like an automation that stopped firing.
     </p>
 
     <h3>Fires are queued and nothing runs</h3>
@@ -158,7 +158,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         Nearly always the allowed origin. <code>https://example.com</code> and <code>https://www.example.com</code> are different origins, the
         site redirects one to the other, and the browser ends up on the one you did not list. List both. The install panel names the origin it
-        turned away and offers to add it — <a href="/docs/doorbell/">Doorbell</a> has the detail.
+        turned away and offers to add it: <a href="/docs/doorbell/">Doorbell</a> has the detail.
     </p>
 
     <h2>Landing work</h2>
@@ -166,21 +166,21 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <h3>Nothing landed and the card says conflict</h3>
     <p>
         The agent's patch could not apply to your main tree: you edited the same lines, or an overlapping file is dirty. Nothing lands for
-        that repo, and the card says so rather than landing half of it. The worktree keeps everything, so resolve your side and land again —
+        that repo, and the card says so instead of landing half of it. The worktree keeps everything, so resolve your side and land again;
         it works the moment the tree is clean. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
     </p>
 
     <h3>Work is already in main and the card still wants to land</h3>
     <p>
         Work that reached the main tree by another road is not treated as a conflict. An agent that committed onto the main line itself, or a
-        branch you merged by hand, resolves as "already there" — so landing it is a no-op rather than a refusal. Landing twice is safe by
+        branch you merged by hand, resolves as "already there". So landing it is a no-op rather than a refusal. Landing twice is safe by
         design.
     </p>
 
     <h3>Finished agents disappeared</h3>
     <p>
         Finished agents are archived after three days by default, on <strong>Sandbox → Agent</strong>. That sweep is on where almost
-        everything else is off, because a finished card holds a full checkout of every repo — a lane that grew forever would be disk that grew
+        everything else is off, because a finished card holds a full checkout of every repo: a lane that grew forever would be disk that grew
         forever.
     </p>
 
@@ -190,28 +190,28 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
     <p>
         A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and a
         route it did not declare throws. So a missing surface usually means the manifest and the code disagree. When an extension's manifest
-        grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences — approval never transfers to powers you did
+        grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences. Approval never transfers to powers you did
         not approve. <a href="/docs/extensions/">Extensions</a> covers what you approved; the{" "}
         <a href="/api/manifest/">manifest reference</a> is what its author had to declare.
     </p>
 
     <h3>One capability vanished and the rest still work</h3>
     <p>
-        A stored connection that cannot be read — a hand-edit, a format that moved — is skipped and reported <em>by name</em>, never
-        rewritten away, and every other capability keeps working. Reconnect that one card. <a href="/docs/capabilities/">Capabilities</a>{" "}
+        An unreadable stored connection is skipped and reported <em>by name</em>. It may come from a hand edit or an old format, but it is never
+        rewritten and every other capability keeps working. Reconnect that one card. <a href="/docs/capabilities/">Capabilities</a>{" "}
         covers where the credential lives.
     </p>
 
     <h3>An extension was switched off on its own</h3>
     <p>
-        Its registry listing is marked <code>blocked</code> — known-malicious or known-broken. The advisory on the installed row carries the
+        Its registry listing is marked <code>blocked</code>: known-malicious or known-broken. The advisory on the installed row carries the
         registry's recorded reason. Disabling is the one automatic action the trust model permits, because it runs no new code and reverses
         with a click. <a href="/docs/extensions/">Extensions</a> states the whole model.
     </p>
 
     <h2>When none of this is it</h2>
     <p>
-        The daemon keeps its own debug logs — terminal captures, CLI run logs and <code>daemon.log</code> — and they are reachable over the
+        The daemon keeps terminal captures, CLI run logs and <code>daemon.log</code>. They are reachable over the
         API and in the desktop app. Your files are never the thing at risk while you dig: <code>/work</code> and your history are named Docker
         volumes, and removing, updating or rebuilding a container does not touch them.
     </p>
@@ -220,8 +220,8 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         click. Discord first because most of what lands here is a question someone has already answered
         once; Issues second, for the failure that reproduces and should therefore leave a record. */}
     <p>
-        And if none of it says anything either: bring the symptom to the <a href={discordUrl}>Discord community</a> — most of what reaches
-        this page is something somebody has already hit — or <a href={githubIssuesUrl}>open an issue</a> if you can make it happen twice.
+        And if none of it says anything either: bring the symptom to the <a href={discordUrl}>Discord community</a>: most of what reaches
+        this page is something somebody has already hit, or <a href={githubIssuesUrl}>open an issue</a> if you can make it happen twice.
         Either way, the logs above are what makes it answerable.
     </p>
 

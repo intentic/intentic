@@ -1,16 +1,16 @@
 import { productHref } from "./product";
 import { githubProfileUrl, githubUrl, linkedinProfileUrl, personalSiteUrl } from "./site";
 
-/* Who builds this, as data — shared by the landing page's trust band and by /about/.
+/* Who builds this, as data: shared by the landing page's trust band and by /about/.
  *
  * It exists because the site asks for an unusual amount of trust: a visitor is about to run a container
  * on their own machine and hand it a GitHub token, a database password and write access to a repo.
  * "The platform architecturally cannot reach in" answers half of that (`#ownership`); the other half is
- * *who is making that promise*, and until now the founder existed only in the page's JSON-LD — told to
+ * *who is making that promise*, and until now the founder existed only in the page's JSON-LD: told to
  * Google, never to the reader.
  *
  * The rule for everything in this file: it must be checkable. No testimonials, no logo wall, no
- * "trusted by N developers" — the product is weeks old and the honest version of that is a strength
+ * "trusted by N developers": the product is weeks old and the honest version of that is a strength
  * only if we say it plainly. Every claim below is either linkable to a public profile or measured from
  * this repository at build time (`gitStats()`), never authored as a number.
  */
@@ -33,7 +33,7 @@ export interface TrustCard {
     linkLabel?: string;
 }
 
-/** A line of the background list — the lead is bolded, the rest is context. */
+/** A line of the background list: the lead is bolded, the rest is context. */
 export interface BackgroundItem {
     lead: string;
     body: string;
@@ -49,7 +49,7 @@ export interface OpenSourceProject {
 export const CREATOR_NAME = "Artur Kurowski";
 export const CREATOR_HANDLE = "radarsu";
 
-/* Split so no `\S+@\S+` exists anywhere in the served HTML — the address is assembled in the browser.
+/* Split so no `\S+@\S+` exists anywhere in the served HTML: the address is assembled in the browser.
  * See AboutContact.astro: a human reads the parts, a harvester's regex finds nothing, and with
  * JavaScript off the address is still legible, just not clickable. */
 export const CONTACT_EMAIL_PARTS = { user: "radarsu", domain: "gmail.com" } as const;
@@ -65,11 +65,11 @@ export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shippi
 export const creatorBio = "I wanted a real workspace for my agents, on my own hardware. Now it runs on yours too.";
 
 /* Four cards, and the fourth is the one that makes the other three believable. A trust section with no
- * admission in it reads as marketing; this product is genuinely new, and saying so is the position. */
+ * admission in it reads as marketing; this product is new, and saying so is the position. */
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "The platform holds only your identity and a URL — never your code, keys or sandbox.",
+        body: "The platform holds only your identity and a URL. It never receives your code, keys or sandbox.",
         href: productHref("delegate"),
         linkLabel: "What the platform actually holds",
     },
@@ -128,7 +128,7 @@ export const openSource: OpenSourceProject[] = [
 
 export const whyIntentic = [
     "Agents got good enough for real work; their tools did not. All you can change is the prompt.",
-    "Fine — until it needs your database password. With intentic the machine is yours, and the vendor can't reach it.",
+    "That works until it needs your database password. With intentic the machine is yours, and the vendor can't reach it.",
 ];
 
 export const aboutMeta = {
