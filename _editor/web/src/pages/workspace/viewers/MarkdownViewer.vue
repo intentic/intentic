@@ -158,13 +158,24 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             <!-- Delegated click: the file links live inside the component's v-html, so they can hold no
                  listener of their own (the copy buttons are <Markdown>'s own business). -->
             <template v-if="view === `preview`">
-                <div ref="scroller" class="scrollbar-thin h-full min-w-0 flex-1 overflow-auto bg-canvas px-6 py-5" @click="openFileRefFromEvent">
+                <!-- `ui-softscroll`, NOT `scrollbar-thin`, and the rail is the reason. scrollbar-thin paints a
+                     permanent line-strong thumb, which put a solid vertical bar immediately to the left of the
+                     rail's spine — two position indicators a few pixels apart, in two visual languages, saying
+                     the same thing. This scrollbar is a whisper until the pointer is in the column and a real
+                     thumb the moment it is, so the one line standing in that gutter is the one that also names
+                     the section it marks. (Its stable gutter is why the prose does not shift when a document
+                     turns out to fit.) -->
+                <div ref="scroller" class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas px-6 py-5" @click="openFileRefFromEvent">
                     <Markdown :source="source" :decorate="decorate" class="mx-auto max-w-3xl" />
                 </div>
                 <!-- The rail is a SIBLING of the scroller, not a sticky column inside it: its own scrolling is
                      then independent of the document's, which is what a 60-heading outline beside a nine-screen
-                     file needs. -->
-                <aside v-if="docked" class="flex w-52 shrink-0 flex-col border-l border-line py-5 pl-2 pr-3">
+                     file needs.
+                     NO BORDER ON THIS EDGE. The rows inside already draw a continuous line down their left,
+                     and a container rule beside it was a second hairline 9px away drawing the same boundary
+                     twice. What separates the rail from the prose is the gutter the centred column already
+                     leaves — which is wider than the rail itself. -->
+                <aside v-if="docked" class="flex w-52 shrink-0 flex-col py-5 pl-2 pr-4">
                     <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="outline.jump" />
                 </aside>
             </template>
