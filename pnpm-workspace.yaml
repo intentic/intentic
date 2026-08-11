@@ -43,6 +43,20 @@ overrides:
   # here — so GHSA-xcpc-8h2w-3j85 is unreachable in this workspace. Pinned to the patched 0.6.0 anyway so the
   # tree does not carry a known-bad copy for whoever enables that build later.
   "onnxruntime-node>adm-zip": 0.6.0
+  # monaco-editor-core bundles its own dompurify 3.2.7 — eighteen sanitiser-bypass advisories, and unlike the
+  # entries above this one is reachable: it is the sanitiser the editor runs over rendered markdown. Same major
+  # as the catalog entry, so this dedupes the tree onto one copy rather than adding a second.
+  "monaco-editor-core>dompurify": 3.4.13
+  # mermaid pins dompurify to an exact 3.4.12, one patch below the fix for GHSA-55q2-fjhq-7xh7, and it is the
+  # sanitiser mermaid runs over diagram labels. Same reasoning and same target as the entry above.
+  "mermaid>dompurify": 3.4.13
+  # miniflare (wrangler's local Workers runtime, a devDependency of the site) pins undici 7.28.0, which has five
+  # request/response-smuggling advisories. Patch bump inside the same major.
+  "miniflare>undici": 7.29.0
+  # @discordjs/node-pre-gyp unpacks @discordjs/opus's prebuilt binary with tar 6.2.1 — twelve path-traversal and
+  # DoS advisories, on the code path that extracts an archive fetched over the network at install time. That
+  # build is enabled in `allowBuilds`, so this is live rather than theoretical.
+  "@discordjs/node-pre-gyp>tar": 7.5.22
 
 minimumReleaseAgeExclude:
   - knip@6.29.0
@@ -174,7 +188,7 @@ catalog:
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
-  astro: 6.4.8
+  astro: 7.1.6
   astro-indexnow: 2.3.10
   astro-opengraph-images: 1.17.4
   bcryptjs: 3.0.3
@@ -184,11 +198,12 @@ catalog:
   croner: 10.0.1
   discord.js: 14.27.0
   docx-preview: 0.3.7
-  dompurify: 3.4.12
+  dompurify: 3.4.13
   esbuild: 0.28.1
   eta: 4.6.0
+  fast-check: 4.9.0
   file-type: 22.0.1
-  hono: 4.12.33
+  hono: 4.12.34
   idb-keyval: 6.3.0
   ignore: 7.0.6
   imapflow: 1.6.5
@@ -197,7 +212,7 @@ catalog:
   knip: 6.31.0
   mailparser: 3.9.14
   marked: 18.0.7
-  mermaid: 11.16.0
+  mermaid: 11.16.1
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
   ovsx: 1.1.1
@@ -210,6 +225,7 @@ catalog:
   prettier: 3.9.6
   primevue: 4.5.5
   prisma: 7.9.1
+  read-excel-file: 9.3.10
   semantic-release: 25.0.8
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
   # site has to declare it even though astro carries the same optional dependency. The two still share one
@@ -234,12 +250,5 @@ catalog:
   web-push: 3.6.7
   wrangler: 4.118.0
   ws: 8.21.1
-  xlsx: 0.18.5
   yaml: 2.9.0
   zod: 4.4.3
-
-# Named catalog: the Astro site needs Vite 7 (astro@6 peer `vite: ^7`), while the Vue platform is on Vite 8.
-# A genuine cross-major conflict that can't collapse to one version — the one justified split from the single catalog.
-catalogs:
-  site:
-    vite: 7.3.5

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-viewers",
     "version": "1.0.0",
-    "description": "File viewers (images, SVG, PDF, audio/video, docx, xlsx) — first-party intentic extension via contributes.viewers",
+    "description": "File viewers (images, SVG, PDF, audio/video, docx, xlsx) \u2014 first-party intentic extension via contributes.viewers",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -22,8 +22,7 @@
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "docx-preview": "catalog:",
-        "dompurify": "catalog:",
-        "xlsx": "catalog:"
+        "read-excel-file": "catalog:"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",

@@ -28,7 +28,7 @@
         "@intentic-dev/demo": "workspace:*",
         "@intentic/constants": "workspace:*",
         "typescript": "catalog:",
-        "vite": "catalog:site",
+        "vite": "catalog:",
         "wrangler": "catalog:"
     }
 }

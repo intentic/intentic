@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { Icon, Segmented } from "@intentic/extension-ui";
-import DOMPurify from "dompurify";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
 
-/* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and converts only the selected
- * sheet to an HTML table. A workbook is untrusted, so the returned markup is DOMPurify-sanitized on the main
- * thread before v-html. The host (FileViewer) fetches the file's bytes and passes them as `blob`. */
+/* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and hands back the selected
+ * sheet's VALUES. The table below is an ordinary template over those values — a workbook is untrusted, and the
+ * shape of that distrust used to be a sanitiser call over markup the file itself produced. Rows of strings and
+ * numbers have no markup to sanitise. The host (FileViewer) fetches the file's bytes and passes them as `blob`. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
 const sheets = ref<readonly string[]>([]);
 const active = ref(``);
-const activeHtml = ref(``);
+const activeRows = ref<SheetRows>([]);
 const loading = ref(true);
 const error = ref<string>();
 // Drops a stale parse when the open file changes, and a stale render when tabs are switched in quick succession.
@@ -21,19 +22,25 @@ let renderSeq = 0;
 let client: ReturnType<typeof createSheetWorkerClient> | undefined;
 
 const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, value: name })));
+// A spreadsheet's first row is its header far more often than not, and the rest of the grid is ragged: a row
+// is only as long as its last filled cell, so the column count has to come from the widest row rather than
+// from the first one, or the tail of a wider row would have nowhere to render.
+const columnCount = computed(() => activeRows.value.reduce((widest, row) => Math.max(widest, row.length), 0));
+const headerRow = computed(() => activeRows.value[0]);
+const bodyRows = computed(() => activeRows.value.slice(1));
 
 const renderSheet = async (name: string, id: number, target: NonNullable<typeof client>): Promise<void> => {
     const selected = ++renderSeq;
     active.value = name;
-    activeHtml.value = ``;
+    activeRows.value = [];
     loading.value = true;
     error.value = undefined;
     try {
-        const html = await target.render(name);
+        const rows = await target.render(name);
         if (id !== seq || selected !== renderSeq || target !== client) {
             return;
         }
-        activeHtml.value = DOMPurify.sanitize(html);
+        activeRows.value = rows;
     } catch (caught) {
         if (id !== seq || selected !== renderSeq || target !== client) {
             return;
@@ -61,7 +68,7 @@ const render = async (source: Blob): Promise<void> => {
     error.value = undefined;
     sheets.value = [];
     active.value = ``;
-    activeHtml.value = ``;
+    activeRows.value = [];
     try {
         const buffer = await source.arrayBuffer();
         if (id !== seq) {
@@ -116,13 +123,30 @@ onBeforeUnmount(() => {
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
                 <p class="text-sm text-danger">{{ error }}</p>
             </div>
-            <div v-else class="xlsx-sheet scrollbar-thin h-full overflow-auto p-4" v-html="activeHtml"></div>
+            <div v-else-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">This sheet is empty.</div>
+            <div v-else class="xlsx-sheet scrollbar-thin h-full overflow-auto p-4">
+                <table>
+                    <thead v-if="headerRow !== undefined">
+                        <tr>
+                            <th v-for="column in columnCount" :key="column" :class="{ numeric: typeof headerRow[column - 1] === `number` }">
+                                {{ headerRow[column - 1] }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(row, index) in bodyRows" :key="index">
+                            <td v-for="column in columnCount" :key="column" :class="{ numeric: typeof row[column - 1] === `number` }">
+                                {{ row[column - 1] }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>
 
-<!-- Unscoped: styles target the v-html-injected table (scoped selectors don't reach injected nodes). -->
-<style>
+<style scoped>
 .xlsx-sheet table {
     border-collapse: collapse;
     font-size: 0.8125rem;
@@ -134,7 +158,13 @@ onBeforeUnmount(() => {
     text-align: left;
     white-space: nowrap;
 }
-.xlsx-sheet tr:first-child td {
+/* Numbers read as a column when they share an edge; text does not. */
+.xlsx-sheet td.numeric,
+.xlsx-sheet th.numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.xlsx-sheet th {
     background: var(--color-card);
     font-weight: 600;
 }

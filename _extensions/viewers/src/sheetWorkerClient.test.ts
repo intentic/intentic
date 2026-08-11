@@ -56,12 +56,13 @@ describe(`spreadsheet worker client`, () => {
         worker.respond({ id: worker.sent[0]!.message.id, type: `loaded`, names: [`Summary`, `Data`] });
         await expect(loading).resolves.toEqual([`Summary`, `Data`]);
 
+        // Answered out of order on purpose: the client correlates by request id, not by arrival.
         const summary = client.render(`Summary`);
         const data = client.render(`Data`);
-        worker.respond({ id: worker.sent[2]!.message.id, type: `rendered`, html: `<table>data</table>` });
-        worker.respond({ id: worker.sent[1]!.message.id, type: `rendered`, html: `<table>summary</table>` });
-        await expect(summary).resolves.toBe(`<table>summary</table>`);
-        await expect(data).resolves.toBe(`<table>data</table>`);
+        worker.respond({ id: worker.sent[2]!.message.id, type: `rendered`, rows: [[`data`, 2]] });
+        worker.respond({ id: worker.sent[1]!.message.id, type: `rendered`, rows: [[`summary`, 1]] });
+        await expect(summary).resolves.toEqual([[`summary`, 1]]);
+        await expect(data).resolves.toEqual([[`data`, 2]]);
 
         client.close();
         expect(worker.terminated).toBe(true);

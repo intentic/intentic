@@ -1,4 +1,4 @@
-import type { SheetWorkerCommand, SheetWorkerRequest, SheetWorkerResponse } from "./sheetProtocol";
+import type { SheetRows, SheetWorkerCommand, SheetWorkerRequest, SheetWorkerResponse } from "./sheetProtocol";
 
 export interface SheetWorkerPort {
     postMessage(message: SheetWorkerRequest, transfer?: Transferable[]): void;
@@ -66,12 +66,12 @@ export const createSheetWorkerClient = (worker: SheetWorkerPort) => {
             }
             return response.names;
         },
-        async render(name: string): Promise<string> {
+        async render(name: string): Promise<SheetRows> {
             const response = await request({ type: `render`, name });
             if (response.type !== `rendered`) {
                 throw new Error(`Spreadsheet worker returned an unexpected response.`);
             }
-            return response.html;
+            return response.rows;
         },
         close(): void {
             if (closed) {

@@ -80,6 +80,7 @@
         "@vitejs/plugin-vue": "catalog:",
         "@xterm/headless": "catalog:",
         "esbuild": "catalog:",
+        "fast-check": "catalog:",
         "jsdom": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",

@@ -36,9 +36,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The DEFAULT every job inherits is read-only on both counts: `packages: read` is what pulling a ghcr
+# container needs, and that is all most jobs here do. The four jobs that actually push a tag name
+# `packages: write` themselves. Kept read at this level deliberately — a write granted here is a write
+# handed to every job in the file, including the ones that run a fork's code.
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
@@ -243,6 +247,10 @@ jobs:
     if: needs.changes.outputs.ci-base == 'true'
     runs-on: [self-hosted, intentic]
     timeout-minutes: 60
+    # Pushes ci-base:latest, so it needs the write the workflow default withholds.
+    permissions:
+      contents: read
+      packages: write
     steps:
       # Runs on the host, so it needs the workspace back from the container jobs before checkout — see the
       # step of the same name in `changes` for why.
@@ -301,6 +309,10 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.ci-desktop == 'true' && needs.ci-base.result != 'failure' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 90
+    # Pushes ci-desktop:latest — same reason as ci-base.
+    permissions:
+      contents: read
+      packages: write
     steps:
       # As in ci-base: a host job, so the workspace comes back before checkout.
       - name: Reclaim the workspace from the container jobs
@@ -670,6 +682,10 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 60
+    # Publishes the sandbox and dind-host tags, so write here rather than in the workflow default.
+    permissions:
+      contents: read
+      packages: write
     env:
       # Pinned rather than left to publish-images.sh's default: ghcr.io is the only registry the login below
       # authenticates to, and every extra entry costs a second ~1.5 GB upload plus two more `--cache-from`
@@ -808,6 +824,10 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 60
+    # Publishes the platform images — same reason as `images`.
+    permissions:
+      contents: read
+      packages: write
     env:
       # Same pin as the `images` job — docker-release.sh carries the identical default, and this job
       # authenticates to ghcr.io only.

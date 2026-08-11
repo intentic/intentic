@@ -1,0 +1,114 @@
+# Triage for the advisories against this Cargo.lock. Read by osv-scanner, and by OpenSSF Scorecard's
+# Vulnerabilities check, which shells out to the same scanner.
+#
+# EVERY entry here is unfixable from this repository, not merely inconvenient. Each one is a transitive
+# dependency of Tauri's Linux stack with no released version that resolves it, verified against crates.io
+# rather than assumed. Nothing reachable and patchable belongs in this file — if a fix ships, the entry goes,
+# and `ignoreUntil` is what forces that question to be asked again rather than left to rot.
+#
+#   bash: cargo update -p <crate> --dry-run   # before adding anything here, prove there is nowhere to go
+#
+# --- the GTK3 bindings ---------------------------------------------------------------------------------------
+# gtk-rs archived its GTK3 bindings and marked the whole family unmaintained. Tauri v2 still targets GTK3 +
+# webkit2gtk on Linux (tauri 2.11.5 -> gtk 0.18.2), so every Tauri desktop app on Linux carries these. They are
+# informational "unmaintained" advisories, not exploitable defects. The exit is Tauri moving off GTK3 upstream;
+# there is no version of these crates to move to.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0411"
+ignoreUntil = 2027-02-01
+reason = "gdkwayland-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0412"
+ignoreUntil = 2027-02-01
+reason = "gdk: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0413"
+ignoreUntil = 2027-02-01
+reason = "atk: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0414"
+ignoreUntil = 2027-02-01
+reason = "gdkx11-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0415"
+ignoreUntil = 2027-02-01
+reason = "gtk: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0416"
+ignoreUntil = 2027-02-01
+reason = "atk-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0417"
+ignoreUntil = 2027-02-01
+reason = "gdkx11: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0418"
+ignoreUntil = 2027-02-01
+reason = "gdk-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0419"
+ignoreUntil = 2027-02-01
+reason = "gtk3-macros: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0420"
+ignoreUntil = 2027-02-01
+reason = "gtk-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
+
+# --- glib, and the macro crate it drags in ---------------------------------------------------------------
+# RUSTSEC-2024-0429 is fixed in glib 0.20, which is the gtk4 line — unreachable while gtk 0.18 pins glib 0.18.
+# The unsoundness is in glib's Iterator impls, which this app does not call directly. proc-macro-error is
+# unmaintained and arrives only through glib-macros 0.18.5 and gtk3-macros: a BUILD-TIME proc macro, so it does
+# not ship in the binary at all. Both leave when the GTK3 stack above does.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-02-01
+reason = "glib 0.18.5 unsoundness; fix is glib 0.20 (gtk4 line), unreachable while tauri pins gtk 0.18."
+
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2027-02-01
+reason = "Same glib 0.18.5 unsoundness as RUSTSEC-2024-0429, under its GHSA identifier."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-02-01
+reason = "proc-macro-error unmaintained; build-time only, via glib-macros/gtk3-macros, not present in the shipped binary."
+
+# --- the unic-* family -----------------------------------------------------------------------------------
+# All five arrive through tauri-utils 2.9.3 -> urlpattern 0.3. urlpattern 0.4 replaced unic-* with
+# icu_properties and would clear every one of these, but tauri-utils requires `urlpattern ^0.3` and 2.9.3 is
+# the latest published tauri-utils — so there is no version combination that takes the newer one. Unmaintained
+# advisories, not exploitable defects. Revisit when Tauri bumps its urlpattern bound.
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+ignoreUntil = 2027-02-01
+reason = "unic-char-range unmaintained; pinned by tauri-utils -> urlpattern ^0.3, no reachable upgrade."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+ignoreUntil = 2027-02-01
+reason = "unic-common unmaintained; pinned by tauri-utils -> urlpattern ^0.3, no reachable upgrade."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+ignoreUntil = 2027-02-01
+reason = "unic-char-property unmaintained; pinned by tauri-utils -> urlpattern ^0.3, no reachable upgrade."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+ignoreUntil = 2027-02-01
+reason = "unic-ucd-version unmaintained; pinned by tauri-utils -> urlpattern ^0.3, no reachable upgrade."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+ignoreUntil = 2027-02-01
+reason = "unic-ucd-ident unmaintained; pinned by tauri-utils -> urlpattern ^0.3, no reachable upgrade."

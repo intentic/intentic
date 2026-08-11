@@ -3,6 +3,13 @@ name: Release
 on:
   workflow_call:
 
+# A floor, not a ceiling — the caller's grant is the ceiling, and every job below replaces this set outright
+# with the one it names. Declared read-only anyway so a job added later without a `permissions:` block starts
+# with nothing rather than inheriting whatever the caller happened to hold.
+permissions:
+  contents: read
+  packages: read
+
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   PNPM_STORE: /ci-cache/pnpm-store
@@ -231,6 +238,7 @@ jobs:
       # reports success is a promise the README makes and the pipeline does not keep. Same reasoning as
       # npm-publish.yml's refusal to fall back when the provenance exchange fails.
       - name: Attest the release assets
+        id: attest-assets
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           # The same four directories publish-github.sh attaches to the Release: the desktop installers and
@@ -241,6 +249,12 @@ jobs:
             _computers/host/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*
+
+      # A copy of that same bundle, attached to the Release next to the installers it vouches for. The script
+      # says why a second copy is worth having; it never fails the job.
+      - name: Attach the provenance to the Release
+        shell: bash
+        run: bash _tools/scripts/attach-provenance.sh "${PLANNED_RELEASE_VERSION}" "${{ steps.attest-assets.outputs.bundle-path }}"
 
       # The images are named by digest rather than by tag because a tag is a pointer and provenance about a
       # pointer proves nothing — `stable` moves on the next release. imagetools reads the digest the merge
