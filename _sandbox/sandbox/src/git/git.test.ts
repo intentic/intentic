@@ -25,6 +25,17 @@ test("gitFailureReason keeps a hint block out of the panel", () => {
     expect(gitFailureReason(diverged, "git failed")).toBe("fatal: Not possible to fast-forward, aborting.");
 });
 
+// A commit-msg hook's output, relayed by git with no verdict of its own — the shape that reached the panel as
+// commitlint's help link and nothing else.
+test("gitFailureReason names the rules a commit message broke rather than the help link under them", () => {
+    const rejected = {
+        stderr: "⧗   --- input ---\nFix: Something.\n✖   subject may not end with full stop [subject-full-stop]\n✖   type must be lower-case [type-case]\n\n✖   found 2 problems, 0 warnings\nⓘ   Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint\n",
+    };
+    expect(gitFailureReason(rejected, "git failed")).toBe(
+        "subject may not end with full stop [subject-full-stop]; type must be lower-case [type-case]",
+    );
+});
+
 test("gitFailureReason reads a single-line failure and an execFile rejection with no stderr", () => {
     expect(gitFailureReason({ stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled\n" }, "git failed")).toBe(
         "fatal: could not read Username for 'https://github.com': terminal prompts disabled",

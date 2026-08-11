@@ -22,6 +22,14 @@ export const AGENT_GIT_AUTHOR = { name: "intentic", email: "agent@intentic.dev" 
 // and the repository exists.` couplet — carries no prefix, which is exactly what makes it separable.
 const VERDICT = /^(?:fatal|error|warning|remote):/i;
 
+// A COMMIT-MSG HOOK'S REFUSAL, which git relays verbatim and prefixes with nothing of its own — so the rule
+// above finds no verdict at all and the tail of the output is whatever the hook printed last. commitlint (this
+// repo's hook, and the most common one in anybody else's) prints its findings as `✖   <what is wrong>
+// [rule-name]`, then a `found N problems` count, then a "Get help:" link — so the panel showed the link, which
+// is the one line that says nothing about the message the user has to fix. The trailing `[rule-name]` is what
+// separates a finding from commitlint's own summary.
+const COMMITLINT_FINDING = /^✖\s+(.+\[[a-z-]+\])$/;
+
 // Why a git command failed, in one line for the panel. execFile rejects with the whole command line in
 // `message`, so git's own stderr is strongly preferred when present.
 //
@@ -38,5 +46,11 @@ export const gitFailureReason = (error: unknown, fallback: string): string => {
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line !== "");
+    // EVERY finding, not the last one: a message routinely breaks two rules at once (a capitalised subject that
+    // ends in a full stop), and a box that names one of them buys the user a second refusal.
+    const findings = lines.map((line) => COMMITLINT_FINDING.exec(line)?.[1]).filter((finding) => finding !== undefined);
+    if (findings.length > 0) {
+        return findings.join("; ");
+    }
     return lines.findLast((line) => VERDICT.test(line)) ?? lines.at(-1) ?? fallback;
 };
