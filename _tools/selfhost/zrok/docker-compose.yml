@@ -199,6 +199,9 @@ services:
         curl -sSf "$$base/docker/compose/zrok2-instance/entrypoint-init.bash" -o /bootstrap/entrypoint-init.bash
         curl -sSf "$$base/nfpm/zrok2-bootstrap.bash" -o /bootstrap/zrok2-bootstrap.bash
         echo "bootstrap scripts fetched at v$${ZROK2_SCRIPTS_TAG}"
+        # The wildcard DNS record must point at this host, and behind NAT nothing else knows the address —
+        # so the stack states its own egress IP where the deploy logs (and the operator) can read it.
+        echo "public egress IP: $$(curl -sSf https://api.ipify.org)"
     environment:
       ZROK2_SCRIPTS_TAG: ${ZROK2_TAG:-2.0.4}
     volumes:
@@ -302,15 +305,41 @@ services:
 
 
 
-  # ── TLS front (folded-in official Caddy overlay) ─────────────────────────
-  # Wildcard certificate for *.$ZROK2_DNS_ZONE over DNS-01; the Caddyfile is written inline so the stack
-  # stays one file. First start compiles Caddy with the DNS plugin (a few minutes, once per volume).
-  caddy:
-    image: caddy:2-builder
+  # The first account, on demand: `docker compose --profile bootstrap up zrok2-account` (or run this service
+  # from Komodo once). Prints the enable token the machine-side agent redeems. Profile-gated so an ordinary
+  # deploy never re-runs it.
+  zrok2-account:
+    <<: *zrok2-image
+    profiles: ["bootstrap"]
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -eu
+        exec zrok2 admin create account "$${ZROK2_ACCOUNT_EMAIL:?set ZROK2_ACCOUNT_EMAIL}" "$${ZROK2_ACCOUNT_PASSWORD:?set ZROK2_ACCOUNT_PASSWORD}"
+    environment:
+      ZROK2_API_ENDPOINT: http://zrok2-controller:${ZROK2_CTRL_PORT:-18080}
+      ZROK2_ADMIN_TOKEN: ${ZROK2_ADMIN_TOKEN:?err}
+      ZROK2_ACCOUNT_EMAIL: ${ZROK2_ACCOUNT_EMAIL:-}
+      ZROK2_ACCOUNT_PASSWORD: ${ZROK2_ACCOUNT_PASSWORD:-}
+      HOME: /var/lib/zrok2
+    volumes:
+      - zrok2-config:/var/lib/zrok2:ro
+    networks:
+      - zrok2
+
+  # ── TLS front (folded-in official Caddy overlay) ─────────────────────────
+  # Wildcard certificate for *.$ZROK2_DNS_ZONE over DNS-01. PREBUILT caddy+cloudflare image
+  # (ghcr.io/caddybuilds/caddy-cloudflare, pinned) instead of the bundle's runtime xcaddy build: the build
+  # ran minutes on every fresh volume and proved flaky on the host — a pinned binary starts in seconds and
+  # pins the plugin with the same rigor as every other image here. The Caddyfile is written inline so the
+  # stack stays one file.
+  caddy:
+    image: ghcr.io/caddybuilds/caddy-cloudflare:2.11.4-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        mkdir -p /etc/caddy
         cat > /etc/caddy/Caddyfile <<'EOF'
         {
         	acme_ca {$$CADDY_ACME_API}
@@ -318,13 +347,25 @@ services:
         zrok2.{$$ZROK2_DNS_ZONE} {
         	reverse_proxy zrok2-controller:{$$ZROK2_CTRL_PORT}
         	tls {
-        		dns {$$CADDY_DNS_PLUGIN} {$$CADDY_DNS_PLUGIN_TOKEN}
+        		dns cloudflare {$$CADDY_DNS_PLUGIN_TOKEN}
+        		# The two settings the first issuance needed, and why: `resolvers` because the host runs
+        		# systemd-resolved on loopback that no container can dial, and the propagation pair because
+        		# Caddy's own pre-check reads the record back through a resolver that has negative-cached the
+        		# name — it then deletes the TXT before Let's Encrypt ever looks ("No TXT record found").
+        		# A fixed delay and no self-check hands the record straight to the CA, which is the party
+        		# whose opinion counts.
+        		resolvers 1.1.1.1
+        		propagation_delay 10s
+        		propagation_timeout -1
         	}
         }
         *.{$$ZROK2_DNS_ZONE} {
         	reverse_proxy zrok2-frontend:{$$ZROK2_FRONTEND_PORT}
         	tls {
-        		dns {$$CADDY_DNS_PLUGIN} {$$CADDY_DNS_PLUGIN_TOKEN}
+        		dns cloudflare {$$CADDY_DNS_PLUGIN_TOKEN}
+        		resolvers 1.1.1.1
+        		propagation_delay 10s
+        		propagation_timeout -1
         	}
         }
         ziti.{$$ZROK2_DNS_ZONE} {
@@ -334,27 +375,34 @@ services:
         		}
         	}
         	tls {
-        		dns {$$CADDY_DNS_PLUGIN} {$$CADDY_DNS_PLUGIN_TOKEN}
+        		dns cloudflare {$$CADDY_DNS_PLUGIN_TOKEN}
+        		resolvers 1.1.1.1
+        		propagation_delay 10s
+        		propagation_timeout -1
         	}
         }
         EOF
-        if [ ! -x /data/caddy-with-dns ]; then
-          xcaddy build --with "github.com/caddy-dns/$${CADDY_DNS_PLUGIN}" --output /data/caddy-with-dns
-        fi
-        exec /data/caddy-with-dns run --config /etc/caddy/Caddyfile --adapter caddyfile
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     environment:
       ZROK2_DNS_ZONE: ${ZROK2_DNS_ZONE:?err}
       ZITI_CTRL_PORT: ${ZITI_CTRL_PORT:-1280}
       ZROK2_CTRL_PORT: ${ZROK2_CTRL_PORT:-18080}
       ZROK2_FRONTEND_PORT: ${ZROK2_FRONTEND_PORT:-8080}
-      CADDY_DNS_PLUGIN: ${CADDY_DNS_PLUGIN:-cloudflare}
       CADDY_DNS_PLUGIN_TOKEN: ${CADDY_DNS_PLUGIN_TOKEN:?token with Zone:Read + DNS:Edit — wildcard-cert challenge only}
       CADDY_ACME_API: ${CADDY_ACME_API:-https://acme-v02.api.letsencrypt.org/directory}
+    # The host runs systemd-resolved on loopback, which a container cannot dial — without explicit upstreams
+    # the ACME calls die on DNS. These feed docker's embedded resolver, so service names keep resolving too.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     depends_on:
       zrok2-controller:
         condition: service_healthy
     ports:
-      - "${CADDY_INTERFACE:-0.0.0.0}:443:443"
+      # 443 unless the host already has a front (a resident Traefik holding 80/443 leaves caddy netless with
+      # a failed bind) — then pick a free port and either forward it from the router or have that front
+      # TCP/SNI-passthrough *.ZROK2_DNS_ZONE here. The cert needs no inbound at all (DNS-01).
+      - "${CADDY_INTERFACE:-0.0.0.0}:${CADDY_HTTPS_PORT:-443}:443"
     volumes:
       - caddy-data:/data
       - caddy-config:/config
