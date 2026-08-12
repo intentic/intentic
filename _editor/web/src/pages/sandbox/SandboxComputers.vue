@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import type { Computer, MachineSandboxOp } from "@intentic/sandbox-contract";
-import { InfoHint, MachineDetail, type MachineSandboxGroup, Notice, type NoticeModel, RowGroup, StatusBadge, type StatusVariant, timeAgo } from "@intentic/ui";
+import {
+    InfoHint,
+    MachineDetail,
+    type MachineSandboxGroup,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+} from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
@@ -86,15 +96,14 @@ const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
  * no edge to add to the pile. */
 const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0.5 text-2xs text-muted`;
 
-/* And the size of the buttons on a sandbox row. A PrimeVue button left at its own defaults is a 14px label in a
- * 38px control, which beside a 12px row is not an action on the row — it is the loudest thing on the card, four
- * times over. The app's dense lists already say this in their own markup (AgentCard, AgentsView); the row of
- * verbs here is the same tier.
+/* The row of verbs on a sandbox row used to carry its own size here — `px-2 py-1 text-xs`, because a button left
+ * at PrimeVue's defaults is a 14px label in a 38px control, which beside a 12px row is not an action on the row,
+ * it is the loudest thing on the card, four times over. That is now what `size="small"` means everywhere (see the
+ * button tokens in the design system's theme), so the buttons below say only their tone.
  *
  * They are all SECONDARY except the one that deletes. Stop and Restart were drawn in the same red as Remove, so
  * the three most alarming words on the page were also two of its most ordinary ones, and the eye went to them
  * before it went to the machine's own state. Red now means exactly one thing here. */
-const ACTION = `px-2 py-1 text-xs`;
 
 const tone = (computer: Computer): StatusVariant => {
     if (computer.gap !== undefined) {
@@ -153,8 +162,7 @@ const runLines = ref<Record<string, string[]>>({});
  * want and a terrible thing to do by accident, so the row says so and the confirmation names it. */
 const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
-const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean =>
-    computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
+const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
 
 // The ops that end this browser's own connection when they are aimed at the sandbox serving it. Everything but
 // `start`, which is the one that can only ever help.
@@ -175,8 +183,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
     const asked = CONFIRM[op]?.(group.title);
     // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and "this also
     // closes the page you are on" are two different things to know, and the second never cancels the first.
-    const severing =
-        isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now — this page will lose it.` : ``;
+    const severing = isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now — this page will lose it.` : ``;
     if ((asked !== undefined || severing !== ``) && !globalThis.confirm(`${asked ?? `${group.title}: ${op}?`}${severing}`)) {
         return;
     }
@@ -313,7 +320,6 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                                         size="small"
                                         severity="secondary"
                                         :text="true"
-                                        :class="ACTION"
                                         :loading="busy === `${rowKey(computer, group)}:start`"
                                         :disabled="busy !== undefined"
                                         @click="act(computer, group, `start`)"
@@ -324,7 +330,6 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                                             size="small"
                                             severity="secondary"
                                             :text="true"
-                                            :class="ACTION"
                                             :loading="busy === `${rowKey(computer, group)}:restart`"
                                             :disabled="busy !== undefined"
                                             @click="act(computer, group, `restart`)"
@@ -334,7 +339,6 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                                             size="small"
                                             severity="secondary"
                                             :text="true"
-                                            :class="ACTION"
                                             :loading="busy === `${rowKey(computer, group)}:stop`"
                                             :disabled="busy !== undefined"
                                             @click="act(computer, group, `stop`)"
@@ -348,7 +352,6 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                                         size="small"
                                         severity="secondary"
                                         :text="true"
-                                        :class="ACTION"
                                         :loading="busy === `${rowKey(computer, group)}:update`"
                                         :disabled="busy !== undefined"
                                         @click="act(computer, group, `update`)"
@@ -358,7 +361,6 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                                         size="small"
                                         severity="danger"
                                         :text="true"
-                                        :class="ACTION"
                                         :loading="busy === `${rowKey(computer, group)}:remove`"
                                         :disabled="busy !== undefined"
                                         @click="act(computer, group, `remove`)"

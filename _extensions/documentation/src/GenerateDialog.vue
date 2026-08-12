@@ -62,9 +62,9 @@ const start = (): void => {
             </p>
 
             <div class="flex flex-wrap items-center gap-2">
-                <Button size="small" severity="secondary" outlined label="Undocumented" @click="chosen = [...undocumented]" />
-                <Button size="small" severity="secondary" outlined :disabled="stale.length === 0" label="Stale" @click="chosen = [...stale]" />
-                <Button size="small" severity="secondary" outlined label="Everything" @click="chosen = [...packages]" />
+                <Button size="small" severity="secondary" label="Undocumented" @click="chosen = [...undocumented]" />
+                <Button size="small" severity="secondary" :disabled="stale.length === 0" label="Stale" @click="chosen = [...stale]" />
+                <Button size="small" severity="secondary" label="Everything" @click="chosen = [...packages]" />
                 <span class="ml-auto text-2xs text-subtle">{{ chosen.length }} of {{ packages.length }}</span>
             </div>
 

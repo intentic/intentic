@@ -5,18 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import {
-    type AgentRunChoice,
-    Button,
-    cmp,
-    Icon,
-    PageAction,
-    Panel,
-    Picker,
-    type PickerOption,
-    Segmented,
-    SplitView,
-} from "@intentic/extension-ui";
+import { type AgentRunChoice, Button, cmp, Icon, PageAction, Panel, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
@@ -219,7 +208,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                         :label="agent.id.split(`-`).slice(2).join(`-`) || `map`"
                         @click="openAgent(agent.id)"
                     />
-                    <Button size="small" severity="secondary" outlined label="Stop" @click="stop(activeRun.manifest.runId)" />
+                    <Button size="small" severity="secondary" label="Stop" @click="stop(activeRun.manifest.runId)" />
                 </div>
             </div>
 

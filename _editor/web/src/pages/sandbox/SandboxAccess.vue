@@ -306,7 +306,6 @@ const revoke = async (target: string): Promise<void> => {
                     <Button
                         label="Sign out all browsers"
                         severity="danger"
-                        :outlined="true"
                         :loading="revokingSessions"
                         :disabled="revokingSessions"
                         @click="revokeSessions"

@@ -595,7 +595,7 @@ const openHistory = (event: Event): void => {
              Note the division of labour with the filter at the top of the list: typing SEARCHES past the
              open chats already (the "Not open" group), so History is for BROWSING — newest first. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <Button size="small" class="h-7 text-2xs" @click="startAgent()"> <Icon name="plus" class="text-2xs" />New agent </Button>
+            <Button size="small" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats</span>

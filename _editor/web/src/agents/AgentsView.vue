@@ -1032,19 +1032,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <!-- The panes on screen ARE the selection (the ringed cards), so this appears exactly when two
                      or more chats sit side by side — press it and a fresh draft chat opens over their full
                      transcripts, composed but NOT sent (synthesizeSessions.ts). -->
-                <Button
-                    v-if="panes.length >= 2"
-                    size="small"
-                    severity="secondary"
-                    :disabled="synthesizing"
-                    class="shrink-0 gap-1 px-2.5 py-1 text-2xs"
-                    @click="synthesize"
-                >
-                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" class="text-2xs" />Synthesize {{ panes.length }}
+                <Button v-if="panes.length >= 2" size="small" severity="secondary" :disabled="synthesizing" class="shrink-0" @click="synthesize">
+                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ panes.length }}
                 </Button>
-                <Button size="small" class="shrink-0 gap-1 px-2.5 py-1 text-2xs" @click="startAgent()">
-                    <Icon name="plus" class="text-2xs" />New agent
-                </Button>
+                <Button size="small" class="shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             </div>
         </div>
         <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
@@ -1098,8 +1089,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         @keydown.enter.exact.prevent="sendFirstTask"
                     ></textarea>
                     <div class="flex items-center justify-end">
-                        <Button size="small" :disabled="firstTask.trim().length === 0" class="gap-1 px-2.5 py-1 text-2xs" @click="sendFirstTask">
-                            <Icon name="sparkles" class="text-2xs" />Start agent
+                        <Button size="small" :disabled="firstTask.trim().length === 0" @click="sendFirstTask">
+                            <Icon name="sparkles" />Start agent
                         </Button>
                     </div>
                 </div>
@@ -1496,8 +1487,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </p>
             <p class="mt-2 text-xs text-muted">Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.</p>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelResolve">Cancel</button>
-                <Button size="small" label="Ask the agent" class="px-3 py-1" @click="confirmResolve" />
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelResolve" />
+                <Button size="small" label="Ask the agent" @click="confirmResolve" />
             </template>
         </Dialog>
         <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
@@ -1523,8 +1514,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 untouched.
             </p>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingPurge = false">Cancel</button>
-                <Button size="small" severity="danger" class="px-3 py-1" @click="confirmPurge">
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingPurge = false" />
+                <Button size="small" severity="danger" @click="confirmPurge">
                     Delete {{ archived.length }} agent{{ archived.length === 1 ? "" : "s" }}
                 </Button>
             </template>

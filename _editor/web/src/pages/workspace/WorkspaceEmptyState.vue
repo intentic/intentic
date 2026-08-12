@@ -101,10 +101,8 @@ const askAgent = (): void => startAgent(`Help me get my code into this workspace
                                 placeholder="https://github.com/owner/repo.git"
                                 class="min-w-0 flex-1 rounded-lg border border-line bg-canvas px-2 py-1.5 text-xs text-content placeholder:text-subtle focus:border-primary-500 focus:outline-none"
                             />
-                            <Button size="small" type="submit" :disabled="!canClone" class="shrink-0 gap-1 px-2.5 py-1 text-2xs">
-                                <Icon :name="cloning ? `spinner` : `arrow-down-left`" :spin="cloning" class="text-2xs" />{{
-                                    cloning ? "Cloning…" : "Clone"
-                                }}
+                            <Button size="small" type="submit" :disabled="!canClone" class="shrink-0">
+                                <Icon :name="cloning ? `spinner` : `arrow-down-left`" :spin="cloning" />{{ cloning ? "Cloning…" : "Clone" }}
                             </Button>
                         </div>
                         <!-- Private repositories need the host connected first; the daemon's refusal says so,

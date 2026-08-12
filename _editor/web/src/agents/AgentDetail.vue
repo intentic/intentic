@@ -287,12 +287,12 @@ const confirmDiscard = (): void => {
                     v-if="!mobile && changes.pending.value.length > 0 && canShip"
                     size="small"
                     severity="success"
-                    class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
+                    class="shrink-0 whitespace-nowrap"
                     :disabled="!canLand"
                     @click="pressLand"
                     v-tooltip.bottom="landHint"
                 >
-                    <Icon name="check" class="mr-1 text-2xs" />Land now
+                    <Icon name="check" />Land now
                 </Button>
                 <!-- The collaborator's copy of the press above: same spot, quieter chrome, and once asked it
                      becomes the fact instead of the button (the daemon floors the land itself at maintainer). -->
@@ -306,13 +306,12 @@ const confirmDiscard = (): void => {
                     v-else-if="!mobile && changes.pending.value.length > 0 && canDrive"
                     size="small"
                     severity="secondary"
-                    :outlined="true"
-                    class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
+                    class="shrink-0 whitespace-nowrap"
                     :disabled="requestingLand"
                     @click="requestLand"
                     v-tooltip.bottom="'Landing needs a maintainer — this puts the ask on their board'"
                 >
-                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" class="mr-1 text-2xs" />Request land
+                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />Request land
                 </Button>
                 <button
                     type="button"
@@ -397,17 +396,8 @@ const confirmDiscard = (): void => {
                 finishes.
             </p>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingForceLand = false">
-                    Cancel
-                </button>
-                <Button
-                    size="small"
-                    severity="warning"
-                    label="Land anyway"
-                    class="px-3 py-1"
-                    :disabled="changes.actionBusy.value"
-                    @click="confirmForceLand"
-                />
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingForceLand = false" />
+                <Button size="small" severity="warn" label="Land anyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
             </template>
         </Dialog>
 
@@ -428,15 +418,8 @@ const confirmDiscard = (): void => {
                 Work that already landed stays in your workspace — only what is still on the branch is lost.
             </p>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = false">Cancel</button>
-                <Button
-                    size="small"
-                    severity="danger"
-                    label="Discard"
-                    class="px-3 py-1"
-                    :disabled="changes.actionBusy.value"
-                    @click="confirmDiscard"
-                />
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = false" />
+                <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Dialog>
     </div>

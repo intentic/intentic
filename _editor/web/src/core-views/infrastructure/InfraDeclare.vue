@@ -387,7 +387,7 @@ onUnmounted(progress.stopWatching);
         </summary>
         <div class="mt-3">
             <div class="mb-3 flex items-center justify-end">
-                <Button v-if="!showConnect" label="Add server" size="small" severity="secondary" :outlined="true" @click="showConnect = true">
+                <Button v-if="!showConnect" label="Add server" size="small" severity="secondary" @click="showConnect = true">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -414,10 +414,10 @@ onUnmounted(progress.stopWatching);
                         <Button v-if="hasGithub" label="Unlink" size="small" severity="secondary" :text="true" @click="removeEntry('gh')" />
                         <Button v-else-if="hasGitlab" label="Unlink" size="small" severity="secondary" :text="true" @click="removeEntry('gl')" />
                         <template v-else-if="!showGithub && !showGitlab">
-                            <Button label="Link GitHub" size="small" severity="secondary" :outlined="true" @click="showGithub = true">
+                            <Button label="Link GitHub" size="small" severity="secondary" @click="showGithub = true">
                                 <template #icon><Icon name="github" /></template>
                             </Button>
-                            <Button label="Link GitLab" size="small" severity="secondary" :outlined="true" @click="showGitlab = true">
+                            <Button label="Link GitLab" size="small" severity="secondary" @click="showGitlab = true">
                                 <template #icon><Icon name="gitlab" /></template>
                             </Button>
                         </template>
@@ -480,14 +480,7 @@ onUnmounted(progress.stopWatching);
                         </p>
                     </div>
                     <Button v-if="hasStripe" label="Disconnect" size="small" severity="secondary" :text="true" @click="removeEntry('stripe')" />
-                    <Button
-                        v-else-if="!showStripe"
-                        label="Connect Stripe"
-                        size="small"
-                        severity="secondary"
-                        :outlined="true"
-                        @click="showStripe = true"
-                    >
+                    <Button v-else-if="!showStripe" label="Connect Stripe" size="small" severity="secondary" @click="showStripe = true">
                         <template #icon><Icon name="credit-card" /></template>
                     </Button>
                 </div>
@@ -530,14 +523,7 @@ onUnmounted(progress.stopWatching);
                         </p>
                     </div>
                     <Button v-if="hasCloudflare" label="Disconnect" size="small" severity="secondary" :text="true" @click="removeEntry('cf')" />
-                    <Button
-                        v-else-if="!showCloudflare"
-                        label="Connect Cloudflare"
-                        size="small"
-                        severity="secondary"
-                        :outlined="true"
-                        @click="showCloudflare = true"
-                    >
+                    <Button v-else-if="!showCloudflare" label="Connect Cloudflare" size="small" severity="secondary" @click="showCloudflare = true">
                         <template #icon><Icon name="cloud" /></template>
                     </Button>
                 </div>

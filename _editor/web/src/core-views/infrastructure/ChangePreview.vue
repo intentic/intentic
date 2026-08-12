@@ -60,7 +60,6 @@ const hasChanges = computed(() => sections.value.length > 0);
                 :label="ran && !stale ? 'Re-check' : 'Preview changes'"
                 size="small"
                 severity="secondary"
-                :outlined="true"
                 :disabled="running"
                 :loading="running"
                 @click="preview.run()"

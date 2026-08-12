@@ -152,7 +152,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             </p>
             <p class="mt-0.5 text-2xs text-muted">{{ extension.health?.detail }}</p>
             <div v-if="extension.health?.autoReverted !== true && extension.previous" class="mt-1.5">
-                <Button size="small" severity="warn" outlined :label="`Revert to ${short(extension.previous.ref)}`" :loading="busy" @click="revert" />
+                <Button size="small" severity="warn" :label="`Revert to ${short(extension.previous.ref)}`" :loading="busy" @click="revert" />
             </div>
         </div>
 
@@ -194,7 +194,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             </div>
 
             <div class="mt-2 flex flex-wrap items-center gap-2">
-                <Button v-if="!preview" size="small" outlined :loading="busy" label="See what changed…" @click="stage" />
+                <Button v-if="!preview" size="small" :loading="busy" label="See what changed…" @click="stage" />
                 <Button
                     v-else
                     size="small"

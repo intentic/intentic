@@ -561,8 +561,8 @@ const grab = (event: PointerEvent): void => {
                  hover reaches no touch device, and a paragraph in a box that closes on the first click is not
                  disclosure, it is a formality. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-0.5">
-                <Button size="small" class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs" @click.stop="emit('resolve')">
-                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" class="mr-1 text-2xs" />{{
+                <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
+                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
                         handingOver ? "Handing it over…" : "Have the agent resolve it"
                     }}
                 </Button>
@@ -607,8 +607,8 @@ const grab = (event: PointerEvent): void => {
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
                 </p>
-                <Button size="small" severity="success" class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs" @click.stop="emit('land')">
-                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" class="mr-1 text-2xs" />{{ landing ? "Landing…" : "Land now" }}
+                <Button size="small" severity="success" class="self-start whitespace-nowrap" @click.stop="emit('land')">
+                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? "Landing…" : "Land now" }}
                 </Button>
                 <span class="text-2xs leading-snug text-subtle">Arrives as uncommitted changes — your own commit stays the review step.</span>
             </div>
@@ -621,16 +621,8 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }} — waiting for a maintainer</span>
                 </p>
                 <template v-else>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :outlined="true"
-                        class="gap-0 self-start whitespace-nowrap px-2 py-0.5 text-2xs"
-                        @click.stop="requestLand"
-                    >
-                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" class="mr-1 text-2xs" />{{
-                            requesting ? "Asking…" : "Request land"
-                        }}
+                    <Button size="small" severity="secondary" class="self-start whitespace-nowrap" @click.stop="requestLand">
+                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ requesting ? "Asking…" : "Request land" }}
                     </Button>
                     <span class="text-2xs leading-snug text-subtle">Landing needs a maintainer — this puts the ask on their board.</span>
                 </template>

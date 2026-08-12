@@ -501,7 +501,6 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             label="Use"
                             size="small"
                             severity="secondary"
-                            :outlined="true"
                             v-tooltip.top="`Opens a chat with this loop picked — nothing runs until you send`"
                             @click="loopNow(design)"
                         >
@@ -566,7 +565,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </StatusBadge>
                         </template>
                         <template #actions>
-                            <Button label="Use this template" size="small" severity="secondary" :outlined="true" @click="fromTemplate(template)">
+                            <Button label="Use this template" size="small" severity="secondary" @click="fromTemplate(template)">
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
                         </template>

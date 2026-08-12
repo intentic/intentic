@@ -248,7 +248,6 @@ const priceLabel = computed(() =>
                 :label="auditLeads ? `Have my agent read the code first` : `Read the code first`"
                 :severity="auditLeads ? undefined : `secondary`"
                 :text="!auditLeads"
-                :outlined="auditLeads"
                 size="small"
                 @click="emit(`audit`)"
             >

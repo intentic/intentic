@@ -118,7 +118,6 @@ const signIn = async (): Promise<void> => {
                 <Button
                     :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
                     severity="secondary"
-                    :outlined="true"
                     class="w-full justify-center"
                     @click="signIn"
                 >

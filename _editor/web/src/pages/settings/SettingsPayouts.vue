@@ -167,8 +167,7 @@ const connect = async (): Promise<void> => {
                 <div v-if="statements.length > 0" class="flex flex-col gap-1.5">
                     <h3 class="text-xs font-semibold">Earnings</h3>
                     <p class="text-sm">
-                        {{ money(owedTotal) }} across {{ statements.length }} closed
-                        {{ statements.length === 1 ? `month` : `months` }}.
+                        {{ money(owedTotal) }} across {{ statements.length }} closed {{ statements.length === 1 ? `month` : `months` }}.
                     </p>
                     <p v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`" class="text-xs text-muted">
                         <span class="font-medium text-content">{{ monthName(statement.month) }}</span> — {{ money(statement.amountCents) }} for
@@ -203,14 +202,8 @@ const connect = async (): Promise<void> => {
                         Earnings add up against the publisher name in your manifest. Prove it's yours and they become payable to you.
                     </p>
                     <div class="flex gap-2">
-                        <InputText
-                            v-model="publisher"
-                            placeholder="your publisher name"
-                            size="small"
-                            class="flex-1"
-                            @keyup.enter="askChallenge"
-                        />
-                        <Button label="Check" severity="secondary" :outlined="true" size="small" :loading="working" @click="askChallenge" />
+                        <InputText v-model="publisher" placeholder="your publisher name" size="small" class="flex-1" @keyup.enter="askChallenge" />
+                        <Button label="Check" severity="secondary" size="small" :loading="working" @click="askChallenge" />
                     </div>
 
                     <template v-if="challenge">
@@ -223,18 +216,12 @@ const connect = async (): Promise<void> => {
                         </p>
                         <template v-else>
                             <p class="text-xs text-muted">
-                                Commit a file called <span class="font-mono">{{ challenge.path }}</span> containing this token to the default branch of
-                                <span class="font-mono">{{ challenge.repos.join(`, `) }}</span> — any one of them is enough.
+                                Commit a file called <span class="font-mono">{{ challenge.path }}</span> containing this token to the default branch
+                                of <span class="font-mono">{{ challenge.repos.join(`, `) }}</span> — any one of them is enough.
                             </p>
                             <div class="flex items-center gap-2">
                                 <code class="flex-1 truncate rounded bg-overlay/50 px-2 py-1 text-2xs">{{ challenge.token }}</code>
-                                <Button
-                                    :label="copied ? `Copied` : `Copy`"
-                                    severity="secondary"
-                                    :outlined="true"
-                                    size="small"
-                                    @click="copyToken"
-                                />
+                                <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyToken" />
                             </div>
                             <div>
                                 <Button label="I've pushed it — verify" size="small" :loading="working" @click="finishClaim" />
@@ -258,7 +245,6 @@ const connect = async (): Promise<void> => {
                         <Button
                             :label="payouts?.connected ? `Continue on Stripe` : `Set up payouts`"
                             severity="secondary"
-                            :outlined="true"
                             size="small"
                             :loading="working"
                             @click="connect"

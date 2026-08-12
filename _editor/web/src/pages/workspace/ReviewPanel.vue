@@ -1140,7 +1140,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Button
                     size="small"
                     severity="success"
-                    class="shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs"
+                    class="shrink-0 whitespace-nowrap"
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.right="
@@ -1155,9 +1155,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                   : 'One commit per repo'
                     "
                 >
-                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" class="mr-1 text-2xs" />{{
-                        commitRunning ? `Committing…` : commitLabel
-                    }}
+                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{ commitRunning ? `Committing…` : commitLabel }}
                 </Button>
             </div>
             <!-- An agent is writing, in a repo this commit would stage from the worktree. A WARNING, not a
@@ -1229,12 +1227,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
             <Button
                 size="small"
-                class="shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs"
+                class="shrink-0 whitespace-nowrap"
                 :disabled="changes.actionBusy.value || pushFlow.running.value"
                 @click="doSync"
                 v-tooltip.right="syncMeta!.hint"
             >
-                <Icon :name="syncMeta!.icon" class="mr-1 text-2xs" />{{ syncMeta!.label }}
+                <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
             </Button>
         </div>
 
@@ -1715,17 +1713,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </p>
             </template>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = undefined">
-                    Cancel
-                </button>
-                <Button
-                    size="small"
-                    severity="danger"
-                    label="Discard"
-                    class="px-3 py-1"
-                    :disabled="changes.actionBusy.value"
-                    @click="confirmDiscard"
-                />
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = undefined" />
+                <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Dialog>
 

@@ -55,7 +55,7 @@ const confirmDelete = async (): Promise<void> => {
         <RowGroup label="Data &amp; privacy">
             <Row icon="download" title="Export my data" description="Download everything the platform stores about your account as JSON.">
                 <template #control>
-                    <Button label="Export" severity="secondary" :outlined="true" size="small" :loading="exporting" @click="exportData" />
+                    <Button label="Export" severity="secondary" size="small" :loading="exporting" @click="exportData" />
                 </template>
             </Row>
             <Row
@@ -65,14 +65,7 @@ const confirmDelete = async (): Promise<void> => {
                 description="Signs out every sandbox, then permanently removes your account and shared access. Keep your sandboxes online."
             >
                 <template #control>
-                    <Button
-                        v-if="!confirmingDelete"
-                        label="Delete"
-                        severity="danger"
-                        :outlined="true"
-                        size="small"
-                        @click="confirmingDelete = true"
-                    />
+                    <Button v-if="!confirmingDelete" label="Delete" severity="danger" size="small" @click="confirmingDelete = true" />
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">

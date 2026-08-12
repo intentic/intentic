@@ -284,7 +284,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
             <div v-else-if="board === undefined" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">
                 <div class="font-medium">Couldn't load this Komodo connection</div>
                 <div class="mt-1 text-xs opacity-80">{{ error ?? `The sandbox did not answer.` }}</div>
-                <Button class="mt-3" label="Try again" size="small" severity="secondary" outlined @click="refetch()" />
+                <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
             </div>
 
             <!-- The single most important thing this view can say, and it can only say it by rendering.
@@ -296,7 +296,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     Nothing below is current — this is not a report that your deployments are down, only that we couldn't ask.
                 </div>
                 <div v-if="board.unreachableReason" class="mt-2 font-mono text-2xs opacity-70">{{ board.unreachableReason }}</div>
-                <Button class="mt-3" label="Try again" size="small" severity="secondary" outlined @click="refetch()" />
+                <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
             </div>
 
             <template v-else>

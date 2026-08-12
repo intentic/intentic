@@ -53,10 +53,24 @@ const custom = {
                 paddingY: `var(--ui-control-padding-y)`,
                 paddingX: `var(--ui-control-padding-x)`,
                 iconOnlyWidth: `2.375rem`,
+                /* THE COMPACT SIZE — the app's default action button, and the one the board's "New agent"
+                 * used to draw by hand. These four numbers were spelled out at 23 call sites in six
+                 * near-identical recipes (`gap-1 px-2.5 py-1 text-2xs`, `gap-0 px-2 py-0.5 text-2xs`,
+                 * `px-3 py-1`, `h-7 text-2xs`, …), because `small` was Aura's own — text-sm at 6px of
+                 * vertical padding, a 30px control — and every dense surface in the app wanted something
+                 * tighter than that. A card's row of actions, a section header, a toolbar: none of them can
+                 * carry a 14px label without out-weighing the thing it acts on, so each one shrank the
+                 * button locally and none of them agreed.
+                 *
+                 * The size lives here so `size="small"` IS the compact button and a call site has nothing
+                 * left to override. `--text-2xs`'s own line-height comes with it (pinned in primeng.css, as
+                 * Aura has no per-size token for it) — 11px text on a 16px line box, 4px above and below,
+                 * lands a 26px control, which is what the board draws today. */
                 sm: {
-                    paddingY: `calc(var(--spacing) * 1.5)`,
+                    fontSize: `var(--text-2xs)`,
+                    paddingY: `var(--spacing)`,
                     paddingX: `calc(var(--spacing) * 2.5)`,
-                    iconOnlyWidth: `2.125rem`,
+                    iconOnlyWidth: `1.75rem`,
                 },
             },
         },

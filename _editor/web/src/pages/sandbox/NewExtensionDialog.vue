@@ -114,14 +114,10 @@ const submit = async (): Promise<void> => {
         </div>
 
         <template #footer>
-            <Button label="Cancel" text @click="open = false" />
-            <Button
-                :label="wish.trim() === `` ? `Create` : `Create and start`"
-                icon="pi pi-plus"
-                :loading="busy"
-                :disabled="!ready"
-                @click="submit"
-            />
+            <Button label="Cancel" severity="secondary" text @click="open = false" />
+            <Button :label="wish.trim() === `` ? `Create` : `Create and start`" :loading="busy" :disabled="!ready" @click="submit">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
         </template>
     </Dialog>
 </template>

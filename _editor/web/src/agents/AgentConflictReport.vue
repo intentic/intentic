@@ -81,7 +81,7 @@ const mergeable = computed(() => blockedCount.value > 0 && theirs.value.length =
 const working = computed(() => props.asked && (props.streaming || props.busy));
 
 // The geometry this block's inline actions share — small, quiet, and narrow enough to sit beside a sentence.
-const INLINE = `whitespace-nowrap px-2 py-0.5 text-2xs`;
+const INLINE = `whitespace-nowrap`;
 const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 </script>
 
@@ -159,7 +159,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     @click="emit('resolve')"
                     v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
-                    <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
+                    <Icon name="sparkles" />Have the agent resolve it
                 </Button>
                 <span class="text-2xs text-subtle">
                     It merges in its own worktree — nothing is written to your workspace until it succeeds.<template v-if="theirs.length > 0">
@@ -173,7 +173,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                  thing standing in the way, so the block always ends on somebody's next move. -->
             <div v-if="theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
-                    <Icon name="file-edit" class="mr-1 text-2xs" />Commit or stash yours
+                    <Icon name="file-edit" />Commit or stash yours
                 </Button>
                 <!-- "Opens the Changes panel" was a tooltip on a button that already had this sentence beside
                      it — two hints for one press, one of them reachable only by pointer. -->
@@ -190,7 +190,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     @click="emit('merge')"
                     v-tooltip.bottom="writing ? 'Wait until the agent stops writing' : undefined"
                 >
-                    <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
+                    <Icon name="check" />Land with conflict markers
                 </Button>
                 <span class="text-2xs text-subtle">You finish the merge yourself, in your workspace.</span>
             </div>

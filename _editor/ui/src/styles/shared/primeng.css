@@ -34,7 +34,25 @@
         line-height: var(--text-sm--line-height); /* same metrics as the text-sm inputs → 38px controls */
     }
 
-    [data-mode="dark"] .p-button-secondary:enabled:hover,
+    /* The compact size's remaining two numbers. Aura tokenises neither per size — there is no
+     * `sm.lineHeight` and no `sm.gap` — so they are pinned here rather than in theme.ts beside the
+     * other four; together the six are the whole of `size="small"`.
+     *
+     * THE GAP IS THE ONE THAT MATTERS. Aura's root 8px is a text-sm gap: at 11px it stops reading as a
+     * labelled button and starts reading as an icon standing next to a word, which is exactly why the
+     * call sites that hand-shrank this button also all hand-set `gap-1` or `gap-0`. 4px is the board's.
+     *
+     * Two classes deep on purpose. Aura sets `gap` on `.p-button`, PrimeVue injects its styles into this
+     * same layer, and same-specificity rules in one layer are settled by source order — which between a
+     * runtime-injected <style> and a bundled sheet is not ours to promise. `.p-button.p-button-sm` wins
+     * on specificity instead, so the size holds however the two land in <head>. */
+    .p-button.p-button-sm {
+        line-height: var(--text-2xs--line-height);
+        gap: var(--spacing);
+    }
+
+    /* Secondary's own hover is defined with the tier, below in @layer components — a later layer, so it wins
+     * whatever this says. What is left here is the borderless variant's, which is every tone's quiet form. */
     [data-mode="dark"] .p-button-text:enabled:hover {
         background: color-mix(in srgb, var(--color-content) 12%, transparent);
     }
@@ -102,6 +120,79 @@
         .p-button-text, .p-button-outlined, .p-button-link
     )):enabled:active {
         background: color-mix(in srgb, var(--ui-button-tone) 22%, transparent);
+    }
+
+    /* THE BORING TIER — the neutral fill that stands beside an accent button, and now the app's ONE spelling of
+     * a non-primary action. Same silhouette as the accent above, same 10%/20% structure, `content` instead of
+     * the brand as the tone: a reader takes in the difference as a colour rather than as a different shape.
+     *
+     * IT HAS TO BE WRITTEN HERE, and finding out why is the whole reason this rule exists. Aura paints secondary
+     * from `surface.100`, theme.ts points that at `var(--color-surface-100)`, and Tailwind emits a `@theme`
+     * variable only where something it can SEE references it — a runtime PrimeVue preset is not something it can
+     * see. So `--color-surface-100` was pruned from the production bundle, `background: var(--color-surface-100)`
+     * resolved to nothing, and in LIGHT MODE the boring button came out with no fill and no border: a filled
+     * control rendered as bare text, indistinguishable from the quiet tier beside it. Dark mode hid it, because
+     * the one rule that did land was a dark-only hover.
+     *
+     * That was invisible while `outlined` existed — the settings pages, which are where most of these live, drew
+     * their own border and never asked Aura for a fill. Retiring the bordered spelling is what surfaced it.
+     *
+     * Role tokens, not the numeric ramp, for the same reason: `content` / `line` are what the app's own utilities
+     * use, so they are always emitted, and they FLIP per scheme — one rule reads correctly in both instead of a
+     * light and a dark copy that drift. `:where()` keeps the negation free so a utility class still wins, and the
+     * borderless and link variants are excluded because a quiet button having no chrome is the point of it. */
+    /* The edge is stated, not inherited. Aura gives secondary `border-style: none` while every other severity
+     * gets a 1px solid one, so a boring button was 26px next to a 28px accent — two of a toolbar's controls
+     * sitting at different heights for no reason a reader could see, and the kind of 2px that only ever shows up
+     * once the two are finally side by side. Same box as every other tier, down to the hairline. */
+    .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
+        background: color-mix(in srgb, var(--color-content) 8%, transparent);
+        color: var(--color-content);
+        border: 1px solid color-mix(in srgb, var(--color-content) 16%, transparent);
+    }
+
+    .p-button-secondary:where(:not(.p-button-text, .p-button-link)):enabled:hover {
+        background: color-mix(in srgb, var(--color-content) 14%, transparent);
+        color: var(--color-content);
+        border-color: color-mix(in srgb, var(--color-content) 26%, transparent);
+    }
+
+    .p-button-secondary:where(:not(.p-button-text, .p-button-link)):enabled:active {
+        background: color-mix(in srgb, var(--color-content) 18%, transparent);
+    }
+
+    /* THE LOUD TIER — the accent as a SOLID fill, and the only button in the app that shouts. It exists for
+     * the one thing a screen can ask that no other action asks: money. Join the membership, fix the card
+     * Stripe declined.
+     *
+     * It is a class and not a severity because it is not a TONE, it is a rank. Every severity above answers
+     * "what kind of thing does this do" — commit, warn, destroy — and any number of them can share a screen.
+     * This one answers "which single control is this page for", so a second one on the same page makes both
+     * of them ordinary. A severity would have invited exactly that; a named tier reads as a claim you have to
+     * mean, and there is nothing to stop `severity` from also being set for a tone that is not the accent.
+     *
+     * It replaces three hand-forced call sites on the billing page — `border-primary-fill! bg-primary-fill!
+     * font-semibold! text-fill-content! hover:bg-primary-fill-hover!`, a whole visual tier written out in
+     * `!` utilities because the design system had no way to say it, twice with `px-5!` and once without, so
+     * the app's two paying CTAs sat at different widths. The extra horizontal padding is part of the tier:
+     * this button is wider than its label needs because being easy to hit is the point of it.
+     *
+     * `--ui-button-tone` is re-declared rather than inherited so the solid hover/active can be mixed from the
+     * same variable the tinted tiers use, and a future palette change moves all four together. */
+    .p-button.ui-button-loud {
+        --ui-button-tone: var(--color-primary-fill);
+        padding-inline: calc(var(--spacing) * 5);
+        background: var(--ui-button-tone);
+        border-color: var(--ui-button-tone);
+        color: var(--color-fill-content);
+        font-weight: 600;
+    }
+
+    .p-button.ui-button-loud:enabled:hover,
+    .p-button.ui-button-loud:enabled:active {
+        background: var(--color-primary-fill-hover);
+        border-color: var(--color-primary-fill-hover);
+        color: var(--color-fill-content);
     }
 
     /* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. Aura transitions the box's colours and leaves the

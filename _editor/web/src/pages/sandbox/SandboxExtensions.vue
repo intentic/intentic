@@ -220,7 +220,9 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                  does: it acts on the tab, not on any one group. It is a labelled button and not a third icon
                  because it is the only control here that CREATES something — the others narrow or refresh a list
                  that already exists, and none of them leaves a directory behind. -->
-            <Button label="New extension" icon="pi pi-plus" size="small" outlined @click="creating = true" />
+            <Button label="New extension" size="small" @click="creating = true">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
             <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
                 <Icon name="refresh" :spin="reloading" />
             </button>

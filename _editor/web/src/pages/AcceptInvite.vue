@@ -106,7 +106,7 @@ const switchAccount = async (): Promise<void> => {
                     You've been invited to open the <span class="font-medium text-content">{{ sandboxName }}</span> sandbox. Sign in with Google as
                     <span class="font-medium text-content">{{ invitedEmail }}</span> to continue.
                 </p>
-                <Button label="Continue with Google" severity="secondary" :outlined="true" class="mt-6 w-full justify-center" @click="signIn">
+                <Button label="Continue with Google" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">
                     <template #icon><Icon name="google" /></template>
                 </Button>
             </template>
@@ -128,7 +128,7 @@ const switchAccount = async (): Promise<void> => {
                     >, but you're signed in as <span class="font-medium text-content">{{ user?.email }}</span
                     >. Switch accounts to accept it.
                 </p>
-                <Button label="Switch account" severity="secondary" :outlined="true" class="mt-6 w-full justify-center" @click="switchAccount">
+                <Button label="Switch account" severity="secondary" class="mt-6 w-full justify-center" @click="switchAccount">
                     <template #icon><Icon name="sync" /></template>
                 </Button>
             </template>

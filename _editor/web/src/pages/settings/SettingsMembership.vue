@@ -226,7 +226,7 @@ const assurances = computed(() => [
                         {{ sharePercent }}% of every credit you spend reaches the creator of what you installed or ran, on a
                         <a :href="transparencyUrl" target="_blank" rel="noopener" class="text-link hover:underline">public ledger</a>.
                     </p>
-                    <Button label="Manage on Stripe" severity="secondary" :outlined="true" size="small" :loading="working" @click="open(`portal`)" />
+                    <Button label="Manage on Stripe" severity="secondary" size="small" :loading="working" @click="open(`portal`)" />
                 </div>
             </Card>
         </template>
@@ -244,12 +244,7 @@ const assurances = computed(() => [
                         — what you've installed stays installed, and your allowance comes back the moment the charge clears.
                     </p>
                     <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Button
-                            label="Update payment on Stripe"
-                            :loading="working"
-                            class="border-primary-fill! bg-primary-fill! px-5! font-semibold! text-fill-content! hover:bg-primary-fill-hover!"
-                            @click="open(`portal`)"
-                        />
+                        <Button label="Update payment on Stripe" :loading="working" class="ui-button-loud" @click="open(`portal`)" />
                         <p class="text-2xs text-subtle">Stripe reports this membership as “{{ lapsed }}”.</p>
                     </div>
                 </div>
@@ -315,12 +310,7 @@ const assurances = computed(() => [
                             <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ n(priceUsd) }}</span>
                             <span class="text-sm text-muted">/month</span>
                         </div>
-                        <Button
-                            :label="joinLabel"
-                            :loading="working"
-                            class="mt-3 w-full! border-primary-fill! bg-primary-fill! font-semibold! text-fill-content! hover:bg-primary-fill-hover!"
-                            @click="open(`checkout`)"
-                        />
+                        <Button :label="joinLabel" :loading="working" class="ui-button-loud mt-3 w-full" @click="open(`checkout`)" />
                         <p class="mt-2 text-center text-2xs text-subtle">Paid through Stripe · cancel any time</p>
                     </div>
                 </div>
@@ -382,12 +372,7 @@ const assurances = computed(() => [
                      behind the gate before paying for it should be sent to look, not talked past: Discover
                      badges every premium listing, and a catalogue nobody can see is not a reason to buy. -->
                 <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-line pt-4">
-                    <Button
-                        :label="joinLabel"
-                        :loading="working"
-                        class="border-primary-fill! bg-primary-fill! px-5! font-semibold! text-fill-content! hover:bg-primary-fill-hover!"
-                        @click="open(`checkout`)"
-                    />
+                    <Button :label="joinLabel" :loading="working" class="ui-button-loud" @click="open(`checkout`)" />
                     <RouterLink :to="{ name: `sandbox`, params: { tab: `discover` } }" class="text-xs text-link hover:underline">
                         See what's premium first
                     </RouterLink>

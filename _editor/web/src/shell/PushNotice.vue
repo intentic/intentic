@@ -83,7 +83,6 @@ const pushFlow = usePushFlow();
             <Button
                 size="small"
                 severity="warn"
-                class="px-3 py-1 text-2xs"
                 @click="pushFlow.pushAnyway"
                 :label="pushFlow.question.value.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`"
             />

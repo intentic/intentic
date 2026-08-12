@@ -5,7 +5,39 @@ import { twMerge } from "tailwind-merge";
  * resolves (e.g. `cmp.input('text-2xs px-2 py-1')` shrinks the base input). No @apply, no
  * specificity issues, no !important — the caller always wins. */
 
-/* THERE IS NO `button*` RECIPE HERE ANY MORE, and its absence is the point.
+/* THE ACTION BUTTON IS `<Button>`, IN FOUR TIERS AND TWO SIZES. Nothing else. The tiers are RANKS, so a screen
+ * reads top-to-bottom by weight, and the whole set is spelled in primeng.css:
+ *
+ *   • LOUD — `class="ui-button-loud"`, the accent as a solid fill. The one place a screen asks for money, and
+ *     the only button in the app that shouts. At most one per page, or it is not loud, it is just orange.
+ *   • ACCENT — plain `<Button>`, the accent tinted. The action that COMMITS: New agent, Land now, Create.
+ *   • BORING — `severity="secondary"`, a neutral fill of the same shape. Everything standing beside an accent.
+ *     Same silhouette, different tone, which is the difference a reader can take in without stopping.
+ *   • QUIET — `:text="true"`, no chrome at all. Cancel, Dismiss, an inline escape hatch.
+ *
+ * `danger` / `warn` / `success` are TONES, not tiers: they say what kind of thing a press does and can wear any
+ * of the ranks above. `severity="warning"` is not one of them — PrimeVue 4 emits `warn`, and the one call site
+ * that spelled it the old way was painted in the brand colour for exactly as long as nobody measured it.
+ *
+ * TWO THINGS ARE RETIRED, and both grew back once already:
+ *
+ *   • `outlined`, which was the boring button's SECOND spelling — 30 call sites of transparent-and-hard-bordered
+ *     against the neutral fill's own, chosen by which file you were in rather than by what the button did. The
+ *     settings pages were outlined throughout and the sandbox pages filled throughout, and the two tone-less
+ *     ones ("New extension", "See what changed…") came out wearing a full-strength accent border, so the same
+ *     "make me one of these" button shouted on one tab and murmured on the next.
+ *   • HAND-WRITTEN GEOMETRY — `px-2.5 py-1 text-2xs` and its five near-variants, at 23 call sites plus two more
+ *     hidden in local `const INLINE` / `const ACTION` strings. They existed because `small` used to be Aura's
+ *     own 14px/30px control and every dense surface in the app wanted something tighter; `size="small"` IS that
+ *     tighter button now (theme.ts), so a call site has nothing left to shrink. Layout is still the caller's —
+ *     `shrink-0`, `w-full`, `self-start` — and the one real exception is the mobile upload FAB, a 56px circle.
+ *
+ * An icon goes in the DEFAULT slot beside the label (`<Icon name="plus" />New agent`), not in `#icon`, whenever
+ * the label is slotted too: PrimeVue's default slot replaces the button's entire body, so an `#icon` alongside
+ * it renders nothing. `#icon` is right only with the `label` prop. And it needs no size or margin of its own —
+ * Iconify draws at 1em and the size carries the gap.
+ *
+ * THERE IS NO `button*` RECIPE HERE, and its absence is the point.
  *
  * There used to be four — buttonPrimary/Success/Warning/Danger — painting a tinted fill on a bare <button>.
  * They existed because `@layer components` in primeng.css translated only ONE of PrimeVue's severities into

@@ -78,7 +78,7 @@ const saveProfile = async (): Promise<void> => {
             </div>
             <div class="mt-3 flex items-center gap-3">
                 <Avatar :size="56" :src="avatarImage" />
-                <Button label="Change avatar" severity="secondary" :outlined="true" size="small" @click="avatarInput?.click()">
+                <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">
                     <template #icon><Icon name="image" /></template>
                 </Button>
                 <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />

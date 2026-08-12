@@ -908,13 +908,12 @@ const runPending = async (): Promise<void> => {
                 <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
             </template>
             <template #footer>
-                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelAction">Cancel</button>
+                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelAction" />
                 <Button
                     v-if="pending"
                     size="small"
                     :severity="ACTIONS[pending.kind].danger ? `warn` : `success`"
                     :label="ACTIONS[pending.kind].confirm"
-                    class="px-3 py-1"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"
                     @click="runPending"
                 />
