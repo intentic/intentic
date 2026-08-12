@@ -37,6 +37,7 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
 import { subagentWaitServer } from "./subagent-wait.js";
+import { watchServer } from "./watch-server.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
@@ -618,7 +619,9 @@ export const planHarnessTurn = async (
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
         // the account in itself when it is still pending — filtered to the accounts this turn's persona
         // speaks for.
-        services.perf.track("turn.plan.browser", {}, () => browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId)),
+        services.perf.track("turn.plan.browser", {}, () =>
+            browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
+        ),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
@@ -645,6 +648,32 @@ export const planHarnessTurn = async (
             conversationId: context.base.conversationId,
             signal: context.base.signal,
         }),
+        /* The condition watch (agent/watchers.ts): the agent states an OUTSIDE condition once — a check command
+         * that exits 0 when it holds — and the daemon does the polling, waking this conversation when it fires.
+         * The replacement for hand-rolled sleep loops and for the CLI's own scheduling tools, which accept
+         * schedules that can never fire once the turn's process is gone (agent.ts disallows them). Withheld
+         * from a persona without shell — the check IS a shell command run on the agent's word — and from a
+         * conversationless turn, whose wake would have nowhere to land. The check runs in the DAEMON's view of
+         * the turn's tree with the turn's capability credentials, both snapshotted at arm time. */
+        ...(persona.powers.shell && input.conversationId !== undefined
+            ? {
+                  watch: watchServer({
+                      conversationId: input.conversationId,
+                      cwd: context.localCwd,
+                      env: context.cliEnv,
+                      commandRules,
+                      turn: {
+                          ...(input.agent !== undefined ? { agent: input.agent } : {}),
+                          ...(input.harness !== undefined ? { harness: input.harness } : {}),
+                          ...(input.account !== undefined ? { account: input.account } : {}),
+                          ...(input.model !== undefined ? { model: input.model } : {}),
+                          ...(input.effort !== undefined ? { effort: input.effort } : {}),
+                          ...(input.isolated === true ? { isolated: true } : {}),
+                          ...(input.unattended === true ? { unattended: true } : {}),
+                      },
+                  }),
+              }
+            : {}),
         /* Dependency readiness, asked rather than announced — and asked of the MAIN checkout, for the reason
          * planTurn sets out above: an isolated turn's dependencies live in /work and are only mounted into its
          * namespace, so /work's answer is the turn's answer and the worktree's would be an empty directory. */

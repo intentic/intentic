@@ -29,6 +29,13 @@ reports the profile.
   rather than being matched by timing. That is what gives a child a real session id, a `blocked` status, and its
   own last words as its report — and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep
   until one of this turn's own children needs input or finishes, instead of polling a terminal tail.
+- Outwait the world on the agent's behalf. For a condition OUTSIDE the harness — a CI run, a deploy, a remote
+  queue — the agent arms a condition watch (src/agent/watch-server.ts): a check command that exits 0 when the
+  thing has happened. The daemon polls it between turns (src/agent/watchers.ts) and wakes the arming
+  conversation exactly once — on the check passing or on the deadline, whichever first, with the check's own
+  output — so the agent writes no sleep loop and holds no turn open. The CLI's own scheduling tools
+  (ScheduleWakeup, the Cron family) are disallowed on every turn: they live in a process that dies with the
+  turn, so they accept schedules that can never fire.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
@@ -204,8 +211,8 @@ exact CLI-version anchor and the locator for a vendored development fallback, no
   container flavor: cloudflared runs **inside** the box as a supervised process (there is no sidecar container
   to hold the tunnel token, so on hosted the token is necessarily within the agent's reach — its scope is this
   sandbox's own tunnel and nothing else), and the daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
-  `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no terminal output for the window →
-  the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
+  `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no armed condition watch, no terminal
+  output for the window → the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
   knowing: scheduled automations run only while the box is awake. Nested dockerd needs no privilege directive
   here — VM root already holds every capability, so the docker capability starts its engine without a rebuild.
 - Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly

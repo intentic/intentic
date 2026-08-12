@@ -12,6 +12,7 @@ import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
+import { startWatchers } from "./agent/watchers.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
@@ -233,7 +234,12 @@ const main = async (): Promise<void> => {
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
-        owners: () => ({ ...services.resourceOwners(), turnRuns: turnRunMetrics(), browserSessions: browserSessionMetrics(), reaper: services.reaper.metrics() }),
+        owners: () => ({
+            ...services.resourceOwners(),
+            turnRuns: turnRunMetrics(),
+            browserSessions: browserSessionMetrics(),
+            reaper: services.reaper.metrics(),
+        }),
     });
     shutdown.push(() => resourceMetrics.stop());
     /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs — the Changes scan's
@@ -900,6 +906,12 @@ const main = async (): Promise<void> => {
     if (role.container) {
         scheduler.start();
     }
+
+    // The condition watches (agent/watchers.ts): agent-armed checks the daemon polls between turns, waking the
+    // arming conversation when one fires. Wired here because the wake is a turn and the turn generator cannot
+    // be imported from under turn-plan, where the arming tool lives. Stop drops every armed watch — a daemon on
+    // its way down cannot check anything, and the record honestly gone beats a timer into a dead process.
+    shutdown.push(startWatchers(services, streamAgent));
 
     /* The post publisher, armed rather than polled: it reads the drafts queue, works out the soonest approved
      * post's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart — a

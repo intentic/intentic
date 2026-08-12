@@ -334,7 +334,10 @@ const cleanerEnv = (request: AgentRequest): Record<string, string> => {
     return {
         // Empty means "the filter's default", so it is dropped the same as absent.
         ...opt("INTENTIC_OUTPUT_CLEANERS", request.outputCleaners || undefined),
-        ...opt("INTENTIC_OUTPUT_HOLDOUT", request.outputHoldout !== undefined && request.outputHoldout > 0 ? String(request.outputHoldout) : undefined),
+        ...opt(
+            "INTENTIC_OUTPUT_HOLDOUT",
+            request.outputHoldout !== undefined && request.outputHoldout > 0 ? String(request.outputHoldout) : undefined,
+        ),
     };
 };
 
@@ -373,13 +376,22 @@ const hasRules = <T extends object>(rules: T | undefined): rules is T => rules !
 // why an unattended turn cannot have them.
 const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
 
-// Tools removed from the model's context: the caller's own list (hashlineEdits drops the native Edit/Write),
-// plus — on an unattended turn — the plan tools, which would park the turn on an approval nobody can give.
-// Undefined when nothing is removed, so the SDK option is omitted rather than sent empty.
-const disallowedToolsOf = (request: AgentRequest): string[] | undefined => {
-    const removed = [...(request.disallowedTools ?? []), ...(request.unattended === true ? PLAN_TOOLS : [])];
-    return removed.length > 0 ? removed : undefined;
-};
+/* The CLI's own scheduling tools, removed from EVERY turn. Claude Code implements them inside a process that
+ * stays alive to fire them — its interactive terminal app — and here the CLI dies when the turn settles, so a
+ * wakeup or cron job is accepted and then never fires: a dead letter the model cannot see is one. Worse than
+ * useless, because the tools still ANSWER — an agent that needed to outwait a CI run found ScheduleWakeup,
+ * read its way to "not for this", and hand-rolled a polling loop instead. The daemon-side replacements are
+ * the automations scheduler (owner-configured) and the watch tools (agent-armed, agent/watchers.ts). */
+const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
+
+// Tools removed from the model's context: the scheduler tools always (dead letters here — see above), the
+// caller's own list (hashlineEdits drops the native Edit/Write), plus — on an unattended turn — the plan
+// tools, which would park the turn on an approval nobody can give.
+const disallowedToolsOf = (request: AgentRequest): string[] => [
+    ...CLI_SCHEDULER_TOOLS,
+    ...(request.disallowedTools ?? []),
+    ...(request.unattended === true ? PLAN_TOOLS : []),
+];
 
 /* The CLI's mid-turn credential recovery. On a 401 it raises an `oauth_token_refresh` control request; the SDK
  * answers it from this callback and the turn RESUMES on the returned token instead of dying. Without it the
@@ -578,7 +590,10 @@ const baseOptions = (
     ...(request.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation.anchor) } : {}),
     ...opt("model", request.model),
     ...opt("resume", request.sessionId),
-    ...opt("plugins", request.plugins?.map((path) => ({ type: "local" as const, path }))),
+    ...opt(
+        "plugins",
+        request.plugins?.map((path) => ({ type: "local" as const, path })),
+    ),
     ...reasoningOptions(request),
     ...opt("disallowedTools", disallowedToolsOf(request)),
 });
