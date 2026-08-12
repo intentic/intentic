@@ -69,6 +69,10 @@ services:
             # this long. Run a new deployment's first sweep with REAP_DRY_RUN=true, read the `tunnel reap
             # candidate` log lines, and only then turn it off — the deletes are not recoverable.
             INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS: ${INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS:-7}
+            # Every sandbox holds ~10 DNS records against Cloudflare's per-zone cap, so the same sweep prunes
+            # sandboxes offline this many days (their address is re-created, identical, on the next setup
+            # visit) and deletes orphaned records the tunnel walk can't see. 0 = never prune offline sandboxes.
+            INTENTIC_CLOUDFLARE_PRUNE_AFTER_DAYS: ${INTENTIC_CLOUDFLARE_PRUNE_AFTER_DAYS:-45}
             INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-false}
             # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
             # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane

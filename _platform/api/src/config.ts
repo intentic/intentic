@@ -65,6 +65,14 @@ const configSchema = z.object({
             // cloudflared runs --restart unless-stopped, so a live tunnel reconnects within minutes of a reboot and
             // never stays idle for days; 7 reclaims real orphans without touching a briefly-offline sandbox.
             reapAfterDays: z.coerce.number().default(7), // INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS
+            /* When a CONNECTED-BEFORE sandbox that has been offline this long gives its tunnel + DNS records
+             * back (every sandbox holds ~10 records against Cloudflare's per-zone cap, so long-dead ones are
+             * what fills a zone). Recoverable by design: the reap nulls the row's cached tunnel columns, the
+             * next setup visit re-provisions, and the hostname is DERIVED from the connect token — the same
+             * address comes back. Hosted sandboxes are never pruned this way (a sleeping machine's tunnel is
+             * idle by design and its machine holds the connector token in its env). 0 disables — offline
+             * sandboxes then keep their records forever. INTENTIC_CLOUDFLARE_PRUNE_AFTER_DAYS. */
+            pruneAfterDays: z.coerce.number().nonnegative().default(45),
             // Log reap candidates without deleting — run the first production sweep with this on, confirm the list,
             // then turn it off.
             reapDryRun: z.stringbool().default(false), // INTENTIC_CLOUDFLARE_REAP_DRY_RUN

@@ -72,12 +72,22 @@ volume self-initializes and an image bump self-migrates — no manual db step.
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
 - **No host ports are published** — everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
   only for local debugging.
-- **The tunnel reaper deletes.** Once `INTENTIC_CLOUDFLARE_API_TOKEN` is set, a daily sweep removes
-  intentic-owned sandbox tunnels that are disconnected and idle past `INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS`
-  (7). Connected tunnels and the pre-provisioned pool are spared, but the deletes are final — run a new
-  deployment's first sweep with `INTENTIC_CLOUDFLARE_REAP_DRY_RUN=true` and read the candidates:
+- **The tunnel reaper deletes — and now prunes and heals.** Once `INTENTIC_CLOUDFLARE_API_TOKEN` is set, the
+  daily sweep removes three kinds of clutter, because every sandbox holds ~10 DNS records against Cloudflare's
+  per-zone cap (a Free-plan zone ≈ 200 records ≈ under 20 sandboxes; error 81045 is what a full zone answers
+  every setup with):
+  - **abandoned setups** — tunnels of sandboxes that never connected, past `INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS` (7);
+  - **long-offline sandboxes** — past `INTENTIC_CLOUDFLARE_PRUNE_AFTER_DAYS` (45; 0 = never). Recoverable by
+    design: the sweep clears the sandbox's cached tunnel so the owner's next setup visit re-creates it — the
+    address is derived from the sandbox's own token, so they get the SAME address back. Hosted sandboxes are
+    never pruned this way: a sleeping machine's disconnected tunnel is the idle-stop working, not abandonment.
+  - **orphaned DNS records** — records pointing at tunnels that no longer exist, plus the loopback
+    (`local-*`) records nothing else ever cleaned. The sweep's `DNS record sweep completed` log line carries
+    the zone's total record count — the quota-pressure number to watch.
+  Deletes of true orphans are final — run a new deployment's first sweep with
+  `INTENTIC_CLOUDFLARE_REAP_DRY_RUN=true` and read the candidates:
   ```sh
-  docker compose logs api | grep 'tunnel reap'
+  docker compose logs api | grep -E 'tunnel reap|orphan DNS|DNS record sweep'
   ```
 - **Back up the database yourself.** The `intentic-platform-db` volume is the stack's only state — accounts,
   sandbox registrations and the encrypted tokens. Nothing here schedules a dump; on the deploy host:

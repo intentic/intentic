@@ -8,6 +8,7 @@ import {
     listZoneNames,
     provisionHostSshTunnel,
     provisionSandboxTunnel,
+    reapOrphanDnsRecords,
     reapStaleTunnels,
 } from "./cloudflare.js";
 
@@ -390,7 +391,7 @@ describe(`reapStaleTunnels`, () => {
             onError: () => {},
         });
 
-        expect(result).toEqual({ scanned: 7, reaped: 3, skipped: 0, failed: 0 });
+        expect(result).toEqual({ scanned: 7, reaped: 3, skipped: 0, failed: 0, reapedNames: [`sandbox-old`, `host-ssh-old`, `sandbox-null`] });
         const deletedTunnels = calls
             .filter((call) => call.method === `DELETE` && call.url.includes(`/cfd_tunnel/`) && !call.url.endsWith(`/connections`))
             .map((call) => call.url.split(`/cfd_tunnel/`)[1]);
@@ -433,7 +434,7 @@ describe(`reapStaleTunnels`, () => {
             onError: () => {},
         });
 
-        expect(result).toEqual({ scanned: 51, reaped: 1, skipped: 0, failed: 0 });
+        expect(result).toEqual({ scanned: 51, reaped: 1, skipped: 0, failed: 0, reapedNames: [`sandbox-p2`] });
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/p2-stale`))).toBe(true);
     });
 
@@ -451,7 +452,7 @@ describe(`reapStaleTunnels`, () => {
             onError: () => {},
         });
 
-        expect(result).toEqual({ scanned: 7, reaped: 0, skipped: 0, failed: 0 });
+        expect(result).toEqual({ scanned: 7, reaped: 0, skipped: 0, failed: 0, reapedNames: [] });
         expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
         expect(seen.toSorted()).toEqual([`host-ssh-old`, `sandbox-null`, `sandbox-old`]);
     });
@@ -471,7 +472,7 @@ describe(`reapStaleTunnels`, () => {
             onError: () => {},
         });
 
-        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 0, failed: 0 });
+        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 0, failed: 0, reapedNames: [`host-ssh-old`, `sandbox-null`] });
         const deletedTunnels = calls
             .filter((call) => call.method === `DELETE` && call.url.includes(`/cfd_tunnel/`) && !call.url.endsWith(`/connections`))
             .map((call) => call.url.split(`/cfd_tunnel/`)[1]);
@@ -503,7 +504,7 @@ describe(`reapStaleTunnels`, () => {
             onError: (tunnel) => failures.push(tunnel.name),
         });
 
-        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 1, failed: 0 });
+        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 1, failed: 0, reapedNames: [`host-ssh-old`, `sandbox-null`] });
         expect(failures).toEqual([]);
         // The 1022 did not abort the sweep — the other aged tunnels were still reaped.
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/t-host`))).toBe(true);
@@ -524,7 +525,7 @@ describe(`reapStaleTunnels`, () => {
             onError: (tunnel) => failures.push(tunnel.name),
         });
 
-        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 0, failed: 1 });
+        expect(result).toEqual({ scanned: 7, reaped: 2, skipped: 0, failed: 1, reapedNames: [`host-ssh-old`, `sandbox-null`] });
         expect(failures).toEqual([`sandbox-old`]);
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/t-host`))).toBe(true);
     });
@@ -546,5 +547,62 @@ describe(`reapStaleTunnels`, () => {
         const deleteAt = calls.findIndex((call) => call.method === `DELETE` && call.url.endsWith(`/cfd_tunnel/t-old`));
         expect(connectionsAt).toBeGreaterThanOrEqual(0);
         expect(connectionsAt).toBeLessThan(deleteAt);
+    });
+});
+
+describe(`reapOrphanDnsRecords`, () => {
+    const zone = `example.com`;
+    // The zone as a churned deployment leaves it: live tunnel records, dangling tunnel records, the loopback
+    // pair for a live sandbox and for a deleted one, a stray ACME TXT, and the operator's own records.
+    const records = [
+        { id: `r-live`, type: `CNAME`, name: `sandbox-aaaaaaaaaaaa.example.com`, content: `11111111-1111-4111-8111-111111111111.cfargotunnel.com` },
+        { id: `r-dangling`, type: `CNAME`, name: `p0rt5l0t4bcd-bbbbbbbbbbbb.example.com`, content: `22222222-2222-4222-8222-222222222222.cfargotunnel.com` },
+        { id: `r-local-live`, type: `A`, name: `local-aaaaaaaaaaaa.example.com`, content: `127.0.0.1` },
+        { id: `r-local-gone`, type: `A`, name: `local-cccccccccccc.example.com`, content: `127.0.0.1` },
+        { id: `r-acme-gone`, type: `TXT`, name: `_acme-challenge.local-cccccccccccc.example.com`, content: `stale-order` },
+        { id: `r-apex`, type: `A`, name: `example.com`, content: `203.0.113.7` },
+        { id: `r-mail`, type: `MX`, name: `example.com`, content: `mail.example.com` },
+    ];
+
+    const stubRecords = () =>
+        stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?is_deleted=false`),
+                respond: () => ok([{ id: `11111111-1111-4111-8111-111111111111`, name: `sandbox-aaaaaaaaaaaa`, status: `healthy`, conns_active_at: null, created_at: `2026-01-01T00:00:00Z` }]),
+            },
+            { match: (method, url) => method === `GET` && url.includes(`/dns_records?per_page=`), respond: () => ok(records) },
+            { match: (method) => method === `DELETE`, respond: () => ok({}) },
+        ]);
+
+    it(`deletes dangling tunnel CNAMEs and the loopback pair of gone sandboxes; never touches anything else`, async () => {
+        const calls = stubRecords();
+        const result = await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            dryRun: false,
+            log: () => {},
+            onError: () => {},
+        });
+        expect(result).toEqual({ total: 7, orphaned: 3, reaped: 3, failed: 0 });
+        const deleted = calls.filter((call) => call.method === `DELETE`).map((call) => call.url.split(`/dns_records/`)[1]);
+        expect(deleted.toSorted()).toEqual([`r-acme-gone`, `r-dangling`, `r-local-gone`]);
+    });
+
+    it(`dry-run reports the zone's totals and candidates without deleting`, async () => {
+        const calls = stubRecords();
+        const seen: string[] = [];
+        const result = await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set([`aaaaaaaaaaaa`]),
+            dryRun: true,
+            log: (record) => seen.push(record.name),
+            onError: () => {},
+        });
+        expect(result).toEqual({ total: 7, orphaned: 3, reaped: 0, failed: 0 });
+        expect(seen).toHaveLength(3);
+        expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
     });
 });

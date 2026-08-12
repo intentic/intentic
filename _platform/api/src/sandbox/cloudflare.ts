@@ -534,7 +534,7 @@ export const reapStaleTunnels = async (args: {
     exclude: Set<string>;
     log: (tunnel: { id: string; name: string; status: string | null }) => void;
     onError: (tunnel: { id: string; name: string }, error: unknown) => void;
-}): Promise<{ scanned: number; reaped: number; skipped: number; failed: number }> => {
+}): Promise<{ scanned: number; reaped: number; skipped: number; failed: number; reapedNames: string[] }> => {
     const { apiToken, zone, reapAfterMs, dryRun, exclude, log, onError } = args;
     const { zoneId, accountId } = await resolveZone(apiToken, zone);
     const tunnels = await listTunnels(apiToken, accountId);
@@ -548,6 +548,9 @@ export const reapStaleTunnels = async (args: {
     let reaped = 0;
     let skipped = 0;
     let failed = 0;
+    // The names actually deleted — retention heals the rows behind them (nulling their cached tunnel columns
+    // arms the lazy re-provision), so this must report what HAPPENED, never what was merely attempted.
+    const reapedNames: string[] = [];
     for (const tunnel of stale) {
         log({ id: tunnel.id, name: tunnel.name, status: tunnel.status });
         if (dryRun) {
@@ -557,6 +560,7 @@ export const reapStaleTunnels = async (args: {
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced deletes keep Cloudflare rate limits comfortable
             await deleteTunnelById(apiToken, accountId, zoneId, tunnel.id);
             reaped += 1;
+            reapedNames.push(tunnel.name);
         } catch (error) {
             // A still-live connector re-registered between the list and the delete (1022) — not an orphan yet.
             if (error instanceof CloudflareApiError && error.codes.includes(1022)) {
@@ -567,5 +571,88 @@ export const reapStaleTunnels = async (args: {
             onError({ id: tunnel.id, name: tunnel.name }, error);
         }
     }
-    return { scanned: tunnels.length, reaped, skipped, failed };
+    return { scanned: tunnels.length, reaped, skipped, failed, reapedNames };
+};
+
+/* THE RECORD-LEVEL SWEEP — the tunnel reaper's blind spot, walked from the other side. That reaper starts
+ * from tunnels, so it can only ever delete records whose tunnel it just deleted; three kinds of stale record
+ * are invisible to it and accumulate until the zone hits Cloudflare's per-zone cap (81045), at which point
+ * NOTHING can be set up on the deployment — every lane provisions the same tunnel:
+ *
+ *   • dangling tunnel CNAMEs — the sandbox-, ssh-, port-slot, preview and public records whose
+ *     `<tunnelId>.cfargotunnel.com` target no longer exists (a teardown that deleted the tunnel but died
+ *     before the records, a quota-interrupted provision, hand-deleted tunnels);
+ *   • `local-<id>` A records — the loopback-certificate names point at 127.0.0.1, not at a tunnel, so no
+ *     tunnel teardown has ever cleaned one; every sandbox that used the local path leaked its record forever;
+ *   • `_acme-challenge.local-<id>` TXTs — meant to live for one ACME order, left behind by a crashed one.
+ *
+ * The verdicts come from the caller's DB truth (liveSandboxIds — every 12-hex id derivable from the rows'
+ * token digests) plus the account's live tunnel list, both computed fresh in one sweep. Only name shapes this
+ * platform mints are ever touched: anything else in the zone — the apex, mail, a hand-made record — is
+ * invisible to the filter by construction. `total` reports the zone's record count either way, because the
+ * operator watching quota pressure needs the number before 81045 says it for them. */
+const RECORD_PAGE = 100;
+const MAX_RECORD_PAGES = 200;
+const zoneRecordSchema = z.object({ id: z.string(), type: z.string(), name: z.string(), content: z.string() });
+export const reapOrphanDnsRecords = async (args: {
+    apiToken: string;
+    zone: string;
+    liveSandboxIds: Set<string>;
+    dryRun: boolean;
+    log: (record: { name: string; type: string; content: string }) => void;
+    onError: (record: { name: string }, error: unknown) => void;
+}): Promise<{ total: number; orphaned: number; reaped: number; failed: number }> => {
+    const { apiToken, zone, liveSandboxIds, dryRun, log, onError } = args;
+    const { zoneId, accountId } = await resolveZone(apiToken, zone);
+    const liveTunnelIds = new Set((await listTunnels(apiToken, accountId)).map((tunnel) => tunnel.id));
+    const records: z.infer<typeof zoneRecordSchema>[] = [];
+    for (let page = 1; page <= MAX_RECORD_PAGES; page += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- pagination
+        const batch = await cfCall(
+            apiToken,
+            `/zones/${encodeURIComponent(zoneId)}/dns_records?per_page=${RECORD_PAGE}&page=${page}`,
+            z.array(zoneRecordSchema),
+        );
+        records.push(...batch);
+        if (batch.length < RECORD_PAGE) {
+            break;
+        }
+    }
+    const zoneSuffix = `.${zone}`;
+    const orphaned = records.filter((record) => {
+        if (!record.name.endsWith(zoneSuffix)) {
+            return false;
+        }
+        // A CNAME onto a tunnel that no longer exists is dangling whatever it is called — the content match
+        // is the ownership proof (only this platform points names at cfargotunnel).
+        const tunnelTarget = /^([0-9a-f-]{36})\.cfargotunnel\.com$/.exec(record.content);
+        if (record.type === `CNAME` && tunnelTarget !== null) {
+            return !liveTunnelIds.has(tunnelTarget[1] ?? ``);
+        }
+        // The loopback pair, keyed to a sandbox id no row derives any more.
+        const local = /^(?:_acme-challenge\.)?local-([0-9a-f]{12})\./.exec(record.name.slice(0, record.name.length - zone.length));
+        if (local !== null && (record.type === `A` || record.type === `TXT`)) {
+            return !liveSandboxIds.has(local[1] ?? ``);
+        }
+        return false;
+    });
+    let reaped = 0;
+    let failed = 0;
+    for (const record of orphaned) {
+        log({ name: record.name, type: record.type, content: record.content });
+        if (dryRun) {
+            continue;
+        }
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced deletes keep Cloudflare rate limits comfortable
+            await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
+                method: "DELETE",
+            });
+            reaped += 1;
+        } catch (error) {
+            failed += 1;
+            onError({ name: record.name }, error);
+        }
+    }
+    return { total: records.length, orphaned: orphaned.length, reaped, failed };
 };

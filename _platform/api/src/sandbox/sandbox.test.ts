@@ -70,7 +70,7 @@ const stubTunnelDeleteFailure = (tunnelDelete: () => Response) =>
 
 const providedConfig = {
     ...context().config,
-    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, reapDryRun: true, poolSize: 0 },
+    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
 };
 const providedRow = { ...sandboxRow, tunnelToken: `cached-token` };
 
@@ -300,7 +300,7 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         const config = {
             ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, reapDryRun: true, poolSize: 0 },
+            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
         };
 
         const result = await call(
@@ -329,7 +329,7 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(row), update } });
         const config = {
             ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, reapDryRun: true, poolSize: 0 },
+            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
         };
 
         const result = await call(
@@ -353,7 +353,7 @@ describe(`sandbox routes`, () => {
         });
         const config = {
             ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, reapDryRun: true, poolSize: 0 },
+            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
         };
         const deleteRow = vi.fn().mockResolvedValue({});
         const provided = fakePrisma({
