@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import type { GitChange, GitDiffSide, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
+import type { GitChange, GitDiffSide, LandedMessage, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import Dialog from "primevue/dialog";
@@ -14,7 +14,7 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
 import { commitMessage, followFilledMessage } from "../../composables/workspace/commitMessage";
-import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { ALL_SIDES, commitMessageOf, landedMessage, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
@@ -185,7 +185,7 @@ const originNote = (id: string): string | undefined => {
 };
 
 /* WHAT THE CHIP FILES INTO THE COMMIT BOX — the sentence written from that session's landed diff when its work
- * arrived, and its title read as a subject when there is no such sentence.
+ * arrived, and nothing at all when there is no such sentence.
  *
  * THE DIFF WINS, and the reason is that the two describe different things. A title names the ASK, once, from
  * the opening prompt (see the daemon's landed-subject.ts) — so a conversation that opened "audit the review
@@ -202,37 +202,28 @@ const originNote = (id: string): string | undefined => {
  *
  * Nothing replaces it, on purpose: a chip with no drafted sentence behind it files nothing and simply filters,
  * which is the honest answer. An empty box the user can type into beats a confident line about a change nobody
- * read. */
-const originSubject = (id: string): string | undefined => originOf(id)?.subject;
-
-/* What the chip actually files: the subject, and the `Release-Note:` / `Breaking-Note:` trailers under it when
- * this landing had them (a repo that keeps a changelog, and a change its users would notice — or lose).
- * Composed HERE rather than stored joined, because a subject is one line everywhere it is SHOWN — the chip in
- * the legend is one line — and the parts only become a commit message at this moment.
+ * read.
  *
- * AND NOTHING ELSE. A drafted message used to carry a body between the two — up to two "- " fact lines — and
- * it is gone from the whole path, prompt included (the daemon's git/commit-message.ts). It was the bulk of what
- * the model wrote and therefore the bulk of the wait, and what it bought was the subject restated at greater
- * length over a diff git already records. A subject and, when there is one, the sentence for the people who
- * read the release, is the whole of a message worth filing.
+ * THE ROSTER ANSWERS FIRST, exactly as it does for the title and the logo above, and here it is the difference
+ * between a message that arrives and one that does not. This sentence is written by a model that starts when
+ * the work lands and answers several seconds later — reliably while the user is walking over to this panel and
+ * clicking the very chip that is waiting for it. The roster is PUSHED the moment it is written; the review is a
+ * workspace-wide rescan that only refreshes when something asks it to, so reading this out of the review alone
+ * meant the box stayed empty until an unrelated write happened to refresh the panel, and clicking the chip
+ * again was the only way anyone ever found to collect it.
  *
- * The two trailers share ONE paragraph, joined by a single newline: git only reads the message's final block
- * as trailers, so a blank line between them would demote the first to body text and the release harvest would
- * never see it. */
-const originMessage = (id: string): string | undefined => {
-    const subject = originSubject(id);
-    if (subject === undefined) {
-        return undefined;
-    }
-    const origin = originOf(id);
-    const trailers = [
-        origin?.note === undefined ? `` : `Release-Note: ${origin.note}`,
-        origin?.breaking === undefined ? `` : `Breaking-Note: ${origin.breaking}`,
-    ]
-        .filter((line) => line !== ``)
-        .join(`\n`);
-    return [subject, trailers].filter((part) => part !== ``).join(`\n\n`);
-};
+ * The review's copy stays as the second answer, for the reader the roster cannot serve: an archived agent is
+ * off the board while its landed lines are still in the tree, and land → archive → commit at leisure is the
+ * ordinary flow. Same shape from both roads (LandedMessage), so this is one lookup rather than two branches —
+ * the rule itself, and the trailers it composes below, live in changeOrigins.ts where they are testable.
+ *
+ * AND NOTHING ELSE GOES IN. A drafted message used to carry a body between the subject and its trailers — up to
+ * two "- " fact lines — and it is gone from the whole path, prompt included (the daemon's git/commit-message.ts).
+ * It was the bulk of what the model wrote and therefore the bulk of the wait, and what it bought was the subject
+ * restated at greater length over a diff git already records. */
+const landedOf = (id: string): LandedMessage | undefined => landedMessage(agentOf(id), originOf(id));
+const originSubject = (id: string): string | undefined => landedOf(id)?.subject;
+const originMessage = (id: string): string | undefined => commitMessageOf(landedOf(id));
 
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
  * list (and every section verb under it) to that agent's files; it now also names that work in the commit box.

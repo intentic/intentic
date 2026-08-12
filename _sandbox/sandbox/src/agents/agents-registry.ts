@@ -5,7 +5,7 @@ import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { loopProjection } from "../loops/loop-state.js";
 import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
-import { type AgentsStore, type AgentTitleSource, isIsolated, type PersistedAgent } from "./agents-store.js";
+import { type AgentsStore, type AgentTitleSource, isIsolated, landedMessageOf, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 import type { LandedPresences } from "./landed-presence.js";
 import type { LandStandings } from "./standing.js";
@@ -202,9 +202,11 @@ export interface AgentsRegistry {
      * and no ladder — unlike a title, which is an identity several sources compete over, this is one sentence
      * about one diff, and the newest land is by definition the one describing the most of the claim.
      *
-     * No roster broadcast: nothing on the fleet board shows it. The Changes panel reads it through agentOrigins,
-     * which re-reads these entries on every scan — so what the panel needs is a REASON to scan, and the caller
-     * publishes one the moment this returns (agents/landed-subject.ts). Leaves updatedAt alone for the same
+     * BROADCAST, like the drafting flag it answers. The Changes panel reads this off the roster frame and only
+     * falls back to the review's copy for an agent the roster has dropped — so the sentence reaches the commit
+     * box on the push that already exists, rather than waiting for something to make the panel re-read a
+     * workspace-wide scan. The caller still publishes that scan afterwards (agents/landed-subject.ts), because
+     * the review's copy is what an ARCHIVED agent's chip is read through. Leaves updatedAt alone for the same
      * reason setTitle does — the land already stamped the activity this describes. */
     readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string }) => Promise<void>;
     /* Say that the sentence above is being written right now, or has stopped being written — the only part of a
@@ -385,6 +387,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         // Read for branch-backed agents only, for the same reason a standing is: a workspace conversation
         // reaches the main tree by typing in it, never through a land, so it has no landing to be missing.
         const landedPresence = entry.branch === undefined ? undefined : presences.of(entry.id);
+        const landedMessage = landedMessageOf(entry);
         return {
             id: entry.id,
             status,
@@ -424,6 +427,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
             // True only for the seconds a model is writing this landing's commit message — see setDraftingSubject.
             ...(draftingSubjects.has(entry.id) ? { draftingSubject: true as const } : {}),
+            /* …and the sentence itself the moment it exists. The flag above is a promise, and this is the frame
+             * that keeps it: the Changes panel's "From" chip files this into the commit box, and a landing's
+             * message is the one thing about that panel which arrives SECONDS after everything else it draws.
+             * Sending it here costs a string on a frame that was going out anyway; the alternative was the
+             * panel re-reading the whole review to collect it (see LandedMessage). */
+            ...(landedMessage === undefined ? {} : { landedMessage }),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
             ...(entry.seenAt !== undefined ? { seenAt: entry.seenAt } : {}),
             ...(entry.archivedAt !== undefined ? { archivedAt: entry.archivedAt } : {}),
@@ -739,6 +748,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(cleanNote === undefined ? { landedNote: undefined } : { landedNote: cleanNote }),
                 ...(cleanBreaking === undefined ? { landedBreaking: undefined } : { landedBreaking: cleanBreaking }),
             });
+            broadcast();
             await persist();
         },
         /* WHETHER A SENTENCE IS BEING WRITTEN FOR THIS AGENT RIGHT NOW — set around the model call and nowhere

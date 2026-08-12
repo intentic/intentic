@@ -92,59 +92,65 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     /* SAY THAT IT IS BEING WRITTEN, before the call rather than after it. The sentence is the one thing about a
      * landing that arrives LATE, so the seconds it takes are the only part of this feature a user ever
      * experiences as a wait — and until this flag they waited at a chip that looked exactly like one with
-     * nothing behind it. Broadcast on the roster rather than published as a review change, because it is a fact
-     * about the AGENT and the roster frame is already live: routing it through `landings` would spend a
-     * workspace-wide rescan to deliver one boolean (see the publish at the end, which spends one deliberately).
+     * nothing behind it. Broadcast on the roster, which is where the ANSWER now travels too: both are facts
+     * about the agent, and a promise and its answer arriving down two different roads is what made a written
+     * message and an unwritten one look the same in the box (see LandedMessage in the contract).
      *
-     * The `finally` is the whole of the cleanup: every road out of the model call — an answer, a refusal, the
-     * chain running dry, a throw — has to clear it, or a chip keeps saying "writing…" about a call that ended
-     * minutes ago. */
+     * THE FLAG CLEARS LAST, after the sentence is on the roster — the whole ordering rule of this function. It
+     * is what a user is told by: "writing…" stops meaning "wait" only once there is something to show, so the
+     * panel can announce a message that is ready without checking whether the message actually arrived. Clearing
+     * it first, as this did while the flag rode a different road from the answer, published a finished draft
+     * over an empty box and left the panel to guess which kind of nothing it was looking at.
+     *
+     * The `finally` is the whole of the cleanup: every road out — an answer, a refusal, the chain running dry, a
+     * throw — has to clear it, or a chip keeps saying "writing…" about a call that ended minutes ago. */
     await services.agents.setDraftingSubject(id, true);
-    const { text } = await services.perf
-        .track("landing.subject", { agent: id, repos: diffs.length }, () =>
+    try {
+        const { text } = await services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
             askQuickModel(services, commitMessagePrompt(diffs, wantsNote, removed), new AbortController().signal),
-        )
-        .finally(() => services.agents.setDraftingSubject(id, false));
-    // The `!` is enforced rather than trusted whenever the detector saw a shrink: the marker is what the
-    // release tooling majors on, and a model that dropped it would ship the removal as a minor bump.
-    const drafted = cleanCommitSubject(text);
-    const subject = removed.length > 0 ? markSubjectBreaking(drafted) : drafted;
-    // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so it
-    // is checked here rather than left to the throw above — and a model that asked a question back instead of
-    // describing the diff has not written a subject either. The same pair of guards, for the same reasons, as
-    // the naming pass makes over its own reply (agent/title-namer.ts).
-    if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
-        return;
+        );
+        // The `!` is enforced rather than trusted whenever the detector saw a shrink: the marker is what the
+        // release tooling majors on, and a model that dropped it would ship the removal as a minor bump.
+        const drafted = cleanCommitSubject(text);
+        const subject = removed.length > 0 ? markSubjectBreaking(drafted) : drafted;
+        // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so
+        // it is checked here rather than left to the throw above — and a model that asked a question back
+        // instead of describing the diff has not written a subject either. The same pair of guards, for the
+        // same reasons, as the naming pass makes over its own reply (agent/title-namer.ts).
+        if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
+            return;
+        }
+        /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
+         * trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
+         * sentence rides the same gate ONLY while nothing was detected — a detected shrink keeps its sentence
+         * on every repo, changelog or not, because the declaration is what the push gate reads from the range
+         * (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none.
+         *
+         * These two and the subject are the WHOLE of a drafted message. The body that used to sit between them
+         * is gone (git/commit-message.ts says why it is not read back): a subject naming what changed, and —
+         * for a repo that publishes one — a sentence for the people who will read the release, is everything
+         * the box needs to be filled with. */
+        const note = wantsNote ? cleanReleaseNote(text) : ``;
+        const written = cleanBreakingNote(text);
+        const breaking = removed.length > 0 ? (written === `` ? fallbackBreakingNote(removed) : written) : wantsNote ? written : ``;
+        // Broadcasts as it writes, which is what puts the sentence in the commit box of a panel that is already
+        // open with this agent's chip lit — no request, no rescan, no second thing that has to go right.
+        await services.agents.setLandedSubject(id, {
+            subject,
+            ...(note === `` ? {} : { note }),
+            ...(breaking === `` ? {} : { breaking }),
+        });
+        /* AND TELL THE REVIEW, for the one reader the roster cannot serve: an ARCHIVED agent, whose card is off
+         * the board while its lines are still sitting in the tree. That chip reads its message out of the
+         * review (agents/origins.ts), and nothing else would refresh it — the entry is on /history so no
+         * workspace path names it, and writing a sentence moves no ref.
+         *
+         * One workspace-wide rescan per landing, spent on the copy that outlives the card. The panel does not
+         * WAIT on it: the roster frame above has already filled the box for every agent still on the board. */
+        publishRuntimeChange("landings");
+    } finally {
+        services.agents.setDraftingSubject(id, false);
     }
-    /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
-     * trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
-     * sentence rides the same gate ONLY while nothing was detected — a detected shrink keeps its sentence on
-     * every repo, changelog or not, because the declaration is what the push gate reads from the range
-     * (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none.
-     *
-     * These two and the subject are now the WHOLE of a drafted message. The body that used to sit between them
-     * is gone (git/commit-message.ts says why it is not read back): a subject naming what changed, and — for a
-     * repo that publishes one — a sentence for the people who will read the release, is everything the box
-     * needs to be filled with. */
-    const note = wantsNote ? cleanReleaseNote(text) : ``;
-    const written = cleanBreakingNote(text);
-    const breaking = removed.length > 0 ? (written === `` ? fallbackBreakingNote(removed) : written) : wantsNote ? written : ``;
-    await services.agents.setLandedSubject(id, {
-        subject,
-        ...(note === `` ? {} : { note }),
-        ...(breaking === `` ? {} : { breaking }),
-    });
-    /* AND SAY SO, which is the difference between a sentence that is written and one that is read.
-     *
-     * Everything above happens SECONDS after the land — the model call is the whole delay — and the review panel
-     * refreshed the moment the turn ended, which is before this began. Nothing else was coming: the entry is on
-     * /history so no workspace path names it, and writing a sentence moves no ref. So the panel held a snapshot
-     * taken just before the message existed, and a "From" chip clicked in that window filed nothing into the
-     * commit box — for as long as it took some unrelated write to refresh the review by accident.
-     *
-     * Published rather than broadcast on the roster: the chip reads this through the review (agents/origins.ts),
-     * because a landing outlives the card that made it, so it is the review that has to be re-asked. */
-    publishRuntimeChange("landings");
 };
 
 // The fire-and-forget form every land site uses: a failure here is a log line, never the land's problem.

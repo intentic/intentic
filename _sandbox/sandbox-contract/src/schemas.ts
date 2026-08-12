@@ -689,6 +689,44 @@ export const AgentAttentionSchema = z.object({
     conflict: z.boolean(),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
+
+/* WHAT A LANDING IS CALLED — the commit message drafted from the landed diff (agents/landed-subject.ts), and
+ * the whole of it: a subject, and the two trailer sentences a repo that keeps a changelog gets.
+ *
+ * ONE SHAPE, TWO CARRIERS, and that is the reason it is a schema of its own rather than three fields written
+ * out twice. The same sentence reaches the Changes panel down two roads — the fleet roster, which is live and
+ * drops archived agents, and the review, which is a rescan and outlives the card (OriginAgent) — so the panel
+ * takes whichever answers first and must not care which one did. Two hand-kept copies of these three fields
+ * would be two things to keep in step, and the one that drifted would be the one nobody was looking at.
+ *
+ * THE PARTS STAY APART. A subject is one bounded line everywhere it is stored and shown; the notes are
+ * sentences for the people who read a release. Flattening them into one string would produce a run-on subject
+ * in the commit box and a truncated note in the changelog, so they are joined only at the moment of the fill —
+ * where they become a commit message with its trailers and nowhere before it. */
+export const LandedMessageSchema = z.object({
+    /* WHAT THIS AGENT'S LANDED WORK DID, as a commit subject — written from the landed diff when the work
+     * arrived, which is why it can say what a title cannot.
+     *
+     * A title names the ASK, and it is written once, from the opening prompt, a second into the first turn. A
+     * conversation that opens "audit the review panel" and then spends four turns fixing what the audit found
+     * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
+     * commit. This is read off the code instead, so it describes the change the user is about to record. */
+    subject: z.string(),
+    /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for
+     * a repo that keeps a changelog (SandboxSettings.changelogRepos).
+     *
+     * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
+     * is told to omit the note for those rather than to invent one. */
+    note: z.string().optional(),
+    /* WHAT THE SAME LANDING TAKES AWAY — the `Breaking-Note:` sentence, filed as its own trailer so the
+     * release harvest can put it under "Breaking changes" and the update card can warn with it before the
+     * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
+     * and to omit it when in doubt — except when the landing shrinks a wire-contract lock, where the sentence
+     * is REQUIRED and mechanically guaranteed (the daemon's git/contract-shrink.ts) rather than judged. */
+    breaking: z.string().optional(),
+});
+export type LandedMessage = z.infer<typeof LandedMessageSchema>;
+
 export const AgentSummarySchema = z.object({
     // The conversationId.
     id: z.string(),
@@ -758,6 +796,23 @@ export const AgentSummarySchema = z.object({
      * Runtime only: nothing about it is persisted, so a daemon restart forgets it. That is correct rather than
      * lossy — a restart also killed the draft it would have been describing. */
     draftingSubject: z.literal(true).optional(),
+    /* AND THE SENTENCE ITSELF, once the flag above clears — what this agent's landed work is called, for the
+     * Changes panel's "From" chip to file into the commit box.
+     *
+     * IT RIDES THE ROSTER because the roster is the channel that is already live for it. The review carries the
+     * same fact (OriginAgent.subject) and has to, for an archived agent whose lines are still in the tree — but
+     * the review is a workspace-wide rescan, coalesced daemon-side and refetched only when something asks, and
+     * this sentence arrives ALONE, seconds after the work it describes, with nothing else moving. Every link in
+     * that chain has to hold for a message that exists to become a message the user can see, and when one of
+     * them doesn't, the box stays empty with nothing to say why — while the flag above, which travels on THIS
+     * frame, has already told them a sentence was coming.
+     *
+     * So the fact goes where the promise went. Same push, same instant: the frame that clears `draftingSubject`
+     * is the frame that carries the answer, which is also what makes "your commit message is ready" honest.
+     *
+     * Absent for every agent that has not landed, and for a landing nothing could be written about. Replaced
+     * wholesale by the next land — the claim grows and so does the sentence about it. */
+    landedMessage: LandedMessageSchema.optional(),
     // Present while a turn runs: its start, ms since epoch.
     startedAt: z.number().optional(),
     updatedAt: z.number(),
@@ -2135,36 +2190,16 @@ export const OriginAgentSchema = z.object({
     // Absent for an entry that never got a title (a turn that failed before one was derived).
     title: z.string().optional(),
     provider: AgentProviderSchema,
-    /* WHAT THIS AGENT'S LANDED WORK DID, as a commit subject — written from the landed diff when the work
-     * arrived (agents/landed-subject.ts), which is why it can say what a title cannot.
+    /* WHAT THE LANDED WORK DID — the same drafted message the agent's own card carries (LandedMessage), on the
+     * road that outlives the card. The panel reads the roster's copy first and this one when the roster has no
+     * entry left to read, which is the case this whole schema exists for: an archived agent's lines are still
+     * in the tree, and the sentence about them has to be too.
      *
-     * A title names the ASK, and it is written once, from the opening prompt, a second into the first turn. A
-     * conversation that opens "audit the review panel" and then spends four turns fixing what the audit found
-     * still answers to "Review panel · audit" — a good name for the session and a wrong subject for the
-     * commit. This is read off the code instead, so it describes the change the user is about to record.
-     *
-     * Absent for three reasons that look identical here and are told apart by `drafting` on the agent's own
-     * card: it is still being written, no quick model is connected, or the draft failed. The panel has no
-     * title-shaped fallback to reach for — guessing a subject from the ask is exactly the habit this replaced —
-     * so a chip with no subject files nothing and simply filters. */
-    subject: z.string().optional(),
-    /* THE SAME LANDING, SAID TO A USER — the `Release-Note:` sentence the chip files in under the subject, for a
-     * repo that keeps a changelog (SandboxSettings.changelogRepos).
-     *
-     * A SEPARATE FIELD rather than a second line inside `subject`, because a subject is one bounded line
-     * everywhere it is stored and shown, and flattening a note into it would produce a run-on subject in the
-     * box and a truncated note in the changelog. Kept apart, each stays what it is and the commit box composes
-     * the pair at the moment of the fill.
-     *
-     * Usually absent, and that is the design: most landings change nothing a user would notice, and the model
-     * is told to omit the note for those rather than to invent one. */
-    note: z.string().optional(),
-    /* WHAT THE SAME LANDING TAKES AWAY — the `Breaking-Note:` sentence, filed as its own trailer so the
-     * release harvest can put it under "Breaking changes" and the update card can warn with it before the
-     * update rather than after. Nearly always absent: the model is told a breaking note is for removals only,
-     * and to omit it when in doubt — except when the landing shrinks a wire-contract lock, where the sentence
-     * is REQUIRED and mechanically guaranteed (the daemon's git/contract-shrink.ts) rather than judged. */
-    breaking: z.string().optional(),
+     * Absent for a landing nothing was written about, and — for the seconds after a land — for one whose
+     * sentence is still being drafted. Those two are told apart by `draftingSubject` on the agent's card, and
+     * neither has a title-shaped fallback: guessing a subject from the ask is exactly the habit this replaced,
+     * so a chip with no message files nothing and simply filters. */
+    landedMessage: LandedMessageSchema.optional(),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 

@@ -1,5 +1,5 @@
 import { readFile, rename } from "node:fs/promises";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema, LandConflictSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema, LandConflictSchema, type LandedMessage } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
 
@@ -181,6 +181,24 @@ export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
  * inventing its own answer for a workspace conversation that could never reach it. */
 export type IsolatedAgent = PersistedAgent & { branch: string };
 export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.branch !== undefined;
+
+/* THE DRAFTED COMMIT MESSAGE THIS ENTRY HOLDS, as the one shape both of its readers hand out — the agent's own
+ * card (live, dropped when the agent is archived) and the review's origin record (a rescan, outliving the
+ * card). Stored as three flat columns because that is what a record of a claim looks like; handed out as one
+ * value because that is what a commit message is, and because a reader that gets it from either road must not
+ * have to know which.
+ *
+ * Undefined when no sentence has been written for this agent's landing — the ordinary state before the first
+ * land, in the seconds while the model is still writing, and forever after a draft that failed. The notes only
+ * ever ride WITH a subject: a release note over no subject would be a trailer with nothing to trail. */
+export const landedMessageOf = (entry: PersistedAgent): LandedMessage | undefined =>
+    entry.landedSubject === undefined
+        ? undefined
+        : {
+              subject: entry.landedSubject,
+              ...(entry.landedNote === undefined ? {} : { note: entry.landedNote }),
+              ...(entry.landedBreaking === undefined ? {} : { breaking: entry.landedBreaking }),
+          };
 
 export interface AgentsStore {
     readonly load: () => Promise<PersistedAgent[]>;

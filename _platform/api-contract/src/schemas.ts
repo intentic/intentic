@@ -54,6 +54,7 @@ import {
     GitLogSchema,
     GitRemoteStateSchema,
     GitReposSchema,
+    LandedMessageSchema,
     OriginAgentSchema,
     RepoChangesSchema,
     RepoPathsSchema,
@@ -286,8 +287,12 @@ export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 // One repo's slice of an action that spans repos — the whole repo, or just the paths named. git can't span
 // repos, so every batch verb in the Changes panel (stage, discard, commit, the AI draft) groups into these.
 export type RepoPaths = z.infer<typeof RepoPathsSchema>;
-// Who an agent id named in a repo's `origins` is — the review carries it, the fleet roster can't (archived).
+// Who an agent id named in a repo's `origins` is — the review carries it, because the fleet roster drops an
+// archived agent while its landed lines are still in the tree.
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
+// What a landing is called: the commit message drafted from its diff, carried by the agent's card while it is
+// on the board and by the review's origin record after it leaves. One shape, so the panel reads one lookup.
+export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
 // What a commit answers with: whether it recorded anything, plus that repo's review row as the commit left it
 // (absent ⇒ the repo has nothing left to show), so the panel replaces one repo instead of re-reading them all.

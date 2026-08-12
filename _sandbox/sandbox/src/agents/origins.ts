@@ -3,6 +3,7 @@ import type { OriginAgent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { headSha } from "../git/changes.js";
 import type { AgentsRegistry } from "./agents-registry.js";
+import { landedMessageOf } from "./agents-store.js";
 
 // WHO PUT THIS FILE IN MY WORKING TREE — the Changes panel's per-file attribution, DERIVED, not recorded.
 //
@@ -178,17 +179,15 @@ export const createAgentOrigins = (
                 if (entry === undefined) {
                     continue;
                 }
+                const landed = landedMessageOf(entry);
                 identities[id] = {
                     provider: entry.provider,
                     ...(entry.title !== undefined ? { title: entry.title } : {}),
                     // What the landed work did, for the chip to file into the commit box — written at land
-                    // time from the diff, so it describes the change rather than the ask the title names.
-                    ...(entry.landedSubject !== undefined ? { subject: entry.landedSubject } : {}),
-                    // …and the same landing said to a user, for a repo that keeps a changelog. Travels beside
-                    // the subject rather than inside it so the box can compose the commit's trailer.
-                    ...(entry.landedNote !== undefined ? { note: entry.landedNote } : {}),
-                    // …and, rarely, what it takes away — the `Breaking-Note:` trailer's sentence.
-                    ...(entry.landedBreaking !== undefined ? { breaking: entry.landedBreaking } : {}),
+                    // time from the diff, so it describes the change rather than the ask the title names. The
+                    // agent's card carries the same message live; this copy is the one an ARCHIVED agent's
+                    // still-uncommitted lines are read through, which is what this whole record is for.
+                    ...(landed === undefined ? {} : { landedMessage: landed }),
                 };
             }
             return identities;

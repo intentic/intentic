@@ -1,6 +1,6 @@
 import type { GitChange, RepoChanges } from "@intentic-app/api-contract";
 import { describe, expect, test } from "vitest";
-import { ORIGIN_HUES, originHue, originsOf, summarizeOrigins } from "./changeOrigins";
+import { commitMessageOf, landedMessage, ORIGIN_HUES, originHue, originsOf, summarizeOrigins } from "./changeOrigins";
 
 const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });
 const repo = (name: string, sides: Partial<Pick<RepoChanges, `conflicted` | `staged` | `unstaged` | `origins`>>): RepoChanges => ({
@@ -57,5 +57,50 @@ describe(`originHue`, () => {
         for (const id of [``, `a`, `agent-1`, `9f3c-4d2e-8a71`, `x`.repeat(200)]) {
             expect(ORIGIN_HUES).toContain(originHue(id));
         }
+    });
+});
+
+/* WHICH COPY OF THE SENTENCE WINS. The first test is the one that matters in practice: the message is written
+ * seconds after the land, and only the card is pushed when it is — a review that still says nothing must not be
+ * allowed to answer over a card that does. */
+describe(`landedMessage`, () => {
+    const message = { subject: `fix: cascading markers` };
+
+    test(`takes the card's copy — it is the one the daemon pushes the moment the sentence exists`, () => {
+        expect(landedMessage({ landedMessage: message }, undefined)).toEqual(message);
+        expect(landedMessage({ landedMessage: message }, {})).toEqual(message);
+    });
+
+    test(`falls back to the review, which is all an archived agent's chip has left`, () => {
+        expect(landedMessage(undefined, { landedMessage: message })).toEqual(message);
+    });
+
+    test(`nothing written for this landing (or nothing yet) is undefined, not a guess`, () => {
+        expect(landedMessage(undefined, undefined)).toBeUndefined();
+        expect(landedMessage({}, {})).toBeUndefined();
+    });
+});
+
+describe(`commitMessageOf`, () => {
+    test(`a bare subject is the whole message`, () => {
+        expect(commitMessageOf({ subject: `fix: cascading markers` })).toBe(`fix: cascading markers`);
+    });
+
+    // git reads only the message's FINAL block as trailers, so both sentences share one paragraph — a blank
+    // line between them would demote the release note to body text and the harvest would never see it.
+    test(`both notes ride one trailer block under the subject`, () => {
+        expect(commitMessageOf({ subject: `feat: rework tabs`, note: `Tabs remember their scroll.`, breaking: `The old tab API is gone.` })).toBe(
+            `feat: rework tabs\n\nRelease-Note: Tabs remember their scroll.\nBreaking-Note: The old tab API is gone.`,
+        );
+    });
+
+    test(`a note without a breaking sentence leaves no empty line behind it`, () => {
+        expect(commitMessageOf({ subject: `feat: rework tabs`, note: `Tabs remember their scroll.` })).toBe(
+            `feat: rework tabs\n\nRelease-Note: Tabs remember their scroll.`,
+        );
+    });
+
+    test(`no message is no message — the box stays the user's to type in`, () => {
+        expect(commitMessageOf(undefined)).toBeUndefined();
     });
 });

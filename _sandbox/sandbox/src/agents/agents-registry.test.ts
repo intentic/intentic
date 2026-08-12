@@ -911,6 +911,32 @@ describe("agents registry", () => {
         expect(saved()?.landedNote).toHaveLength(MAX_NOTE_LENGTH);
     });
 
+    /* THE SENTENCE GOES OUT ON THE FRAME THAT IS ALREADY LEAVING, which is the whole delivery of this feature.
+     *
+     * It is written by a model several seconds after the work lands — reliably while the user is walking over to
+     * the Changes panel and clicking the chip that is waiting for it. Until this broadcast the only copy that
+     * reached the panel rode the review, a workspace-wide rescan that refreshes when something asks it to, so a
+     * message that existed sat unread in the daemon and the box stayed empty with nothing to say why. */
+    it("setLandedSubject puts the message on the card and broadcasts it", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        const frames: (AgentSummary["landedMessage"] | undefined)[] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.landedMessage));
+        expect(frames).toEqual([undefined]); // nothing landed yet: a card with no sentence behind it
+
+        await registry.setLandedSubject("c1", { subject: "fix: cascading markers", note: "Markers stop cascading." });
+        expect(frames.at(-1)).toEqual({ subject: "fix: cascading markers", note: "Markers stop cascading." });
+        expect(registry.get("c1")?.landedMessage).toEqual({ subject: "fix: cascading markers", note: "Markers stop cascading." });
+
+        // A second land describes the whole claim afresh, notes included — so the card carries the new sentence
+        // and not a word of the old one's trailers.
+        await registry.setLandedSubject("c1", { subject: "fix: cascading markers and their counts" });
+        expect(frames.at(-1)).toEqual({ subject: "fix: cascading markers and their counts" });
+        unsubscribe();
+    });
+
     // A card that says "Resolve conflict" but cannot say WHAT blocked is the dead end this report exists to
     // prevent, so it has to outlive the land that produced it — and has to disappear the moment a later land
     // succeeds, or the review keeps offering a resolution for something already resolved. (It is EVIDENCE, not

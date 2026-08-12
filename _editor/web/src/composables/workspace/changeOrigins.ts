@@ -1,4 +1,4 @@
-import type { GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
+import type { GitDiffSide, LandedMessage, RepoChanges } from "@intentic-app/api-contract";
 
 /* WHO PUT THIS FILE IN THE TREE — the Changes panel's attribution layer over the daemon's per-repo `origins`
  * map (path → agent ids that landed it, newest land first; derived from the landed shas in
@@ -86,4 +86,48 @@ export const originHue = (id: string): OriginHue => {
         hash = (hash * 31 + id.charCodeAt(index)) % 1_000_003;
     }
     return ORIGIN_HUES[hash % ORIGIN_HUES.length]!;
+};
+
+// Either carrier of a landing's drafted message: the agent's own card, and the review's origin record. Both
+// hold the same shape, which is what lets the rule below be one lookup instead of two branches.
+type MessageCarrier = { readonly landedMessage?: LandedMessage } | undefined;
+
+/* WHICH COPY OF THE SENTENCE THE CHIP READS — the card's, then the review's.
+ *
+ * THE CARD FIRST, because it is the one that is LIVE. This sentence is written by a model that starts when the
+ * work lands and answers seconds later, which is exactly the window in which someone walks over to the Changes
+ * panel and clicks the chip waiting for it. The roster is pushed the moment it is written; the review is a
+ * workspace-wide rescan that refreshes only when something asks. Reading it out of the review alone left the
+ * box empty until an unrelated write happened to refresh the panel — a message that existed, that the user had
+ * been promised, and that nothing was ever going to deliver.
+ *
+ * THE REVIEW SECOND, because the roster drops an archived agent while its landed lines are still in the tree,
+ * and land → archive → commit at leisure is an ordinary flow. Same rule the chip's title and logo already
+ * follow, for the same two reasons.
+ *
+ * Undefined ⇒ neither has one: nothing was written for this landing, or it is still being written (the card's
+ * `draftingSubject` is what tells those apart). The chip then files nothing and simply filters. */
+export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): LandedMessage | undefined =>
+    card?.landedMessage ?? origin?.landedMessage;
+
+/* THE MESSAGE AS A COMMIT MESSAGE — the subject, and the `Release-Note:` / `Breaking-Note:` trailers under it
+ * when this landing had them (a repo that keeps a changelog, and a change its users would notice — or lose).
+ *
+ * Composed HERE rather than stored joined, because a subject is one line everywhere it is SHOWN — the chip in
+ * the legend is one line — and the parts only become a commit message at this moment.
+ *
+ * The two trailers share ONE paragraph, joined by a single newline: git only reads the message's final block as
+ * trailers, so a blank line between them would demote the first to body text and the release harvest would
+ * never see it. */
+export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => {
+    if (landed === undefined) {
+        return undefined;
+    }
+    const trailers = [
+        landed.note === undefined ? `` : `Release-Note: ${landed.note}`,
+        landed.breaking === undefined ? `` : `Breaking-Note: ${landed.breaking}`,
+    ]
+        .filter((line) => line !== ``)
+        .join(`\n`);
+    return [landed.subject, trailers].filter((part) => part !== ``).join(`\n\n`);
 };
