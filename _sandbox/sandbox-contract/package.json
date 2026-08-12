@@ -69,7 +69,7 @@
         "watch": "tsgo --build --watch",
         "test": "vitest run",
         "test:watch": "vitest",
-        "lock": "tsgo && node scripts/write-lock.mjs"
+        "lock": "tsgo -b && node scripts/write-lock.mjs"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",
