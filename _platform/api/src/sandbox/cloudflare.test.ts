@@ -71,6 +71,26 @@ describe(`provisionSandboxTunnel`, () => {
     const hostname = `sandbox-${id}.${zone}`;
     const sshHostname = `ssh-${id}.${zone}`;
 
+    /* A FULL ZONE IS THE OPERATOR'S TO FIX, and until this it read as an intentic bug: the wizard showed
+     * Cloudflare's own words ("POST /zones/44823fc…/dns_records failed (HTTP 400): 81045 Record quota
+     * exceeded") to a person who could not act on them, on a deployment where NOTHING could be set up any more
+     * — every lane provisions this same tunnel. */
+    it(`says a full zone is a full zone, in words the operator can act on`, async () => {
+        stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
+            { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([]) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/cfd_tunnel`), respond: () => ok({ id: `t1` }) },
+            { match: (method, url) => method === `GET` && url.endsWith(`/cfd_tunnel/t1/token`), respond: () => ok(`connector-token`) },
+            { match: (method, url) => method === `PUT` && url.endsWith(`/cfd_tunnel/t1/configurations`), respond: () => ok({}) },
+            { match: (method, url) => method === `GET` && url.includes(`/dns_records?type=CNAME`), respond: () => ok([]) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/dns_records`), respond: () => cfError(81045) },
+        ]);
+
+        await expect(provisionSandboxTunnel({ apiToken: `api`, zone, connectToken })).rejects.toThrow(/out of DNS records/);
+        // And it still says what to do about it, which is the whole point of catching this code.
+        await expect(provisionSandboxTunnel({ apiToken: `api`, zone, connectToken })).rejects.toThrow(/Cloudflare dashboard/);
+    });
+
     it(`creates the tunnel, routes the daemon + sshd + the port-slot pool, and creates every DNS record when none exist`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },

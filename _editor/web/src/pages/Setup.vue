@@ -328,20 +328,6 @@ const onProvisioned = (summary: SandboxSummary): void => {
     cloudMachine.value = summary.cloud;
 };
 
-// The step names the machine, because "run this" alone reads as something the platform does for you. In the
-// app there is no command to point at — the step is one button — so "this" becomes "it", and the button under
-// it is free to say the verb instead of repeating the place. The cloud choice changes the machine itself, so
-// the title follows it: there, nothing is run BY the user at all.
-const runTitle = computed(() => {
-    if (machine.value === `hosted`) {
-        return `We run it for you`;
-    }
-    if (machine.value === `cloud` && cloudOffered.value) {
-        return `Create a machine for it in your cloud`;
-    }
-    return desktop.value ? `Run it on this computer` : `Run this on your computer`;
-});
-
 /* THE LADDER — the machine choice as a range of power rather than a binary, each rung captioned by what it
  * costs and what it buys.
  *
@@ -1244,6 +1230,19 @@ watch(
     { immediate: true },
 );
 
+// Ask for the address again after a mint that failed — the retry beside the reason on the run step. The
+// watcher above only fires on a CHANGED target, and a failure changes nothing about what was asked for, so
+// without this the only way back was reloading the page.
+const remint = (): void => {
+    const chosen = target.value;
+    const key = targetKey.value;
+    if (chosen === undefined || key === undefined) {
+        return;
+    }
+    setupError.value = undefined;
+    void mint(chosen, key);
+};
+
 // Derive the default `sandbox-<hash>` prefix (must mirror the CLI) once the connection token is known, and
 // pre-fill the editable subdomain field if the user hasn't typed one.
 watch(
@@ -1333,9 +1332,7 @@ watch(commandReady, (ready) => {
                         <template v-if="lane === `attach`"
                             >Point intentic at the sandbox you're already running. One address, and you're in.</template
                         >
-                        <template v-else
-                            >A few minutes to a live sandbox, no Cloudflare account required. Use intentic's domain, or bring your own.</template
-                        >
+                        <template v-else>Pick where it runs. You'll be working in it in a minute or two.</template>
                     </p>
                 </div>
             </header>
@@ -1768,29 +1765,19 @@ watch(commandReady, (ready) => {
                          a step and does not wear one — which leaves this as the only thing on the page anybody has
                          to DO, and a lone "2" beside an unnumbered card counts a spine that isn't there. The icon
                          says which kind of card this is instead, exactly as the attach lane's does. -->
-                    <StepSection v-if="created && lane === `provision`" icon="terminal" :title="runTitle">
-                        <template #actions>
-                            <!-- Below xl only: from there up the same content is docked in its own column (see the
-                         aside at the foot of this template), where it never lands on the command.
-                         A bare (i) in the card's corner, not a captioned "What this does" chip: the caption
-                         was a third row of text competing with the step's own instruction, and it sat where
-                         a phone had to read past it to reach the button. The icon is the universal "more
-                         about this" and it costs the card nothing. -->
-                            <!-- Not on the hosted rung: the reference explains what the install does on the
-                                 reader's machine, and on this rung nothing runs on any machine of theirs. -->
-                            <InfoHint v-if="machine !== `hosted`" class="xl:hidden" label="What running your sandbox does">
-                                <SetupRunDetails :cleanup="cleanupCommand" />
-                            </InfoHint>
-                        </template>
-
-                        <!-- THE LADDER — first on the card because everything under it is the answer to it: how
-                             much machine, whose, at what cost. One CARD per rung, not a row of pills: this is
-                             the decision the rest of onboarding hangs off, and a pill shows only its label, so
-                             what each rung gives you and asks of you stayed invisible until after you picked.
-                             Each card states its own trade and carries its cost as a badge, so the choice can
-                             be read before it is made. Hidden in the desktop app, where "this computer" is the
-                             whole point of being in the app. -->
-                        <div v-if="ladderShown" class="flex flex-col gap-2">
+                    <!-- WHERE THE SANDBOX RUNS, AND THEN THE ONE THING THAT MAKES IT RUN. No step chrome and no
+                         heading: the heading could only name ONE of the three answers below it ("Run this on
+                         your computer" over a chooser that also offers a machine you never touch), and the
+                         chooser says what this card is about better than a title could. Same bare-section
+                         shape as the sandbox card above it, for the same reason. -->
+                    <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
+                        <!-- THE LADDER — first, because everything under it is the answer to it: how much
+                             machine, whose, at what cost. One CARD per rung rather than a row of pills, laid
+                             out in columns so all three are read at a glance: this is the decision the rest of
+                             onboarding hangs off, and a pill shows only its label, so what each rung gives you
+                             and asks of you stayed invisible until after you had picked. Hidden in the desktop
+                             app, where "this computer" is the whole point of being in the app. -->
+                        <div v-if="ladderShown" class="grid gap-2 sm:grid-cols-3">
                             <button
                                 v-for="option in ladderOptions"
                                 :key="option.value"
@@ -1798,7 +1785,7 @@ watch(commandReady, (ready) => {
                                 role="radio"
                                 :aria-checked="machine === option.value"
                                 :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
-                                class="flex w-full cursor-pointer items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                class="flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                                 :class="
                                     machine === option.value
                                         ? `border-link bg-overlay`
@@ -1806,34 +1793,19 @@ watch(commandReady, (ready) => {
                                 "
                                 @click="chooseMachine(option.value)"
                             >
-                                <Icon
-                                    :name="option.icon"
-                                    class="mt-0.5 shrink-0"
-                                    :class="machine === option.value ? `text-link` : `text-muted`"
-                                />
-                                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                                    <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                        <span class="text-sm font-medium text-content">{{ option.title }}</span>
-                                        <span class="text-2xs text-subtle">{{ option.meta }}</span>
-                                    </span>
-                                    <span class="text-xs leading-relaxed text-muted">{{ option.note }}</span>
-                                    <!-- The allowance is spent, and saying so beats hiding a rung the reader was
-                                         offered on their first sandbox. -->
-                                    <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">
-                                        You're already using the sandbox we host. Remove it to have this one hosted instead.
-                                    </span>
+                                <span class="flex items-center gap-2">
+                                    <Icon
+                                        :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
+                                        :spin="hostedBusy && option.value === `hosted`"
+                                        class="shrink-0"
+                                        :class="machine === option.value ? `text-link` : `text-muted`"
+                                    />
+                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
                                 </span>
-                                <Icon
-                                    v-if="hostedBusy && option.value === `hosted`"
-                                    name="spinner"
-                                    spin
-                                    class="mt-0.5 shrink-0 text-info"
-                                />
-                                <Icon
-                                    v-else-if="machine === option.value"
-                                    name="check"
-                                    class="mt-0.5 shrink-0 text-link"
-                                />
+                                <span class="text-2xs text-muted">{{ option.meta }}</span>
+                                <!-- The allowance is spent, and saying so beats hiding a rung the reader was
+                                     offered on their first sandbox. -->
+                                <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>
                             </button>
                         </div>
 
@@ -1868,14 +1840,23 @@ watch(commandReady, (ready) => {
                         </template>
 
                         <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
-                     command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
-                        <div
-                            v-else-if="!commandReady"
-                            class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted"
-                        >
-                            <Icon name="lock" class="mt-0.5 shrink-0" />
-                            <span>{{ lockedReason }}</span>
-                        </div>
+                     command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox.
+                     A FAILED mint gets a notice and a retry instead of the dashed placeholder: "Preparing your
+                     intentic domain…" that never resolves is the state that made this page read as broken, and
+                     the reader could neither see the reason (it was two cards up, in the address row) nor do
+                     anything about it. -->
+                        <template v-else-if="!commandReady">
+                            <template v-if="setupError">
+                                <Notice :of="setupError" />
+                                <Button label="Try again" class="w-full justify-center md:w-auto" @click="remint">
+                                    <template #icon><Icon name="refresh" /></template>
+                                </Button>
+                            </template>
+                            <div v-else class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
+                                <Icon name="lock" class="mt-0.5 shrink-0" />
+                                <span>{{ lockedReason }}</span>
+                            </div>
+                        </template>
                         <template v-else>
                             <template v-if="machine === `cloud` && cloudOffered">
                                 <!-- The machine boots headless with no Cloudflare of its own, so only the
@@ -2277,7 +2258,7 @@ watch(commandReady, (ready) => {
                             </p>
                         </div>
                         <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
-                    </StepSection>
+                    </section>
                 </div>
 
                 <!-- The docked half of the run step's reference material (SetupRunDetails carries the reasoning).

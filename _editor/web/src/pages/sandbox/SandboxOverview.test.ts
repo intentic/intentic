@@ -73,6 +73,17 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
             },
         }),
     );
+    // The upgrade card on a hosted sandbox links onward with a RouterLink, and this mount installs no router
+    // — a stand-in that renders the anchor keeps the card in the tree instead of warning on every mount.
+    app.component(
+        `RouterLink`,
+        defineComponent({
+            props: { to: { type: String, default: `` } },
+            render() {
+                return h(`a`, { href: this.to }, this.$slots[`default`]?.());
+            },
+        }),
+    );
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;

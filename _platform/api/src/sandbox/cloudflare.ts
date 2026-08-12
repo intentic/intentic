@@ -103,10 +103,22 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
     const envelope = envelopeSchema.parse(await response.json());
     if (!response.ok || !envelope.success) {
         const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
-        throw new CloudflareApiError(
-            `Cloudflare ${init?.method ?? "GET"} ${path} failed (HTTP ${response.status}): ${detail}`,
-            envelope.errors.map((error) => error.code),
-        );
+        const codes = envelope.errors.map((error) => error.code);
+        /* THE ONE REFUSAL THAT IS THE OPERATOR'S TO FIX, NOT A MYSTERY. Every sandbox costs its zone a couple
+         * of DNS records, and a zone has a cap (a few hundred on the smaller plans) — so a deployment that has
+         * created and torn down many sandboxes eventually meets 81045, at which point NOTHING can be set up on
+         * it: hosted machines, pasted commands and cloud machines all provision the same tunnel. Left as
+         * Cloudflare's own words it reads as an intentic bug ("POST /zones/44823fc.../dns_records failed (HTTP
+         * 400): 81045 Record quota exceeded"), and the person who can actually fix it is never told what to do.
+         * The reap sweep (retention.ts) reclaims records from disconnected sandboxes, which is the other half
+         * of this and worth naming here — it is the answer for a zone full of test runs. */
+        if (codes.includes(81045)) {
+            throw new CloudflareApiError(
+                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota). Delete records you no longer need in the Cloudflare dashboard — sandbox-*/ssh-* entries whose sandbox is gone are the usual culprit and the daily reaper removes them once their tunnels disconnect — or move the zone to a plan with a higher limit.`,
+                codes,
+            );
+        }
+        throw new CloudflareApiError(`Cloudflare ${init?.method ?? "GET"} ${path} failed (HTTP ${response.status}): ${detail}`, codes);
     }
     return resultSchema.parse(envelope.result);
 };
