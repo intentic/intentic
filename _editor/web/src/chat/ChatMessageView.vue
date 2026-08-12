@@ -167,6 +167,22 @@ const permissionTitle = computed(() => {
     return permission.title ?? permission.displayName ?? permission.toolName;
 });
 
+// The approved run's latest status line off the provider's stream — what the card shows living while the
+// receipt is still pending. Newest wins: a status line is a spinner label, not a log.
+const serviceStatus = computed(() => {
+    const offer = props.message.serviceOffer;
+    if (offer === undefined || offer.receipt !== undefined) {
+        return undefined;
+    }
+    for (let i = (offer.events?.length ?? 0) - 1; i >= 0; i -= 1) {
+        const event = offer.events?.[i];
+        if (event?.event === `status`) {
+            return event.text;
+        }
+    }
+    return undefined;
+});
+
 // Keep the loader visible for the whole live turn, not just before the first token. The model streams a
 // preamble sentence and then goes quiet while it runs tools and thinks — text is present but the turn isn't
 // done. Anchored at the bottom of the assistant stack, the loader tells the user work is still in flight;
@@ -1116,6 +1132,13 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             {{ formatCredits(message.serviceOffer.offer.credits.allowance) }} left today</template
                         >
                     </span>
+                </div>
+
+                <!-- The run living: the provider's own status line, streamed through the platform while the
+                     answer is composed — the paid seconds visible instead of a spinner of unknowable length. -->
+                <div v-if="serviceStatus" class="flex items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <Icon name="spinner" class="text-2xs text-link" spin />
+                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ serviceStatus }}</span>
                 </div>
 
                 <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the

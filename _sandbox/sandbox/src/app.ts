@@ -1098,7 +1098,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             ? await gatedServiceRun(
                   {
                       catalog: () => relayServiceCatalog(services.config),
-                      run: (slug, body) => relayServiceRun(services.config, slug, body),
+                      run: (slug, body, onStatus) => relayServiceRun(services.config, slug, body, onStatus),
                       liveRun: (conversationId) => {
                           const id = conversationId ?? soleLiveConversation();
                           const run = id === undefined ? undefined : turnRunOf(id);

@@ -371,7 +371,7 @@ describe(`metered service runs`, () => {
         expect(stored.serviceRuns).toEqual([]);
     });
 
-    it(`spends, forwards signed, and relays the provider's answer with the meter on it`, async () => {
+    it(`spends, forwards signed, and relays the provider's stream with the ledger's receipt on the end`, async () => {
         const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
         const requestBody = `{"query":"launch on reddit"}`;
         const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -380,14 +380,66 @@ describe(`metered service runs`, () => {
             // The provider's whole verification: HMAC of "{timestamp}.{body}" with the shared secret.
             const expected = createHmac(`sha256`, `svc-secret`).update(`${headers[`x-intentic-timestamp`]}.${requestBody}`).digest(`hex`);
             expect(headers[`x-intentic-signature`]).toBe(expected);
-            return new Response(`{"answer":42}`, { status: 200, headers: { "content-type": `application/json` } });
+            return new Response(`{"event":"status","text":"digging"}\n{"event":"result","data":{"answer":42}}\n`, {
+                status: 200,
+                headers: { "content-type": `application/x-ndjson` },
+            });
         });
         const response = await run(prisma, fetchFn as unknown as typeof fetch, requestBody);
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ answer: 42 });
-        expect(response.headers.get(`x-intentic-credits-remaining`)).toBe(`60`);
+        expect(response.headers.get(`content-type`)).toBe(`application/x-ndjson`);
+        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        expect(lines).toEqual([
+            { event: `status`, text: `digging` },
+            { event: `result`, data: { answer: 42 } },
+            // The trailer is the platform's, never the provider's: outcome and the meter after the charge.
+            { event: `receipt`, outcome: `ok`, credits: 40, remaining: 60 },
+        ]);
         expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(40);
         expect(stored.serviceRuns).toMatchObject([{ userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `ok` }]);
+    });
+
+    it(`refunds a stream that dies before its result — on the open stream, via the trailer`, async () => {
+        const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
+        const fetchFn = vi.fn(
+            async () => new Response(`{"event":"status","text":"digging"}\n`, { status: 200, headers: { "content-type": `application/x-ndjson` } }),
+        );
+        const response = await run(prisma, fetchFn as unknown as typeof fetch);
+        // The status line already crossed the wire before the stream died, so the refusal cannot be an HTTP
+        // status — the refund is the trailer's word, and the ledger agrees.
+        expect(response.status).toBe(200);
+        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        expect(lines).toEqual([
+            { event: `status`, text: `digging` },
+            { event: `receipt`, outcome: `refunded`, credits: 40 },
+        ]);
+        expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(0);
+        expect(stored.serviceRuns).toMatchObject([{ status: `refunded` }]);
+    });
+
+    it(`refunds a 2xx that is not the event format — a misbehaving provider did not serve`, async () => {
+        const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
+        const fetchFn = vi.fn(async () => new Response(`{"answer":42}`, { status: 200, headers: { "content-type": `application/json` } }));
+        const response = await run(prisma, fetchFn as unknown as typeof fetch);
+        expect(response.status).toBe(200);
+        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        expect(lines).toEqual([{ event: `receipt`, outcome: `refunded`, credits: 40 }]);
+        expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(0);
+        expect(stored.serviceRuns).toMatchObject([{ status: `refunded` }]);
+    });
+
+    it(`serves a result whose line the stream never terminated`, async () => {
+        const { prisma, stored } = fakePrisma({ services: [RESEARCH], memberships: [MEMBER] });
+        const fetchFn = vi.fn(
+            async () => new Response(`{"event":"result","data":7}`, { status: 200, headers: { "content-type": `application/x-ndjson` } }),
+        );
+        const response = await run(prisma, fetchFn as unknown as typeof fetch);
+        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        expect(lines).toEqual([
+            { event: `result`, data: 7 },
+            { event: `receipt`, outcome: `ok`, credits: 40, remaining: 60 },
+        ]);
+        expect(stored.serviceRuns).toMatchObject([{ status: `ok` }]);
     });
 
     it(`refunds a provider that failed to serve, and the run row says so`, async () => {
@@ -466,10 +518,12 @@ describe(`metered service runs`, () => {
             headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
         });
         expect(response.status).toBe(200);
-        const answer = (await response.json()) as { demo: boolean; query: string; summary: string };
-        expect(answer.demo).toBe(true);
-        expect(answer.query).toBe(`launch on reddit`);
-        expect(response.headers.get(`x-intentic-credits-remaining`)).toBe(`95`);
+        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as { event: string; data?: { demo?: boolean; query?: string }; remaining?: number });
+        // The demo streams like any provider: status lines, its result, then the platform's receipt.
+        expect(lines.map((line) => line.event)).toEqual([`status`, `status`, `result`, `receipt`]);
+        expect(lines[2]?.data?.demo).toBe(true);
+        expect(lines[2]?.data?.query).toBe(`launch on reddit`);
+        expect(lines[3]).toMatchObject({ event: `receipt`, outcome: `ok`, credits: 5, remaining: 95 });
         expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `ok` }]);
 
         // And the intermediary promise holds: an unsigned call straight at the upstream is refused.

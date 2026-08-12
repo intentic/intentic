@@ -79,15 +79,19 @@ reports the profile.
   a `tier: "premium"` extension donates the owner's credits to its publisher through the platform
   (src/platform/pool-donate.ts — the donation IS the premium gate, keyed on the checkout's own manifest
   identity, refused installs leave no debris); enabling one re-checks the membership (src/platform/pool-status.ts);
-  nothing about what runs on this machine is ever reported. Metered service runs relay verbatim
-  (src/platform/pool-services.ts): the daemon adds the connect token — the member gate, the credit meter and
-  the refund discipline are the platform's. The AGENT's own run is additionally parked on an owner-approval
-  card in the chat before anything is forwarded (src/platform/service-offer.ts): every number on the card is
-  the platform's catalog answer, the owner's click is the only thing that releases the spend, and one click
-  covers one run — consent is plumbing, not the skill's etiquette. The agent reaches the priced catalog
-  through the `services` CLI (bin/services + the baked services skill), scoped by the agent token's grant;
-  an extension backend's runs pass straight through, because which services it may spend the owner's credits
-  on is a `permissions.daemon` glob approved at install.
+  nothing about what runs on this machine is ever reported. Metered service runs relay through
+  src/platform/pool-services.ts: the daemon adds the connect token — the member gate, the credit meter and
+  the refund discipline are the platform's. A run's answer is the platform's NDJSON stream (the contract's
+  ServiceStreamEvent vocabulary plus its own receipt trailer), which the relay forks: provider `status`
+  lines surface live, the buffered `result` is what the caller is answered with. The AGENT's own run is
+  additionally parked on an owner-approval card in the chat before anything is forwarded
+  (src/platform/service-offer.ts): every number on the card is the platform's catalog answer, the owner's
+  click is the only thing that releases the spend, and one click covers one run — consent is plumbing, not
+  the skill's etiquette. While the approved run streams, its status lines land under that card as
+  service_event frames, and the receipt frame is the platform's trailer verbatim. The agent reaches the
+  priced catalog through the `services` CLI (bin/services + the baked services skill), scoped by the agent
+  token's grant; an extension backend's runs pass straight through the gate, because which services it may
+  spend the owner's credits on is a `permissions.daemon` glob approved at install.
 
 ## Key files
 

@@ -52,3 +52,13 @@ export const demoAnswer = (query: string): object => ({
     summary: `Demo summary for "${query}": this canned answer proves the metered path end to end — your credits were spent, the call was signature-verified, and a real provider would answer here.`,
     sources: [{ title: `The creator pool, documented`, url: `https://intentic.dev/api/earn/` }],
 });
+
+/* The demo run as a provider streams it — NDJSON in the contract's ServiceStreamEvent vocabulary, status
+ * lines then the one `result`. Being the living reference of the wire format is half this service's job:
+ * the platform's own forward parses these exact lines, so the documented shape cannot drift from the
+ * enforced one. */
+export const demoStream = (query: string): string =>
+    [{ event: `status`, text: `Searching the demo corpus…` }, { event: `status`, text: `Composing the summary…` }, { event: `result`, data: demoAnswer(query) }]
+        .map((event) => JSON.stringify(event))
+        .join(`\n`)
+        .concat(`\n`);

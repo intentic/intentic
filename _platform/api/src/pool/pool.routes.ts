@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@intentic-app/prisma";
+import type { ServiceRunReceipt } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
@@ -6,7 +7,7 @@ import { z } from "zod";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
-import { DEMO_SLUG, demoAnswer } from "./pool-demo.js";
+import { DEMO_SLUG, demoStream } from "./pool-demo.js";
 import { buildLedger } from "./pool-ledger.js";
 import { applySubscription, poolEnabled, premiumOf } from "./pool-membership.js";
 import { forwardToService, verifyServiceSignature } from "./pool-services.js";
@@ -191,23 +192,72 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
                 429,
             );
         }
-        const result = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, fetchFn, () => at);
-        await prisma.serviceRun.create({
-            data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: result.served ? `ok` : `refunded` },
-        });
-        if (!result.served) {
+        const forward = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, fetchFn, () => at);
+        if (forward.kind === `failed`) {
+            await prisma.serviceRun.create({
+                data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `refunded` },
+            });
             await refundCredits(prisma, ownerId, service.creditsPerRun, at);
-            c.get(`logger`)?.warn({ service: service.slug, status: result.status }, `pool: service did not serve — run refunded`);
+            c.get(`logger`)?.warn({ service: service.slug }, `pool: service did not serve — run refunded`);
             return c.json(
                 { error: { type: `service_unavailable`, message: `${service.name} did not answer — nothing was charged. Please try again shortly.` } },
                 502,
             );
         }
-        return c.newResponse(result.body, result.status as 200, {
-            "content-type": result.contentType,
-            // Advisory, like the trial's remaining-count header: any UI can show the meter without a second call.
-            "x-intentic-credits-remaining": String(spend.remaining),
+        if (forward.kind === `answered`) {
+            // The provider's own refusal (a 4xx) — a complete, PAID answer, relayed verbatim as ever.
+            await prisma.serviceRun.create({
+                data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `ok` },
+            });
+            return c.newResponse(forward.body, forward.status as 200, {
+                "content-type": forward.contentType,
+                // Advisory, like the trial's remaining-count header: any UI can show the meter without a second call.
+                "x-intentic-credits-remaining": String(spend.remaining),
+            });
+        }
+        /* The stream: every validated provider event relayed the moment it arrives, then the LEDGER's own last
+         * word — a `receipt` trailer this handler appends after the stream settles, because whether the run
+         * served (and so whether the charge stood or was reversed) is only knowable at the end, when the
+         * response's status line is long gone. The trailer is the platform speaking, never the provider. */
+        const logger = c.get(`logger`);
+        const encoder = new TextEncoder();
+        const relayed = new ReadableStream<Uint8Array>({
+            async start(controller) {
+                let served = false;
+                try {
+                    while (true) {
+                        const next = await forward.events.next();
+                        if (next.done) {
+                            served = next.value;
+                            break;
+                        }
+                        controller.enqueue(encoder.encode(`${JSON.stringify(next.value)}\n`));
+                    }
+                } catch {
+                    served = false;
+                }
+                try {
+                    await prisma.serviceRun.create({
+                        data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: served ? `ok` : `refunded` },
+                    });
+                    if (!served) {
+                        await refundCredits(prisma, ownerId, service.creditsPerRun, at);
+                        logger?.warn({ service: service.slug }, `pool: service stream ended without a result — run refunded`);
+                    }
+                } catch (error) {
+                    logger?.error({ service: service.slug, error }, `pool: failed to record a streamed run`);
+                }
+                const receipt: ServiceRunReceipt = {
+                    event: `receipt`,
+                    outcome: served ? `ok` : `refunded`,
+                    credits: service.creditsPerRun,
+                    ...(served ? { remaining: spend.remaining } : {}),
+                };
+                controller.enqueue(encoder.encode(`${JSON.stringify(receipt)}\n`));
+                controller.close();
+            },
         });
+        return c.newResponse(relayed, 200, { "content-type": `application/x-ndjson` });
     });
 
     /* The demo service's upstream (pool-demo.ts) — the platform answering its own forwarded calls, verifying
@@ -233,7 +283,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             return c.json({ error: `bad signature — only calls forwarded by the platform are served` }, 401);
         }
         const query = (JSON.parse(body || `{}`) as { query?: unknown }).query;
-        return c.json(demoAnswer(typeof query === `string` ? query : `(no query)`));
+        return c.newResponse(demoStream(typeof query === `string` ? query : `(no query)`), 200, { "content-type": `application/x-ndjson` });
     });
 
     /* The public ledger (pool-ledger.ts): the month in progress computed live and marked open, then every

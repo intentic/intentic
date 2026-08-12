@@ -37,7 +37,8 @@ const USAGE = `services — the platform's premium services, priced in the owner
 \`run\` raises an approval card in the owner's chat — price and remaining credits on it, straight from the
 platform — and waits. The owner's click is the only thing that releases the spend: a skip or an expired
 offer charges nothing and answers with a sentence to act on. One click covers one run; ask again to repeat.
-Nothing is charged when a service fails to answer.`;
+An approved run streams its progress onto that same card (up to five minutes — hold this command open) and
+prints its result here when it completes. Nothing is charged when a service fails to answer.`;
 
 const die = (message) => {
     process.stderr.write(`${message}\n`);

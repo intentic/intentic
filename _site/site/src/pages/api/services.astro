@@ -30,9 +30,11 @@ x-intentic-signature: 3f1a9c…   # HMAC-SHA256 over "{timestamp}.{body}"
 { "query": "which subreddits fit a self-hosted agent workspace?" }
 
 HTTP/1.1 200 OK
-content-type: application/json
+content-type: application/x-ndjson
 
-{ "communities": [ … ], "timing": "…", "confidence": 0.82 }`;
+{ "event": "status", "text": "Searching 240 communities…" }
+{ "event": "status", "text": "Ranking the 12 that fit…" }
+{ "event": "result", "data": { "communities": [ … ], "confidence": 0.82 } }`;
 
 /* THE RUN, DRAWN — geometry for the round-trip figure, computed so the picture cannot show a party or a hop
  * the prose beside it doesn't. Three actors across the width; the call travels right along one row and the
@@ -55,9 +57,9 @@ const RUN_PAD = 10;
 const runSteps = [
     "The <strong>member</strong> clicks approve on the run's card in chat — their agent cannot spend without that click.",
     "The <strong>platform</strong> charges the member's credits and forwards one <strong>signed</strong> call to your endpoint.",
-    "You <strong>verify the signature</strong> and answer — JSON in, JSON out, up to a minute, no streaming.",
-    "The platform <strong>relays your answer back verbatim</strong>, and you're paid.",
-    "No answer — a 5xx or a timeout — and the <strong>charge is reversed</strong>. You aren't paid; it cost the member nothing.",
+    "You <strong>verify the signature</strong> and stream events — <code>status</code> lines while you work, one <code>result</code> that ends the run, up to five minutes.",
+    "The platform <strong>relays every event live</strong> — status lines onto the run's card in the member's chat, the result to their agent — and you're paid.",
+    "No result — a 5xx, a timeout, or a stream that dies early — and the <strong>charge is reversed</strong>. You aren't paid; it cost the member nothing.",
 ];
 ---
 
@@ -87,9 +89,12 @@ const runSteps = [
 
     <h2>The shape of a run</h2>
     <p>
-        The platform is the intermediary, and the whole thing is <strong>one HTTP round trip</strong>: it charges the member's credits
-        atomically, forwards their JSON to you with a signature, and relays your answer back verbatim. Version 1 is sized for
-        research-and-answer services, not live feeds.
+        The platform is the intermediary: it charges the member's credits atomically, forwards their JSON to you with a signature, and
+        relays what you send back <strong>as you send it</strong>. Your answer is a stream — NDJSON, one event per line:
+        <code>status</code> lines while you work (each replaces the last, a progress label rather than a log) and exactly one
+        <code>result</code> whose <code>data</code> is the answer, which ends the run. The status lines appear live on the run's card in
+        the member's chat; the result goes to their agent. A run has five minutes and 2&nbsp;MB of stream to finish in, and richer event
+        kinds will join the vocabulary as chat learns to render them — a service written today streams the two above.
     </p>
 
     <div class="docs-embed mt-6">
@@ -107,7 +112,7 @@ const runSteps = [
                     viewBox={`0 0 ${RUN.w} ${RUN.h}`}
                     class="h-auto w-full text-link"
                     role="img"
-                    aria-label="One paid run as a round trip: the member approves, the platform charges the member's credits and forwards a signed call, your endpoint verifies it and answers, and the answer is relayed back verbatim and paid. If you do not answer, the platform reverses the charge."
+                    aria-label="One paid run: the member approves, the platform charges the member's credits and forwards a signed call, your endpoint verifies it and streams status events ending in one result, and the stream is relayed back live and paid. If no result arrives, the platform reverses the charge."
                 >
                     <defs>
                         <marker id="run-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -128,11 +133,11 @@ const runSteps = [
                     <text x={(PX + YX) / 2} y={RUN_FWD - 8} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">charge · sign · forward</text>
                     <text x={(PX + YX) / 2} y={RUN_FWD + 13} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">HMAC signature</text>
 
-                    {/* Return: your answer travelling back, relayed verbatim and paid. */}
+                    {/* Return: your event stream travelling back, relayed live and paid. */}
                     <path d={`M ${YX - RUN_PAD} ${RUN_RET} L ${PX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
                     <path d={`M ${PX - RUN_PAD} ${RUN_RET} L ${MX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <text x={(PX + YX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">your JSON answer</text>
-                    <text x={(MX + PX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">relayed verbatim · paid</text>
+                    <text x={(PX + YX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">your event stream: status … result</text>
+                    <text x={(MX + PX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">relayed live · paid</text>
 
                     {/* What you do, on your own lane, between arrival and answer. */}
                     <rect
@@ -145,12 +150,12 @@ const runSteps = [
                         stroke="color-mix(in srgb, var(--color-primary-500) 45%, transparent)"
                         stroke-width="1"
                     />
-                    <text x={YX} y={(RUN_FWD + RUN_RET) / 2 + 1} text-anchor="middle" dominant-baseline="central" font-size="9.5" font-weight="600" style="fill: var(--color-link)">verify · answer ≤ 60s</text>
+                    <text x={YX} y={(RUN_FWD + RUN_RET) / 2 + 1} text-anchor="middle" dominant-baseline="central" font-size="9.5" font-weight="600" style="fill: var(--color-link)">verify · stream ≤ 5 min</text>
 
-                    {/* The honest branch: no answer, no charge. Drawn to the member, past the platform that reverses it. */}
+                    {/* The honest branch: no result, no charge. Drawn to the member, past the platform that reverses it. */}
                     <path d={`M ${YX - RUN_PAD} ${RUN_REF} L ${MX + RUN_PAD} ${RUN_REF}`} fill="none" stroke="var(--color-success)" stroke-opacity="0.9" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#run-refund)" />
                     <circle cx={PX} cy={RUN_REF} r="2.5" fill="var(--color-success)" />
-                    <text x={(MX + YX) / 2} y={RUN_REF - 7} text-anchor="middle" font-size="9" style="fill: var(--color-success)">no answer (5xx · timeout) → the platform reverses the charge</text>
+                    <text x={(MX + YX) / 2} y={RUN_REF - 7} text-anchor="middle" font-size="9" style="fill: var(--color-success)">no result (5xx · timeout · dead stream) → the platform reverses the charge</text>
 
                     {/* The three parties, drawn last so they sit above the flow. YOU is tinted: it is the reader. */}
                     {
@@ -178,7 +183,7 @@ const runSteps = [
                 </svg>
             </div>
             <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
-                The platform is the only party that holds the money or learns who is asking. You get a signed call and return JSON — the answer is your whole side of it, never the member's identity or their wallet.
+                The platform is the only party that holds the money or learns who is asking. You get a signed call and stream events back — the stream is your whole side of it, never the member's identity or their wallet.
             </figcaption>
         </figure>
 
@@ -206,23 +211,24 @@ const runSteps = [
 
     <h2>What's paid, what refunds</h2>
     <p>
-        The line is <strong>whether you answered</strong>, not whether the caller liked the answer. Anything below 500 is an answer —
-        including your 4xx.
+        The line is <strong>whether a <code>result</code> arrived</strong>, not whether the caller liked it. A 4xx refusal is still an
+        answer — "your query was malformed" is the service serving exactly what was asked — and it's paid.
     </p>
     <table>
         <thead>
             <tr><th>Your response</th><th>The member</th><th>You</th></tr>
         </thead>
         <tbody>
-            <tr><td><code>2xx</code> — a normal answer</td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>2xx</code> — a stream ending in its <code>result</code></td><td>pays</td><td>paid</td></tr>
             <tr><td><code>4xx</code> — "your query was malformed"</td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>2xx</code> — a stream that dies before its <code>result</code>, or isn't the event format</td><td>refunded</td><td>not paid</td></tr>
             <tr><td><code>5xx</code> — your endpoint failed</td><td>refunded</td><td>not paid</td></tr>
-            <tr><td>Timeout or dead socket</td><td>refunded</td><td>not paid</td></tr>
+            <tr><td>Timeout (5 min) or dead socket</td><td>refunded</td><td>not paid</td></tr>
         </tbody>
     </table>
     <p>
-        Credits are spent atomically before the call, so a refund is immediate and the member is told the run cost nothing. Validate
-        loudly: a clear <code>4xx</code> is a real answer, and the paid, honest thing to serve.
+        Credits are spent atomically before the call, so a refund is immediate — the receipt on the member's card says the run cost
+        nothing. Validate loudly: a clear <code>4xx</code> is a real answer, and the paid, honest thing to serve.
     </p>
 
     <h2>Pricing &amp; the split</h2>

@@ -1101,6 +1101,31 @@ describe(`Conversation`, () => {
         expect(card.serviceOffer).toMatchObject({ status: `approved`, receipt: { outcome: `ok`, credits: 40, remaining: 920 } });
     });
 
+    it(`an approved run's stream events accumulate on the card, in order, by requestId`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { slug: `s`, name: `S`, publisher: `p`, description: `d`, creditsPerRun: 40, request: `{}` };
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `service_offer`, requestId: `s1`, offer },
+                { kind: `resolved`, requestId: `s1`, reply: { kind: `service_offer`, requestId: `s1`, approve: true } },
+                { kind: `service_event`, requestId: `s1`, event: { event: `status`, text: `Searching 240 communities…` } },
+                { kind: `service_event`, requestId: `s1`, event: { event: `status`, text: `Ranking the 12 that fit…` } },
+                // Another card's stream must not bleed onto this one.
+                { kind: `service_event`, requestId: `other`, event: { event: `status`, text: `elsewhere` } },
+                { kind: `service_receipt`, requestId: `s1`, outcome: `ok`, credits: 40, remaining: 920 },
+            ]),
+        );
+
+        await conversation.send(`research it`, settings);
+
+        const card = conversation.messages.value.find((message) => message.serviceOffer !== undefined)!;
+        expect(card.serviceOffer?.events).toEqual([
+            { event: `status`, text: `Searching 240 communities…` },
+            { event: `status`, text: `Ranking the 12 that fit…` },
+        ]);
+        expect(card.serviceOffer?.receipt).toMatchObject({ outcome: `ok` });
+    });
+
     it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

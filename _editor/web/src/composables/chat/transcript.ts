@@ -2,6 +2,7 @@ import type {
     AskQuestion,
     PermissionAsk,
     ServiceOffer,
+    ServiceStreamEvent,
     SubagentKind,
     SubagentStatus,
     TodoItem,
@@ -82,6 +83,11 @@ export interface ServiceOfferRequest {
     readonly requestId: string;
     readonly offer: ServiceOffer;
     readonly status: ServiceOfferStatus;
+    /* The approved run's stream so far (the service_event frames): what the provider is doing right now,
+     * rendered as the card's live activity. Status lines accumulate in order — the card shows the last one
+     * while the run lives and can show the trail once it settles. Carried as the contract's whole event
+     * union so richer event kinds render here without reshaping the transcript. */
+    readonly events?: readonly ServiceStreamEvent[];
     // How an approved run ended (the service_receipt frame): served and charged, refunded in full because the
     // service failed to answer, or refused by the platform after the click (a raced-out allowance).
     readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };

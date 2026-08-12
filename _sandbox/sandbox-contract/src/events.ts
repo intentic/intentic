@@ -77,6 +77,29 @@ export const ServiceOfferSchema = z.object({
 });
 export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
 
+/* WHAT A SERVICE STREAMS — the provider's event vocabulary, stated once here and imported by everyone who
+ * touches it: the platform validates each line of a provider's NDJSON against this before relaying it, the
+ * daemon turns `status` events into transcript frames, and the editor renders them under the offer card.
+ * A run is `status` lines (each replaces the last — a spinner label, not a log) ending in exactly one
+ * `result`, whose `data` is the answer the agent acts on. The union is where future event kinds land when
+ * services start streaming richer transcript elements; today's two are the smallest honest set. */
+export const ServiceStreamEventSchema = z.discriminatedUnion(`event`, [
+    z.object({ event: z.literal(`status`), text: z.string() }),
+    z.object({ event: z.literal(`result`), data: z.unknown() }),
+]);
+export type ServiceStreamEvent = z.infer<typeof ServiceStreamEventSchema>;
+
+/* The trailer the PLATFORM appends to every relayed run stream — never provider-authored: it is the ledger
+ * speaking after the stream settled. `ok` means the run served and was charged (`remaining` is the meter
+ * after); `refunded` means the provider's stream died before its `result` and the charge was reversed. */
+export const ServiceRunReceiptSchema = z.object({
+    event: z.literal(`receipt`),
+    outcome: z.enum([`ok`, `refunded`]),
+    credits: z.number(),
+    remaining: z.number().optional(),
+});
+export type ServiceRunReceipt = z.infer<typeof ServiceRunReceiptSchema>;
+
 // One provider-advertised slash command — an ACP agent's available_commands entry, or a Claude Code session's
 // supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
 // `hint` is the argument placeholder the popover shows after the name.
@@ -518,6 +541,11 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * waiter is the CLI's held connection, which dies with the daemon, and a restored card would offer
      * buttons nothing is waiting behind. Settles through the same `POST /agent/reply` as every other card. */
     z.object({ kind: z.literal("service_offer"), requestId: z.string(), offer: ServiceOfferSchema }),
+    /* One event off an approved run's stream, pushed as the provider emits it so the settled card shows the
+     * run living rather than a spinner of unknowable length. Today that is `status` lines; `result` stays off
+     * the transcript on purpose (it is the agent's answer to act on, not the card's to duplicate) — the frame
+     * carries the whole union so richer event kinds land here without a contract break. */
+    z.object({ kind: z.literal("service_event"), requestId: z.string(), event: ServiceStreamEventSchema }),
     /* How an approved run ended, pushed after the platform answered so the card can settle as a receipt
      * rather than a promise: `ok` served and charged, `refunded` failed to answer and charged nothing,
      * `refused` the platform said no after the click (a raced-out allowance). `remaining` is the meter after,

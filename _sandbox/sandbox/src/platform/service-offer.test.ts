@@ -214,3 +214,68 @@ it("a post-click platform refusal receipts as refused", async () => {
     await pending;
     expect(frames[2]).toMatchObject({ kind: "service_receipt", outcome: "refused" });
 });
+
+it("a streamed run's status lines land under the card as frames, and the trailer is the receipt verbatim", async () => {
+    const { deps, frames, observed } = fake({
+        run: async (_slug, _body, onStatus) => {
+            onStatus("Searching 240 communities…");
+            onStatus("Ranking the 12 that fit…");
+            return {
+                status: 200,
+                contentType: "application/json",
+                body: `{"answer":42}`,
+                streamed: true,
+                remaining: "920",
+                receipt: { event: "receipt", outcome: "ok", credits: 40, remaining: 920 },
+            };
+        },
+    });
+    const pending = gatedServiceRun(deps, offered());
+    await answerCard(frames, true);
+    const answer = await pending;
+    expect(answer.status).toBe(200);
+    expect(frames.map((frame) => frame.kind)).toEqual(["service_offer", "resolved", "service_event", "service_event", "service_receipt"]);
+    expect(frames[2]).toMatchObject({ kind: "service_event", event: { event: "status", text: "Searching 240 communities…" } });
+    expect(frames[4]).toMatchObject({ kind: "service_receipt", outcome: "ok", credits: 40, remaining: 920 });
+    // Progress is not attention: the registry sees the card raised, settled and receipted — not every line.
+    expect(observed.map((frame) => frame.kind)).toEqual(["service_offer", "resolved", "service_receipt"]);
+    // Every stream frame answers to the card that raised it.
+    const requestId = (frames[0] as { requestId: string }).requestId;
+    expect(frames.every((frame) => (frame as { requestId?: string }).requestId === requestId)).toBe(true);
+});
+
+it("a refunded trailer receipts as refunded, off the platform's own word", async () => {
+    const { deps, frames } = fake({
+        run: async () => ({
+            status: 502,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { type: "service_unavailable", message: "did not answer" } }),
+            streamed: true as const,
+            receipt: { event: "receipt" as const, outcome: "refunded" as const, credits: 40 },
+        }),
+    });
+    const pending = gatedServiceRun(deps, offered());
+    await answerCard(frames, true);
+    await pending;
+    expect(frames[2]).toMatchObject({ kind: "service_receipt", outcome: "refunded", credits: 40 });
+    expect((frames[2] as { remaining?: number }).remaining).toBeUndefined();
+});
+
+it("a stream that broke before its trailer pushes no receipt — the charge is not this side's to state", async () => {
+    const { deps, frames } = fake({
+        run: async (_slug, _body, onStatus) => {
+            onStatus("Searching…");
+            return {
+                status: 502,
+                contentType: "application/json",
+                body: JSON.stringify({ error: { type: "service_unavailable", message: "the stream broke" } }),
+                streamed: true as const,
+            };
+        },
+    });
+    const pending = gatedServiceRun(deps, offered());
+    await answerCard(frames, true);
+    const answer = await pending;
+    expect(answer.status).toBe(502);
+    expect(frames.map((frame) => frame.kind)).toEqual(["service_offer", "resolved", "service_event"]);
+});

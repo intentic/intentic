@@ -1,7 +1,7 @@
 import type { AgentEvent, ServiceOffer } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "./leftovers.js";
-import type { RelayedAnswer } from "./pool-services.js";
+import type { RelayedAnswer, RelayedRunAnswer } from "./pool-services.js";
 
 /* THE SPEND GATE — what turns the services skill's etiquette into a wall.
  *
@@ -47,7 +47,7 @@ export interface OfferDeps {
     // The platform reads/writes, injected relay-shaped so tests drive the gate without a network
     // (pool-services.ts is the real pair behind both).
     readonly catalog: () => Promise<RelayedAnswer>;
-    readonly run: (slug: string, body: string) => Promise<RelayedAnswer>;
+    readonly run: (slug: string, body: string, onStatus: (text: string) => void) => Promise<RelayedRunAnswer>;
     // The live turn the card lands in: the named conversation's run, or — when the caller could not name one —
     // the sole live run (turn-runs.ts soleLiveConversation). Undefined refuses the spend outright.
     readonly liveRun: (
@@ -135,19 +135,40 @@ export const gatedServiceRun = async (deps: OfferDeps, offered: OfferedRun): Pro
               )
             : refusal(403, "declined", "The owner skipped this run — nothing was charged. Continue without the service.");
     }
-    const outcome = await deps.run(offered.slug, offered.body);
-    /* The receipt, from what actually came back: the credits header is the platform's own "this run was
-     * charged" (set exactly when a forward served — a provider's 4xx included, which is a PAID answer); a 502
-     * is its no-answer-no-charge refund; anything else is a refusal that spent nothing (a raced-out allowance,
-     * a service delisted between card and click). */
-    const receipt: AgentEvent = {
-        kind: "service_receipt",
-        requestId: id,
-        outcome: outcome.remaining !== undefined ? "ok" : outcome.status === 502 ? "refunded" : "refused",
-        credits: service.creditsPerRun,
-        ...(outcome.remaining !== undefined ? { remaining: Number(outcome.remaining) } : {}),
-    };
-    run.push(receipt);
-    deps.observe(run.conversationId, receipt);
+    /* The approved run, relayed live: every `status` line off the provider's stream becomes a transcript
+     * frame under the settled card the moment it arrives, so the owner watches the run they just paid for
+     * living instead of a spinner of unknowable length. Not mirrored to the registry on purpose — progress
+     * is not attention. */
+    const outcome = await deps.run(offered.slug, offered.body, (text) => {
+        run.push({ kind: "service_event", requestId: id, event: { event: "status", text } });
+    });
+    /* The receipt. A streamed run carries the platform's own trailer — the ledger's last word, used whole; a
+     * stream that broke before its trailer gets NO receipt frame, because whether the charge stood is the
+     * platform's to know and a guessed "refunded" would be the ledger's voice faked. A run that never
+     * streamed falls back to what the answer's shape proves: the credits header is the platform's "this run
+     * was charged" (a provider's paid 4xx), a 502 is its no-answer-no-charge refund, and anything else is a
+     * refusal that spent nothing (a raced-out allowance, a service delisted between card and click). */
+    const receipt: AgentEvent | undefined =
+        outcome.receipt !== undefined
+            ? {
+                  kind: "service_receipt",
+                  requestId: id,
+                  outcome: outcome.receipt.outcome,
+                  credits: outcome.receipt.credits,
+                  ...(outcome.receipt.remaining !== undefined ? { remaining: outcome.receipt.remaining } : {}),
+              }
+            : outcome.streamed === true
+              ? undefined
+              : {
+                    kind: "service_receipt",
+                    requestId: id,
+                    outcome: outcome.remaining !== undefined ? "ok" : outcome.status === 502 ? "refunded" : "refused",
+                    credits: service.creditsPerRun,
+                    ...(outcome.remaining !== undefined ? { remaining: Number(outcome.remaining) } : {}),
+                };
+    if (receipt !== undefined) {
+        run.push(receipt);
+        deps.observe(run.conversationId, receipt);
+    }
     return outcome;
 };

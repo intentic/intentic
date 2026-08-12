@@ -15,10 +15,12 @@ answer**.
 ```sh
 services list                                # every service, its price, and the credits left today
 services run <slug> '{"query":"…"}' \
-    --why "one line on why this helps"       # ask for one metered run — JSON in, JSON out (or pipe stdin)
+    --why "one line on why this helps"       # ask for one metered run — request JSON inline or on stdin
 ```
 
-`run` prints the provider's JSON on stdout (composable) and the remaining credits on stderr.
+A run streams: the provider's progress shows live on the card in the owner's chat while you wait, and when
+it finishes `run` prints the provider's result JSON on stdout (composable) and the remaining credits on
+stderr. A run can take up to five minutes — hold the command open rather than timing it out.
 
 ## How consent works — enforced, not promised
 

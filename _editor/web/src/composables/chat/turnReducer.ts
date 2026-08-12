@@ -518,6 +518,17 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             }));
             return step({ ...attached, bubbleId: null });
         }
+        case `service_event`:
+            // One event off the approved run's stream, appended to the card the requestId names — the run
+            // showing itself living. The card renders the latest status line while the receipt is pending.
+            return step({
+                ...state,
+                messages: state.messages.map((message): ChatMessage =>
+                    message.serviceOffer?.requestId === event.requestId
+                        ? { ...message, serviceOffer: { ...message.serviceOffer, events: [...(message.serviceOffer.events ?? []), event.event] } }
+                        : message,
+                ),
+            });
         case `service_receipt`:
             // The approved run's outcome, patched onto the card the requestId names: served-and-charged,
             // refunded (the service failed to answer — nothing charged), or refused after the click.
