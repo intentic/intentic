@@ -78,9 +78,23 @@ So the cleanup that matters happens at cutover: per-sandbox tunnels and their ~1
 created, and the existing ones are torn down by the reaper that already exists (`retention.ts`). Nothing to
 rip out by hand, and nothing to remove before the replacement carries traffic.
 
-## Phase 2 (not in this stack)
+## What the platform does with it (phase 2, landed)
 
-Swapping the platform's per-sandbox provisioning from the Cloudflare API to zrok's controller API — a
-`zrok.ts` sibling of `_platform/api/src/sandbox/cloudflare.ts` minting an account + names per sandbox, and
-the `zrok2` agent riding in the sandbox where cloudflared does today. Until then this stack runs alongside
-the Cloudflare path and is the infrastructure the swap lands on.
+The platform mints ONE zrok account per sandbox (`_platform/api/src/sandbox/zrok.ts` +
+`zrok-provision.ts`) and hands it down with the setup code or the hosted machine's env: `ZROK_TOKEN`,
+`ZROK_API`, `ZROK_NAMESPACE`. The box's entrypoint enables with it (identity born in the box — the platform
+can revoke reachability, never impersonate it) and serves the daemon as a public share whose name is the
+`sandbox-<id>` label the browser already knows. Deleting a sandbox deletes its account; the daily sweep
+reconciles accounts against rows.
+
+Configure the platform with `ZROK_API_ENDPOINT`, `ZROK_ADMIN_TOKEN` (this stack's `ZROK2_ADMIN_TOKEN`),
+`ZROK_ZONE`, and — when sandboxes reach the hub at a different address than the platform does —
+`ZROK_AGENT_ENDPOINT`.
+
+### Still owed
+
+The preview/panel names (forwarded ports, the public outbox) are not attached yet: the platform's old
+Cloudflare relays are gone, and the daemon does not yet create its own names with its account token. Desktop
+sync, the sandbox's `ssh-<id>` name and connected-computer tunnels are SSH-shaped and stay on their old path
+until they become private `tcpTunnel` shares. And the connect scripts (`connect.sh`, `ic`) still start the
+old cloudflared sidecar for the docker lane — the hosted lane and the image are already zrok-only.

@@ -8,7 +8,6 @@ import { createPrisma } from "./prisma.js";
 import { startPoolCycle } from "./pool/pool-cycle-job.js";
 import { seedDemoService } from "./pool/pool-demo.js";
 import { startRetention } from "./retention.js";
-import { startSandboxPool } from "./sandbox/sandbox-pool.js";
 import { startTracing } from "./tracing.js";
 
 // Standard OTEL_* vars come from the environment. The dev/start scripts pass `--env-file=../../.env` so the
@@ -33,7 +32,6 @@ if (!config.email.apiKey || !config.email.from) {
 
 const prisma = createPrisma(config);
 startRetention(prisma, config, logger);
-startSandboxPool(prisma, config, logger);
 // Freezes every finished month the platform has not closed yet, then pays out everything that has come due.
 // The frozen month is what payouts settle on, and the only record of what was owed once the ledger rows behind
 // it age out. No-ops on a platform without a pool.

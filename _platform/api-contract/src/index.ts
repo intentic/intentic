@@ -2,12 +2,12 @@ import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
-    CfTokenSchema,
-    CfZonesSchema,
     ClaimChallengeSchema,
     CloudCredentialsSchema,
     CloudOptionsSchema,
     CreatorStateSchema,
+    CfTokenSchema,
+    CfZonesSchema,
     DaemonUrlSchema,
     HostedOfferSchema,
     ImageDataUrlSchema,
@@ -18,7 +18,6 @@ import {
     PublisherSlugSchema,
     SandboxSummarySchema,
     SetupCodeSchema,
-    SetupCodeTargetSchema,
     UserSchema,
 } from "./schemas.js";
 
@@ -34,10 +33,8 @@ export const meContract = {
 
 // The user's sandboxes + shared access. `list` returns every sandbox the caller owns or is a member of;
 // `create` mints a new one (owner) with a fresh connection token; `update` renames an owned one and/or sets
-// its switcher logo (a small data URL); `delete` removes an owned one. `zones` lists
-// the Cloudflare zones a pasted token can see so the picker can choose one before the install command is revealed
-// — the token is used for that one call and discarded (never persisted/logged). `setupCode` mints the short-lived
-// code the install one-liner carries (a pure DB write — the intentic tunnel is provisioned lazily at claim time);
+// its switcher logo (a small data URL); `delete` removes an owned one. `setupCode` mints the short-lived
+// code the install one-liner carries (and the sandbox's reachability grant on the self-hosted hub with it);
 // the connect script redeems it at the public POST /setup/claim. `emailSetupLink` mails the OWNER a link back to
 // that command's own setup screen, which is how a phone — where the command cannot be run and the clipboard
 // reaches no terminal — gets the step onto a machine that can finish it; it carries no code and no command, only
@@ -64,6 +61,9 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/delete" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
+    // The zones a pasted Cloudflare token can see — for the in-app Cloudflare capability (the user's own zone,
+    // for the deploy engine's apps), not for sandbox reachability, which is self-hosted now. The token is used
+    // for that one call and discarded: never persisted, never logged.
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
     // The cloud lane (schemas.ts "the cloud lane"): `cloudOptions` validates a pasted provider credential by
     // spending it on the provider's own catalog (regions + sizes with live prices); `cloudProvision` spends it
@@ -106,7 +106,7 @@ export const sandboxContract = {
         .output(z.object({ ok: z.boolean() })),
     setupCode: oc
         .route({ method: "POST", path: "/sandbox/setup-code" })
-        .input(z.object({ sandboxId: z.string(), target: SetupCodeTargetSchema }))
+        .input(sandboxIdInput)
         .output(SetupCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })

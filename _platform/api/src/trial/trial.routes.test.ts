@@ -18,7 +18,7 @@ const baseConfig = {
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapAfterDays: 7, reapDryRun: false, poolSize: 0 },
+    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     trial: { keys: `k1,k2`, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: false },

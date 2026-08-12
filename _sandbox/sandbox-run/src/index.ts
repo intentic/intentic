@@ -163,6 +163,11 @@ export const REPLAY_ENV = [
     "WEB_ORIGIN",
     "SANDBOX_PUBLIC_URL",
     "PLATFORM_URL",
+    // The sandbox's reachability grant on the self-hosted hub — replayed like every other identity value, so
+    // a recreated container re-enables as the SAME zrok environment and re-attaches the same public names.
+    "ZROK_TOKEN",
+    "ZROK_API",
+    "ZROK_NAMESPACE",
     "CLOUDFLARE_API_TOKEN",
     "HOST_SSH_KEY",
     "SELF_HOST_USER",

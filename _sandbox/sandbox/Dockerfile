@@ -159,10 +159,20 @@ RUN npm install -g node-gyp@13.0.1 && node-gyp --version && npm cache clean --fo
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
 # feature packs: connected-provider state decides whether each rides the overlay (environment/provider-packs.ts),
 # and the standard profile bakes them all.
-# cloudflared on PATH — `intentic deploy apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
-# through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
-# Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
-# so the layer stays cache-stable across source changes.
+# THE TUNNEL AGENT — `zrok2`, how a sandbox reaches its owner: it enables against the self-hosted hub with the
+# account token the platform minted and serves the daemon + preview proxy as public shares under the hub's one
+# wildcard (entrypoint). Outbound-only, so it needs nothing open on the machine running this container.
+# cloudflared stays beside it for one unrelated job — `intentic deploy apply` shells out to `cloudflared access
+# tcp` to reach a self-host's SSH through the USER'S own Cloudflare tunnel (via:"cloudflared" hosts). Placed
+# HERE, before the tree COPYs below, so the layer stays cache-stable across source changes.
+ARG ZROK_VERSION=2.0.4
+RUN arch="$(dpkg --print-architecture)" \
+    && case "$arch" in amd64) zarch=amd64 ;; arm64) zarch=arm64 ;; *) echo "unsupported arch $arch" >&2; exit 1 ;; esac \
+    && curl -fsSL "https://github.com/openziti/zrok/releases/download/v${ZROK_VERSION}/zrok_${ZROK_VERSION}_linux_${zarch}.tar.gz" -o /tmp/zrok2.tgz \
+    && tar -xzf /tmp/zrok2.tgz -C /usr/local/bin zrok2 \
+    && rm /tmp/zrok2.tgz \
+    && chmod +x /usr/local/bin/zrok2 \
+    && /usr/local/bin/zrok2 version
 ARG CLOUDFLARED_VERSION=2026.7.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \

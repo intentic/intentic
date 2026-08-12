@@ -52,33 +52,37 @@ const configSchema = z.object({
             from: z.string().default(``), // EMAIL_FROM
         })
         .prefault({}),
-    // Intentic-OWNED Cloudflare token + zone, used ONLY to provision sandbox tunnels for users who bring no
-    // Cloudflare of their own: the platform creates the tunnel + DNS server-side and hands the sandbox a narrow
-    // per-tunnel connector token (never this API token). This is intentic's own credential — a documented, scoped
-    // exception to the secret-free model above, like Google's here. Unset (either field) → the
-    // intentic-provided path is disabled and setup offers only the bring-your-own-Cloudflare flow.
+    // Intentic-OWNED Cloudflare token + zone — DNS ONLY since the tunnel fabric moved in-house (zrok above).
+    // What is left of it: the loopback certificate's `local-<id>` records (the daemon relays for them, having
+    // no token for this zone) and the daily sweep that clears their residue. No tunnels, no per-sandbox
+    // records, nothing against the per-zone quota. Unset ⇒ the loopback-certificate path is simply off.
     intenticCloudflare: z
         .object({
             apiToken: z.string().default(``).meta({ secret: true }), // INTENTIC_CLOUDFLARE_API_TOKEN
             zone: z.string().default(`intentic.dev`), // INTENTIC_CLOUDFLARE_ZONE
-            // Daily reaper (retention.ts): delete intentic-owned sandbox-*/host-ssh-* tunnels idle this many days.
-            // cloudflared runs --restart unless-stopped, so a live tunnel reconnects within minutes of a reboot and
-            // never stays idle for days; 7 reclaims real orphans without touching a briefly-offline sandbox.
-            reapAfterDays: z.coerce.number().default(7), // INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS
-            /* When a CONNECTED-BEFORE sandbox that has been offline this long gives its tunnel + DNS records
-             * back (every sandbox holds ~10 records against Cloudflare's per-zone cap, so long-dead ones are
-             * what fills a zone). Recoverable by design: the reap nulls the row's cached tunnel columns, the
-             * next setup visit re-provisions, and the hostname is DERIVED from the connect token — the same
-             * address comes back. Hosted sandboxes are never pruned this way (a sleeping machine's tunnel is
-             * idle by design and its machine holds the connector token in its env). 0 disables — offline
-             * sandboxes then keep their records forever. INTENTIC_CLOUDFLARE_PRUNE_AFTER_DAYS. */
-            pruneAfterDays: z.coerce.number().nonnegative().default(45),
-            // Log reap candidates without deleting — run the first production sweep with this on, confirm the list,
-            // then turn it off.
-            reapDryRun: z.stringbool().default(false), // INTENTIC_CLOUDFLARE_REAP_DRY_RUN
-            // Keep this many sandbox tunnels pre-provisioned (sandbox-pool.ts): sandbox.create claims one so /setup
-            // pays no Cloudflare round-trips inline. 0 disables the pool (create provisions lazily, as before).
-            poolSize: z.coerce.number().int().nonnegative().default(1), // INTENTIC_CLOUDFLARE_POOL_SIZE
+            // Log the record sweep's candidates without deleting — run a new deployment's first sweep with
+            // this on, confirm the list, then turn it off. INTENTIC_CLOUDFLARE_REAP_DRY_RUN.
+            reapDryRun: z.stringbool().default(false),
+        })
+        .prefault({}),
+    /* THE TUNNEL FABRIC — the self-hosted zrok hub every sandbox reaches its owner through (sandbox/zrok.ts;
+     * the `zrok` Komodo stack runs it). The platform holds the hub's ADMIN token and mints one account per
+     * sandbox; the box's own `zrok2 enable` births the identity, so this credential creates and revokes
+     * reachability but can never impersonate a sandbox. Replaces the Cloudflare tunnel machinery outright —
+     * intenticCloudflare below is DNS-only residue now (loopback-cert records). `adminToken` is the switch:
+     * empty (the default for a platform that has not stood the hub up) leaves every provisioning route 404
+     * and the wizard offering only the attach lane. */
+    zrok: z
+        .object({
+            // The controller API as the PLATFORM reaches it (LAN address is fine). ZROK_API_ENDPOINT.
+            apiEndpoint: z.url().default(`https://zrok2.sbx.intentic.dev`),
+            // The same controller as SANDBOXES reach it — differs from the above when the platform sits on
+            // the hub's LAN but the boxes come in from outside. Empty ⇒ same as apiEndpoint. ZROK_AGENT_ENDPOINT.
+            agentEndpoint: z.string().default(``),
+            // The hub's admin token (ZROK2_ADMIN_TOKEN of the zrok stack). ZROK_ADMIN_TOKEN.
+            adminToken: z.string().default(``).meta({ secret: true }),
+            // The DNS zone the wildcard record serves — the suffix of every sandbox hostname. ZROK_ZONE.
+            zone: z.string().default(`sbx.intentic.dev`),
         })
         .prefault({}),
     /* THE HOSTED LANE — intentic's OWN Fly.io credential, the THIRD documented exception to the secret-free
@@ -256,6 +260,7 @@ export const CONFIG_SECRETS = [
     `google.clientSecret`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
+    `zrok.adminToken`,
     `hosted.flyApiToken`,
     `trial.keys`,
 ];

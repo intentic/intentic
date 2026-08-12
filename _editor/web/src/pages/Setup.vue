@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HostedOffer, SandboxSummary, SetupCode, SetupCodeTarget, SetupReport } from "@intentic-app/api-contract";
+import type { HostedOffer, SandboxSummary, SetupCode, SetupReport } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
@@ -416,16 +416,8 @@ const factLabel = `w-16 shrink-0 text-xs text-muted`;
  * first attempt and it hard-codes a spacing token the theme is free to change. */
 const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 font-mono text-sm text-content`;
 
-// The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
-const target = computed<SetupCodeTarget | undefined>(() => {
-    if (mode.value === `intentic`) {
-        return { mode: `intentic` };
-    }
-    if (cfTokenValid.value && selectedZone.value !== undefined && subdomainValid.value) {
-        return { mode: `own`, zone: selectedZone.value, subdomain: subdomain.value.trim() };
-    }
-    return undefined;
-});
+// There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
+// chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
 // Identity of the target, for mint dedupe + stale-response drops (a mint answers for the key it was fired for).
 // The sandbox id is part of the key — a code redeems ONE sandbox's token, so switching sandboxes mid-page
 // (resume → "create a new one instead") invalidates the previous mint instead of showing sandbox A's command
@@ -436,13 +428,12 @@ const target = computed<SetupCodeTarget | undefined>(() => {
 // lane would buy Cloudflare infrastructure nothing will ever dial. Undefined here also re-arms the mint when the
 // user comes back: the key changes from undefined to a real one, which is exactly what the watcher fires on.
 const targetKey = computed<string | undefined>(() => {
-    const chosen = target.value;
     // The hosted lane never mints: its machine was born holding the tunnel, and a code would buy a command
     // nothing will ever run — same reasoning as the attach lane's gate.
-    if (chosen === undefined || created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null) {
+    if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null) {
         return undefined;
     }
-    return `${created.value.id}:${chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`}`;
+    return created.value.id;
 });
 
 // The command can be built only once the chosen target has a code minted for it.
@@ -948,13 +939,13 @@ const chooseOwnZone = (): void => {
 // Mint the setup code for the chosen target (the intentic path provisions the tunnel + DNS server-side before
 // returning, so the hostname it shows already exists). A NOT_FOUND on the intentic path means the feature is
 // off: hide the option and fall back to own-Cloudflare. Responses for a stale target are dropped.
-const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
+const mint = async (key: string): Promise<void> => {
     if (created.value === null) {
         return;
     }
     setupError.value = undefined;
     try {
-        const minted = await apiClient.sandbox.setupCode({ sandboxId: created.value.id, target: chosen });
+        const minted = await apiClient.sandbox.setupCode({ sandboxId: created.value.id });
         if (key !== targetKey.value) {
             return;
         }
@@ -967,9 +958,9 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
         launched.value = false;
         claimedAt.value = null;
     } catch (err) {
-        if (chosen.mode === `intentic` && isNotFound(err)) {
+        if (isNotFound(err)) {
+            // The platform runs no tunnel fabric — the attach lane is the only honest offer left.
             intenticAvailable.value = false;
-            mode.value = `own`;
         } else if (key === targetKey.value) {
             setupError.value = noticeFrom(err, `Couldn't prepare your install command. Try again.`);
         }
@@ -1214,9 +1205,8 @@ watch(
     targetKey,
     () => {
         clearTimeout(mintTimer);
-        const chosen = target.value;
         const key = targetKey.value;
-        if (chosen === undefined || key === undefined || created.value === null || mintedFor.value === key) {
+        if (key === undefined || created.value === null || mintedFor.value === key) {
             return;
         }
         // A provisioned cloud machine boots holding THE minted code — re-minting would overwrite it
@@ -1225,7 +1215,7 @@ watch(
         if (cloudMachine.value !== null) {
             return;
         }
-        mintTimer = setTimeout(() => void mint(chosen, key), 500);
+        mintTimer = setTimeout(() => void mint(key), 500);
     },
     { immediate: true },
 );
@@ -1234,13 +1224,12 @@ watch(
 // watcher above only fires on a CHANGED target, and a failure changes nothing about what was asked for, so
 // without this the only way back was reloading the page.
 const remint = (): void => {
-    const chosen = target.value;
     const key = targetKey.value;
-    if (chosen === undefined || key === undefined) {
+    if (key === undefined) {
         return;
     }
     setupError.value = undefined;
-    void mint(chosen, key);
+    void mint(key);
 };
 
 // Derive the default `sandbox-<hash>` prefix (must mirror the CLI) once the connection token is known, and

@@ -14,14 +14,11 @@ import { createApp, createMachine, createVolume, deleteApp, getMachine, listAppN
  * flips power. That is the hosted trust trade in one line: power and existence are the platform's, the
  * command path stays browser → daemon. */
 
-// The lane needs BOTH its own switch and the intentic-provided tunnel fabric: a hosted machine is reachable
-// only through the tunnel the platform provisions, so Fly credentials without intenticCloudflare would build
-// machines that boot to nothing.
+// The lane needs BOTH its own switch and the tunnel fabric: a hosted machine is reachable only through the
+// grant the platform mints on the hub, so Fly credentials without a configured hub would build machines that
+// boot to nothing.
 export const hostedEnabled = (config: Config): boolean =>
-    config.hosted.flyApiToken !== `` &&
-    config.hosted.flyOrg !== `` &&
-    config.intenticCloudflare.apiToken !== `` &&
-    config.intenticCloudflare.zone !== ``;
+    config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
 
 export const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
@@ -30,8 +27,9 @@ export interface HostedProvisionArgs {
     readonly sandboxId: string;
     // Decrypted by the route (the row stores them encrypted) — this module never touches crypto.
     readonly connectToken: string;
-    readonly tunnelToken: string;
-    readonly tunnelHostname: string;
+    // The sandbox's reachability grant on the self-hosted hub (zrok-provision.ts): the account token the box
+    // enables with, the namespace its names live under, its derived address, and the hub as the box dials it.
+    readonly grant: { accountToken: string; namespaceToken: string; hostname: string; apiEndpoint: string };
     readonly ownerEmail: string;
 }
 
@@ -64,9 +62,11 @@ export const provisionHosted = async (
                 [`CONNECT_TOKEN`, args.connectToken],
                 [`OWNER_EMAIL`, args.ownerEmail],
                 [`WEB_ORIGIN`, config.webOrigin],
-                [`SANDBOX_PUBLIC_URL`, `https://${args.tunnelHostname}`],
+                [`SANDBOX_PUBLIC_URL`, `https://${args.grant.hostname}`],
                 [`PLATFORM_URL`, config.api.url],
-                [`TUNNEL_TOKEN`, args.tunnelToken],
+                [`ZROK_TOKEN`, args.grant.accountToken],
+                [`ZROK_API`, args.grant.apiEndpoint],
+                [`ZROK_NAMESPACE`, args.grant.namespaceToken],
                 [`IDLE_STOP_MINUTES`, String(idleStopMinutes)],
             ],
         });

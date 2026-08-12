@@ -154,13 +154,13 @@ model Sandbox {
     // code. The wizard renders it so "why did setup fail" has an answer in the browser, not just in a
     // terminal that may be closed. Cleared on every mint, same lifecycle as the claim stamp above.
     setupReport        Json?
-    // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): intentic mode
-    // {TUNNEL_TOKEN, SANDBOX_HOSTNAME}; own-Cloudflare mode {ZONE, SUBDOMAIN} — never the user's CF token.
+    // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): {ZROK_TOKEN,
+    // ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
     setupPayload       Json?
-    // Intentic-path tunnel, provisioned once and reused across mints (its hostname is a stable digest of `token`,
-    // so re-provisioning only re-does the Cloudflare round-trips for the same result). tunnelToken is encrypted.
-    tunnelToken        String?
-    tunnelHostname     String?
+    // The sandbox's zrok ACCOUNT token (encrypted) — its whole reachability grant on the self-hosted hub,
+    // minted once (sandbox/zrok.ts) and reused across mints; the hostname needs no column because it stays a
+    // stable digest of `token` (tunnel-ids). Null until the first setup mint (or hosted provision) buys it.
+    zrokToken          String?
     // Where the cloud lane created this sandbox's machine (SandboxCloudSchema + the provider's server id) —
     // null for every other creation path. Display metadata only, never a credential: the provider token was
     // request-scoped, so the platform keeps no way back into the machine. Plaintext on purpose — nothing here
@@ -178,21 +178,8 @@ model Sandbox {
     @@map("sandbox")
 }
 
-// A sandbox subdomain provisioned ahead of demand (sandboxPool.ts) so /setup never pays the Cloudflare
-// round-trips inline. Holds exactly a Sandbox's provisioning artifacts — connect token + intentic tunnel —
-// minus the owner/name, all in the same encrypted-at-rest form (api crypto.ts) so sandbox.create claims one
-// by copying columns verbatim. `tunnelHostname` is sandbox-<id>.<zone>, whose leftmost label is the tunnel
-// name the reaper must skip (retention.ts) so it never deletes a still-unclaimed pool entry.
-model ReservedSandbox {
-    id             String   @id @default(cuid())
-    token          String   @unique
-    tokenDigest    String   @unique
-    tunnelToken    String
-    tunnelHostname String
-    createdAt      DateTime @default(now())
-
-    @@map("reserved_sandbox")
-}
+// The pre-provisioned pool (ReservedSandbox) died with the Cloudflare tunnels it existed to amortize: a zrok
+// account mint is one fast call, so sandbox.create provisions inline and nothing is reserved ahead of demand.
 
 // A HOSTED sandbox's machine on Fly — the row that inverts the cloud stamp's stance on purpose: `cloud` is
 // display-only residue of a machine the platform can never reach again, while this row is exactly the way

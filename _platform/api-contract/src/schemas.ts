@@ -544,26 +544,22 @@ export type InvitePreview = z.infer<typeof InvitePreviewSchema>;
 // is revealed. The browser can't list zones itself (Cloudflare's API sends no CORS headers), so the token is
 // posted here for a SINGLE request-scoped call to Cloudflare and then discarded: it is never persisted, logged,
 // or stored. This is the one place the token transits the platform (the narrowed secret-free invariant).
+// The pasted Cloudflare token + the zones it can see. NOT the sandbox tunnel's business any more (that fabric
+// is self-hosted) — this serves the in-app Cloudflare capability, where a user connects their OWN zone for the
+// deploy engine to publish their apps under. Request-scoped: used for the one listing call, never stored.
 export const CfTokenSchema = z.object({ token: z.string().min(1) });
 export const CfZonesSchema = z.object({ zones: z.array(z.string()) });
 export type CfZones = z.infer<typeof CfZonesSchema>;
 
-// The setup code: ONE short-lived value the copy-paste install command carries instead of raw tokens (nothing
-// secret lands in shell history or the process list). The connect script redeems it at POST /setup/claim (a
-// public non-oRPC route — the script has no session) for CONNECT_TOKEN plus, per target mode:
-//   • intentic: the platform provisions the tunnel + DNS under its OWN zone (its API token never leaves the
-//     server; the sandbox only ever sees the narrow per-tunnel connector token) → {TUNNEL_TOKEN, SANDBOX_HOSTNAME}.
-//   • own: the user's zone/subdomain picks → {ZONE, SUBDOMAIN}. Their CF token NEVER enters the code — it stays
-//     an env var on the command (the never-stored invariant).
-// When desktop sync is requested at setup, the payload additionally carries {SYNC_DIR, SYNC_PAIR_TOKEN} — a
-// platform-minted single-use pairing token the sandbox seeds at boot, so the connect script can enroll the sync
-// agent without a second pasted command (the command itself stays identical either way).
-// Re-claimable until expiry so a failed run stays re-runnable from the same copied command; re-minting overwrites.
-export const SetupCodeTargetSchema = z.discriminatedUnion("mode", [
-    z.object({ mode: z.literal("intentic") }),
-    z.object({ mode: z.literal("own"), zone: z.string().min(1), subdomain: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i) }),
-]);
-export type SetupCodeTarget = z.infer<typeof SetupCodeTargetSchema>;
+/* The setup code: ONE short-lived value the copy-paste install command carries instead of raw tokens (nothing
+ * secret lands in shell history or the process list). The connect script redeems it at POST /setup/claim (a
+ * public non-oRPC route — the script has no session) for CONNECT_TOKEN plus the sandbox's reachability grant
+ * on the self-hosted zrok hub: {ZROK_TOKEN, ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
+ *
+ * There is no target to choose any more. Under the platform's own tunnel fabric every sandbox's address is
+ * DERIVED from its connect token (`sandbox-<id>.<zone>`) — the bring-your-own-Cloudflare lane it used to
+ * select died with the Cloudflare tunnels, and "I have my own domain" is served by the attach lane, which
+ * provisions nothing at all. */
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
 

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { Prisma } from "@intentic-app/prisma";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { call, ORPCError } from "@orpc/server";
@@ -17,7 +15,7 @@ const sandboxRow = {
     daemonUrl: null,
     lastSeenAt: null,
     setupCodeClaimedAt: null,
-    tunnelToken: null,
+    zrokToken: null,
 };
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
@@ -28,7 +26,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         prisma: fakePrisma({}),
         config: {
             webOrigin: `https://app.test`,
-            intenticCloudflare: { apiToken: ``, zone: `` },
+            intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
             secrets: { key: `` },
             email: { apiKey: ``, from: `` },
         },
@@ -41,70 +39,12 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-// Canned Cloudflare success envelope for the tunnel fetch stubs.
-const cfOk = (result: unknown) => new Response(JSON.stringify({ success: true, errors: [], result }));
 
-// Canned Cloudflare error envelope (e.g. 1022 = tunnel has active connections).
-const cfErr = (code: number, message: string, status = 400) =>
-    new Response(JSON.stringify({ success: false, errors: [{ code, message }], result: null }), { status });
 
 // A Cloudflare API where the tunnel delete fails with `tunnelDelete` (its connections cleanup + zone/list all
-// succeed) — for the delete-teardown error paths.
-const stubTunnelDeleteFailure = (tunnelDelete: () => Response) =>
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
-        const method = init?.method ?? `GET`;
-        if (url.includes(`/zones?name=`)) {
-            return Promise.resolve(cfOk([{ id: `z1`, account: { id: `a1` } }]));
-        }
-        if (method === `GET` && url.includes(`/cfd_tunnel?name=`)) {
-            return Promise.resolve(cfOk([{ id: `t1` }]));
-        }
-        if (method === `DELETE` && url.endsWith(`/cfd_tunnel/t1/connections`)) {
-            return Promise.resolve(cfOk({}));
-        }
-        if (method === `DELETE` && url.endsWith(`/cfd_tunnel/t1`)) {
-            return Promise.resolve(tunnelDelete());
-        }
-        throw new Error(`unexpected fetch: ${method} ${url}`);
-    });
 
-const providedConfig = {
-    ...context().config,
-    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
-};
-const providedRow = { ...sandboxRow, tunnelToken: `cached-token` };
 
 // A happy-path Cloudflare API: one zone, tunnel t1 found by name, connector token, ingress + DNS accepted.
-// Shared by the mint-provisioning, hostTunnel, and delete-teardown tests.
-const stubCloudflareFetch = () =>
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
-        const method = init?.method ?? `GET`;
-        if (url.includes(`/zones?name=`)) {
-            return Promise.resolve(cfOk([{ id: `z1`, account: { id: `a1` } }]));
-        }
-        if (method === `GET` && url.includes(`/cfd_tunnel?name=`)) {
-            return Promise.resolve(cfOk([{ id: `t1` }]));
-        }
-        if (url.endsWith(`/cfd_tunnel/t1/token`)) {
-            return Promise.resolve(cfOk(`connector-token`));
-        }
-        if (method === `DELETE` && url.endsWith(`/cfd_tunnel/t1/connections`)) {
-            return Promise.resolve(cfOk({}));
-        }
-        if (method === `DELETE` && url.endsWith(`/cfd_tunnel/t1`)) {
-            return Promise.resolve(cfOk({}));
-        }
-        if (method === `PUT` && url.endsWith(`/configurations`)) {
-            return Promise.resolve(cfOk({}));
-        }
-        if (url.includes(`/dns_records?type=CNAME`)) {
-            return Promise.resolve(cfOk([]));
-        }
-        if (method === `POST` && url.endsWith(`/dns_records`)) {
-            return Promise.resolve(cfOk({}));
-        }
-        throw new Error(`unexpected fetch: ${method} ${url}`);
-    });
 
 const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
     const error = await promise.then(
@@ -241,196 +181,64 @@ describe(`sandbox routes`, () => {
         );
     });
 
-    it(`setupCode 404s the intentic target when intentic-provided sandboxes are not configured`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) } });
-        await expectOrpcCode(
-            call(sandboxRoutes.setupCode, { sandboxId: `s1`, target: { mode: `intentic` } }, { context: context({ prisma }) }),
-            `NOT_FOUND`,
-        );
-    });
-
-    it(`setupCode stores the own-Cloudflare picks and returns the code + hostname`, async () => {
-        const update = vi.fn().mockResolvedValue(sandboxRow);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
-
-        const result = await call(
-            sandboxRoutes.setupCode,
-            { sandboxId: `s1`, target: { mode: `own`, zone: `example.com`, subdomain: `sandbox-abc` } },
-            { context: context({ prisma }) },
-        );
-
-        expect(result.hostname).toBe(`sandbox-abc.example.com`);
-        expect(result.code).toMatch(/^[\w-]{8,}$/);
-        expect(update).toHaveBeenCalledWith({
-            where: { id: `s1` },
-            data: {
-                setupCode: result.code,
-                setupCodeExpiresAt: expect.any(Date),
-                // The claim stamp and the setup report belong to the code: a fresh command starts unclaimed
-                // and unreported, so the setup wizard never narrates the previous run as this one.
-                setupCodeClaimedAt: null,
-                setupReport: Prisma.DbNull,
-                // Stored as the (encryptable) JSON string; with no SECRETS_KEY it stays plaintext JSON. OWNER_EMAIL
-                // is seeded (lowercased) so the daemon binds only the creator's Google identity as owner.
-                setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `sandbox-abc`, OWNER_EMAIL: `owner@example.com` }),
-            },
-        });
-    });
-
-    it(`setupCode seeds the creator's email lowercased so the daemon binds the right owner`, async () => {
+    /* THE MINT, on the self-hosted fabric: one account per sandbox, cached on the row, and a payload carrying
+     * exactly what the box needs to enable and share. The owner email is lowercased into it for the reason it
+     * always was — the daemon binds that one Google identity as owner. */
+    it(`setupCode mints the reachability grant, caches it, and hands the box its whole payload`, async () => {
         const update = vi.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null };
+        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
+            if (String(url).endsWith(`/namespaces`)) {
+                return Promise.resolve(new Response(JSON.stringify([{ namespaceToken: `ns-1`, name: `public` }])));
+            }
+            if ((init?.method ?? `GET`) === `POST` && String(url).endsWith(`/account`)) {
+                return Promise.resolve(new Response(JSON.stringify({ accountToken: `acct-9` }), { status: 201 }));
+            }
+            throw new Error(`unexpected fetch: ${String(url)}`);
+        });
 
-        await call(
-            sandboxRoutes.setupCode,
-            { sandboxId: `s1`, target: { mode: `own`, zone: `example.com`, subdomain: `sandbox-abc` } },
-            { context: context({ prisma, user: mixedCase }) },
-        );
+        const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma, user: mixedCase }) });
 
-        const stored = JSON.parse((update.mock.calls[0]![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
+        // The address is derived from the connect token, so it is knowable before anything runs.
+        expect(minted.hostname).toBe(`${sandboxSubdomain(sandboxIdFromToken(`tok`)!)}.sbx.test`);
+        // The account token is cached on the row: a second mint reuses it rather than growing a second grant.
+        const cached = update.mock.calls.find((entry) => (entry[0] as { data: Record<string, unknown> }).data[`zrokToken`] !== undefined);
+        expect(cached).toBeDefined();
+        const stored = JSON.parse((update.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
+        expect(stored[`ZROK_TOKEN`]).toBe(`acct-9`);
+        expect(stored[`ZROK_NAMESPACE`]).toBe(`ns-1`);
+        expect(stored[`ZROK_API`]).toBe(`https://zrok2.sbx.test`);
         expect(stored[`OWNER_EMAIL`]).toBe(`owner@example.com`);
     });
 
-    it(`setupCode provisions the intentic tunnel + DNS at mint and caches it on the row`, async () => {
-        // The DNS record must exist BEFORE the wizard shows the hostname — a lookup fired before it exists
-        // would negative-cache NXDOMAIN in the user's resolver chain for the zone's SOA TTL.
-        stubCloudflareFetch();
-        const update = vi.fn().mockResolvedValue(sandboxRow);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
-        const config = {
-            ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
-        };
-
-        const result = await call(
-            sandboxRoutes.setupCode,
-            { sandboxId: `s1`, target: { mode: `intentic` } },
-            { context: context({ prisma, config }) },
-        );
-
-        // Deterministic digest of the connect token — the same one the CLI/browser derive.
-        const id = createHash(`sha256`).update(sandboxRow.token).digest(`hex`).slice(0, 12);
-        expect(result.hostname).toBe(`sandbox-${id}.intentic.dev`);
-        expect(update).toHaveBeenCalledWith({
-            where: { id: `s1` },
-            data: { tunnelToken: `connector-token`, tunnelHostname: `sandbox-${id}.intentic.dev` },
-        });
-        const stored = JSON.parse((update.mock.lastCall![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
-        expect(stored[`SANDBOX_HOSTNAME`]).toBe(`sandbox-${id}.intentic.dev`);
+    it(`setupCode 404s when this platform has no tunnel fabric configured`, async () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
+        const noFabric = context({ prisma });
+        (noFabric.config as { zrok: { adminToken: string } }).zrok.adminToken = ``;
+        await expectOrpcCode(call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: noFabric }), `NOT_FOUND`);
     });
 
-    it(`setupCode skips Cloudflare when the tunnel is already cached on the row`, async () => {
-        vi.stubGlobal(`fetch`, () => {
-            throw new Error(`mint must not re-provision a cached tunnel`);
-        });
-        const row = { ...sandboxRow, tunnelToken: `cached-token` };
-        const update = vi.fn().mockResolvedValue(row);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(row), update } });
-        const config = {
-            ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
-        };
-
-        const result = await call(
-            sandboxRoutes.setupCode,
-            { sandboxId: `s1`, target: { mode: `intentic` } },
-            { context: context({ prisma, config }) },
-        );
-
-        const id = createHash(`sha256`).update(sandboxRow.token).digest(`hex`).slice(0, 12);
-        expect(result.hostname).toBe(`sandbox-${id}.intentic.dev`);
-        expect(update).toHaveBeenCalledOnce();
-    });
-
-    it(`delete tears down the intentic tunnel + DNS, but leaves own-Cloudflare sandboxes' tunnels alone`, async () => {
-        stubCloudflareFetch();
-        const cfCalls: string[] = [];
-        const original = globalThis.fetch;
-        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
-            cfCalls.push(`${init?.method ?? `GET`} ${url}`);
-            return original(url as never, init);
-        });
-        const config = {
-            ...context().config,
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 0, pruneAfterDays: 0, reapDryRun: true, poolSize: 0 },
-        };
-        const deleteRow = vi.fn().mockResolvedValue({});
-        const provided = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, tunnelToken: `cached-token` }), delete: deleteRow },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
-        });
-        expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma: provided, config }) })).toEqual({ ok: true });
-        expect(cfCalls.some((entry) => entry.startsWith(`DELETE `) && entry.includes(`/cfd_tunnel/t1`))).toBe(true);
-        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `s1` } });
-
-        // Own-Cloudflare sandbox (no cached tunnelToken): the row goes, Cloudflare is never touched.
-        cfCalls.length = 0;
-        const own = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: vi.fn().mockResolvedValue({}) },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
-        });
-        expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma: own, config }) })).toEqual({ ok: true });
-        expect(cfCalls).toEqual([]);
-    });
-
-    it(`delete removes the sandbox even when the tunnel still has live connections (1022), leaving it for the reaper`, async () => {
-        stubTunnelDeleteFailure(() => cfErr(1022, `This tunnel has active connections. Please stop all cloudflared replicas.`));
-        const deleteRow = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
-        });
-        const ctx = context({ prisma, config: providedConfig });
-
-        // The row is still removed (UI unblocks); the orphaned tunnel is left for the daily reaper to reap once
-        // the host's connector detaches.
-        expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: ctx })).toEqual({ ok: true });
-        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `s1` } });
-        expect(ctx.logger.warn).toHaveBeenCalled();
-    });
-
-    it(`delete removes the sandbox even when the tunnel teardown fails outright`, async () => {
-        stubTunnelDeleteFailure(() => cfErr(1000, `internal`, 500));
-        const deleteRow = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
-        });
-        const ctx = context({ prisma, config: providedConfig });
-
-        // A confirmed removal must never be undone by a Cloudflare failure: the row goes regardless, and the
-        // orphaned intentic-owned tunnel is the reaper's problem.
-        expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: ctx })).toEqual({ ok: true });
-        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `s1` } });
-        expect(ctx.logger.warn).toHaveBeenCalled();
-    });
-
-    it(`delete drops the row BEFORE the Cloudflare teardown, so a reload mid-teardown never sees it`, async () => {
+    // The teardown a delete owes the hub: the account goes, taking every environment, share and name with it.
+    it(`delete revokes the sandbox's reachability grant after dropping the row`, async () => {
         const order: string[] = [];
+        const deleteRow = vi.fn().mockImplementation(() => {
+            order.push(`row`);
+            return Promise.resolve({});
+        });
         vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
-            order.push(`cf`);
-            if (url.includes(`/zones?name=`)) {
-                return Promise.resolve(cfOk([{ id: `z1`, account: { id: `a1` } }]));
-            }
-            if ((init?.method ?? `GET`) === `GET` && url.includes(`/cfd_tunnel?name=`)) {
-                return Promise.resolve(cfOk([]));
-            }
-            throw new Error(`unexpected fetch: ${init?.method ?? `GET`} ${url}`);
+            order.push(`hub`);
+            expect((init?.method ?? `GET`)).toBe(`DELETE`);
+            expect(String(url)).toContain(`/account`);
+            return Promise.resolve(new Response(``, { status: 200 }));
         });
         const prisma = fakePrisma({
-            sandbox: {
-                findFirst: vi.fn().mockResolvedValue(providedRow),
-                delete: vi.fn().mockImplementation(() => {
-                    order.push(`row`);
-                    return Promise.resolve({});
-                }),
-            },
+            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, zrokToken: `enc-acct` }), delete: deleteRow },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
         });
-
-        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: providedConfig }) });
-        expect(order[0]).toBe(`row`);
+        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) });
+        // Row first: it is what the browser reads, and a failed hub call is what the reconcile cleans up.
+        expect(order).toEqual([`row`, `hub`]);
     });
 
     it(`creates a second sandbox for an owner who already has one — there is no cap`, async () => {
@@ -440,14 +248,14 @@ describe(`sandbox routes`, () => {
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
     });
 
-    it(`flags providedTunnel only for a daemonUrl under the configured intentic zone`, async () => {
+    it(`flags providedTunnel only for a daemonUrl under the fabric's own zone`, async () => {
         const rows = [
-            { ...sandboxRow, id: `s1`, daemonUrl: `https://sandbox-abc.intentic.dev` },
+            { ...sandboxRow, id: `s1`, daemonUrl: `https://sandbox-abc.sbx.test` },
             { ...sandboxRow, id: `s2`, daemonUrl: `https://sandbox-def.example.com` },
             { ...sandboxRow, id: `s3` },
         ];
         const config = {
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev` },
+            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prisma = fakePrisma({
@@ -458,9 +266,10 @@ describe(`sandbox routes`, () => {
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
         expect(sandboxes.map((sandbox) => sandbox.providedTunnel)).toEqual([true, false, false]);
 
-        // The zone alone defaults even when the feature is off (no token) — it must not flag on its own.
+        // The zone alone defaults even when the fabric is off (no admin token) — it must not flag on its own.
         const tokenless = {
-            intenticCloudflare: { apiToken: ``, zone: `intentic.dev` },
+            intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
+            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: ``, zone: `sbx.test` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prismaAgain = fakePrisma({
@@ -487,30 +296,6 @@ describe(`cloud lane routes`, () => {
         vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 401 })));
         await expectOrpcCode(
             call(sandboxRoutes.cloudOptions, { credentials: { provider: `hetzner`, token: `bad` } }, { context: context() }),
-            `BAD_REQUEST`,
-        );
-    });
-
-    it(`cloudProvision refuses without a live setup code, and refuses an own-Cloudflare code`, async () => {
-        const stale = { ...sandboxRow, setupCode: `c0de`, setupCodeExpiresAt: new Date(Date.now() - 1) };
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(stale) } });
-        await expectOrpcCode(
-            call(
-                sandboxRoutes.cloudProvision,
-                { sandboxId: `s1`, credentials: { provider: `hetzner`, token: `t` }, location: `fsn1`, size: `cx22` },
-                { context: context({ prisma }) },
-            ),
-            `BAD_REQUEST`,
-        );
-
-        const ownCf = { ...provisionable, setupPayload: JSON.stringify({ ZONE: `example.com`, SUBDOMAIN: `sandbox-abc` }) };
-        const prismaOwn = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(ownCf) } });
-        await expectOrpcCode(
-            call(
-                sandboxRoutes.cloudProvision,
-                { sandboxId: `s1`, credentials: { provider: `hetzner`, token: `t` }, location: `fsn1`, size: `cx22` },
-                { context: context({ prisma: prismaOwn }) },
-            ),
             `BAD_REQUEST`,
         );
     });

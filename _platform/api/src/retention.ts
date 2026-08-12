@@ -1,5 +1,7 @@
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
-import { reapOrphanDnsRecords, reapStaleTunnels } from "./sandbox/cloudflare.js";
+import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
+import { reconcileZrokAccounts } from "./sandbox/zrok.js";
+import { zrokEnabled } from "./sandbox/zrok-provision.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
@@ -45,45 +47,8 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     return { sessions: sessions.count, verifications: verifications.count, handoffs: handoffs.count, invites: invites.count };
 };
 
-/* WHICH SANDBOX TUNNELS THE REAPER MUST NOT TOUCH — the DB's answer, as a pure function.
- *
- * The reaper's original rule was "idle for N days = orphan", and the hosted lane broke it: a sleeping hosted
- * machine's connector is disconnected BY DESIGN (the idle-stop stopped the machine), so after a quiet week the
- * sweep would have deleted the tunnel out from under a sandbox that wakes on its owner's next visit — with the
- * dead connector token baked into the machine's env, permanently unreachable. Idleness is not abandonment any
- * more; the rows are.
- *
- * So the protect set is computed from the rows, which is possible without decrypting anything: a tunnel is
- * named `sandbox-<first 12 hex of sha256(token)>`, and the row already stores the full digest for lookups.
- * Protected: every hosted row (sleep is normal, and its machine holds the connector token); every row seen
- * within the prune window (a laptop off for a fortnight is not abandoned); every never-connected row younger
- * than the reap window (a setup in progress); and, when pruning is disabled (pruneAfterDays 0), every row
- * outright. What is NOT protected falls to the sweep — abandoned setups past the reap window, and
- * connected-before sandboxes offline past the prune window — and the sweep then heals those rows (below) so
- * the address is re-minted, identical, on their owner's next setup visit. */
-export const protectedTunnelNames = (
-    rows: readonly { tokenDigest: string; lastSeenAt: Date | null; createdAt: Date; hosted: boolean }[],
-    args: { now: number; reapAfterMs: number; pruneAfterMs: number },
-): Set<string> => {
-    const names = new Set<string>();
-    for (const row of rows) {
-        const protectedRow =
-            row.hosted ||
-            (row.lastSeenAt === null
-                ? // Never connected: still someone's setup-in-progress inside the reap window, reclaimable past
-                  // it (the shipped behavior since the reaper existed — pruneAfterDays does not govern these).
-                  args.now - row.createdAt.getTime() < args.reapAfterMs
-                : // Connected before: a workspace someone has used. 0 turns the inactivity prune off entirely.
-                  args.pruneAfterMs === 0 || args.now - row.lastSeenAt.getTime() < args.pruneAfterMs);
-        if (protectedRow) {
-            names.add(`sandbox-${row.tokenDigest.slice(0, 12)}`);
-        }
-    }
-    return names;
-};
-
 export const startRetention = (prisma: PrismaClient, config: Config, logger: Logger): void => {
-    const { apiToken, zone, reapAfterDays, pruneAfterDays, reapDryRun } = config.intenticCloudflare;
+    const { apiToken, zone, reapDryRun } = config.intenticCloudflare;
     const sweep = async (): Promise<void> => {
         // A failed sweep must not crash the API; the next daily run retries.
         try {
@@ -91,66 +56,40 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         } catch (error) {
             logger.error({ err: error }, `retention sweep failed`);
         }
-        // Reap orphaned intentic-provided tunnels only when the intentic-provided path is configured (mirrors
-        // intenticZoneOf). Guarded separately so a Cloudflare failure never masks the DB sweep's result.
+        /* THE RECONCILE — every reachability grant on the hub whose sandbox row is gone, deleted. It replaces
+         * the Cloudflare tunnel reaper and is a far simpler thing than what it replaces: idleness is no longer
+         * evidence of anything (a sleeping hosted machine is disconnected by design), so the DB is the only
+         * authority — an account whose row exists is live, an account with no row is garbage, and there is no
+         * "inactive for N days" heuristic left to get wrong. A sandbox that is merely offline keeps its grant
+         * forever, which is exactly right: the grant is one row on the hub, not ten DNS records against a
+         * quota. Accounts outside our synthetic email shape are somebody else's and are never touched. */
+        if (zrokEnabled(config)) {
+            try {
+                const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
+                const live = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
+                const result = await reconcileZrokAccounts(config.zrok, {
+                    live,
+                    dryRun: reapDryRun,
+                    log: (email) => logger.info({ email, dryRun: reapDryRun }, `orphan zrok account`),
+                    onError: (email, error) => logger.error({ email, err: error }, `orphan zrok account delete failed`),
+                });
+                logger.info(result, `zrok account reconcile completed`);
+            } catch (error) {
+                logger.error({ err: error }, `zrok account reconcile failed`);
+            }
+        }
+        // Cloudflare is DNS-only now, and the one thing still worth sweeping there is the loopback-certificate
+        // residue (`local-*` A records and their ACME TXTs) that no tunnel teardown ever owned.
         if (apiToken === `` || zone === ``) {
             return;
         }
+        /* The record sweep: the loopback pair (`local-<id>` A + its ACME TXT) of sandboxes that no longer
+         * exist, plus any CNAME left pointing at a Cloudflare tunnel from before the migration. Nothing
+         * creates tunnel records any more, so this is now a shrinking cleanup rather than a standing defence
+         * against the per-zone quota — but the `total` it logs is still the number to watch. */
         try {
-            // Pre-provisioned pool tunnels (sandbox-pool.ts) are unclaimed and have never connected, so they look
-            // exactly like idle orphans to the reaper — exclude them by name (the hostname's leftmost label IS the
-            // tunnel name) so a full-but-idle pool is never reaped out from under the next signup. Live rows'
-            // tunnels join the exclusion through protectedTunnelNames (the DB truth the idle heuristic lacks).
-            const [reserved, rows] = await Promise.all([
-                prisma.reservedSandbox.findMany({ select: { tunnelHostname: true } }),
-                prisma.sandbox.findMany({ select: { tokenDigest: true, lastSeenAt: true, createdAt: true, hosted: { select: { id: true } } } }),
-            ]);
-            const exclude = new Set(reserved.map((entry) => entry.tunnelHostname.slice(0, entry.tunnelHostname.indexOf(`.`))));
-            for (const name of protectedTunnelNames(
-                rows.map((row) => ({ tokenDigest: row.tokenDigest, lastSeenAt: row.lastSeenAt, createdAt: row.createdAt, hosted: row.hosted !== null })),
-                { now: Date.now(), reapAfterMs: reapAfterDays * DAY_MS, pruneAfterMs: pruneAfterDays * DAY_MS },
-            )) {
-                exclude.add(name);
-            }
-            const result = await reapStaleTunnels({
-                apiToken,
-                zone,
-                reapAfterMs: reapAfterDays * DAY_MS,
-                dryRun: reapDryRun,
-                exclude,
-                log: (tunnel) => logger.info({ ...tunnel, dryRun: reapDryRun }, `tunnel reap candidate`),
-                onError: (tunnel, error) => logger.error({ ...tunnel, err: error }, `tunnel reap failed`),
-            });
-            logger.info({ ...result, reapedNames: undefined }, `tunnel reap sweep completed`);
-            /* HEAL THE ROWS BEHIND REAPED TUNNELS — the recovery half of pruning. A row whose tunnel was just
-             * deleted still caches the dead connector token and hostname, and the mint paths (setupCode,
-             * hostedProvision) only provision when those are null — so without this, a pruned sandbox resumed
-             * a month later showed a command with a dead token and an address that no longer resolves.
-             * Nulling the cache arms the ordinary lazy re-provision, and because the hostname is derived from
-             * the connect token, the owner gets the SAME address back on their next setup visit. */
-            if (result.reapedNames.length > 0) {
-                const healed = await prisma.sandbox.updateMany({
-                    where: { tunnelHostname: { in: result.reapedNames.map((name) => `${name}.${zone}`) } },
-                    data: { tunnelToken: null, tunnelHostname: null },
-                });
-                if (healed.count > 0) {
-                    logger.info({ healed: healed.count }, `pruned sandboxes armed for re-provision on next setup visit`);
-                }
-            }
-        } catch (error) {
-            logger.error({ err: error }, `tunnel reap sweep failed`);
-        }
-        /* The record-level sweep (reapOrphanDnsRecords): dangling tunnel CNAMEs, leaked local-* loopback
-         * records, stray ACME TXTs — the stale records the tunnel walk cannot see, and what actually fills a
-         * zone to Cloudflare's cap (81045). Runs AFTER the tunnel reap so just-reaped tunnels' records are
-         * already dangling by the time it looks. The `total` in its log line is the zone's record count — the
-         * quota-pressure number an operator should be watching before 81045 announces it. */
-        try {
-            const [rows, reserved] = await Promise.all([
-                prisma.sandbox.findMany({ select: { tokenDigest: true } }),
-                prisma.reservedSandbox.findMany({ select: { tokenDigest: true } }),
-            ]);
-            const liveSandboxIds = new Set([...rows, ...reserved].map((row) => row.tokenDigest.slice(0, 12)));
+            const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
+            const liveSandboxIds = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
             const records = await reapOrphanDnsRecords({
                 apiToken,
                 zone,

@@ -11,10 +11,11 @@ import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudCredentialError, CloudProviderError } from "./cloud/common.js";
 import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
-import { CloudflareTokenError, deleteSandboxTunnel, listZoneNames, provisionSandboxTunnel, sandboxHostname } from "./cloudflare.js";
+import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
-import { claimReserved, topUp } from "./sandbox-pool.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
+import { ensureZrokAccount, sandboxHostname, zrokEnabled } from "./zrok-provision.js";
+import { deleteSandboxAccount } from "./zrok.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -22,18 +23,15 @@ const os = implement(apiContract).$context<OrpcContext>();
 // command; short enough that a leaked pasted command goes stale quickly.
 const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
 
-// The intentic zone when intentic-provided tunnels are enabled (token + zone configured), else undefined —
-// the zone alone defaults even when the feature is off, so it must not flag sandboxes on its own.
-const intenticZoneOf = (context: OrpcContext): string | undefined => {
-    const { apiToken, zone } = context.config.intenticCloudflare;
-    return apiToken !== `` && zone !== `` ? zone : undefined;
-};
+// The hub's zone when the tunnel fabric is configured, else undefined — the zone alone defaults even when
+// the fabric is off, so it must not flag sandboxes on its own.
+const intenticZoneOf = (context: OrpcContext): string | undefined => (zrokEnabled(context.config) ? context.config.zrok.zone : undefined);
 
 // Shape a sandbox row for the browser. `role` is the caller's relationship — owner rows drive management, member
 // rows are access-only. token + daemonUrl are what the browser needs to reach the daemon directly (the stored
 // token is encrypted at rest, so it is decrypted here); daemonUrl + lastSeenAt come from the daemon's announce.
-// `providedTunnel` flags a daemonUrl under intentic's own zone, so the infra operator panel mints host tunnels
-// via the daemon's connect-token relay (POST /sandbox/host-tunnel) instead of asking for the user's Cloudflare token.
+// `providedTunnel` flags a daemonUrl under the platform's own tunnel zone — the browser reads it to tell a
+// sandbox we made reachable from one the owner attached behind a domain of their own.
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.
 const toSummary = (
@@ -103,32 +101,11 @@ export const sandboxRoutes = {
             ],
         };
     }),
-    // Mint a new sandbox for the caller. Unlimited — own as many as you like.
+    // Mint a new sandbox for the caller. Unlimited — own as many as you like. Nothing is provisioned here:
+    // a zrok account is one fast call the first setup mint (or hosted provision) makes, which is why the
+    // pre-provisioned pool the Cloudflare tunnels needed died with them.
     create: os.sandbox.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        // Claim a pre-provisioned subdomain when the pool is enabled and stocked (sandbox-pool.ts): its token +
-        // intentic tunnel are copied verbatim (already encrypted), so setupCode's tunnelToken is already set and
-        // its Cloudflare round-trips are skipped — the wizard's "preparing your domain" step becomes instant.
-        // The claimed slot is refilled in the background, never blocking this response.
-        const reserved = context.config.intenticCloudflare.poolSize > 0 ? await claimReserved(context.prisma) : undefined;
-        if (reserved !== undefined) {
-            const sandbox = await context.prisma.sandbox.create({
-                data: {
-                    name: input.name,
-                    ownerId: user.id,
-                    token: reserved.token,
-                    tokenDigest: reserved.tokenDigest,
-                    tunnelToken: reserved.tunnelToken,
-                    tunnelHostname: reserved.tunnelHostname,
-                },
-                include: { hosted: true },
-            });
-            void topUp(context.prisma, context.config, context.logger).catch((error) =>
-                context.logger.error({ err: error }, `sandbox pool refill after claim failed`),
-            );
-            return toSummary(sandbox, `owner`, context);
-        }
-        // Empty pool → mint inline as before; setupCode provisions the tunnel lazily.
         const token = randomBytes(16).toString(`base64url`);
         const sandbox = await context.prisma.sandbox.create({
             data: { name: input.name, ownerId: user.id, token: encryptSecret(context.config, token), tokenDigest: sha256Hex(token) },
@@ -148,15 +125,13 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Remove an owned sandbox (cascades its member grants) AND its intentic-provided Cloudflare tunnel + DNS —
-    // the platform destroys everything it provisioned (own-CF tunnels are the user's, untouched). The row goes
-    // FIRST, and the teardown is best-effort after it: the row is the only thing the browser reads
-    // (sandbox.list), while the teardown is a stack of Cloudflare round-trips — tearing down first kept a
-    // just-removed sandbox visible to any reload during those seconds, and made every Cloudflare hiccup fail a
-    // removal the user already confirmed. A failed teardown just orphans an intentic-owned tunnel, which the
-    // daily reaper deletes along with its DNS once the connector detaches (the common case: a host whose
-    // cloudflared is still connected refuses the delete with 1022 until cleanup.sh runs there).
-    // The daemon keeps running on its host until cleanup.sh tears it down there.
+    // Remove an owned sandbox (cascades its member grants), its hosted machine, and its reachability grant on
+    // the hub — the platform destroys everything it provisioned. The row goes FIRST and the teardowns are
+    // best-effort after it: the row is the only thing the browser reads (sandbox.list), so tearing down first
+    // kept a just-removed sandbox visible to every reload during those seconds and made any hub hiccup fail a
+    // removal the user had already confirmed. What a failed teardown leaves is an account with no row, which
+    // is precisely what the daily reconcile deletes. The daemon keeps running on its host until cleanup.sh
+    // tears it down there.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         // Read the hosted record BEFORE the row goes — the cascade takes it, and its appName is the teardown.
@@ -172,14 +147,17 @@ export const sandboxRoutes = {
                 context.logger.warn({ err: error, sandboxId: input.sandboxId, app: hosted.appName }, `hosted machine teardown failed; orphaned for the reaper`);
             }
         }
-        if (sandbox.tunnelToken === null) {
-            return { ok: true };
-        }
-        const { apiToken, zone } = context.config.intenticCloudflare;
-        try {
-            await deleteSandboxTunnel({ apiToken, zone, connectToken: decryptSecret(context.config, sandbox.token) });
-        } catch (error) {
-            context.logger.warn({ err: error, sandboxId: input.sandboxId }, `sandbox tunnel teardown failed; orphaned for the reaper`);
+        // The sandbox's reachability grant on the hub goes with it — one call that takes its environments,
+        // shares and names with it. Best-effort after the row for the same reason the machine teardown is:
+        // the row is what the browser reads, and an account with no row is exactly what the daily reconcile
+        // (retention.ts) deletes.
+        if (sandbox.zrokToken !== null && zrokEnabled(context.config)) {
+            const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token));
+            try {
+                await deleteSandboxAccount(context.config.zrok, sandboxId ?? sandbox.id);
+            } catch (error) {
+                context.logger.warn({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed; orphaned for the reconcile`);
+            }
         }
         return { ok: true };
     }),
@@ -191,8 +169,9 @@ export const sandboxRoutes = {
         await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: input.sandboxId, email: user.email.toLowerCase() } });
         return { ok: true };
     }),
-    // List the Cloudflare zones the pasted token can see, so setup can make the user pick one before the install
-    // command is revealed. Session-gated, used for this one call, then dropped — never persisted or logged.
+    // The zones a pasted Cloudflare token can see — the in-app Cloudflare capability's credential check (the
+    // user's OWN zone, for the deploy engine's apps). Nothing to do with sandbox reachability, which the
+    // self-hosted hub serves. Session-gated, used for this one call, then dropped — never persisted or logged.
     zones: os.sandbox.zones.handler(async ({ context, input }) => {
         requireUser(context);
         try {
@@ -314,30 +293,22 @@ export const sandboxRoutes = {
                 message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`} — remove one to have this sandbox hosted instead`,
             });
         }
-        const { apiToken, zone } = context.config.intenticCloudflare;
-        let tunnelToken = sandbox.tunnelToken;
-        let tunnelHostname = sandbox.tunnelHostname;
-        if (tunnelToken === null || tunnelHostname === null) {
-            // The pool was empty when this row was created (or it predates the pool) — buy the tunnel now, and
-            // cache it on the row exactly as setupCode does, so nothing pays for it twice.
-            try {
-                const tunnel = await provisionSandboxTunnel({ apiToken, zone, connectToken: decryptSecret(context.config, sandbox.token) });
-                tunnelToken = encryptSecret(context.config, tunnel.tunnelToken);
-                tunnelHostname = tunnel.hostname;
-                await context.prisma.sandbox.update({ where: { id: sandbox.id }, data: { tunnelToken, tunnelHostname } });
-            } catch (error) {
-                if (error instanceof CloudflareTokenError) {
-                    throw new ORPCError(`BAD_REQUEST`, { message: error.message });
-                }
-                throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `tunnel provisioning failed` });
-            }
+        if (!zrokEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no tunnel fabric configured` });
+        }
+        let grant;
+        try {
+            // The machine's env must carry the sandbox's reachability grant, so it is minted (or reused)
+            // before the machine exists — the same ordering the tunnel had, one call instead of a dozen.
+            grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
+        } catch (error) {
+            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
         }
         try {
             await provisionHosted(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
                 connectToken: decryptSecret(context.config, sandbox.token),
-                tunnelToken: decryptSecret(context.config, tunnelToken),
-                tunnelHostname,
+                grant,
                 ownerEmail: user.email.toLowerCase(),
             });
         } catch (error) {
@@ -392,50 +363,31 @@ export const sandboxRoutes = {
         }
         return { ok: true };
     }),
-    // Mint the short-lived setup code the install one-liner carries instead of raw tokens. Per target mode:
-    // `intentic` — provision the tunnel + proxied DNS record UP FRONT (cached on the row, so only the first
-    // mint per sandbox hits Cloudflare): the wizard binds + probes the hostname the moment this returns, and
-    // a probe fired before the DNS record exists gets NXDOMAIN, which resolver chains negative-cache for the
-    // zone's SOA TTL (30 min) — the wizard then looks dead long after the sandbox is up. `own` — stash the
-    // zone/subdomain picks (the user's CF token NEVER enters the code — it rides the command as an env var;
-    // that path's tunnel is created by the script). Re-claimable until expiry so a failed run stays
-    // re-runnable; re-minting overwrites the previous code.
+    /* Mint the short-lived setup code the install one-liner carries instead of raw tokens. One lane now: the
+     * sandbox's reachability grant on the self-hosted hub is minted (or reused) here and stashed in the
+     * payload, so the pasted command carries a code and nothing else — the address it will answer on is a
+     * derivation of the connect token, known before anything runs. Re-claimable until expiry so a failed run
+     * stays re-runnable; re-minting overwrites the previous code but never the grant. */
     setupCode: os.sandbox.setupCode.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        let hostname: string;
-        let payload: Record<string, string>;
-        if (input.target.mode === `intentic`) {
-            const { apiToken, zone } = context.config.intenticCloudflare;
-            if (apiToken === `` || zone === ``) {
-                throw new ORPCError(`NOT_FOUND`, { message: `intentic-provided sandboxes are not enabled` });
-            }
-            const connectToken = decryptSecret(context.config, sandbox.token);
-            hostname = sandboxHostname(zone, connectToken);
-            if (sandbox.tunnelToken === null) {
-                // Surface WHY like hostTunnel below — a raw throw serializes as a bare "Internal server error".
-                try {
-                    const tunnel = await provisionSandboxTunnel({ apiToken, zone, connectToken });
-                    await context.prisma.sandbox.update({
-                        where: { id: sandbox.id },
-                        data: { tunnelToken: encryptSecret(context.config, tunnel.tunnelToken), tunnelHostname: tunnel.hostname },
-                    });
-                } catch (error) {
-                    if (error instanceof CloudflareTokenError) {
-                        throw new ORPCError(`BAD_REQUEST`, { message: error.message });
-                    }
-                    if (error instanceof Error) {
-                        throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
-                    }
-                    throw error;
-                }
-            }
-            // SANDBOX_HOSTNAME both feeds the connect script and marks the code as intentic-mode for /setup/claim.
-            payload = { SANDBOX_HOSTNAME: hostname };
-        } else {
-            hostname = `${input.target.subdomain}.${input.target.zone}`;
-            payload = { ZONE: input.target.zone, SUBDOMAIN: input.target.subdomain };
+        if (!zrokEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no tunnel fabric configured` });
         }
+        let grant;
+        try {
+            grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
+        } catch (error) {
+            // Surface WHY — a raw throw serializes as a bare "Internal server error" in the wizard.
+            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
+        }
+        const hostname = grant.hostname;
+        const payload: Record<string, string> = {
+            ZROK_TOKEN: grant.accountToken,
+            ZROK_API: grant.apiEndpoint,
+            ZROK_NAMESPACE: grant.namespaceToken,
+            SANDBOX_HOSTNAME: hostname,
+        };
         // Seed the creator's account email so the daemon binds ONLY this Google identity as owner (TOFU by
         // the intended person, not just whoever holds the connect token) — daemon ownership then always
         // matches the intentic account. Lowercased to match the daemon's case-insensitive owner check.

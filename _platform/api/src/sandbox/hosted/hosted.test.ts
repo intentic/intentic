@@ -14,7 +14,7 @@ const config = (over?: Record<string, unknown>): Config =>
         google: { clientId: `gcid` },
         api: { url: `https://api.test` },
         secrets: { key: `` },
-        intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, poolSize: 0 },
+        intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,
@@ -53,10 +53,10 @@ afterEach(() => {
 });
 
 describe(`hostedEnabled`, () => {
-    it(`needs BOTH the Fly credential and the intentic tunnel fabric — machines without tunnels boot to nothing`, () => {
+    it(`needs BOTH the Fly credential and the tunnel fabric — machines without reachability boot to nothing`, () => {
         expect(hostedEnabled(config())).toBe(true);
         expect(hostedEnabled(config({ hosted: { ...config().hosted, flyApiToken: `` } }))).toBe(false);
-        expect(hostedEnabled(config({ intenticCloudflare: { apiToken: ``, zone: `` } }))).toBe(false);
+        expect(hostedEnabled(config({ zrok: { ...config().zrok, adminToken: `` } }))).toBe(false);
     });
 });
 
@@ -64,8 +64,7 @@ describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,
         connectToken: `t0k3n`,
-        tunnelToken: `tunnel-secret`,
-        tunnelHostname: `sandbox-abc.sbx.test`,
+        grant: { accountToken: `acct-1`, namespaceToken: `ns-1`, hostname: `sandbox-abc.sbx.test`, apiEndpoint: `https://zrok2.sbx.test` },
         ownerEmail: `owner@example.com`,
     };
 
@@ -84,7 +83,9 @@ describe(`provisionHosted`, () => {
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
-        expect(machine.config.env[`TUNNEL_TOKEN`]).toBe(`tunnel-secret`);
+        expect(machine.config.env[`ZROK_TOKEN`]).toBe(`acct-1`);
+        expect(machine.config.env[`ZROK_NAMESPACE`]).toBe(`ns-1`);
+        expect(machine.config.env[`ZROK_API`]).toBe(`https://zrok2.sbx.test`);
         expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
