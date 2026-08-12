@@ -47,10 +47,9 @@ describe(`the pool math`, () => {
         const wholeAllowance = 30 * config.pool.dailyCredits;
         const report = computeMonth(`2026-08`, 1, config, [{ extensionId: `evil.farm`, donors: 1, credits: wholeAllowance }], []);
         /* The whole month's credits donated to yourself earn exactly the 90% ceiling — 1800¢ back on 2000¢
-         * paid. Still loss-making, and note how much thinner the margin is at a 90% share than at 70%: what
-         * actually makes self-dealing laborious is not this 200¢ gap but the per-month donation dedupe, which
-         * caps one membership at one donation per listing and so forces a farmer to publish a listing for
-         * every 200 credits they want back. */
+         * paid. Still loss-making, and what actually makes self-dealing laborious is not this 200¢ gap but
+         * the per-month donation dedupe, which caps one membership at one donation per listing and so forces
+         * a farmer to publish a listing for every 200 credits they want back. */
         expect(report.extensions[0]?.earningsCents).toBe(1800);
         expect(report.extensions[0]!.earningsCents).toBeLessThan(report.grossCents);
         expect(report.paidCents).toBeLessThanOrEqual(report.poolCents);

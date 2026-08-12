@@ -54,7 +54,7 @@ const membership = (over: Partial<MembershipState> = {}): MembershipState =>
         enabled: true,
         member: true,
         priceUsd: 20,
-        creatorShare: 0.7,
+        creatorShare: 0.9,
         dailyCredits: 1_000,
         donationCredits: 200,
         credits: { allowance: 1_000, used: 200, remaining: 800, resetsAt: `2026-08-13T00:00:00.000Z` },

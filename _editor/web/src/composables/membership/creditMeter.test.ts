@@ -9,7 +9,7 @@ const state = (credits: { used: number; remaining: number } | undefined, donatio
         enabled: true,
         member: credits !== undefined,
         priceUsd: 20,
-        creatorShare: 0.7,
+        creatorShare: 0.9,
         dailyCredits: 1_000,
         donationCredits,
         credits: credits === undefined ? undefined : { allowance: 1_000, resetsAt: `2026-08-13T00:00:00.000Z`, ...credits },
