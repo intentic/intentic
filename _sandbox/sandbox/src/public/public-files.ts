@@ -85,8 +85,13 @@ const CREDENTIAL_NAMES = /^(?:id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.?netrc
 const CREDENTIAL_EXTS = new Set([".pem", ".key", ".p12", ".pfx", ".ppk", ".jks", ".keystore", ".kdbx", ".asc", ".gpg"]);
 
 /* Rule 5: self-identifying secrets only — every pattern here names its own issuer, so a match is evidence
- * rather than a guess. Deliberately NOT a general `key = <long string>` rule; see the header. */
-const SECRET_PATTERNS = [
+ * rather than a guess. Deliberately NOT a general `key = <long string>` rule; see the header.
+ *
+ * Exported because a conversation published as a page (src/share) has to be held to the SAME rule, and from
+ * the other direction: a file is REFUSED for matching one of these, but a shared page is rewritten to remove
+ * them. The two have to be one list — a share redacted against a shorter list would be a page the outbox then
+ * refuses to serve, which reads to its owner as a broken feature rather than as a guard doing its job. */
+export const SECRET_PATTERNS = [
     /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/,
     /\bAKIA[0-9A-Z]{16}\b/,
     /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,

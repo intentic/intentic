@@ -1,0 +1,41 @@
+{
+    "name": "@intentic/share-view",
+    "version": "0.0.0",
+    "description": "The read-only page a conversation shared to the public is published as",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_editor/share-view"
+    },
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        "./page": "./dist/index.html"
+    },
+    "scripts": {
+        "build": "vite build",
+        "typecheck": "vue-tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "devDependencies": {
+        "@intentic-app/web": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@intentic/ui": "workspace:*",
+        "@tailwindcss/vite": "catalog:",
+        "@vitejs/plugin-vue": "catalog:",
+        "jsdom": "catalog:",
+        "shiki": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    }
+}

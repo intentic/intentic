@@ -185,7 +185,16 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
     await openMenuOn(1);
-    expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close Finished`, `Close All`, `Move chat into new window`]);
+    expect(labels()).toEqual([
+        `Rename`,
+        `Share…`,
+        `Close`,
+        `Close Others`,
+        `Close to the Right`,
+        `Close Finished`,
+        `Close All`,
+        `Move chat into new window`,
+    ]);
     await clickRow(`Close to the Right`);
 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);

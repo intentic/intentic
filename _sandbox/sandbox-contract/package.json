@@ -51,6 +51,17 @@
                 "default": "./dist/tunnel-ids.js"
             }
         },
+        "./share-paths": {
+            "types": "./dist/share-paths.d.ts",
+            "import": {
+                "@intentic/src": "./src/share-paths.ts",
+                "default": "./dist/share-paths.js"
+            },
+            "require": {
+                "@intentic/src": "./src/share-paths.ts",
+                "default": "./dist/share-paths.js"
+            }
+        },
         "./session-names": {
             "types": "./dist/session-names.d.ts",
             "import": {

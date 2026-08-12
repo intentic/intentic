@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { publicContract, publicLabel, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
 import { implement, ORPCError } from "@orpc/server";
@@ -36,16 +37,23 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
     return {
         list: i.list.handler(async () => ({
             ...(base === undefined ? {} : { url: base }),
-            files: (await listPublicFiles(root)).map((entry) => {
-                const file = { path: entry.path, size: entry.size, modifiedAt: entry.modifiedAt };
-                // A blocked file gets no URL: handing out a link that is guaranteed to 404 would read as the
-                // guard's failure rather than its verdict.
-                if (entry.blocked !== undefined) {
-                    return Object.assign(file, { blocked: BLOCK_REASON[entry.blocked] });
-                }
-                const url = fileUrl(base, entry.path);
-                return url === undefined ? file : Object.assign(file, { url });
-            }),
+            /* Shared conversations are in the outbox but not in this list. They are published by a different
+             * gesture, listed with their own titles and dates by the /share routes, and withdrawn by their own
+             * action — so a row here would be a second, worse handle on the same thing. And there would be
+             * hundreds: the page's assets are one syntax grammar per file, and a file list that is nine parts
+             * machinery is a file list nobody reads. */
+            files: (await listPublicFiles(root))
+                .filter((entry) => !entry.path.startsWith(`${SHARE_DIR}/`))
+                .map((entry) => {
+                    const file = { path: entry.path, size: entry.size, modifiedAt: entry.modifiedAt };
+                    // A blocked file gets no URL: handing out a link that is guaranteed to 404 would read as
+                    // the guard's failure rather than its verdict.
+                    if (entry.blocked !== undefined) {
+                        return Object.assign(file, { blocked: BLOCK_REASON[entry.blocked] });
+                    }
+                    const url = fileUrl(base, entry.path);
+                    return url === undefined ? file : Object.assign(file, { url });
+                }),
         })),
 
         publish: i.publish.handler(async ({ input }) => {
@@ -67,6 +75,12 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
                 throw new ORPCError("NOT_FOUND", { message: `"${input.path}" does not exist` });
             }
             const name = basename(source);
+            // The outbox's one reserved name. A file published here would land among the shared conversations
+            // (or, publishing a directory, on top of them) and be invisible in the list above — and the /share
+            // routes would then be maintaining a tree somebody else is writing into.
+            if (name === SHARE_DIR) {
+                throw new ORPCError("BAD_REQUEST", { message: `"${SHARE_DIR}" is where shared conversations are published — rename it first` });
+            }
             // Refuse the shapes the serve path would refuse anyway — at the gesture, where there is someone to
             // read the reason, instead of silently later when a recipient reports a dead link.
             const blocked = blockByName(name);
@@ -86,6 +100,11 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             const target = resolveWithin(root, input.path);
             if (target === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a published path` });
+            }
+            // A shared conversation is withdrawn by its own action, which also drops it from the list the app
+            // shows. Removing its page through here would leave a row promising a link that answers nothing.
+            if (input.path === SHARE_DIR || input.path.startsWith(`${SHARE_DIR}/`)) {
+                throw new ORPCError("BAD_REQUEST", { message: "shared conversations are withdrawn from the Shared conversations list" });
             }
             await rm(target, { recursive: true, force: true });
             // Withdrawing the last file turns publishing off, because the outbox's existence is what "on" means.

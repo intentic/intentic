@@ -8,6 +8,7 @@ import {
     MemberRoleSchema,
     PermissionModeSchema,
     RateLimitInfoSchema,
+    ShareDetailSchema,
     SubagentKindSchema,
     SubagentStatusSchema,
     UsageWindowSchema,
@@ -210,6 +211,26 @@ export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 
 export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMessageSchema) });
 export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId: z.string().optional() });
+
+/* WHAT A PUBLISHED CONVERSATION'S PAGE IS HANDED — the whole of it, baked into the page as one JSON block.
+ *
+ * A share has to keep working with nothing behind it: no daemon, no session, no sandbox that has to still be
+ * running when the recipient finally opens the link. So the page carries its conversation rather than fetching
+ * it, which also settles the security question by construction — a page with nothing to ask has no way to ask
+ * for something it was not given.
+ *
+ * The messages are the SAME RestoredMessage rows the app replays a reopened tab from, already filtered to the
+ * chosen detail level and with every picture path rewritten to the copy published beside the page. That
+ * sameness is the point: the shared page renders them with the app's own components, so what a recipient sees
+ * is what the owner saw. */
+export const SharePayloadSchema = z.object({
+    title: z.string(),
+    // When the snapshot was taken, not when the conversation happened — see SharedConversation.sharedAt.
+    sharedAt: z.number(),
+    detail: ShareDetailSchema,
+    messages: z.array(RestoredMessageSchema),
+});
+export type SharePayload = z.infer<typeof SharePayloadSchema>;
 
 /* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
  * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the

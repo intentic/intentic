@@ -2,7 +2,7 @@
 import { type AgentProvider, NATIVE_PROVIDERS, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
 import { formatTokens, Icon, type IconName, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
@@ -11,6 +11,8 @@ import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { SUBAGENT_TRANSCRIPT } from "../composables/queryKeys";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
+import { CHAT_SURFACE } from "../chat/chatSurface";
+import { workspaceSurface } from "../chat/workspaceSurface";
 import ChatToolCard from "../chat/ChatToolCard.vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import IdentityTile from "../components/IdentityTile.vue";
@@ -72,6 +74,27 @@ const selected = computed<string | undefined>(() => {
     return visible.value[0]?.id;
 });
 const current = computed(() => visible.value.find((session) => session.id === selected.value));
+
+/* What THIS page's tool cards can lead to (chatSurface.ts). A child's work is drawn by the very components the
+ * conversation uses, and those cards are mounted outside any chat pane here — so the page states its own
+ * surface rather than inheriting a pane's. Files and pictures resolve; there is no shell or browser to offer,
+ * because the live views a child has are the page's own, not a card's.
+ *
+ * The paths a child named are its PARENT's tree: a subagent runs inside the conversation that started it, so an
+ * isolated parent's worktree is where its files are. A parent holding a branch is what "isolated" looks like
+ * from the roster. */
+provide(
+    CHAT_SURFACE,
+    workspaceSurface({
+        agent: () => {
+            const conversationId = current.value?.conversationId;
+            return conversationId !== undefined && agentById(conversationId)?.branch !== undefined ? conversationId : undefined;
+        },
+        // A child that delegated further links to ITS child's transcript, which is this same page — routed
+        // rather than reloaded.
+        navigate: (to) => void router.push(to),
+    }),
+);
 
 // Selecting keeps whatever narrowed the list — a click inside a filtered rail must not silently widen it.
 const select = (id: string): void => void router.push({ name: `subagents`, params: { id }, query: route.query });

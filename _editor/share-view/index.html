@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-mode="dark">
+    <head>
+        <meta charset="utf-8" />
+        <title>Shared conversation</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <!-- A shared link is handed to a person, not to a crawler. The owner chose one recipient; an index
+             entry would quietly widen that to everyone who searches the right words. -->
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="theme-color" content="#141210" />
+        <!-- THE CONVERSATION ITSELF. The daemon replaces this block's contents when it writes a share (see the
+             sandbox's share renderer); left as it stands, the page says it has nothing to show — which is what
+             an un-filled copy of this file honestly is.
+             A data block rather than a fetch: the page has to keep working with no daemon behind it, and a page
+             with nothing to ask cannot be talked into asking for something it was not given. -->
+        <script id="intentic-conversation" type="application/json">
+            null
+        </script>
+    </head>
+    <body class="bg-canvas text-content">
+        <div id="app"></div>
+        <script type="module" src="/src/main.ts"></script>
+        <noscript>This shared conversation needs JavaScript to render.</noscript>
+    </body>
+</html>

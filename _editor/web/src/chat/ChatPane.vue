@@ -27,6 +27,8 @@ import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT
 import { withShortcut } from "../composables/commands/useCommands";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { CHAT_SURFACE } from "./chatSurface";
+import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -151,6 +153,17 @@ const {
 // off its own conversation.
 const { composerFocus } = useChat();
 const router = useRouter();
+/* What this pane's tool cards can lead to (chatSurface.ts). Per-PANE, like the view above it: with two chats
+ * side by side, each card must offer its own chat's shell and browser rather than the focused chat's. */
+provide(
+    CHAT_SURFACE,
+    workspaceSurface({
+        agent: () => (props.conversation.isolated.value ? props.conversation.conversationId : undefined),
+        terminal: () => props.conversation.agentTerminal.value,
+        browser: () => props.conversation.agentBrowser.value,
+        navigate: (route) => void router.push(route),
+    }),
+);
 const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because

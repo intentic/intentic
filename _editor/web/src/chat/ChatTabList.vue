@@ -26,6 +26,7 @@ import { relativeTime, statusIcon, statusLabel } from "../composables/chat/catal
 import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
+import ChatShareDialog from "./ChatShareDialog.vue";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
@@ -554,6 +555,17 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     collapsePanes();
 };
 
+/* The share dialog's target, held here rather than on the card: the menu acts on the RIGHT-CLICKED chat, and
+ * by the time the dialog is answered that card may not be the one on screen any more. One dialog for the whole
+ * list, told which conversation it is about. */
+const shareTarget = ref<{ id: string; title: string }>();
+const openShare = (id: string): void => {
+    const conversation = conversations.value.find((entry) => entry.conversationId === id);
+    if (conversation !== undefined) {
+        shareTarget.value = { id, title: tabLabel(conversation) };
+    }
+};
+
 /* --- Right-click menu -----------------------------------------------------------------------------
  * The same close set the workspace's file tabs carry, plus this list's own rename and the pop-out toggle. It
  * acts on the RIGHT-CLICKED card (`menuTabId`), never on the active one — the split the workspace makes, and
@@ -571,6 +583,10 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const finished = finishedTabs();
     return [
         { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
+        /* SHARE — the one row here that reaches outside this machine, so it sits apart from the pane and close
+         * rows rather than among them, and it opens a dialog rather than acting on the press. Nothing about the
+         * conversation changes: a share is a rendering of it, taken now and frozen (see the share routes). */
+        { label: `Share…`, icon: `globe`, command: () => openShare(id) },
         { separator: true },
         /* The pane pair. "Open Beside" is the discoverable half of Ctrl/Cmd+click, and it names the result
          * rather than the mechanism — a column of its own next to the one you are in. Its opposite takes the
@@ -912,5 +928,12 @@ const closeTab = (event: Event, id: string): void => {
              the sizing classes its two hosts hand it. Into the pop-out window while the chat floats there. -->
         <HoverCard ref="hoverCard" :to="overlayTarget" />
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :append-to="overlayTarget" :min-width="13" />
+        <ChatShareDialog
+            v-if="shareTarget"
+            visible
+            :conversation-id="shareTarget.id"
+            :title="shareTarget.title"
+            @update:visible="!$event && (shareTarget = undefined)"
+        />
     </div>
 </template>

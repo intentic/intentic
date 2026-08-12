@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, cmp, CopyButton, Icon, InfoHint, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
+import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
 import { usePublic } from "./usePublic";
 
@@ -53,6 +54,11 @@ const size = (bytes: number): string => {
 <template>
     <div class="flex flex-col gap-4">
         <div v-if="error || actionError" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error ?? actionError }}</div>
+
+        <!-- Above the files, and it renders nothing when nothing is shared. A published conversation is the
+             most sensitive thing in this outbox, so where it exists it is the first thing on the screen; where
+             it does not, this view is exactly what it was. -->
+        <SharedConversations />
 
         <section>
             <div class="mb-2 flex items-center gap-2">

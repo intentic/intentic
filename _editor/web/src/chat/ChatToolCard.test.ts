@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
+import type { ChatSurface } from "./chatSurface";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
 // @intentic/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts
@@ -30,16 +31,19 @@ vi.hoisted(() => {
 });
 
 const { default: ChatToolCard } = await import("./ChatToolCard.vue");
-const { conversationView, PANE_VIEW, useChat } = await import("../composables/chat/useChat");
+const { CHAT_SURFACE } = await import("./chatSurface");
 
 let app: App | undefined;
-const mount = (tool: ChatTool, live = true): HTMLElement => {
+// `surface` is what the card can reach beyond itself (chatSurface.ts). Left out, the card falls back to the
+// inert one — which is exactly the shape a conversation published to the public renders under, so the default
+// here is also the published case.
+const mount = (tool: ChatTool, live = true, surface?: ChatSurface): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolCard, { tool, live }) });
-    // A card only ever renders inside a pane, and reads that pane's conversation for the shell/browser behind
-    // the call (see ChatToolCard). The store's own chat stands in for one here.
-    app.provide(PANE_VIEW, conversationView(useChat().active));
+    if (surface !== undefined) {
+        app.provide(CHAT_SURFACE, surface);
+    }
     // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin. Icon renders which glyph it was handed (and whether it spins), because that IS
     // what the liveness rule below decides; the tooltip's content is not under test.

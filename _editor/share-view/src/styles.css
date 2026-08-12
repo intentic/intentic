@@ -1,0 +1,25 @@
+/* The published page's stylesheet — the app's own sheets, in the app's own order.
+ *
+ * Every import below is the file the web app imports (see _editor/web/src/styles.css); the layer declaration
+ * is there for the same reason it is there, and prose.css must load after the design system's sheets because
+ * chat.css tunes its tokens. A shared conversation that approximated the app's type scale would be a page the
+ * owner does not recognise as theirs. */
+@layer theme, base, primeng, components, utilities;
+
+@import "tailwindcss";
+
+@import "../../ui/src/styles/shared/index.css";
+@import "../../ui/src/styles/core/index.css";
+@import "../../ui/src/styles/shared/prose.css";
+@import "../../web/src/chat/chat.css";
+
+/* WHAT TAILWIND SCANS. Named rather than left to auto-detection, which is rooted at the BUILD's root — this
+ * package's directory — and would therefore see this page's own markup and none of the components it draws it
+ * with, producing a page with real markup and a quarter of a design system.
+ *
+ * Three sources, and each is a place a class this page renders can come from: the design system, the app's chat
+ * components (the tool card and everything under it), and this package. */
+@source "../../ui/src/**/*.{ts,html,vue}";
+@source "../../web/src/chat/**/*.{ts,vue}";
+@source "./**/*.{ts,vue}";
+@source "../index.html";

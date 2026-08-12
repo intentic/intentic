@@ -1,0 +1,30 @@
+/* The published page. Same toolchain as the app it borrows its components from (Vite + vue-tsc, no emit —
+ * Vite produces the artifact), and the same source-first paths, so a change in the chat's tool card is
+ * type-checked here without a build in between.
+ *
+ * `@intentic-app/web/*` is this package's window onto the app's source. Deliberately narrow in what it is USED
+ * for rather than in what it can reach: the page imports the chat's card and its surface, and nothing that
+ * would drag a router or a daemon client into a bundle a stranger loads. */
+{
+    "compilerOptions": {
+        "rootDir": "../..",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "types": ["vite/client"],
+        "paths": {
+            "@intentic-app/web/*": ["../../_editor/web/src/*"],
+            "@intentic/ui/src/*": ["../../_editor/ui/src/*"],
+            "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/format": ["../../_editor/ui/src/format.ts"],
+            "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
+            "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
+            "@intentic/ui/path": ["../../_editor/ui/src/path.ts"],
+            "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
+            "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
+            "@intentic/ui/time": ["../../_editor/ui/src/timeWindow.ts"],
+            "@intentic/sandbox-contract": ["../../_sandbox/sandbox-contract/src/index.ts"],
+            "@intentic/sandbox-contract/share-paths": ["../../_sandbox/sandbox-contract/src/share-paths.ts"]
+        }
+    },
+    "include": ["./src/**/*.ts", "./src/**/*.vue", "./env.d.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

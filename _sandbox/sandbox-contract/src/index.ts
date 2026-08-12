@@ -28,6 +28,7 @@ import { pushContract } from "./contracts/push.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
+import { shareContract } from "./contracts/share.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
@@ -67,6 +68,7 @@ export { pushContract } from "./contracts/push.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
+export { shareContract } from "./contracts/share.contract.js";
 export { skillsContract } from "./contracts/skills.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
@@ -128,6 +130,7 @@ export const sandboxContract = {
     personas: personasContract,
     sessions: sessionsContract,
     settings: settingsContract,
+    share: shareContract,
     skills: skillsContract,
     intentic: intenticContract,
     git: gitContract,

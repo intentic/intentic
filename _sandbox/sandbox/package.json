@@ -37,6 +37,7 @@
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
         "@intentic/scaffold": "workspace:*",
+        "@intentic/share-view": "workspace:*",
         "@intentic/sdk": "workspace:*",
         "@intentic/webchat-widget": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",

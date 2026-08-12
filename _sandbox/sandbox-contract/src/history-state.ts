@@ -43,6 +43,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // restored conversation reads back whole and offers no way back into it, even though both the messages and
     // the states they name travelled.
     { path: "turn-anchors.json", portability: "carry" },
+    /* WHICH CONVERSATIONS ARE PUBLISHED AS PAGES ANYONE WITH THE LINK CAN READ.
+     *
+     * Carried, and it is the entry with the most to say for itself: the PAGES live in the workspace's outbox
+     * (`public/`), so they travel with `/work` whatever this says. Leaving the index behind would restore a
+     * sandbox that is still serving somebody's conversation on the internet with nothing in the app that knows
+     * it — no row, no link, and no way to stop sharing short of deleting files by hand. The index is what makes
+     * a published page withdrawable, so it goes wherever the pages go. */
+    { path: "shares.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },

@@ -161,6 +161,7 @@ import {
     type TranscriptAgent,
 } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
+import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
@@ -604,6 +605,9 @@ export interface Services {
         // Drop everything after the message a rewind went back to; returns how many went.
         readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
     };
+    /* Which conversations have been published as pages anyone with the link can read (historyRoot/shares.json).
+     * The index only — the pages themselves live in the workspace's outbox. See share/share-store.ts. */
+    readonly shares: ShareStore;
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
@@ -759,7 +763,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // second instance would answer from a stale agents.json.
     // The presences are held by name too, because their caches report into the resource series below.
     const landedPresences = createLandedPresences(agentWorktrees, logger);
-    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees), landedPresences);
+    const agents = createAgentsRegistry(
+        fileAgentsStore(join(config.historyRoot, "agents.json")),
+        createLandStandings(agentWorktrees),
+        landedPresences,
+    );
     /* The reaper, keyed to the same three facts everything else keys to: whose work (the workload stamp),
      * whether it is live (the turn registry), and whether it is OURS (this registry knows the conversation).
      * The reserved owners answer for themselves — what the daemon keeps warm on purpose (the ACP/Pi pools, the
@@ -1085,6 +1093,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             count: (agent) => transcriptDeps.record.count(agent.id),
             truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },
+        shares: fileShareStore(join(config.historyRoot, "shares.json")),
         purgeConversationState: (removed, retained) => purgeConversationState(workspace.root, config.historyRoot, removed, retained),
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),

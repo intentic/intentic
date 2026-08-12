@@ -16,7 +16,10 @@
             "POST /ports/unforward",
             "GET /public",
             "POST /public/publish",
-            "POST /public/unpublish"
+            "POST /public/unpublish",
+            "GET /share",
+            "POST /share/update",
+            "POST /share/remove"
         ]
     },
     "contributes": {
