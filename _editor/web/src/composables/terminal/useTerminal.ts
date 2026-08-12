@@ -115,6 +115,9 @@ export interface TerminalTabs {
     readonly processes: Ref<TerminalTab[]>;
     // The FOCUSED session — keystrokes land here; its group is the mounted pane.
     readonly activeName: Ref<string | undefined>;
+    // The session an open request is still waiting for, if any — undefined the moment it arrives (or the
+    // request is superseded). What the panel says "this is starting" about.
+    readonly pending: Ref<string | undefined>;
     // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one, unless
     // `awaited` names the session the panel was opened for — see attach).
     readonly attach: (el: HTMLElement, awaited?: string) => Promise<boolean>;
@@ -122,8 +125,8 @@ export interface TerminalTabs {
     readonly refresh: () => Promise<void>;
     // Focus a specific session, refreshing the list first when it isn't tabbed yet (a row's terminal button).
     readonly focus: (name: string) => Promise<void>;
-    // Surface a session as a tab (relist until it appears) without mounting it — never steals the active tab.
-    readonly surface: (name: string) => Promise<void>;
+    // Relist so a session that just appeared tabs without being mounted — never steals the active tab.
+    readonly surface: () => Promise<void>;
     // Open (and focus) a background process's read-only log view as a tab.
     readonly viewProcess: (name: string) => Promise<void>;
     readonly switchTab: (name: string) => void;
@@ -159,6 +162,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // answer to a question the user asked while watching; close the panel, walk away for a day of agent turns,
     // and the set comes back empty — so there is nothing to tidy, rather than a broom to reach for.
     const revealed = new Set<string>();
+    /* The session an open request is still waiting to see listed — the standing half of `focus`, and what the
+     * panel draws its "this is starting" state from. One at a time: a second request supersedes the first,
+     * because a user who asks for another terminal is no longer waiting for the last one. */
+    const pending = ref<string | undefined>(undefined);
     const activeName = ref<string | undefined>(undefined);
     let container: HTMLElement | undefined;
     // The session names whose hosts are currently in the container — the active group's members.
@@ -314,6 +321,21 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             sessionOf(tab);
         }
         const tabbed = new Set(tabs.map((tab) => tab.name));
+        /* The standing wait's other end: whatever this list just brought in, if it is what somebody asked for,
+         * is opened here — whether this relist was the one `focus` ran itself or one the daemon's change frame
+         * triggered minutes later. Against the DAEMON's list rather than the strip's, because a background
+         * process is listed without ever being a tab: it opens as a log view, which is what puts it on the
+         * strip in the first place. */
+        if (pending.value !== undefined && listed.some((tab) => tab.name === pending.value)) {
+            const arrived = pending.value;
+            pending.value = undefined;
+            if (processes.value.some((process) => process.name === arrived)) {
+                void viewProcess(arrived);
+            } else {
+                mount(arrived);
+            }
+            return;
+        }
         if (activeName.value === undefined || !tabbed.has(activeName.value)) {
             // What the panel opens ONTO. A finished session is a dead pane whose whole content is an epitaph, so
             // it is the last thing worth restoring someone to — prefer the remembered tab only while it is still
@@ -336,6 +358,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         processes.value = [];
         groups.value = [];
         viewedProcesses.clear();
+        // The wait was for a session on the OLD daemon; nothing on this one is going to answer it.
+        pending.value = undefined;
         activeName.value = undefined;
         mountedNames = [];
         void refresh();
@@ -395,6 +419,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const endSession = (name: string): void => {
         viewedProcesses.delete(name);
         revealed.delete(name);
+        // Waiting on the session that just ended is waiting for nothing.
+        if (pending.value === name) {
+            pending.value = undefined;
+        }
         // Whether or not the daemon ever listed it, this name is spent — a claim left standing would keep the
         // session in the shared list (and in the rail's count) until the page reloaded.
         dropPendingTerminal(name);
@@ -438,29 +466,6 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         mount(name);
     };
 
-    // Relist until `name` is listed. A flow ANNOUNCES its session before that session exists: the daemon names
-    // the terminal it is about to work in as its stream's first frame, and the tmux session itself is born with
-    // the flow's first command a moment later. One relist therefore asks too early — and the surface that asked
-    // was left showing whatever it had (an empty panel, or a stray shell), with the tab arriving only on the
-    // panel's ten-second poll, by which time a short install had been over for nine of them. Bounded, so a name
-    // that never materializes stops asking; the poll remains the backstop.
-    const relistUntilListed = async (name: string): Promise<void> => {
-        for (let attempt = 0; attempt < 8; attempt++) {
-            if (attempt > 0) {
-                await new Promise((resolve) => setTimeout(resolve, 250));
-                // The shared list answers from a one-second freshness window (terminalsQuery), so retries
-                // spaced tighter than that would re-read the very answer they are retrying — "no such session",
-                // four times, without asking the daemon once. Retrying IS the statement that the cached list is
-                // out of date, so give it up before asking again.
-                await refreshTerminals();
-            }
-            await refresh();
-            if (order.value.some((tab) => tab.name === name)) {
-                return;
-            }
-        }
-    };
-
     const focus = async (name: string): Promise<void> => {
         if (!order.value.some((tab) => tab.name === name)) {
             // Focusing IS the explicit open that reveals a hidden work terminal (the chat's Bash card, the
@@ -468,7 +473,22 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             // which is what decides whether it tabs. Unconditional: the set is only ever consulted for agent/job
             // sessions, so a shell or panel name landing in it changes nothing.
             revealed.add(name);
-            await relistUntilListed(name);
+            /* AND THEN WE WAIT, for as long as it takes. A flow can name its session before tmux has created
+             * it, so one look is often too early — but the answer to that used to be a race: eight relists a
+             * quarter-second apart, every one of them a round trip, and then silence. Under the load the flow
+             * itself makes (a test suite pins the box; plain requests take seconds) those eight tries expire
+             * before the session appears, and because a work terminal only tabs when it has been revealed,
+             * missing that window did not make the tab LATE — it made it invisible, while the command ran to
+             * completion in a terminal nothing ever showed.
+             *
+             * So the wait is standing instead: the name is remembered, and `refresh` mounts it the moment it
+             * is listed. The daemon pushes a `terminals` frame whenever its tmux changes (runtime-watch.ts) and
+             * the panel relists on it, so this costs no timer of its own and cannot expire early. One relist
+             * still happens now, because the session is usually already there. */
+            pending.value = name;
+            await refreshTerminals();
+            await refresh();
+            return;
         }
         // A background-process session never tabs directly — route it through its read-only log view
         // (`panel-docker`, an extension's gateway).
@@ -480,18 +500,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Make a session that just appeared (the agent's `agent-<id>` the moment it runs Bash) show up as a tab
-    // WITHOUT mounting it — refresh() keeps the current active tab, so focus isn't stolen. The relist covers
-    // tmux-run's session-create lag; the common case (already listed) exits on its first check.
-    const surface = async (name: string): Promise<void> => {
-        // Only the agent channel surfaces, and by default its shells don't tab (useWorkTerminals) — so the
-        // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
-        // list, which is what makes the work-terminals popover show the turn's shell the moment it starts
-        // rather than up to a poll later.
-        if (!showWorkTerminals.value) {
-            await refresh();
-            return;
-        }
-        await relistUntilListed(name);
+    // WITHOUT mounting it — refresh() keeps the current active tab, so focus isn't stolen. One relist, and the
+    // daemon's own `terminals` frame carries anything that lands after it: this writes the shared session list,
+    // which is what makes the work-terminals popover show the turn's shell the moment it starts.
+    const surface = async (): Promise<void> => {
+        await refresh();
     };
 
     // Switching away is the "looking up" that ends a finished work terminal's stay: its reveal was held only
@@ -563,6 +576,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             groups,
             processes,
             activeName,
+            pending,
             attach,
             detach,
             refresh,
@@ -654,6 +668,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         groups,
         processes,
         activeName,
+        pending,
         attach,
         detach,
         refresh,

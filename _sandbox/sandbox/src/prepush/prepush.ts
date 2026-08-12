@@ -100,6 +100,14 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
         // invisible shell, and a session name nothing can attach to would send the browser after a tab that is
         // never going to be listed.
         const session = terminalRun.visible ? CHECKS_SESSION : undefined;
+        /* THE SESSION IS ONLY NAMED ONCE THE COMMAND IS IN IT. `session` on a running state is not a label —
+         * it is the app's instruction to go and open that terminal, and it acts on it the moment it reads it.
+         * Published up front, it named a tab that did not exist yet: the suite could still be queued behind
+         * another check in the same session, and the panel opened onto a name tmux had not created, showing a
+         * spinner over an empty panel while the run it was waiting for happened somewhere it never looked. So
+         * this stays undefined until the runner says the command has left the queue and its window is being
+         * made — which is also the honest answer to "where is my check running" before that. */
+        let opened: string | undefined;
         const settle = (rule: Rule, command: string, run: RuleCommandRun): PrepushRun => {
             const settled: PrepushRun = {
                 status: run.status,
@@ -108,7 +116,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                 command,
                 startedAt,
                 finishedAt: Date.now(),
-                ...(session !== undefined ? { session } : {}),
+                ...(opened !== undefined ? { session: opened } : {}),
                 output: run.output,
             };
             current = settled;
@@ -133,7 +141,8 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                 }
                 const { command, timeoutMs } = rule.action;
                 logger.info({ rule: rule.id, command, session }, "prepush: check started");
-                current = { status: "running", command, startedAt, output: "", ...(session !== undefined ? { session } : {}) };
+                opened = undefined;
+                current = { status: "running", command, startedAt, output: "" };
                 // `window` names the tmux window rather than the command, so a session holding several runs
                 // reads as a list of checks.
                 const run = await runRuleCommand(services, {
@@ -144,6 +153,12 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                     window: "checks",
                     outputBytes: PREPUSH_OUTPUT_BYTES,
                     signal: abort.signal,
+                    onStarted: () => {
+                        opened = session;
+                        // Republished rather than mutated: the dialog polls whole states, and this is the one
+                        // that carries "there is a terminal now, go and open it".
+                        current = { ...current, ...(session !== undefined ? { session } : {}) };
+                    },
                 });
                 last = settle(rule, command, run);
                 // A check that ran did something, whichever way it went — that is what the settings list's

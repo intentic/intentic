@@ -60,9 +60,20 @@ export const globalTerminalSource: TerminalTabsSource = {
     },
 };
 
+/* What a surface asks the panel to open, and what it may say about it while the tab is on its way. A flow
+ * knows what it started ("Running your pre-push check") and the app does not — the session name is an internal
+ * one, and "Opening job-checks…" is the whole of what a waiting panel used to be able to say for itself. */
+export interface TerminalRequest {
+    readonly name: string;
+    // One line naming what is starting. Falls back to the session's own name where a caller has nothing better.
+    readonly title?: string;
+    // The command behind it, drawn in mono under the title.
+    readonly detail?: string;
+}
+
 // The focus channel: a fresh object per request, so re-focusing the same session still triggers the panel's
 // watch (the shell binds this to TerminalPanel's `initial`).
-const requested = ref<{ readonly name: string } | undefined>(undefined);
+const requested = ref<TerminalRequest | undefined>(undefined);
 
 // The surface channel: like `requested`, but it only relists so the tab appears — it never opens the panel or
 // steals the active tab. Used when the agent starts running Bash (its `agent-<id>` terminal should show up
@@ -97,11 +108,19 @@ watch(useSandbox().activeSandboxId, () => {
     surfaced.value = undefined;
 });
 
+/* A request is SPENT once the panel has taken it. It used to stand forever, so the next panel to mount —
+ * hours later, by Ctrl+`, a popout, a mobile route change — replayed it and went hunting for whatever
+ * yesterday's push had been running. That is where "Opening job-checks…" came from when nobody was pushing.
+ * Called by the panel as it consumes the request, which is the only reader there is. */
+export const clearTerminalRequest = (): void => {
+    requested.value = undefined;
+};
+
 export function useTerminalPanel() {
     const layout = useLayout();
-    const openFocused = (name: string): void => {
+    const openFocused = (name: string, about?: Omit<TerminalRequest, `name`>): void => {
         layout.setTerminalOpen(true);
-        requested.value = { name };
+        requested.value = { name, ...about };
     };
     // Deliberately does NOT open the panel: a closed panel lists the session anyway on its next open, an open
     // panel relists in place (keeping the active tab).

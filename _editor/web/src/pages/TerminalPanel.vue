@@ -15,7 +15,7 @@ import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
 import { fetchScrollback } from "../composables/terminal/terminalScrollback";
 import { copySelection, pasteIntoTerminal } from "../composables/terminal/terminalSession";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "../composables/terminal/useTerminal";
-import { consumeSpawnRequest, registerTerminalSpawn } from "../composables/terminal/useTerminalPanel";
+import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
 /* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
@@ -50,7 +50,7 @@ const {
 } = defineProps<{
     source: TerminalTabsSource;
     storageKey: string;
-    initial?: { readonly name: string };
+    initial?: TerminalRequest;
     // A session to relist as a tab without focusing it (the agent's live terminal — appears without hijacking
     // the active tab). Distinct from `initial`, which focuses.
     surfaced?: { readonly name: string };
@@ -740,18 +740,55 @@ let disposeSpawn: (() => void) | undefined;
 // tmux session that no live panel will ever show.
 let live = true;
 
-/* The session this panel is still WAITING for, if any — set for as long as the bounded relist behind `focus`
- * runs. An empty panel means two different things across those couple of seconds: before, the tab is on its way
- * (a Start's tmux session is born a moment after the POST); after, it is never coming. The empty state below
- * says both, and needs this to tell them apart — without it every Start would flash "isn't running" first. */
-const awaiting = ref<string | undefined>(initial?.name);
-const openRequested = async (name: string): Promise<void> => {
-    awaiting.value = name;
-    await tabs.focus(name);
-    // A newer request may have overtaken this one; only the outstanding name clears itself.
-    if (awaiting.value === name) {
-        awaiting.value = undefined;
+/* WHAT THE PANEL IS WAITING FOR, and what it may say about it. `tabs.pending` is the wait itself — held until
+ * the session is listed, however long that takes (useTerminal's focus) — and this is the sentence that goes
+ * with it, kept from the request that started the wait.
+ *
+ * The wait used to be a bounded race whose only vocabulary was the session name, so a push met a spinner over
+ * `job-checks` and no way to find out what that was. Two things fix that: the request carries a title, and the
+ * wait ADMITS DEFEAT out loud — `waited` below flips after a few seconds, the panel stops holding itself empty
+ * for a tab that isn't coming, and says what it was waiting for instead of spinning on it forever. */
+const about = ref<TerminalRequest | undefined>(initial);
+const awaiting = computed(() => tabs.pending.value);
+// How long the panel holds itself empty for a session on its way. Long enough to cover a slow start under the
+// load the flow itself makes (a suite pins the sandbox, and the daemon answers in seconds), short enough that
+// nobody sits in front of a spinner wondering whether anything is happening at all.
+const WAIT_MS = 6_000;
+const waited = ref(false);
+let waitTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+    awaiting,
+    (name) => {
+        clearTimeout(waitTimer);
+        waited.value = false;
+        if (name !== undefined) {
+            waitTimer = setTimeout(() => (waited.value = true), WAIT_MS);
+        }
+    },
+    { immediate: true },
+);
+
+// What the panel says about itself while it has nothing to show. A caller that named what it started gets its
+// own sentence; everything else falls back to the session name, drawn as the id it is.
+const named = computed(() => awaiting.value ?? about.value?.name ?? ``);
+const emptyHint = computed(() => {
+    if (awaiting.value !== undefined) {
+        // The wait is still standing — it has only stopped holding the panel empty. Saying so is the difference
+        // between "be patient" and the spinner that used to sit there with nothing behind it.
+        return `No terminal has appeared for it yet. It may still be starting, and this panel will show it the moment it does.`;
     }
+    return about.value === undefined
+        ? `Open one to run something here.`
+        : `Nothing in this sandbox runs under that name — it was started outside it, or it has already stopped.`;
+});
+
+/* Take the request — and SPEND it. It stands in module state so that setting it can open a panel that isn't
+ * mounted yet; left standing afterwards, the next panel to mount replayed it, which is how a terminal from a
+ * push half an hour ago came back as "Opening job-checks…" over an empty panel. */
+const openRequested = async (request: TerminalRequest): Promise<void> => {
+    about.value = request;
+    clearTerminalRequest();
+    await tabs.focus(request.name);
 };
 
 onMounted(async () => {
@@ -778,11 +815,12 @@ onMounted(async () => {
         }
     }
     if (live && initial !== undefined) {
-        await openRequested(initial.name);
+        await openRequested(initial);
     }
 });
 onBeforeUnmount(() => {
     live = false;
+    clearTimeout(waitTimer);
     tabs.detach();
     window.removeEventListener(`keydown`, onArmedKeydown, true);
     for (const disposable of commandDisposables) {
@@ -798,7 +836,7 @@ watch(
     () => initial,
     (request) => {
         if (request !== undefined) {
-            void openRequested(request.name);
+            void openRequested(request);
         }
     },
 );
@@ -808,7 +846,7 @@ watch(
     () => surfaced,
     (request) => {
         if (request !== undefined) {
-            void tabs.surface(request.name);
+            void tabs.surface();
         }
     },
 );
@@ -1006,31 +1044,32 @@ const endResize = (event: PointerEvent): void => {
                  start from a session that never existed. An OVERLAY rather than a v-if on the container: the
                  container is the imperative mount target and must stay in the DOM at its real size. -->
             <div
-                v-if="order.length === 0 && awaiting !== undefined"
+                v-if="order.length === 0 && awaiting !== undefined && !waited"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
                 <Icon name="spinner" class="animate-spin text-lg text-subtle" />
                 <p class="text-sm text-muted">
-                    Opening <span class="font-mono text-content">{{ awaiting }}</span
-                    >…
+                    <template v-if="about?.title">{{ about.title }}…</template>
+                    <template v-else
+                        >Opening <span class="font-mono text-content">{{ named }}</span
+                        >…</template
+                    >
                 </p>
+                <!-- The command behind it. A check that opens a terminal by itself has to be able to say what
+                     it is running, or the panel is back to offering a session name as the whole explanation. -->
+                <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
             </div>
             <div
                 v-else-if="order.length === 0"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
                 <Icon name="desktop" class="text-2xl text-subtle" />
-                <p v-if="initial" class="text-sm text-muted">
-                    <span class="font-mono text-content">{{ initial.name }}</span> isn't running.
+                <p v-if="about?.title" class="text-sm text-muted">{{ about.title }}</p>
+                <p v-else-if="about" class="text-sm text-muted">
+                    <span class="font-mono text-content">{{ named }}</span> {{ awaiting === undefined ? `isn't running.` : `` }}
                 </p>
                 <p v-else class="text-sm text-muted">No terminals open.</p>
-                <p class="max-w-md text-2xs text-subtle">
-                    {{
-                        initial
-                            ? `Nothing in this sandbox runs under that name — it was started outside it, or it has already stopped.`
-                            : `Open one to run something here.`
-                    }}
-                </p>
+                <p class="max-w-md text-2xs text-subtle">{{ emptyHint }}</p>
                 <Button
                     v-if="newTab !== undefined"
                     class="pointer-events-auto mt-1"

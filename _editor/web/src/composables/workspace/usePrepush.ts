@@ -30,16 +30,41 @@ const IDLE: PrepushRun = { status: `idle`, command: ``, output: `` };
 const run = ref<PrepushRun>(IDLE);
 const error = ref<string | undefined>(undefined);
 let timer: ReturnType<typeof setInterval> | undefined;
+// Whether this run's terminal has already been put on screen — the reveal is ONCE per run, at the moment the
+// daemon first names a session. After that the panel is the user's: they may close it, or switch tabs, and a
+// poll must not drag them back.
+let shown = false;
 
 const stopPolling = (): void => {
     clearInterval(timer);
     timer = undefined;
 };
 
+/* Put the check's terminal on screen, saying WHAT is starting — the panel cannot know. The session is called
+ * `job-checks` inside the sandbox, and a panel waiting on a tab could only offer that name back, which is not
+ * an answer to "why has this opened" for anyone who met it mid-push.
+ *
+ * Absent `session` means there is no terminal to go to: either the command is not in one yet, or this sandbox
+ * has no tmux wrapper (local dev) and the suite ran in an invisible shell. */
+const reveal = (state: PrepushRun): void => {
+    const { session, command } = state;
+    if (session !== undefined) {
+        useTerminalPanel().openFocused(session, { title: `Running your pre-push check`, detail: command });
+    }
+};
+
 const poll = async (): Promise<void> => {
     try {
         run.value = await sandboxJson<PrepushRun>(`/prepush/state`);
         error.value = undefined;
+        /* THE REVEAL, at the first state that carries a terminal. The daemon names the session only once the
+         * command is actually in it (prepush/prepush.ts), so this is the moment there is something to watch —
+         * and opening the panel any earlier is how it came to sit on a spinner over a session tmux had not
+         * created yet. Not in `start`, because that moment is now usually one poll too early. */
+        if (!shown && run.value.session !== undefined) {
+            shown = true;
+            reveal(run.value);
+        }
     } catch (cause) {
         // A dropped poll is not a failed check: the suite is still going on the daemon. Report it and keep
         // polling — the next tick usually reconnects, and killing the poll here would strand the dialog on a
@@ -53,16 +78,9 @@ const poll = async (): Promise<void> => {
 };
 
 export function usePrepush() {
-    /* Put the check's terminal on screen. Called once as a run starts, and offered as a button for the rest of
-     * it: the panel is the user's, so closing it or switching tabs must not be something the dialog undoes on
-     * the next poll. Absent `session` means this sandbox has no tmux wrapper (local dev) — the suite ran in an
-     * invisible shell, and there is no tab to send anyone to. */
-    const showTerminal = (): void => {
-        const session = run.value.session;
-        if (session !== undefined) {
-            useTerminalPanel().openFocused(session);
-        }
-    };
+    // The button beside a running check. The automatic reveal is `poll`'s, once per run; this is the user
+    // asking again — after closing the panel, or from another view.
+    const showTerminal = (): void => reveal(run.value);
 
     /* Start a run and follow it to a terminal state. Resolves with the settled run, which is what makes the
      * push flow readable as one sentence at the call site — start the checks, then decide.
@@ -73,6 +91,7 @@ export function usePrepush() {
     const start = async (): Promise<PrepushRun> => {
         stopPolling();
         error.value = undefined;
+        shown = false;
         run.value = { ...IDLE, status: `running` };
         try {
             await sandboxJson(`/prepush/run`, { method: `POST` });
@@ -81,11 +100,10 @@ export function usePrepush() {
             run.value = IDLE;
             return run.value;
         }
-        // Ask once before settling into the interval, because this first answer is the one that names the
-        // terminal: waiting a tick for it would leave the panel closed over the opening seconds of a suite, which
-        // on a fast command is all of it.
+        // Ask once before settling into the interval: a command that is already in its terminal is revealed by
+        // this first answer (see `poll`), which on a fast suite is the difference between watching it and
+        // missing it entirely.
         await poll();
-        showTerminal();
         if (run.value.status !== `running`) {
             return run.value;
         }

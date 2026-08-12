@@ -43,6 +43,11 @@ export interface TerminalRunOptions {
     readonly signal?: AbortSignal;
     // Watchdog for a wedged command — same kill path as abort.
     readonly timeoutMs?: number;
+    /* Called when this command LEAVES THE QUEUE and the wrapper is spawned — i.e. when its tmux window is
+     * being created, milliseconds away, rather than at some unknown later point behind whatever else the
+     * session is running. For the one caller that has to tell a browser where to look: a session name handed
+     * out while the command is still queued sends it to a tab tmux has not created yet. */
+    readonly onStarted?: () => void;
 }
 
 export interface TerminalRunResult {
@@ -100,6 +105,7 @@ export const createTerminalRunner = (): TerminalRunner => {
     const queues = new Map<string, Promise<unknown>>();
 
     const execute = async (session: string, command: string, options: TerminalRunOptions): Promise<TerminalRunResult> => {
+        options.onStarted?.();
         const env = { ...process.env, ...options.env };
         const execOptions = {
             cwd: options.cwd,

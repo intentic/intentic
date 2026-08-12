@@ -26,7 +26,7 @@ import { subscribeRefChanges } from "../git/ref-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
-import { captureScrollback, isValidSessionName } from "../terminal/terminal-session.js";
+import { captureScrollback, isValidSessionName, jobSessionLabel } from "../terminal/terminal-session.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/release-notes.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
@@ -429,7 +429,7 @@ export const createSystemRoutes = (services: Services) => {
                         return [
                             {
                                 name,
-                                label: name.slice(JOB_SESSION_PREFIX.length),
+                                label: jobSessionLabel(name),
                                 kind: "job" as const,
                                 running: services.terminalRun.running(name),
                                 ...seen,

@@ -50,11 +50,14 @@ export interface RuleCommandRequest {
     readonly outputBytes: number;
     // The caller's own cancel. Distinct from the ceiling below: this one means a person asked it to stop.
     readonly signal?: AbortSignal | undefined;
+    /* Called when the command is actually in its terminal rather than queued behind another — what a caller
+     * with somewhere to report the session name waits for before reporting it (terminal-run.ts). */
+    readonly onStarted?: (() => void) | undefined;
 }
 
 export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommandRequest): Promise<RuleCommandRun> => {
     const { logger, terminalRun } = deps;
-    const { command, timeoutMs, cwd, session, window, outputBytes, signal } = request;
+    const { command, timeoutMs, cwd, session, window, outputBytes, signal, onStarted } = request;
     const abort = new AbortController();
     let timedOut = false;
     // Counted from the start of the command — a ceiling measured from anywhere else is not the ceiling the rule
@@ -69,7 +72,12 @@ export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommand
     signal?.addEventListener("abort", relay, { once: true });
     const tail = (text: string): string => plainText(text).slice(-outputBytes);
     try {
-        const { code, output } = await terminalRun.tryRun(session, command, { cwd, window, signal: abort.signal });
+        const { code, output } = await terminalRun.tryRun(session, command, {
+            cwd,
+            window,
+            signal: abort.signal,
+            ...(onStarted !== undefined ? { onStarted } : {}),
+        });
         return { status: code === 0 ? "passed" : "failed", exitCode: code, output: tail(output) };
     } catch (cause) {
         // Not our abort ⇒ the command never ran at all. `error`, not `failed`: nothing was learned about the

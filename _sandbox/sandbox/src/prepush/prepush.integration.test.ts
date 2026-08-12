@@ -55,11 +55,17 @@ const execFileAsync = promisify(execFile);
  * The real runner is deliberately not used: it decides `visible` by looking for the image's tmux wrapper, so on a
  * machine that has one these tests would open real tmux sessions, and on a machine that hasn't they would cover
  * only the other half of the module. */
-const fakeRunner = (visible: boolean, count: () => void): TerminalRunner =>
+const fakeRunner = (visible: boolean, count: () => void, starts = true): TerminalRunner =>
     unstubbed<TerminalRunner>("terminalRun", {
         visible,
         tryRun: async (_session, command, options) => {
             count();
+            // The real runner says so as the command leaves its queue and its tmux window is made — which is
+            // what the check waits for before it will name a terminal to anyone. `starts: false` stands for the
+            // window before that: the command is the daemon's business, but it is in no terminal yet.
+            if (starts) {
+                options.onStarted?.();
+            }
             try {
                 const { stdout, stderr } = await execFileAsync("bash", ["-c", command], {
                     cwd: options.cwd,
@@ -89,8 +95,8 @@ interface Fakes {
 
 // `visible` stands in for the sandbox having the tmux wrapper, and `root` for the working tree the check runs on —
 // a `root` that does not exist is how the one genuinely unstartable command below is written.
-const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string } = {}): Fakes => {
-    const { visible = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...knobs } = over;
+const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string; starts?: boolean } = {}): Fakes => {
+    const { visible = true, starts = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...knobs } = over;
     const settings = { current: { ...SETTINGS, rules: rulesOf({ ...DEFAULTS, ...knobs }) } };
     let runs = 0;
     const notified: string[] = [];
@@ -104,9 +110,13 @@ const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string 
                 return { delivered: 1, failed: 0 };
             },
         }),
-        terminalRun: fakeRunner(visible, () => {
-            runs += 1;
-        }),
+        terminalRun: fakeRunner(
+            visible,
+            () => {
+                runs += 1;
+            },
+            starts,
+        ),
         // Both are fire-and-forget bookkeeping the check must never be blocked by, so the fakes only have to
         // exist. What they RECORD is asserted where it is the subject (rules/rules.test.ts, and the feed's own
         // tests) rather than in every run this file drives.
@@ -132,10 +142,10 @@ test("run resolves only once the run is visible to state", async () => {
     expect((await check.state()).status).toBe("running");
 });
 
-/* THE OUTPUT IS THE TERMINAL'S. That first `state` is also what tells the browser WHERE to watch, so the session
- * has to be named from the start of the run and not merely at its end — a panel opening on the verdict would be a
- * terminal shown to a user who no longer needs one. Nothing accumulates here in the meantime: a dialog
- * re-printing a captured tail is exactly the surface this replaced. */
+/* THE OUTPUT IS THE TERMINAL'S. `state` is also what tells the browser WHERE to watch, so a running check names
+ * its session — a panel opening on the verdict would be a terminal shown to a user who no longer needs one.
+ * Nothing accumulates here in the meantime: a dialog re-printing a captured tail is exactly the surface this
+ * replaced. */
 test("a running check names its terminal and carries no output of its own", async () => {
     const { services } = fakeServices({ prepushCommand: "echo working; sleep 2" });
     const check = createPrepushCheck(services);
@@ -143,6 +153,20 @@ test("a running check names its terminal and carries no output of its own", asyn
     const state = await check.state();
     expect(state.session).toBe(CHECKS_SESSION);
     expect(state.output).toBe("");
+});
+
+/* THE REPORTED BUG. `session` is not a label — it is the instruction the app acts on by opening its terminal
+ * panel on that name, immediately. Published before the command was in a terminal (it can sit in the session's
+ * queue behind another check), it sent the panel to a tmux session that did not exist: a spinner over an empty
+ * panel, while the suite it named ran somewhere the user never got shown. So a check that has not reached its
+ * terminal names none, and the app has nothing to open until there is something to see. */
+test("a check that has not reached its terminal yet names none", async () => {
+    const { services } = fakeServices({ prepushCommand: "sleep 2", starts: false });
+    const check = createPrepushCheck(services);
+    await check.run();
+    const state = await check.state();
+    expect(state.status).toBe("running");
+    expect(state.session).toBeUndefined();
 });
 
 // No tmux wrapper ⇒ the runner falls back to an invisible shell, so there is no tab to send anyone to. Naming one

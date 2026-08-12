@@ -24,6 +24,15 @@ export const INFRA_CHECK_SESSION = `${JOB_SESSION_PREFIX}infra-check`;
 // session rather than one per moment, because what the user wants is a place to read their checks.
 export const CHECKS_SESSION = `${JOB_SESSION_PREFIX}checks`;
 
+/* What a job session is CALLED where a person reads it — the terminal tab, the work popover's row. The session
+ * name is an id (`job-checks`, `job-capability-demo`): it has a prefix nobody needs, a shape nobody types, and
+ * it turned up in front of the owner as the entire explanation of a terminal that opened by itself mid-push.
+ * The id stays the identity everywhere it matters — sockets, kill routes, the reveal — and this is the label. */
+export const jobSessionLabel = (session: string): string => {
+    const words = session.slice(JOB_SESSION_PREFIX.length).replace(/-/g, " ");
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
+
 const SESSION_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
 export const isValidSessionName = (name: string): boolean => SESSION_NAME.test(name);

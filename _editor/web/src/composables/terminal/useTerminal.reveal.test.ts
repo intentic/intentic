@@ -40,15 +40,23 @@ const agent = (id: string, running: boolean): Listed => ({ name: `agent-${id}`, 
 // One panel instance over a mutable session list, standing in for the daemon.
 const panel = (initial: Listed[]) => {
     let listed = initial;
-    const tabs = createTerminalTabs(
-        { list: () => Promise.resolve(listed), create: () => `web-new`, kill: () => Promise.resolve() },
-        `test`,
-        () => undefined,
-    );
+    let failOnce = false;
+    const list = (): Promise<Listed[]> => {
+        if (failOnce) {
+            failOnce = false;
+            return Promise.reject(new Error(`daemon unreachable`));
+        }
+        return Promise.resolve(listed);
+    };
+    const tabs = createTerminalTabs({ list, create: () => `web-new`, kill: () => Promise.resolve() }, `test`, () => undefined);
     return {
         tabs,
         daemonLists: (next: Listed[]) => {
             listed = next;
+        },
+        // The next list comes back as a rejection — the tunnel dropping one request under load.
+        failNextList: () => {
+            failOnce = true;
         },
         attach: (awaited?: string) => tabs.attach(document.createElement(`div`), awaited),
         names: () => tabs.order.value.map((tab) => tab.name),
@@ -116,10 +124,10 @@ test("the panel opens onto a live tab, never onto the dead pane it was last left
     expect(tabs.activeName.value).toBe(`web-1`);
 });
 
-// THE reported bug behind the retry: a flow NAMES its terminal before that terminal exists — the daemon's first
-// frame says "I will work in job-capability-github", and tmux creates that session with the install's first
-// command a beat later. Asking once meant the answer was always "no such session", so the user sat in front of
-// an empty panel (or the shell they had open) while the install ran to completion somewhere they couldn't see.
+// THE reported bug behind the wait: a flow NAMES its terminal before that terminal exists — the daemon says
+// "I will work in job-capability-github", and tmux creates that session with the install's first command a beat
+// later. Asking once meant the answer was always "no such session", so the user sat in front of an empty panel
+// (or the shell they had open) while the install ran to completion somewhere they couldn't see.
 test("a job the daemon has only just announced still tabs and focuses once it exists", async () => {
     const { tabs, daemonLists, attach, names } = panel([]);
     await attach(`job-capability-github`);
@@ -131,6 +139,44 @@ test("a job the daemon has only just announced still tabs and focuses once it ex
 
     expect(names()).toEqual([`job-capability-github`]);
     expect(tabs.activeName.value).toBe(`job-capability-github`);
+});
+
+/* THE PUSH BUG. The wait used to be a race — a handful of relists a quarter-second apart — run at the busiest
+ * moment there is: the pre-push suite pinning the sandbox it is asking. When the session lost that race the tab
+ * was not late, it was gone, because a work terminal tabs only while its reveal stands. The check then ran to
+ * completion in a terminal nothing ever showed, behind a spinner that had already given up. */
+test("a check that takes its time to reach tmux still surfaces whenever it gets there", async () => {
+    const { tabs, daemonLists, attach, names } = panel([]);
+    await attach(`job-checks`);
+
+    // The panel asks, and the session simply is not there yet — for far longer than any retry window.
+    await tabs.focus(`job-checks`);
+    expect(names()).toEqual([]);
+    expect(tabs.pending.value).toBe(`job-checks`);
+
+    // Whenever it does land, the daemon's own `terminals` frame relists — and the tab is waiting for it.
+    daemonLists([job(`checks`, true)]);
+    await tabs.refresh();
+
+    expect(names()).toEqual([`job-checks`]);
+    expect(tabs.activeName.value).toBe(`job-checks`);
+    expect(tabs.pending.value).toBeUndefined();
+});
+
+// The other half of that failure: one dropped list — the tunnel under load, mid-suite — used to strand the
+// panel on its spinner for good, because the wait was a promise and nothing ever settled it.
+test("a list that fails mid-wait does not strand the panel", async () => {
+    const { tabs, daemonLists, failNextList, attach, names } = panel([]);
+    await attach(`job-checks`);
+
+    failNextList();
+    await expect(tabs.focus(`job-checks`)).rejects.toThrow();
+    expect(tabs.pending.value).toBe(`job-checks`);
+
+    daemonLists([job(`checks`, true)]);
+    await tabs.refresh();
+
+    expect(names()).toEqual([`job-checks`]);
 });
 
 // Start opens the panel for a dev-server session the daemon hasn't created yet. The empty-panel shell exists so

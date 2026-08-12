@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { panePidSessions, reapableSessions } from "./terminal-session.js";
+import { jobSessionLabel, panePidSessions, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. What it must never do is take something someone is using or something still
  * working — everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
@@ -69,4 +69,12 @@ test("panePidSessions maps each pane's root pid to its session, skipping lines w
     );
     expect(panePidSessions("")).toEqual(new Map());
     expect(panePidSessions("web-broken \nweb-negative -1\nweb-nan abc\n 500\n")).toEqual(new Map());
+});
+
+/* What a job session is CALLED. The id is the daemon's (sockets, kill routes, the reveal); the label is the
+ * only part a person reads, and `job-checks` in front of an owner mid-push answered none of the questions they
+ * had. */
+test("a job session reads as a name rather than as its id", () => {
+    expect(jobSessionLabel("job-checks")).toBe("Checks");
+    expect(jobSessionLabel("job-capability-demo")).toBe("Capability demo");
 });
