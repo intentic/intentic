@@ -1,5 +1,6 @@
 ---
 import type { ProductFigure } from "@intentic-dev/site-content/product";
+import ChatMock from "./ChatMock.astro";
 
 /* The diagrams a screenshot can't carry: what isolation, sharing, wiring and the platform boundary actually
  * mean. They are markup rather than images so they read at any width and stay in the site's palette, and
@@ -337,49 +338,12 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
 
 {
     figure === "teammate" && (
-        <div class="card overflow-hidden shadow-xl shadow-black/30">
-            <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-                <svg viewBox="0 0 24 24" class="h-4 w-4 text-subtle" fill="currentColor" aria-hidden="true">
-                    <Fragment set:html={discordMark} />
-                </svg>
-                <span class="font-mono text-xs text-content">#releases</span>
-                <span class="ml-auto flex items-center gap-1.5 text-2xs text-subtle">
-                    <span class="h-1.5 w-1.5 rounded-full bg-success" />3 online
-                </span>
-            </div>
-
-            <div class="space-y-4 p-4">
-                {thread.map((msg) => (
-                    <div class="flex gap-3">
-                        {msg.agent ? (
-                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600/15 text-link">
-                                <Fragment set:html={botGlyph} />
-                            </span>
-                        ) : (
-                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-overlay text-xs font-semibold text-muted">
-                                {msg.author.charAt(0)}
-                            </span>
-                        )}
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class={`text-xs font-semibold ${msg.agent ? "text-link" : "text-content"}`}>{msg.author}</span>
-                                {msg.agent && (
-                                    <span class="rounded bg-primary-600/20 px-1.5 py-0.5 text-[0.625rem] font-semibold tracking-wide text-link uppercase">Agent</span>
-                                )}
-                                <span class="text-2xs text-subtle">{msg.time}</span>
-                            </div>
-                            <div
-                                class={`mt-1 inline-block rounded-lg px-3 py-2 text-sm leading-relaxed ${msg.agent ? "border border-primary-600/20 bg-primary-600/[0.05] text-content" : "bg-overlay/60 text-muted"}`}
-                            >
-                                {msg.text}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-
-                <div class="mt-2 flex items-center gap-2 rounded-lg border border-line bg-overlay/40 px-3 py-2 text-xs text-subtle">Message #releases…</div>
-            </div>
-        </div>
+        <ChatMock
+            thread={thread}
+            header={{ icon: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${discordMark}</svg>`, title: "#releases", status: "3 online" }}
+            input="Message #releases…"
+            ariaLabel="A Discord channel where a teammate asks the release-captain agent to ship a release and it reports back"
+        />
     )
 }
 
