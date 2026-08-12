@@ -11,6 +11,7 @@ import {
     deriveTitle,
     type EditorContext,
     fastAllowed,
+    newConversationId,
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
@@ -401,9 +402,10 @@ export class Conversation {
 
     // `conversationId` is the conversation's whole identity — the key the daemon puts on the fleet registry
     // entry and the worktree, the strip puts on the tab, and the transcript mirror puts on the cache entry. It
-    // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot),
-    // and its shape satisfies the wire's branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
-    constructor(readonly conversationId: string = crypto.randomUUID()) {}
+    // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot).
+    // A readable word pair rather than a UUID, because this string is READ far more than it is dereferenced —
+    // it is the branch, the worktree directory and the name on every board card; see newConversationId.
+    constructor(readonly conversationId: string = newConversationId()) {}
 
     // Switch the provider this conversation's next turn runs on and re-scope its provider-specific settings:
     // the model repoints to the new provider's remembered/live-default pick (the effort scale follows the model,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import { formatTokens, ProgressRing, useDevice } from "@intentic/ui";
+import { ProgressRing, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -36,8 +36,8 @@ import { canArchive, useAgents, type FleetAgent } from "../composables/agents/us
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 
-/* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · branch meta;
- * a self-hiding stats row (tokens ↑in/out · cost · files · +ins −dels · msgs · context ring); the live
+/* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · session meta;
+ * a self-hiding stats row (cost · +ins −dels · msgs · subagents · context ring); the live
  * activity line while running; time-ago / Completed footer. `now` ticks from AgentsView so every card's
  * elapsed readout advances together without per-card timers. The title renames in place (hover pencil →
  * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML.
@@ -199,17 +199,19 @@ const landAsk = computed(() => {
 const relanding = computed(() => props.pending === `reland`);
 const handingOver = computed(() => props.pending === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
-/* WHETHER THE STAT ROW HAS ANYTHING TO SAY — every chip in it, which is the whole point of naming it here.
- * The row used to be gated on tokens/cost/diff/turns, and all four are facts a turn only produces when it
- * ENDS: nothing is counted until the result message lands, `turns` moves at finish, the diff after a land. So
- * the two chips that mean something WHILE the agent works — the agents it started and how full its context
- * is — were hidden behind four numbers that do not exist yet, and a first turn that delegated showed its
- * children nowhere. A row gated on a subset of what it renders is a row that hides the rest. */
+/* WHETHER THE STAT ROW HAS ANYTHING TO SAY — every chip in it and NOTHING ELSE, which is the whole point of
+ * naming it here. The row was once gated on cost/diff/turns, and all three are facts a turn only produces when
+ * it ENDS: nothing is counted until the result message lands, `turns` moves at finish, the diff after a land.
+ * So the two chips that mean something WHILE the agent works — the agents it started and how full its context
+ * is — were hidden behind numbers that do not exist yet, and a first turn that delegated showed its children
+ * nowhere. A row gated on a SUBSET of what it renders is a row that hides the rest.
+ * The mirror of that mistake is a row gated on MORE than it renders, which opens an empty strip of padding: so
+ * the diff clause is the diff chip's own condition rather than "there is a diff", since a diff of renames and
+ * mode changes alone has nothing to draw. */
 const stats = computed(
     () =>
-        props.agent.inputTokens !== undefined ||
         props.agent.costUsd !== undefined ||
-        props.agent.diff !== undefined ||
+        (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)) ||
         props.agent.turns !== undefined ||
         props.agent.subagents !== undefined ||
         context.value !== undefined,
@@ -471,23 +473,25 @@ const grab = (event: PointerEvent): void => {
             </div>
 
             <div v-if="stats" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted">
-                <!-- No hover labels on this row. Five chips side by side each raising its own box turned a
-                     glance across the card's numbers into a strip of pop-ups, and every label was the legend
-                     for a glyph the reader had already decoded: the arrow is tokens, the pages are files, the
-                     speech bubbles are turns, the ring is context. A stat you cannot name from its icon does
-                     not belong in a chip row. -->
-                <span v-if="agent.inputTokens !== undefined">
-                    <Icon name="arrow-circle-up" class="mr-0.5 text-2xs" />{{ formatTokens(agent.inputTokens)
-                    }}<template v-if="agent.outputTokens !== undefined"> / {{ formatTokens(agent.outputTokens) }}</template>
-                </span>
+                <!-- No hover labels on this row. Chips side by side each raising its own box turned a glance
+                     across the card's numbers into a strip of pop-ups, and every label was the legend for a
+                     glyph the reader had already decoded: the speech bubbles are turns, the ring is context. A
+                     stat you cannot name from its icon does not belong in a chip row.
+                     WHAT IS NOT HERE, AND WHY. The row carried a token reading (`277 / 65k`) and a count of
+                     files touched, and a board is scanned rather than studied — every chip in it spends the
+                     same glance, so a chip has to change what the reader does next or it is taxing the ones
+                     that do. Tokens were the raw form of the cost sitting beside them: two numbers, an icon,
+                     and no decision anybody makes from a board that the money figure does not make shorter.
+                     The file count was drawn with the duplicate-pages glyph — which reads as "copy", not as
+                     "files" — and stood next to the +/− that already says how big the change is. Both facts
+                     still exist where they are read on purpose rather than in passing: the tokens in the Usage
+                     tab, the files in the agent's own Changes panel. -->
                 <!-- The card's cost is this agent's lifetime total, read only — the Usage tab still breaks it
                      down by day and model, but reaching it from here put a route change inside the chip row a
                      click aims THROUGH on its way to focusing the agent, and the misfires cost more than the
-                     shortcut saved. -->
+                     shortcut saved. It stays while the tokens go because it is the board's ONE economic
+                     signal, three characters wide, and an agent that has quietly spent $23 is worth catching. -->
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-                <span v-if="agent.diff !== undefined && agent.diff.files > 0">
-                    <Icon name="copy" class="mr-0.5 text-2xs" />{{ agent.diff.files }}
-                </span>
                 <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
                     <span class="text-success">+{{ agent.diff.insertions }}</span>
                     <span class="text-danger"> −{{ agent.diff.deletions }}</span>
