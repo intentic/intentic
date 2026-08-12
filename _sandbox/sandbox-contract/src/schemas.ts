@@ -5985,12 +5985,6 @@ export const ManifestProblemsSchema = z.array(ManifestProblemReportSchema);
 export const DaemonSessionSchema = z.object({ token: z.string(), expiresAt: z.number(), email: z.string() });
 export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 
-// Intentic-provided host SSH tunnel: minting it needs intentic's PLATFORM Cloudflare account, so the daemon
-// can't do it directly — it relays to the platform authenticated by the connect token (the announce pattern).
-// The panel embeds the returned connector token + hostname in its connect-host one-liner.
-export const HostTunnelInputSchema = z.object({ hostName: z.string().min(1) });
-export const HostTunnelSchema = z.object({ hostname: z.string(), tunnelToken: z.string() });
-
 // ---- activity: the activity audit log (historyRoot/activity.jsonl) ----
 // One provider-agnostic event per agent↔provider interaction, appended by the daemon only (never the agent —
 // the log lives under historyRoot, outside /work, so the agent can't read or rewrite its own trail). Discord

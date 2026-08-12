@@ -22,7 +22,6 @@ import {
     EnvironmentSchema,
     BundleExportSchema,
     GrantedRoleSchema,
-    HostTunnelSchema,
     ImportReportSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
@@ -124,7 +123,6 @@ export {
     EnvironmentSchema,
     BundleExportSchema,
     BundleExportsSchema,
-    HostTunnelSchema,
     ImportReportSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
@@ -196,7 +194,6 @@ export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;
 export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 export type RepoApp = z.infer<typeof RepoAppSchema>;
-export type HostTunnel = z.infer<typeof HostTunnelSchema>;
 export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 export type ActivityConnection = z.infer<typeof ActivityConnectionSchema>;
 export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;

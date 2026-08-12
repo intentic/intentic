@@ -3,24 +3,24 @@ import { portSlotsFromToken, publicSlotFromToken } from "@intentic/sandbox-contr
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
-import { postToPlatform } from "../platform/platform-client.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { discoverPanels, panelKey } from "./panels.js";
 
-// Asks the platform to mint preview routes (proxied CNAMEs + tunnel ingress → the preview proxy) on the
-// sandbox's intentic-provided tunnel, for a batch of `labels` — the first-DNS-label prefixes before
-// `-<sandboxId>`: `preview-<panel>` for panel dev servers, `port-<slot>` for forwarded ports. Called BEFORE a
-// hostname is handed to a browser, so it resolves by the time the iframe/tab loads — an early NXDOMAIN would
-// get negative-cached for the zone's SOA TTL. Own-Cloudflare sandboxes get an `{ok:true}` no-op from the
-// platform (their `*.<zone>` wildcard already serves the hostnames). Never rejects: a panel must start even
-// when the platform is unreachable — the warn log is the operator's signal, and the next ensure retries.
-// The boot-time sweep: one batched ensure covering every discovered repo's panel label, the whole port-slot
-// pool, AND the outbox. Pre-minting the slots is what makes a port forward instant — by the time anyone
-// Ctrl+clicks a localhost link, the port-<slot> hostnames have existed since boot, so DNS is warm and the
-// forward is a pure in-daemon table update. The outbox is minted on the same principle and needs it more:
-// publishing is a file move, with no moment slow enough to hide DNS propagation behind, so its record exists
-// from boot whether or not anything has ever been published. Also the self-heal for repos created while the
-// platform was unreachable. Cloudflare keeps routes across daemon restarts, so on the platform side this is
-// usually all no-ops.
+const exec = promisify(execFile);
+
+/* THE SANDBOX'S OWN PUBLIC NAMES — panel dev servers (`preview-<panel>`), forwarded ports (`port-<slot>`)
+ * and the outbox (`public-<slot>`), all served by the preview proxy under the tunnel hub's ONE wildcard.
+ *
+ * This used to ask the PLATFORM to mint a DNS record per label (its /sandbox/preview-route relay, since
+ * deleted): the fabric was Cloudflare's, only the platform held a token for the zone, and every name cost the
+ * zone a record against its quota. Under the self-hosted hub a name is a row on the controller rather than
+ * DNS, and the box holds its OWN account token — so the sandbox attaches its names itself and the platform is
+ * off the naming path entirely. One less thing a compromised platform could do to a sandbox.
+ *
+ * Called BEFORE a hostname is handed to a browser, and never rejects: a panel must start even when the hub is
+ * unreachable — the warn log is the operator's signal and the next ensure retries.
+ */
 export const ensureAllPreviewRoutes = async (services: Services): Promise<void> => {
     const discovered = await discoverPanels(services.workspace);
     const keys = discovered.map(({ repo }) => panelKey(repo)).filter((key): key is string => key !== undefined);
@@ -30,15 +30,16 @@ export const ensureAllPreviewRoutes = async (services: Services): Promise<void> 
 };
 
 export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((labels: readonly string[]) => Promise<void>) => {
-    // Labels already routed this boot — bounds Cloudflare traffic to one ensure per label per daemon lifetime
-    // (the platform side is idempotent, so a daemon restart re-ensuring is cheap).
+    // Names already shared this boot — one share per label per daemon lifetime. The hub is idempotent about a
+    // name it already knows, so a restart re-sharing is cheap; this just avoids spawning the agent for nothing.
     const ensured = new Set<string>();
-    // Serialize the platform calls: the ingress update is a read-modify-write of the whole tunnel config, so
-    // two concurrent ensures could drop each other's routes.
-    // ponytail: per-daemon serialization only — a multi-replica platform race self-heals on the next start.
+    // Serialized: each share is an agent invocation, and a burst of panel starts would otherwise race a dozen
+    // processes at the controller for no gain.
     let tail = Promise.resolve();
     return (labels) => {
-        if (config.platform.url === "" || config.connectToken === "") {
+        // No grant ⇒ nothing to share under: an attached sandbox (its owner's own domain) serves its previews
+        // however that domain does, and a sandbox before its first claim has no account yet.
+        if (config.zrok.token === "") {
             return Promise.resolve();
         }
         tail = tail.then(async () => {
@@ -46,17 +47,35 @@ export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((lab
             if (missing.length === 0) {
                 return;
             }
-            try {
-                const { status } = await postToPlatform(config, "/sandbox/preview-route", { labels: missing });
-                if (status < 200 || status >= 300) {
-                    logger.warn({ labels: missing, status }, "preview routes not minted — the preview hostnames may not resolve");
-                    return;
-                }
-                for (const label of missing) {
+            const target = `http://127.0.0.1:${config.preview.port}`;
+            const namespace = config.zrok.namespace === "" ? "public" : config.zrok.namespace;
+            for (const label of missing) {
+                try {
+                    /* Two calls, because the hub separates the NAME from the share that answers on it: the name
+                     * is claimed in the namespace first (a hostname reserved to this account), then a public
+                     * share is bound to it, pointed at the preview proxy — which already routes by Host header,
+                     * so every preview name lands on the same port and the daemon's existing dispatch does the
+                     * rest. Both calls return immediately: the in-box agent (started by the entrypoint) is what
+                     * actually holds the share, so nothing here has to stay resident. A name that exists and a
+                     * share already bound to it both answer 409, which is this loop's idea of success. */
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- serialized on purpose (see above)
+                    await exec("zrok2", ["create", "name", label, "--namespace-token", namespace]).catch((error: unknown) => {
+                        if (!/already|exists|conflict/i.test(error instanceof Error ? error.message : String(error))) {
+                            throw error;
+                        }
+                    });
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- serialized on purpose (see above)
+                    await exec("zrok2", ["share", "public", target, "--backend-mode", "proxy", "--name-selection", `${namespace}:${label}`]);
                     ensured.add(label);
+                } catch (error) {
+                    // A name this account already serves is success, not a failure to report.
+                    const message = error instanceof Error ? error.message : String(error);
+                    if (/already|exists|conflict|in use/i.test(message)) {
+                        ensured.add(label);
+                        continue;
+                    }
+                    logger.warn({ err: error, label }, "preview name not shared — this preview hostname may not resolve");
                 }
-            } catch (error) {
-                logger.warn({ err: error, labels: missing }, "preview route request failed — the preview hostnames may not resolve");
             }
         });
         return tail;

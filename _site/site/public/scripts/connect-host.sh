@@ -4,11 +4,12 @@
 # the POST /enroll self-registration. The flow lives in _sandbox/ic; this file stays the thing a user can
 # read before piping into sh. It does NOT create or recreate a sandbox — that already exists from setup.
 #
-# Two paths, matching the sandbox's setup mode (the Infra screen hands you the right one-liner):
-#   own Cloudflare — CF_TOKEN creates this host's tunnel + DNS on your zone:
+# CF_TOKEN creates this host's tunnel + DNS on your zone (ZONE is optional — the token's own zone is resolved
+# when it names exactly one). This is the one path: a deploy target is reached over SSH, and intentic's own
+# tunnels carry web traffic, so the Infra screen always hands you the Cloudflare form of the one-liner.
 #     curl -fsSL https://intentic.dev/connect-host \
 #       | sudo env SANDBOX_URL=… CONNECT_TOKEN=… CF_TOKEN=… ZONE=… HOST_NAME=… sh
-#   intentic-provided — the platform already minted the tunnel under intentic's zone:
+# A tunnel minted elsewhere can still be handed in directly, skipping the Cloudflare call:
 #     curl -fsSL https://intentic.dev/connect-host \
 #       | sudo env SANDBOX_URL=… CONNECT_TOKEN=… HOST_SSH_TUNNEL_TOKEN=… HOST_SSH_HOSTNAME=… HOST_NAME=… sh
 #

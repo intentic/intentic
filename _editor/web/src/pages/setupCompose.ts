@@ -3,7 +3,7 @@
  * the `.env` beside it. The claim endpoint already answers KEY=value lines — exactly compose's .env format —
  * so the intentic-provided path needs no script at all: claim → .env, `docker compose up -d`. The
  * own-Cloudflare path additionally mints the sandbox tunnel with the bundled CLI (the same `tunnel sandbox`
- * call connect.sh makes), appending TUNNEL_TOKEN/SANDBOX_HOSTNAME to the .env.
+ * call connect.sh makes), appending the reachability grant (ZROK_*) + SANDBOX_HOSTNAME to the .env.
  *
  * Everything here mirrors connect.sh's `docker run` — image, env set, volumes, network alias, dns, logging —
  * and uses the SAME container/volume/network names (intentic-*-<slug>), so cleanup.sh, the coexistence check,
@@ -14,13 +14,11 @@ import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
 
 export interface ComposeArgs {
-    readonly mode: `intentic` | `own`;
     // The short-lived setup code the platform minted — the only secret-adjacent value in the instructions.
     readonly code: string;
     // The sandbox's public hostname (<slug>.<zone>) the chosen target resolved to.
     readonly hostname: string;
     // The Cloudflare API token (own path only) — appended to .env, never sent to the platform.
-    readonly cfToken?: string;
     readonly image: string;
     readonly googleClientId: string;
     // The origin the setup page is being served from — the browser the daemon's CORS has to answer. Mirrors
@@ -34,7 +32,6 @@ export interface ComposeArgs {
 // web-app origin (app.*), which serves only static files and 405s a POST. Mirrors connect.sh's PLATFORM_URL.
 const PLATFORM_DEFAULT = `https://api.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE; the alias and per-sandbox names come from the run contract.
-const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf`;
 
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
@@ -48,24 +45,15 @@ const imageHasRegistry = (image: string): boolean => {
     return image.includes(`/`) && firstSegment !== undefined && /[.:]/.test(firstSegment);
 };
 
-// The one-time bootstrap, run in the folder holding the compose file. The claim consumes the setup code and
-// writes the per-sandbox values as .env lines; the own path then appends the CF token (compose feeds it to
-// the sandbox) and mints the tunnel — `--env-file .env` hands the CLI the just-claimed CONNECT_TOKEN + ZONE.
+// The one-time bootstrap, run in the folder holding the compose file: the claim consumes the setup code and
+// writes the per-sandbox values (connect token, the reachability grant, the address) as .env lines, and
+// compose starts the sandbox with them. Two commands, because nothing has to be provisioned here any more —
+// the box enables against the platform's hub itself.
 export const composeBootstrap = (args: ComposeArgs): string => {
     const platform = args.platformUrl ?? PLATFORM_DEFAULT;
     // LOCAL DEV ONLY: the dev platform's cert is a repo CA the system doesn't trust (same as connect.sh).
     const claim = `curl -fsS${isLocal(platform) ? `k` : ``} ${platform}/setup/claim -d code=${args.code} > .env`;
-    if (args.mode === `intentic`) {
-        return `${claim}\ndocker compose up -d`;
-    }
-    return [
-        claim,
-        `echo "CLOUDFLARE_API_TOKEN=${args.cfToken ?? ``}" >> .env`,
-        `docker run --rm --env-file .env --entrypoint intentic ${args.image} tunnel sandbox \\`,
-        `    --service http://${ORIGIN_HOST}:8787 --preview-service http://${ORIGIN_HOST}:5173 \\`,
-        `    --ssh-service ssh://${ORIGIN_HOST}:22 --subdomain '${slugOf(args.hostname)}' >> .env`,
-        `docker compose up -d`,
-    ].join(`\n`);
+    return `${claim}\ndocker compose up -d`;
 };
 
 // The compose services/volumes/networks to add to the user's docker-compose.yml. Secrets stay in the .env
@@ -135,19 +123,13 @@ export const composeFile = (args: ComposeArgs): string => {
         // defaults to — but a self-hosted or localhost-dev SPA is a browser the daemon has never heard of, and
         // without this line every call it makes is blocked before the bearer is ever looked at.
         ...(args.webOrigin === PLATFORM_WEB_ORIGIN ? [] : [`            WEB_ORIGIN: ${args.webOrigin}`]),
-        // Only the own path carries a Cloudflare token; an empty baked-in var would shadow the workspace
-        // .env the user may write later (a container's env can't change after creation) — so omit otherwise.
-        ...(args.mode === `own` ? [`            CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`] : []),
+        // The sandbox's reachability grant on the platform's own hub — the .env bootstrap (the claim) carries
+        // all three, and the container's entrypoint enables + shares with them. There is no tunnel SERVICE any
+        // more: the agent runs inside the sandbox, which is why this file is one container shorter than it was.
+        `            ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}`,
+        `            ZROK_API: \${ZROK_API:-}`,
+        `            ZROK_NAMESPACE: \${ZROK_NAMESPACE:-}`,
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
-        `    intentic-sandbox-tunnel:`,
-        `        image: ${CLOUDFLARED_IMAGE}`,
-        `        container_name: ${names.tunnelContainer}`,
-        `        restart: unless-stopped`,
-        `        command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN:?run the .env bootstrap first}`,
-        `        networks: [intentic]`,
-        `        logging:`,
-        `            driver: json-file`,
-        `            options: { max-size: 10m, max-file: "3" }`,
         `networks:`,
         `    intentic:`,
         `        name: ${names.network}`,

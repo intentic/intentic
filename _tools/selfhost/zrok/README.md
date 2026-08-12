@@ -68,8 +68,8 @@ names are decoupled from the backing environment, so a recreated sandbox re-atta
 Going "fully zrok" is two separate moves, and only one of them is done:
 
 - **Traffic** — the part worth moving, and what this stack is for. It cannot switch until phase 2 below is
-  written AND this hub is publicly reachable; until then every existing sandbox reaches its owner over its
-  Cloudflare tunnel, and deleting that would take the product down.
+  written AND this hub is publicly reachable. Nothing reaches a sandbox over Cloudflare any more, so what is
+  left there is the platform's own front door — its tunnel to app/api — which this stack does not touch.
 - **DNS + the certificate challenge** — deliberately staying. The zone has to live at *some* registrar/DNS
   host, one wildcard record is not a quota problem, and Caddy's DNS-01 challenge needs an API there. This is
   Cloudflare as a DNS provider, not as a tunnel vendor: no per-sandbox records, no cloudflared, no quota.
@@ -84,17 +84,32 @@ The platform mints ONE zrok account per sandbox (`_platform/api/src/sandbox/zrok
 `zrok-provision.ts`) and hands it down with the setup code or the hosted machine's env: `ZROK_TOKEN`,
 `ZROK_API`, `ZROK_NAMESPACE`. The box's entrypoint enables with it (identity born in the box — the platform
 can revoke reachability, never impersonate it) and serves the daemon as a public share whose name is the
-`sandbox-<id>` label the browser already knows. Deleting a sandbox deletes its account; the daily sweep
-reconciles accounts against rows.
+`sandbox-<id>` label the browser already knows. Deleting a sandbox deletes its account first and only then
+its row: v2's admin API has create and delete and no listing, so a grant whose row is gone could never be
+found again — the removal fails and is retried instead.
 
 Configure the platform with `ZROK_API_ENDPOINT`, `ZROK_ADMIN_TOKEN` (this stack's `ZROK2_ADMIN_TOKEN`),
 `ZROK_ZONE`, and — when sandboxes reach the hub at a different address than the platform does —
 `ZROK_AGENT_ENDPOINT`.
 
-### Still owed
+Preview and panel names (forwarded ports, the public outbox) are attached by the BOX, not the platform: the
+daemon claims each label and binds a share to it on its own account (`panels/preview-route.ts`), so the
+platform can hand out reachability without being able to serve anything through it. Every lane — the connect
+one-liner, the compose file, the hosted machine — runs the same in-box agent; there is no sidecar anywhere.
 
-The preview/panel names (forwarded ports, the public outbox) are not attached yet: the platform's old
-Cloudflare relays are gone, and the daemon does not yet create its own names with its account token. Desktop
-sync, the sandbox's `ssh-<id>` name and connected-computer tunnels are SSH-shaped and stay on their old path
-until they become private `tcpTunnel` shares. And the connect scripts (`connect.sh`, `ic`) still start the
-old cloudflared sidecar for the docker lane — the hosted lane and the image are already zrok-only.
+The shape the box actually runs, proven against a 2.0.4 hub rather than read off the spec: `zrok2 enable
+--headless` once (its environment lives on `/history`, symlinked to `~/.zrok2`, so a rebuild re-attaches the
+same names), then `zrok2 agent start` supervised — the agent is what HOLDS every share, which is why adding a
+name later costs two calls that return immediately: `zrok2 create name <label> --namespace-token <ns>` and
+`zrok2 share public <target> --backend-mode proxy --name-selection <ns>:<label>`. Three details bite: the
+binary reads `ZROK2_*` env vars (`ZROK2_API_ENDPOINT`, not `ZROK_API_ENDPOINT` — otherwise it quietly dials
+api-v2.zrok.io), its REST API consumes `application/zrok.v1+json` (plain JSON answers 500), and every
+already-exists case is a 409 that means success.
+
+### Parked until private shares land
+
+SSH-shaped traffic can't ride a public HTTP frontend, so three things wait for zrok *private* `tcpTunnel`
+shares (both ends running the agent): **desktop sync** (Mutagen over SSH — the card now says it needs an SSH
+way in rather than offering a one-liner that would hang), the sandbox's own `ssh-<id>` name, and
+**connected computers** for the deploy engine, whose one-liner now always carries the user's own Cloudflare
+token. None of them fail silently; each surface says what it needs.

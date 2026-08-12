@@ -81,11 +81,6 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
                 <td>The daemon, your agent, your workspace</td>
             </tr>
             <tr>
-                <td>Container</td>
-                <td><code>intentic-sandbox-tunnel-&lt;slug&gt;</code></td>
-                <td>cloudflared, dialling out to serve the tunnel</td>
-            </tr>
-            <tr>
                 <td>Volume</td>
                 <td><code>intentic-workspace-&lt;slug&gt;</code></td>
                 <td><code>/work</code>: your repos and files</td>
@@ -127,13 +122,13 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
 
     <h2>Ports: none inbound, one on loopback</h2>
     <p>
-        Nothing is published to the network. The sandbox is reached over a private Cloudflare tunnel that the connector dials{" "}
+        Nothing is published to the network. The sandbox is reached over a private tunnel that its own agent dials{" "}
         <em>outward</em>, so there is no port to forward and nothing to expose. Inside the container the daemon serves the tunnel on{" "}
         <code>8787</code> and preview servers on <code>5173</code>; neither is bound on your machine.
     </p>
     <p>
-        The one exception is a shortcut, not an opening. A browser on the <em>same machine</em> shouldn't have to travel to Cloudflare and
-        back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id. Nobody announces that address; your browser computes the same number from the token it holds. If something else holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
+        The one exception is a shortcut, not an opening. A browser on the <em>same machine</em> shouldn't have to travel out to the tunnel
+        and back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id. Nobody announces that address; your browser computes the same number from the token it holds. If something else holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
     </p>
 
     <h2>What the container may do</h2>

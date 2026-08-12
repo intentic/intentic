@@ -1,7 +1,5 @@
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
-import { reconcileZrokAccounts } from "./sandbox/zrok.js";
-import { zrokEnabled } from "./sandbox/zrok-provision.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
@@ -55,28 +53,6 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
             logger.info(await runRetention(prisma), `retention sweep completed`);
         } catch (error) {
             logger.error({ err: error }, `retention sweep failed`);
-        }
-        /* THE RECONCILE — every reachability grant on the hub whose sandbox row is gone, deleted. It replaces
-         * the Cloudflare tunnel reaper and is a far simpler thing than what it replaces: idleness is no longer
-         * evidence of anything (a sleeping hosted machine is disconnected by design), so the DB is the only
-         * authority — an account whose row exists is live, an account with no row is garbage, and there is no
-         * "inactive for N days" heuristic left to get wrong. A sandbox that is merely offline keeps its grant
-         * forever, which is exactly right: the grant is one row on the hub, not ten DNS records against a
-         * quota. Accounts outside our synthetic email shape are somebody else's and are never touched. */
-        if (zrokEnabled(config)) {
-            try {
-                const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
-                const live = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
-                const result = await reconcileZrokAccounts(config.zrok, {
-                    live,
-                    dryRun: reapDryRun,
-                    log: (email) => logger.info({ email, dryRun: reapDryRun }, `orphan zrok account`),
-                    onError: (email, error) => logger.error({ email, err: error }, `orphan zrok account delete failed`),
-                });
-                logger.info(result, `zrok account reconcile completed`);
-            } catch (error) {
-                logger.error({ err: error }, `zrok account reconcile failed`);
-            }
         }
         // Cloudflare is DNS-only now, and the one thing still worth sweeping there is the loopback-certificate
         // residue (`local-*` A records and their ACME TXTs) that no tunnel teardown ever owned.

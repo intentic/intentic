@@ -1,10 +1,6 @@
 <script setup lang="ts">
-import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
-import { cmp, Code, commandLang, InfoHint, Notice, type NoticeModel, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
-import { noticeFrom, noticeOf } from "@intentic/ui/async";
-import Button from "primevue/button";
+import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
-import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
@@ -17,24 +13,19 @@ import { normalizeHostName } from "./hostName";
  * InfraDeclare's "What you have" section behind its Add server button. Run a single connect-host
  * command on each host you want to deploy onto — it sets up the host (service user + SSH key + its own
  * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token) — no
- * sandbox recreate, no keys pasted here. On an own-Cloudflare sandbox the command carries the user's CF token;
- * on an intentic-provided one the daemon relays a host-tunnel mint to the platform and the command carries its
- * connector token instead — no Cloudflare account needed. This runs in the browser workspace, so the sandbox
- * self-context (daemon URL, connect token, tunnel provenance) comes from the platform's sandbox registry
- * (useSandbox); the install command from scriptCommand (deploy curls intentic.dev, dev runs the repo script by
- * path); the zone is derived client-side from the daemon URL. */
+ * sandbox recreate, no keys pasted here.
+ *
+ * The command carries the user's OWN Cloudflare token, always: a deploy target is reached over SSH, and
+ * intentic's own tunnels carry web traffic only, so the platform has nothing to hand out here. This runs in the
+ * browser workspace, so the sandbox self-context (daemon URL, connect token) comes from the platform's sandbox
+ * registry (useSandbox); the install command from scriptCommand (deploy curls intentic.dev, dev runs the repo
+ * script by path). */
 const { refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
-// Whether this sandbox's tunnel is intentic-provided (platform-computed: no user Cloudflare token). On that path
-// host tunnels are minted platform-side (relayed by the daemon) and the one-liner carries the narrow connector
-// token instead of CF_TOKEN.
-const provided = computed(() => active.value?.providedTunnel === true);
-
-// The connect-host one-liner: SANDBOX_URL (the daemon) + CONNECT_TOKEN (which also authorizes /enroll) + either
-// CF_TOKEN (entered here; the daemon writes it via /enroll) with ZONE, or — on the intentic-provided path — the
-// minted HOST_SSH_TUNNEL_TOKEN/HOST_SSH_HOSTNAME with the required HOST_NAME that salted the mint. The command
-// shape comes from scriptCommand (deploy vs local-dev-by-path); the sandbox URL + token from the active sandbox.
+// The connect-host one-liner: SANDBOX_URL (the daemon) + CONNECT_TOKEN (which also authorizes /enroll) +
+// CF_TOKEN (entered here; the daemon writes it via /enroll), with ZONE when we know one. The command shape comes
+// from scriptCommand (deploy vs local-dev-by-path); the sandbox URL + token from the active sandbox.
 const cfToken = ref(``);
 const hostName = ref(``);
 // Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); the connect-host script does the real verify.
@@ -44,65 +35,18 @@ const hostNameTouched = ref(false);
 const rawHostName = computed(() => hostName.value.trim());
 const canonicalHostName = computed(() => normalizeHostName(hostName.value));
 const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostName.value !== ``);
-// The zone the sandbox tunnel already lives under (derived client-side from the daemon URL); undefined when unknown.
-const zone = computed(() => zoneFromUrl(daemonUrl.value));
-
-// The minted intentic-provided host tunnel, valid for exactly the host name it was minted with — the name salts
-// the tunnel id, so editing it voids the command and needs a new mint (re-minting the same name reuses the tunnel).
-const minted = ref<HostTunnel | undefined>(undefined);
-const mintedName = ref(``);
-const minting = ref(false);
-const mintError = ref<NoticeModel | undefined>(undefined);
-const mintCurrent = computed(() => minted.value !== undefined && mintedName.value === canonicalHostName.value);
-const canMint = computed(() => canonicalHostName.value !== `` && active.value !== undefined);
-
-const mint = async (): Promise<void> => {
-    const name = canonicalHostName.value;
-    // Only the intentic-provided path mints; on the own-Cloudflare path the command is reactive, so a form
-    // Enter must be a no-op here rather than minting a host tunnel the user never asked for.
-    if (!provided.value || !canMint.value || minting.value) {
-        return;
-    }
-    minting.value = true;
-    mintError.value = undefined;
-    try {
-        minted.value = HostTunnelSchema.parse(
-            await sandboxJson(`/system/host-tunnel`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ hostName: name }),
-                // The floor that guarantees this promise settles (and the spinner stops) even when every hop
-                // upstream stalls. Longer than the daemon's platform-relay timeout, so its specific error wins.
-                signal: AbortSignal.timeout(90_000),
-            }),
-        );
-        mintedName.value = name;
-    } catch (err) {
-        mintError.value =
-            err instanceof DOMException && err.name === `TimeoutError`
-                ? noticeOf(`Timed out preparing this host's tunnel — try again.`)
-                : noticeFrom(err, `Couldn't prepare this host's tunnel — try again.`);
-    } finally {
-        minting.value = false;
-    }
-};
+/* The zone to create this host's tunnel in, derived client-side from the daemon URL — right when the sandbox is
+ * behind the user's OWN domain (same account, same zone). A sandbox we connect answers under intentic's zone,
+ * which the user's token cannot touch: pass no ZONE there and let the host resolve the token's own zone. */
+const zone = computed(() => (active.value?.providedTunnel === true ? undefined : zoneFromUrl(daemonUrl.value)));
 
 const commandReady = computed(() => {
     if (active.value === undefined) {
         return false;
     }
-    if (provided.value) {
-        return mintCurrent.value;
-    }
-    return cfTokenValid.value && hostNameReady.value && zone.value !== undefined;
+    return cfTokenValid.value && hostNameReady.value;
 });
 const lockedReason = computed(() => {
-    if (provided.value) {
-        if (hostName.value.trim() === ``) {
-            return `Enter a host name to generate this machine's command.`;
-        }
-        return `Generate the command for this host name.`;
-    }
     if (cfToken.value.trim().length === 0) {
         return `Enter your Cloudflare API token to reveal the command.`;
     }
@@ -123,23 +67,11 @@ const connectHostCommand = computed(() => {
     if (sandbox === undefined || url === undefined) {
         return ``;
     }
-    if (provided.value) {
-        if (minted.value === undefined || !mintCurrent.value) {
-            return ``;
-        }
-        return bashCommand(
-            `hostSh`,
-            `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}' HOST_SSH_HOSTNAME='${minted.value.hostname}' HOST_NAME='${mintedName.value}' `,
-            ``,
-        );
-    }
-    if (zone.value === undefined) {
-        return ``;
-    }
+    const zoneEnv = zone.value !== undefined ? ` ZONE='${zone.value}'` : ``;
     const nameEnv = canonicalHostName.value !== `` ? ` HOST_NAME='${canonicalHostName.value}'` : ``;
     return bashCommand(
         `hostSh`,
-        `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}' ZONE='${zone.value}'${nameEnv} `,
+        `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}'${zoneEnv}${nameEnv} `,
         ``,
     );
 });
@@ -154,20 +86,9 @@ const connectHostCommandPs = computed(() => {
         return ``;
     }
     const base = `$env:SANDBOX_URL='${url}'; $env:CONNECT_TOKEN='${sandbox.token}'; `;
-    if (provided.value) {
-        if (minted.value === undefined || !mintCurrent.value) {
-            return ``;
-        }
-        return psCommand(
-            `hostPs1`,
-            `${base}$env:HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}'; $env:HOST_SSH_HOSTNAME='${minted.value.hostname}'; $env:HOST_NAME='${mintedName.value}'; `,
-        );
-    }
-    if (zone.value === undefined) {
-        return ``;
-    }
+    const zoneEnv = zone.value !== undefined ? `$env:ZONE='${zone.value}'; ` : ``;
     const nameEnv = canonicalHostName.value !== `` ? `$env:HOST_NAME='${canonicalHostName.value}'; ` : ``;
-    return psCommand(`hostPs1`, `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; $env:ZONE='${zone.value}'; ${nameEnv}`);
+    return psCommand(`hostPs1`, `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; ${zoneEnv}${nameEnv}`);
 });
 
 // While the section is open, poll the inventory so a machine that just ran connect-host appears in the list.
@@ -191,17 +112,13 @@ onUnmounted(() => clearInterval(timer));
             <p class="mt-0.5 text-xs text-muted">
                 <!-- Placement-specific motivation (the requirement cards say why a server is being asked for). -->
                 <slot name="reason"></slot>
-                {{
-                    provided
-                        ? `One command per machine, run on it as root. No Cloudflare account needed — intentic hosts the tunnel.`
-                        : `One command, run on the target host as root. Cloudflare is set up as part of it.`
-                }}
+                One command, run on the target host as root. Cloudflare is set up as part of it.
             </p>
         </div>
 
-        <form class="flex flex-col gap-3" @submit.prevent="mint">
+        <form class="flex flex-col gap-3" @submit.prevent>
             <div class="grid gap-3 @lg:grid-cols-2">
-                <label v-if="!provided" class="ui-field">
+                <label class="ui-field">
                     <span class="ui-field-label">Cloudflare API token</span>
                     <input
                         v-model="cfToken"
@@ -220,10 +137,10 @@ onUnmounted(() => clearInterval(timer));
                     >
                 </label>
                 <label class="ui-field">
-                    <span class="ui-field-label">{{ provided ? `Host name` : `Host name (optional)` }}</span>
+                    <span class="ui-field-label">Host name (optional)</span>
                     <input
                         v-model="hostName"
-                        :placeholder="provided ? `e.g. home-server` : `defaults to the machine's hostname`"
+                        placeholder="defaults to the machine's hostname"
                         :class="[cmp.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-input-error' : '']"
                         @blur="hostNameTouched = true"
                     />
@@ -234,11 +151,7 @@ onUnmounted(() => clearInterval(timer));
                     <span v-else-if="canonicalHostName !== ``" class="text-2xs text-success">
                         ✓ Saved in intent as <span class="font-mono">{{ canonicalHostName }}</span>
                     </span>
-                    <span v-else class="text-2xs text-subtle">{{
-                        provided
-                            ? `A short name for this machine — each name gets its own intentic-hosted tunnel.`
-                            : `A short name for this machine in your intent.`
-                    }}</span>
+                    <span v-else class="text-2xs text-subtle">A short name for this machine in your intent.</span>
                 </label>
             </div>
 
@@ -265,25 +178,9 @@ onUnmounted(() => clearInterval(timer));
                 />
             </template>
 
-            <Button
-                v-if="provided && !commandReady"
-                type="submit"
-                class="self-start"
-                label="Generate command"
-                :loading="minting"
-                :disabled="!canMint || minting"
-            >
-                <template #icon><Icon name="bolt" /></template>
-            </Button>
-            <Notice v-if="mintError !== undefined" :of="mintError" />
-
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
-                <span>{{
-                    provided
-                        ? `Waiting for machines to register — each appears in your server list as you connect it. Generate a separate command for each host name you want to add.`
-                        : `Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want to add.`
-                }}</span>
+                <span>Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want to add.</span>
             </div>
         </form>
     </div>

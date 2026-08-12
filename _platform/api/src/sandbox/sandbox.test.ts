@@ -220,7 +220,7 @@ describe(`sandbox routes`, () => {
     });
 
     // The teardown a delete owes the hub: the account goes, taking every environment, share and name with it.
-    it(`delete revokes the sandbox's reachability grant after dropping the row`, async () => {
+    it(`delete revokes the sandbox's reachability grant before dropping the row`, async () => {
         const order: string[] = [];
         const deleteRow = vi.fn().mockImplementation(() => {
             order.push(`row`);
@@ -237,8 +237,22 @@ describe(`sandbox routes`, () => {
             hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) });
-        // Row first: it is what the browser reads, and a failed hub call is what the reconcile cleans up.
-        expect(order).toEqual([`row`, `hub`]);
+        // Hub first: the hub cannot be asked what it holds (v2 lists no accounts), so a grant whose row is
+        // already gone could never be found again.
+        expect(order).toEqual([`hub`, `row`]);
+    });
+
+    // …and a hub that refuses keeps the row: the user retries a removal rather than losing the only record of
+    // an address that is still live.
+    it(`delete fails, leaving the row, when the hub cannot revoke`, async () => {
+        const deleteRow = vi.fn();
+        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(`down`, { status: 503 })));
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, zrokToken: `enc-acct` }), delete: deleteRow },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+        });
+        await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `BAD_GATEWAY`);
+        expect(deleteRow).not.toHaveBeenCalled();
     });
 
     it(`creates a second sandbox for an owner who already has one — there is no cap`, async () => {

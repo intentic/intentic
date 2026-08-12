@@ -25,8 +25,8 @@ curl -fsSL https://intentic.dev/connect | sh -s -- <SETUP_CODE>`;
 const connectWin = `# Windows (PowerShell)
 $env:SETUP_CODE='<SETUP_CODE>'; irm https://intentic.dev/connect.ps1 | iex`;
 
-const connectAdvanced = `# Your own Cloudflare zone: the token rides the command, and is never stored.
-curl -fsSL https://intentic.dev/connect | sudo env CF_TOKEN=<CF_TOKEN> sh -s -- <SETUP_CODE>
+const connectAdvanced = `# Also make this machine a deploy target for the agent (its own Cloudflare tunnel).
+curl -fsSL https://intentic.dev/connect | sudo env SELF_HOST=1 CF_TOKEN=<CF_TOKEN> sh -s -- <SETUP_CODE>
 
 # Unattended (no terminal to ask): pre-consent to the Docker install.
 curl -fsSL https://intentic.dev/connect | sudo env INSTALL_DOCKER=1 sh -s -- <SETUP_CODE>`;
@@ -62,15 +62,9 @@ const composeFile = `services:
             SANDBOX_PUBLIC_URL: https://<SLUG>.intentic.dev
             PLATFORM_URL: https://api.intentic.dev
             GOOGLE_CLIENT_ID: <shown filled in on the setup page>
-    intentic-sandbox-tunnel:
-        image: cloudflare/cloudflared:2026.7.3
-        container_name: intentic-sandbox-tunnel-<SLUG>
-        restart: unless-stopped
-        command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN:?run the .env bootstrap first}
-        networks: [intentic]
-        logging:
-            driver: json-file
-            options: { max-size: 10m, max-file: "3" }
+            ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}
+            ZROK_API: \${ZROK_API:-}
+            ZROK_NAMESPACE: \${ZROK_NAMESPACE:-}
 networks:
     intentic:
         name: intentic-workspace-<SLUG>
@@ -86,8 +80,9 @@ const runInline = `IMAGE=ghcr.io/intentic/sandbox:stable
 SLUG='<SLUG>'              # the first label of your sandbox hostname
 SETUP_CODE='<SETUP_CODE>'  # the short-lived code the setup screen shows
 
-# 1 · Redeem the setup code. You get KEY=value lines: CONNECT_TOKEN, TUNNEL_TOKEN,
-#     SANDBOX_HOSTNAME, OWNER_EMAIL, LOCAL_PORT. Every other path does exactly this.
+# 1 · Redeem the setup code. You get KEY=value lines: CONNECT_TOKEN, ZROK_TOKEN,
+#     ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL, LOCAL_PORT.
+#     Every other path does exactly this.
 curl -fsS https://api.intentic.dev/setup/claim -d code=$SETUP_CODE > sandbox.env
 
 # 2 · Add the three the claim does not carry (the setup page's Compose tab shows the
@@ -98,7 +93,7 @@ PLATFORM_URL=https://api.intentic.dev
 GOOGLE_CLIENT_ID=<shown filled in on the setup page>
 EOF
 
-# 3 · The network the connector reaches the sandbox on.
+# 3 · The network the sandbox and anything you run beside it share.
 docker network create intentic-workspace-$SLUG
 
 # 4 · Ask the image for its own run command, then read it, then run it.
@@ -109,10 +104,8 @@ RUN=$(tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic $I
 echo "$RUN"
 eval "$RUN"
 
-# 5 · The tunnel connector, alongside it on the same network.
-docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
-    --network intentic-workspace-$SLUG cloudflare/cloudflared:2026.7.3 \\
-    tunnel --no-autoupdate run --token "$(sed -n 's/^TUNNEL_TOKEN=//p' sandbox.env)"`;
+# That is all of it — the sandbox connects itself outward on boot. There is no
+# second container: the tunnel agent runs inside the image.`;
 ---
 
 <DocsLayout
@@ -127,13 +120,13 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         <li>A <strong>Google account</strong> to sign in. No card, no repo permissions, no code upload.</li>
     </ul>
     <p>
-        No inbound ports, on any path. The sandbox is reached over a private Cloudflare tunnel that dials <em>out</em> from your machine, so
-        nothing is exposed and nothing is deployed.
+        No inbound ports, on any path. The sandbox is reached over a private tunnel that dials <em>out</em> from your machine, so nothing is
+        exposed and nothing is deployed.
     </p>
 
     <h2 id="setup-code">1 · Sign in and get your setup code</h2>
     <p>
-        Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. A sandbox is created as setup opens, named for you and renameable from the same card, so a private tunnel is prepared under intentic's own domain straight away. No Cloudflare account required.
+        Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. A sandbox is created as setup opens, named for you and renameable from the same card, so its address under intentic's own domain is ready straight away. No account anywhere else, and nothing to configure.
     </p>
     <p>
         <strong>You never type the setup code, and there is nothing to generate.</strong> The moment your address is ready, the setup
@@ -241,26 +234,22 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <DocsCodeBlock code={connectAdvanced} lang="bash" title="Variations" />
     <p>
         For a scripted install with no setup code at all, pass the values directly instead:{" "}
-        <code>CONNECT_TOKEN=… CF_TOKEN=… ./connect.sh</code>.
+        <code>CONNECT_TOKEN=… ZROK_TOKEN=… ./connect.sh</code>.
     </p>
 
     <h3 id="docker-compose">Install with Docker Compose</h3>
     <p>
         The path for someone who would rather read a file than run a script: <strong>nothing executes on your machine until you start it
-        yourself</strong>. Setup's <strong>Docker Compose</strong> tab renders these two services with your hostname, client id and a digest-pinned connector image filled in; paste them into your own <code>docker-compose.yml</code>.
+        yourself</strong>. Setup's <strong>Docker Compose</strong> tab renders this service with your hostname and client id filled in; paste it into your own <code>docker-compose.yml</code>.
     </p>
     <DocsCodeBlock code={composeFile} lang="yaml" title="docker-compose.yml" />
     <p>Then, once, in the same folder: the same tab prints this with your <a href="#setup-code">setup code</a> already in the URL:</p>
     <DocsCodeBlock code={composeBootstrap} lang="bash" title="Bootstrap" />
     <p>
         The first command redeems your setup code into the <code>.env</code> that Compose interpolates
-        (<code>CONNECT_TOKEN</code>, <code>TUNNEL_TOKEN</code>, <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After that the sandbox is
-        yours to manage with <code>docker compose up -d</code>, <code>down</code>, and <code>logs</code>. Your workspace lives in the named
-        volumes, so <code>down</code> then <code>up</code> keeps it.
-    </p>
-    <p>
-        On your own Cloudflare zone there are two extra bootstrap steps before <code>up</code>: append your token to the{" "}
-        <code>.env</code>, and mint the tunnel with the CLI the image carries. The setup page prints both with your values in place.
+        (<code>CONNECT_TOKEN</code>, the <code>ZROK_*</code> reachability grant, <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After
+        that the sandbox is yours to manage with <code>docker compose up -d</code>, <code>down</code>, and <code>logs</code>. Your workspace
+        lives in the named volumes, so <code>down</code> then <code>up</code> keeps it.
     </p>
     <p>
         Two things this path leaves out on purpose. The <strong>docker capability</strong>'s nested engine needs{" "}
@@ -292,13 +281,13 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     </p>
 
     <h2>3 · Check what came up</h2>
-    <p>Whichever path you took, you now have two containers and nothing else:</p>
+    <p>Whichever path you took, you now have one container and nothing else:</p>
     <ul>
         <li>the <strong>sandbox</strong>: the daemon, your agent, and your workspace, running unprivileged;</li>
-        <li>a <strong>cloudflared</strong> connector that dials out to establish the private tunnel.</li>
+        <li>inside it, a small <strong>tunnel agent</strong> that dials out to make the daemon reachable.</li>
     </ul>
     <p>
-        Both are <strong>outbound-only</strong>: no port is opened on your machine. The daemon announces its URL, your browser probes the sandbox directly until it reports healthy, and the workspace opens on its own. From then you are talking to the daemon over its tunnel and the platform is out of the loop.
+        Both halves are <strong>outbound-only</strong>: no port is opened on your machine. The daemon announces its URL, your browser probes the sandbox directly until it reports healthy, and the workspace opens on its own. From then you are talking to the daemon over its tunnel and the platform is out of the loop.
     </p>
 
     {/* An appendix, not part of the numbered path: all of it is contingency: what to do when the code expired,
@@ -316,9 +305,6 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <p>
         Setting up on a different machine from the one you're reading this on? On a phone, setup offers to{" "}
         <strong>email you the link back to this screen</strong>: open it on the target machine and copy the command there.
-    </p>
-    <p>
-        Prefer your own Cloudflare zone? Paste a token on the setup screen; it is used once to list your zones and never stored. The <a href="#setup-command">setup command</a>'s variations show how to pass it on the command line instead.
     </p>
 
     <h2>After it's running</h2>

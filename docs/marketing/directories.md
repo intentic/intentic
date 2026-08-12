@@ -106,7 +106,7 @@ First comment, posted immediately after submitting:
 >
 > It works with Claude Code, Codex, Grok, Kimi Code and Gemini on your own subscription — intentic charges
 > nothing and never meters model usage. MIT, and the platform tier is deliberately thin: it knows who you are
-> and where your sandbox is, and every keystroke goes browser-to-your-machine over your own Cloudflare tunnel.
+> and where your sandbox is, and every keystroke goes browser-to-your-machine over your sandbox's own tunnel.
 >
 > Demo, which is the real workspace running against fixtures: https://intentic.dev/demo/
 > Source: https://github.com/intentic/intentic

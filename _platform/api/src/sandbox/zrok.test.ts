@@ -29,16 +29,48 @@ afterEach(() => {
 });
 
 describe(`zrok`, () => {
-    it(`mints one account per sandbox under the synthetic reconcile email, x-token authed, v2 path`, async () => {
+    it(`mints one account per sandbox under the synthetic email, x-token authed, v2 path, hub media type`, async () => {
         const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/api/v2/account`), respond: () => json({ accountToken: `acct-1` }, 201) }]);
         const created = await createSandboxAccount(config, { sandboxId: `abcdefabcdef`, password: `p` });
         expect(created).toEqual({ accountToken: `acct-1` });
         expect(calls[0]?.body).toEqual({ email: `sandbox-abcdefabcdef@sbx.test`, password: `p` });
         const headers = calls[0]?.headers as Record<string, string> | undefined;
         expect(headers?.[`x-token`]).toBe(`admin-token`);
+        // The hub declares its OWN media type on every operation and answers `application/json` with a 500 that
+        // reads like a server fault — the header is load-bearing, so it is asserted rather than assumed.
+        expect(headers?.[`content-type`]).toBe(`application/zrok.v1+json`);
+        expect(headers?.[`accept`]).toBe(`application/zrok.v1+json`);
     });
 
-    it(`treats an already-gone account as deleted — the delete flow and the reconcile both retry`, async () => {
+    /* A mint that collides is a mint whose row-write never landed: the hub has no way to read an existing
+     * account's token back, so the only way out is to drop the stale account and mint again. */
+    it(`heals a colliding mint by deleting the stale account and minting again`, async () => {
+        let created = 0;
+        const calls = stubFetch([
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/account`),
+                respond: () => {
+                    created += 1;
+                    return created === 1 ? new Response(``, { status: 500 }) : json({ accountToken: `acct-2` }, 201);
+                },
+            },
+            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 200 }) },
+        ]);
+        expect(await createSandboxAccount(config, { sandboxId: `abcdefabcdef`, password: `p` })).toEqual({ accountToken: `acct-2` });
+        expect(calls.map((call) => call.method)).toEqual([`POST`, `DELETE`, `POST`]);
+    });
+
+    // A hub that is simply down must not read as a collision: the retry fails too, and the FIRST error is what
+    // the operator sees.
+    it(`surfaces the original failure when the retry fails as well`, async () => {
+        stubFetch([
+            { match: (method) => method === `POST`, respond: () => new Response(`boom`, { status: 502 }) },
+            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 404 }) },
+        ]);
+        await expect(createSandboxAccount(config, { sandboxId: `abcdefabcdef`, password: `p` })).rejects.toThrow(/HTTP 502/);
+    });
+
+    it(`treats an already-gone account as deleted, so a retried removal cannot fail on it`, async () => {
         stubFetch([{ match: (method) => method === `DELETE`, respond: () => new Response(`not found`, { status: 404 }) }]);
         await expect(deleteSandboxAccount(config, `abcdefabcdef`)).resolves.toBeUndefined();
     });
@@ -62,7 +94,7 @@ describe(`zrok`, () => {
         await expect(createSandboxAccount(config, { sandboxId: `a`, password: `p` })).rejects.toThrow(/ZROK_ADMIN_TOKEN/);
     });
 
-    it(`derives the reconcile email from the sandbox id alone`, () => {
+    it(`derives the account email from the sandbox id alone`, () => {
         expect(accountEmail(`0f310c3c4db4`, `sbx.test`)).toBe(`sandbox-0f310c3c4db4@sbx.test`);
     });
 });

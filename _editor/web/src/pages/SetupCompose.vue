@@ -31,11 +31,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
         <Code
             :code="bootstrap"
             lang="bash"
-            :label="
-                args.mode === `own`
-                    ? `2. In the same folder: claim your .env, add the Cloudflare token, mint the tunnel, start`
-                    : `2. In the same folder: claim your .env, then start`
-            "
+            label="2. In the same folder: claim your .env, then start"
             :wrap="true"
         />
         <p class="text-xs text-muted">

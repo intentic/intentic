@@ -11,10 +11,13 @@ use crate::util::{bail, kv_lines, Result};
 #[derive(Default)]
 pub struct Claim {
     pub connect_token: Option<String>,
-    pub tunnel_token: Option<String>,
+    /// The sandbox's reachability grant on the self-hosted tunnel hub: the account token the in-box agent
+    /// enables with, the hub as this machine reaches it, and the namespace its public names live under.
+    /// Replaces the Cloudflare connector token this flow used to carry.
+    pub zrok_token: Option<String>,
+    pub zrok_api: Option<String>,
+    pub zrok_namespace: Option<String>,
     pub sandbox_hostname: Option<String>,
-    pub zone: Option<String>,
-    pub subdomain: Option<String>,
     pub sync_pair_token: Option<String>,
     /// The one-shot pairing the CONNECTED-COMPUTER agent redeems, so this machine's sandboxes can be managed
     /// from the browser instead of from a terminal here. Minted per claim like the sync one beside it, and inert
@@ -84,10 +87,10 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     let lookup = kv_lines(&body);
     Ok(Claim {
         connect_token: lookup("CONNECT_TOKEN"),
-        tunnel_token: lookup("TUNNEL_TOKEN"),
+        zrok_token: lookup("ZROK_TOKEN"),
+        zrok_api: lookup("ZROK_API"),
+        zrok_namespace: lookup("ZROK_NAMESPACE"),
         sandbox_hostname: lookup("SANDBOX_HOSTNAME"),
-        zone: lookup("ZONE"),
-        subdomain: lookup("SUBDOMAIN"),
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
         host_pair_token: lookup("HOST_PAIR_TOKEN"),
         owner_email: lookup("OWNER_EMAIL"),

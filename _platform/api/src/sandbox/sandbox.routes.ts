@@ -14,7 +14,7 @@ import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
-import { ensureZrokAccount, sandboxHostname, zrokEnabled } from "./zrok-provision.js";
+import { ensureZrokAccount, zrokEnabled } from "./zrok-provision.js";
 import { deleteSandboxAccount } from "./zrok.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
@@ -126,37 +126,34 @@ export const sandboxRoutes = {
         return toSummary(sandbox, `owner`, context);
     }),
     // Remove an owned sandbox (cascades its member grants), its hosted machine, and its reachability grant on
-    // the hub — the platform destroys everything it provisioned. The row goes FIRST and the teardowns are
-    // best-effort after it: the row is the only thing the browser reads (sandbox.list), so tearing down first
-    // kept a just-removed sandbox visible to every reload during those seconds and made any hub hiccup fail a
-    // removal the user had already confirmed. What a failed teardown leaves is an account with no row, which
-    // is precisely what the daily reconcile deletes. The daemon keeps running on its host until cleanup.sh
-    // tears it down there.
+    // the hub — the platform destroys everything it provisioned. The grant is revoked FIRST and the machine is
+    // destroyed after the row, and the asymmetry is the hubs' own doing: Fly apps can be listed by prefix, so
+    // a machine the teardown missed is found and destroyed tomorrow, while zrok v2 has no way to list accounts
+    // at all — a grant whose row is gone could never be found again. So the removal fails on a hub hiccup and
+    // the user retries, rather than stranding an address nobody can revoke. The daemon keeps running on its
+    // host until cleanup.sh tears it down there.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         // Read the hosted record BEFORE the row goes — the cascade takes it, and its appName is the teardown.
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: input.sandboxId } });
+        if (sandbox.zrokToken !== null && zrokEnabled(context.config)) {
+            const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token)) ?? sandbox.id;
+            try {
+                await deleteSandboxAccount(context.config.zrok, sandboxId);
+            } catch (error) {
+                context.logger.error({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed`);
+                throw new ORPCError(`BAD_GATEWAY`, { message: `couldn't take this sandbox's address down just now — try removing it again in a moment` });
+            }
+        }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
-        // A hosted sandbox's machine dies with it — same best-effort-after-the-row stance as the tunnel below:
-        // the row is what the browser reads, and a failed teardown is an app with no row, which is exactly
-        // what the hosted reaper destroys tomorrow.
+        // A hosted sandbox's machine dies with it, best-effort AFTER the row: the row is what the browser
+        // reads, so a slow provider would otherwise keep a just-removed sandbox on screen — and a failed
+        // teardown leaves an app with no row, which is exactly what the hosted reaper destroys tomorrow.
         if (hosted !== null) {
             try {
                 await destroyHosted(context.config, hosted.appName);
             } catch (error) {
                 context.logger.warn({ err: error, sandboxId: input.sandboxId, app: hosted.appName }, `hosted machine teardown failed; orphaned for the reaper`);
-            }
-        }
-        // The sandbox's reachability grant on the hub goes with it — one call that takes its environments,
-        // shares and names with it. Best-effort after the row for the same reason the machine teardown is:
-        // the row is what the browser reads, and an account with no row is exactly what the daily reconcile
-        // (retention.ts) deletes.
-        if (sandbox.zrokToken !== null && zrokEnabled(context.config)) {
-            const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token));
-            try {
-                await deleteSandboxAccount(context.config.zrok, sandboxId ?? sandbox.id);
-            } catch (error) {
-                context.logger.warn({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed; orphaned for the reconcile`);
             }
         }
         return { ok: true };

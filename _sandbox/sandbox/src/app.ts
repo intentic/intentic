@@ -1281,9 +1281,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "invalid key" }, 400);
         }
         // The agent needs the tunnel's SSH host to point Mutagen at; without one, sync can't reach this sandbox.
-        const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
+        const sshHostname = syncSshHostname(services.config);
         if (sshHostname === undefined) {
-            return c.json({ error: "ssh tunnel not configured" }, 409);
+            return c.json({ error: "this sandbox has no SSH tunnel for desktop sync to ride" }, 409);
         }
         // The mode comes from the pairing (minted per the requester's role), never from the agent — so a member's
         // pairing can only ever enroll "mirror". The owner-Google fallback path defaults to full "sync".
@@ -1304,7 +1304,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/system/sync", async (c) => {
         // Any collaborator (owner or member) may read enrollment state — the bearer middleware already blocked a
         // non-member — so a member's Desktop-sync card can render and mint its mirror-only pairing.
-        const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
+        const sshHostname = syncSshHostname(services.config);
         const holder = await syncHolder(services.config.historyRoot);
         const mirrors = await mirrorMachines(services.config.historyRoot);
         // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this

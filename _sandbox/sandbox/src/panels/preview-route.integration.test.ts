@@ -5,70 +5,93 @@ import { portSlotsFromToken, publicSlotFromToken } from "@intentic/sandbox-contr
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
-const postMock = vi.fn<(config: unknown, path: string, body: unknown) => Promise<{ status: number; json: unknown }>>();
-vi.mock("../platform/platform-client.js", () => ({ postToPlatform: (...args: unknown[]) => postMock(...(args as Parameters<typeof postMock>)) }));
+// The names are attached by the box's OWN agent now (a name claimed, then a share bound to it), not by asking
+// the platform to mint DNS — so the seam these tests hold is the pair of agent invocations per label.
+const execMock = vi.fn<(file: string, args: readonly string[]) => Promise<{ stdout: string; stderr: string }>>();
+vi.mock("node:child_process", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("node:child_process")>()),
+    execFile: (file: string, args: readonly string[], callback: (error: Error | null, stdout: string, stderr: string) => void) => {
+        execMock(file, args).then(
+            (result) => callback(null, result.stdout, result.stderr),
+            (error: Error) => callback(error, "", ""),
+        );
+    },
+}));
 
 const { createPreviewRouteEnsurer, ensureAllPreviewRoutes } = await import("./preview-route.js");
 
-const config = (platformUrl = "https://p", connectToken = "tok"): Parameters<typeof createPreviewRouteEnsurer>[0] =>
-    ({ platform: { url: platformUrl }, connectToken }) as unknown as Parameters<typeof createPreviewRouteEnsurer>[0];
+const config = (token = "acct-token", namespace = "ns-1"): Parameters<typeof createPreviewRouteEnsurer>[0] =>
+    ({ zrok: { token, api: "", namespace }, preview: { port: 5173 } }) as unknown as Parameters<typeof createPreviewRouteEnsurer>[0];
 const warn = vi.fn();
 const logger = { warn } as unknown as Parameters<typeof createPreviewRouteEnsurer>[1];
 
 beforeEach(() => {
-    postMock.mockReset();
+    execMock.mockReset().mockResolvedValue({ stdout: "", stderr: "" });
     warn.mockClear();
 });
 
 describe("createPreviewRouteEnsurer", () => {
-    it("posts the labels once and memoizes the 2xx per label — a re-ensure costs no platform call", async () => {
-        postMock.mockResolvedValue({ status: 200, json: { hostnames: [] } });
+    it("claims and binds each label once, then memoizes it — a re-ensure spawns no agent", async () => {
         const ensure = createPreviewRouteEnsurer(config(), logger);
         await ensure(["preview-app", "port-a"]);
         await ensure(["preview-app"]);
         await ensure(["port-a"]);
-        expect(postMock).toHaveBeenCalledTimes(1);
-        expect(postMock).toHaveBeenCalledWith(expect.anything(), "/sandbox/preview-route", { labels: ["preview-app", "port-a"] });
-        // A batch with one new label posts ONLY the missing one.
+        // Two calls per label: the name in the namespace, then the share bound to it.
+        expect(execMock).toHaveBeenCalledTimes(4);
+        const [file, claim] = execMock.mock.calls[0]!;
+        expect(file).toBe("zrok2");
+        expect(claim).toEqual([`create`, `name`, `preview-app`, `--namespace-token`, `ns-1`]);
+        // Every preview name points at the ONE preview proxy — it already routes by Host header.
+        expect(execMock.mock.calls[1]![1]).toEqual([
+            `share`,
+            `public`,
+            `http://127.0.0.1:5173`,
+            `--backend-mode`,
+            `proxy`,
+            `--name-selection`,
+            `ns-1:preview-app`,
+        ]);
+        // A batch with one new label attaches ONLY the missing one.
         await ensure(["preview-app", "preview-other"]);
-        expect(postMock).toHaveBeenCalledTimes(2);
-        expect(postMock).toHaveBeenLastCalledWith(expect.anything(), "/sandbox/preview-route", { labels: ["preview-other"] });
+        expect(execMock).toHaveBeenCalledTimes(6);
+        expect(execMock.mock.calls.at(-1)![1]).toContain("ns-1:preview-other");
     });
 
-    it("never rejects: a non-2xx warns and is retried on the next ensure; a transport error too", async () => {
-        postMock.mockResolvedValueOnce({ status: 502, json: undefined });
-        postMock.mockRejectedValueOnce(new Error("down"));
-        postMock.mockResolvedValueOnce({ status: 200, json: {} });
+    it("never rejects: a failure warns and is retried on the next ensure", async () => {
+        execMock.mockRejectedValueOnce(new Error("hub down"));
         const ensure = createPreviewRouteEnsurer(config(), logger);
         await expect(ensure(["preview-app"])).resolves.toBeUndefined();
-        await expect(ensure(["preview-app"])).resolves.toBeUndefined();
+        expect(warn).toHaveBeenCalledTimes(1);
         await ensure(["preview-app"]);
-        expect(postMock).toHaveBeenCalledTimes(3);
-        expect(warn).toHaveBeenCalledTimes(2);
+        expect(execMock).toHaveBeenCalledTimes(3);
         // Now memoized.
         await ensure(["preview-app"]);
-        expect(postMock).toHaveBeenCalledTimes(3);
+        expect(execMock).toHaveBeenCalledTimes(3);
     });
 
-    it("serializes concurrent ensures — the tunnel config update is a read-modify-write on the platform", async () => {
-        const gate = Promise.withResolvers<{ status: number; json: unknown }>();
-        postMock.mockImplementationOnce(() => gate.promise);
-        postMock.mockResolvedValueOnce({ status: 200, json: {} });
+    /* A name the hub already holds for this account, and a share already bound to it, are the steady state
+     * after any restart — both answer 409 and neither is a failure. */
+    it("treats an already-claimed name and an already-bound share as done, silently", async () => {
+        execMock.mockRejectedValueOnce(new Error("[409] createShareNameConflict"));
         const ensure = createPreviewRouteEnsurer(config(), logger);
-        const first = ensure(["preview-a"]);
-        const second = ensure(["preview-b"]);
-        // Flush the chained microtask: "a" is in flight, "b" must wait for it.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(postMock).toHaveBeenCalledTimes(1);
-        gate.resolve({ status: 200, json: {} });
-        await Promise.all([first, second]);
-        expect(postMock).toHaveBeenCalledTimes(2);
+        await ensure(["preview-app"]);
+        expect(warn).not.toHaveBeenCalled();
+        // The claim conflicted, the bind still ran: two calls, and the label counts as attached.
+        expect(execMock).toHaveBeenCalledTimes(2);
+        await ensure(["preview-app"]);
+        expect(execMock).toHaveBeenCalledTimes(2);
+
+        execMock
+            .mockReset()
+            .mockResolvedValue({ stdout: "", stderr: "" })
+            .mockRejectedValueOnce(new Error("name 'port-a' in namespace 'public' is already in use by another share"));
+        await createPreviewRouteEnsurer(config(), logger)(["port-a"]);
+        expect(warn).not.toHaveBeenCalled();
     });
 
-    it("is a no-op without a platform or connect token (loopback/headless)", async () => {
+    it("is a no-op without a reachability grant (an attached domain, or loopback dev)", async () => {
         await createPreviewRouteEnsurer(config(""), logger)(["preview-app"]);
-        await createPreviewRouteEnsurer(config("https://p", ""), logger)(["preview-app"]);
-        expect(postMock).not.toHaveBeenCalled();
+        expect(execMock).not.toHaveBeenCalled();
     });
 });
 

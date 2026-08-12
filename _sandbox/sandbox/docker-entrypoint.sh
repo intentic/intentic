@@ -39,43 +39,74 @@ fi
 #
 # One in-box agent, every flavor: `zrok2` enables against the self-hosted hub with the account token the
 # platform minted for THIS sandbox (ZROK_TOKEN, born as a grant the platform can revoke but never
-# impersonate — the Ziti identity below is created here and never leaves), then serves two public shares
-# under the hub's one wildcard: the daemon at `sandbox-<id>` and the preview proxy at the sandbox's port and
-# public slots. That replaces the cloudflared sidecar container and its per-sandbox DNS records outright.
+# impersonate — the Ziti identity below is created here and never leaves), then serves the daemon publicly at
+# the `sandbox-<id>` name the browser already knows. That replaces the cloudflared sidecar container and its
+# per-sandbox DNS records outright.
+#
+# The hub keeps NAMES and SHARES apart: a name is a hostname claimed in the namespace, a share is what answers
+# on it. So each is claimed first (`create name`, 409 when it is already ours) and bound second (`share
+# public -n <namespace>:<name>`). The long-lived process is the AGENT, not the share: `zrok2 agent start`
+# holds every share this box publishes, which is why the daemon can add preview names later
+# (panels/preview-route.ts) with two calls that return immediately instead of resident processes of its own.
 #
 # Enabling is idempotent-by-marker: the environment's identity lives on /history (the volume that outlives
 # every recreate), so a restarted or rebuilt container re-attaches the SAME names rather than minting a
-# second environment. Each share runs in its own restart loop for the reason the sidecar had
-# `--restart unless-stopped`: the overlay drops connections and must simply come back.
+# second environment. The agent runs in a restart loop for the reason the sidecar had `--restart
+# unless-stopped`: the overlay drops connections and must simply come back.
 if [ -n "${ZROK_TOKEN:-}" ]; then
     export HOME="${HOME:-/root}"
     # Set here as well as below: the agent's state must land on the volume, and this block runs first.
     HISTORY_ROOT="${HISTORY_ROOT:-/history}"
     ZROK_STATE="$HISTORY_ROOT/zrok"
     mkdir -p "$ZROK_STATE" "$HISTORY_ROOT/logs"
-    export ZROK_HOME="$ZROK_STATE"
-    [ -n "${ZROK_API:-}" ] && export ZROK_API_ENDPOINT="$ZROK_API"
+    # The agent keeps its environment (its Ziti identity, its share registry) in $HOME/.zrok2 with no way to
+    # point it elsewhere — so that path becomes a link onto the volume, which is what survives a recreate. Any
+    # process that later runs `zrok2` (the daemon attaching preview names) inherits the same HOME and lands on
+    # the same environment, which is the point.
+    [ -e "$HOME/.zrok2" ] || ln -s "$ZROK_STATE" "$HOME/.zrok2"
+    # The v2 binary reads ZROK2_*; the platform hands the grant down under ZROK_* (its own vocabulary, shared
+    # with the run contract and the compose file). Without this the CLI silently talks to api-v2.zrok.io.
+    [ -n "${ZROK_API:-}" ] && export ZROK2_API_ENDPOINT="$ZROK_API"
+    export ZROK2_HEADLESS=true
     if [ ! -f "$ZROK_STATE/environment.json" ]; then
-        zrok2 enable "$ZROK_TOKEN" --description "${SANDBOX_NAME:-intentic-sandbox}" \
+        # --headless or the TUI opens /dev/tty, which a container does not have: enable then fails AFTER
+        # creating the environment, which reads as a failure that isn't one.
+        zrok2 enable "$ZROK_TOKEN" --headless --description "${SANDBOX_NAME:-intentic-sandbox}" \
             >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || echo "zrok enable failed — see $HISTORY_ROOT/logs/zrok.log" >&2
     fi
+    (
+        while :; do
+            zrok2 agent start >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+            sleep 2
+        done
+    ) &
     # The daemon's own name is the address the browser already knows: sandbox-<id>, derived from the connect
     # token by the platform and handed down as SANDBOX_PUBLIC_URL, so its leftmost label is the share name.
     if [ -n "${SANDBOX_PUBLIC_URL:-}" ]; then
         daemon_name="$(printf '%s' "$SANDBOX_PUBLIC_URL" | sed -e 's#^https\?://##' -e 's#/.*##' -e 's#\..*##')"
+        zrok_namespace="${ZROK_NAMESPACE:-public}"
         (
+            # Until the share is bound: the agent needs a moment to come up, and a bind that answers "already
+            # in use" is this sandbox's own share from a previous boot — done either way.
             while :; do
-                zrok2 share public "http://127.0.0.1:${SANDBOX_PORT:-8787}" --backend-mode proxy --headless \
-                    --name "$daemon_name" ${ZROK_NAMESPACE:+--namespace "$ZROK_NAMESPACE"} \
+                zrok2 create name "$daemon_name" --namespace-token "$zrok_namespace" \
                     >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+                if zrok2 share public "http://127.0.0.1:${SANDBOX_PORT:-8787}" --backend-mode proxy \
+                    --name-selection "$zrok_namespace:$daemon_name" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1; then
+                    break
+                fi
+                if grep -q "already in use" "$HISTORY_ROOT/logs/zrok.log" 2>/dev/null; then
+                    break
+                fi
                 sleep 2
             done
         ) &
     fi
 fi
 
-# sshd backs the local-sync path: the laptop's Mutagen connects over SSH (through the sandbox's Cloudflare
-# tunnel) and auto-injects its agent, which reads/writes /work. Key-only auth; the owner's public key is
+# sshd backs the local-sync path: the laptop's Mutagen connects over SSH (through a tunnel on the owner's own
+# domain — the hub's public shares carry HTTP, so this is the one lane it does not serve) and auto-injects its
+# agent, which reads/writes /work. Key-only auth; the owner's public key is
 # enrolled at runtime by the daemon's POST /system/authorized-key (authorized by the owner's Google token).
 
 # The host key is the sandbox's SSH IDENTITY, so it must outlive the container. Every runner recreates this

@@ -172,7 +172,6 @@ import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
-import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
@@ -609,12 +608,8 @@ export interface Services {
      * The index only — the pages themselves live in the workspace's outbox. See share/share-store.ts. */
     readonly shares: ShareStore;
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
-    // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
-    // which needs intentic's platform Cloudflare account the daemon doesn't hold.
-    readonly platformHostTunnel: (hostName: string) => Promise<PlatformResponse>;
-    // Relays to the platform (connect-token auth) to mint a batch of preview routes (`preview-<panel>` /
-    // `port-<slot>` labels) on the sandbox's intentic-provided tunnel before the hostnames reach a browser;
-    // never rejects (see panels/preview-route.ts).
+    // Attaches a batch of share names (`preview-<panel>` / `port-<slot>` labels) to this box's own account on
+    // the tunnel fabric before the hostnames reach a browser; never rejects (see panels/preview-route.ts).
     readonly ensurePreviewRoutes: (labels: readonly string[]) => Promise<void>;
     // Shared-access grants — the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
@@ -1095,7 +1090,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         shares: fileShareStore(join(config.historyRoot, "shares.json")),
         purgeConversationState: (removed, retained) => purgeConversationState(workspace.root, config.historyRoot, removed, retained),
-        platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,
         auth,

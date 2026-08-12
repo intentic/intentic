@@ -4,7 +4,6 @@ import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";
 
 const base: ComposeArgs = {
-    mode: `intentic`,
     code: `abc123`,
     hostname: `sandbox-0f00ba4dd12b.intentic.dev`,
     image: `ghcr.io/intentic/sandbox:stable`,
@@ -14,14 +13,6 @@ const base: ComposeArgs = {
 
 test("intentic path: the bootstrap is claim → up, against the production platform, no -k", () => {
     expect(composeBootstrap(base)).toBe(`curl -fsS https://api.intentic.dev/setup/claim -d code=abc123 > .env\ndocker compose up -d`);
-});
-
-test("own path: the bootstrap appends the CF token and mints the tunnel through the .env before up", () => {
-    const bootstrap = composeBootstrap({ ...base, mode: `own`, hostname: `dev.example.com`, cfToken: `cf-tok` });
-    expect(bootstrap).toContain(`echo "CLOUDFLARE_API_TOKEN=cf-tok" >> .env`);
-    expect(bootstrap).toContain(`docker run --rm --env-file .env --entrypoint intentic ${base.image} tunnel sandbox`);
-    expect(bootstrap).toContain(`--subdomain 'dev' >> .env`);
-    expect(bootstrap.endsWith(`docker compose up -d`)).toBe(true);
 });
 
 test("local dev claims against the localhost platform with -k (repo CA)", () => {
@@ -34,7 +25,9 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     const yaml = composeFile(base);
     // Same names as connect.sh derives, so cleanup.sh + coexistence checks + workspace data stay compatible.
     expect(yaml).toContain(`container_name: intentic-sandbox-sandbox-0f00ba4dd12b`);
-    expect(yaml).toContain(`container_name: intentic-sandbox-tunnel-sandbox-0f00ba4dd12b`);
+    // No tunnel container: the sandbox's own agent enables against the platform's hub from inside.
+    expect(yaml).not.toContain(`intentic-sandbox-tunnel`);
+    expect(yaml).toContain(`ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`name: intentic-workspace-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`name: intentic-history-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);
@@ -45,7 +38,6 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`cap_add: [SYS_ADMIN, SYS_PTRACE]`);
     // Secrets come from the claimed .env, with a clear error when the bootstrap was skipped.
     expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
-    expect(yaml).toContain(`--token \${TUNNEL_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`SANDBOX_PUBLIC_URL: https://sandbox-0f00ba4dd12b.intentic.dev`);
     expect(yaml).toContain(`PLATFORM_URL: https://api.intentic.dev`);
     // The intentic path bakes NO Cloudflare token env — an empty one would shadow the workspace .env later.
@@ -85,12 +77,6 @@ test("an SPA served anywhere but the hosted app names itself as the daemon's COR
     // blocked on its first /health — the failure reads as "sandbox unreachable", never as CORS.
     expect(composeFile({ ...base, webOrigin: `https://localhost:47145` })).toContain(`WEB_ORIGIN: https://localhost:47145`);
     expect(composeFile(base)).not.toContain(`WEB_ORIGIN`);
-});
-
-test("the own path feeds the sandbox its Cloudflare token from the .env", () => {
-    expect(composeFile({ ...base, mode: `own`, cfToken: `cf-tok` })).toContain(
-        `CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`,
-    );
 });
 
 test("local dev rewrites the container-visible platform url and mounts the shared agent-auth volume", () => {

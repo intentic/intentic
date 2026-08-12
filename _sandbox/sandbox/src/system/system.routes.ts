@@ -4,7 +4,6 @@ import {
     type SystemEvent,
     type TerminalsList,
     type UsageAccount,
-    HostTunnelSchema,
     SANDBOX_ROUTE_NAMES,
     SANDBOX_ROUTE_SHAPES,
     systemContract,
@@ -302,23 +301,6 @@ export const createSystemRoutes = (services: Services) => {
                 updatePresence(context.identity, input);
             }
             return { ok: true } as const;
-        }),
-        // Relay an intentic-provided host-tunnel mint to the platform (connect-token auth). The platform maps its
-        // own failures to statuses we translate back: 404 (tunnels disabled / unknown sandbox), 400 (bad token),
-        // anything else is an upstream gateway failure.
-        hostTunnel: i.hostTunnel.handler(async ({ input }) => {
-            const { status, json } = await services.platformHostTunnel(input.hostName);
-            if (status !== 200) {
-                const message = (json as { error?: string } | undefined)?.error ?? `host tunnel request failed (${status})`;
-                if (status === 404) {
-                    throw new ORPCError("NOT_FOUND", { message });
-                }
-                if (status === 400) {
-                    throw new ORPCError("BAD_REQUEST", { message });
-                }
-                throw new ORPCError("BAD_GATEWAY", { message });
-            }
-            return HostTunnelSchema.parse(json);
         }),
         // Per-account token/cost totals, folded from the spend ledger (usage/usage-store.ts) — ALL-TIME, because
         // that ledger is never pruned. This used to aggregate the activity log's turn.completed events, so the

@@ -263,7 +263,11 @@ onUnmounted(stop);
             </template>
         </template>
 
-        <!-- Sandbox has no SSH tunnel (loopback/preview) — sync can't reach it. -->
-        <div v-else :class="cmp.emptyState()">Desktop sync becomes available once your sandbox is connected over its tunnel.</div>
+        <!-- No SSH way in: a loopback/preview sandbox, or one reached over intentic's own tunnels, which carry
+             web traffic only for now. Either way sync has nothing to ride, and saying so beats an Enable button
+             whose one-liner would hang on the laptop. -->
+        <div v-else :class="cmp.emptyState()">
+            Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet — one behind your own domain does.
+        </div>
     </Card>
 </template>

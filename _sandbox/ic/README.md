@@ -12,8 +12,9 @@ once, here, in Rust — a single static binary with no runtime to ship.
 ## Responsibilities
 
 - `ic sandbox connect` — the setup one-liner's flow: preflight the machine (every prerequisite checked
-  read-only, every failure reported at once with its fix), claim the setup code, mint the tunnels, launch the
-  sandbox + cloudflared sidecar, verify the whole reachability chain end to end, bootstrap desktop sync, and
+  read-only, every failure reported at once with its fix), claim the setup code (which carries the sandbox's
+  reachability grant — the box enables with it and dials the tunnel hub itself), launch the sandbox, verify the
+  whole reachability chain end to end, bootstrap desktop sync, and
   connect this machine as a **computer** so its sandboxes are manageable from the browser. Each stage — and
   any failure, with its fix — is also POSTed to the platform's `/setup/report` (authenticated by the setup
   code), so the browser's setup wizard names why a setup failed instead of guessing from elapsed time.
@@ -72,7 +73,8 @@ a stale ic still runs a new image correctly.
   things are broken, and it must not depend on a binary that might itself be what is broken. `ic sandbox
   remove` / `ic machine remove` are their CLI twins — change one, change both.
 - `connect-host.ps1` (Windows deploy targets) is still script-only: its flow is genuinely different (a
-  Docker-in-Docker target with a netns-shared cloudflared), not a dialect of the Linux one.
+  Docker-in-Docker target with a netns-shared cloudflared publishing its sshd on the user's own zone), not a
+  dialect of the Linux one.
 - Interactive questions read from the controlling terminal, never stdin — the shims pipe this binary's flows
   from `curl … | sh`, where stdin is the script. A failed read is a refusal, never a default.
 - **Decisions are split from the IO that acts on them**, and that split is what the tests hook into: the argv

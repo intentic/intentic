@@ -314,6 +314,30 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
 
+test("a sandbox on intentic's tunnels offers no sync hostname — the enroll is refused instead of hanging Mutagen", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-zrok-home-"));
+    /* The address resolves (that IS the fabric's hostname), so the ssh-<id> name of the same zone would derive
+     * happily and answer nothing — the shares are HTTP. The card reads the missing hostname as "no way in". */
+    const app = createApp(
+        services({
+            config: {
+                ...testConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-zrok-history-")),
+                zrok: { token: "acct", api: "https://zrok2.example.com", namespace: "ns" },
+                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
+        }),
+    );
+    expect(await (await app.request("/system/sync")).json()).not.toHaveProperty("sshHostname");
+    const refused = await app.request("/system/authorized-key", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token },
+        body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
+    });
+    expect(refused.status).toBe(409);
+});
+
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
     // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it — point both at
     // temp dirs so neither lands on the real /history nor in the real home.

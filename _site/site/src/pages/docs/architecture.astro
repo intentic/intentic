@@ -4,7 +4,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
 const lifecycle = [
     { title: "Sign in + open Setup", body: "You authenticate with Google, and the sandbox is created for you. The platform reserves a private tunnel and hands you a connect one-liner." },
-    { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox and a cloudflared sidecar; the daemon announces its URL to the platform on boot." },
+    { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox, which dials out to make itself reachable and announces its URL to the platform on boot." },
     { title: "Bind on first use", body: "Your browser drives the daemon directly with your Google ID token. The daemon verifies it and binds you as owner on the first authenticated request." },
     { title: "Chat + plan", body: "You work over the tunnel: chat, files, editor, terminals. The agent runs in plan mode, proposing changes while you watch and steer." },
     { title: "Review + approve", body: "Every change comes back as a diff you commit or discard, and the agent can operate any connected system or tool from chat. You supervise; it does the work." },
@@ -33,7 +33,7 @@ const lifecycle = [
 
     <h3>The sandbox</h3>
     <p>
-        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds your repos and credentials, and exposes its daemon over its own Cloudflare tunnel. That is the whole product surface: chat, terminals, files, panels, capabilities and automations all come from here, and your keys never reach the platform. Inside it the agent runs whatever a job needs (a database client, a headless browser, a deployment engine), but those are tools it invokes, not tiers of the product.
+        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds your repos and credentials, and exposes its daemon over its own tunnel. That is the whole product surface: chat, terminals, files, panels, capabilities and automations all come from here, and your keys never reach the platform. Inside it the agent runs whatever a job needs (a database client, a headless browser, a deployment engine), but those are tools it invokes, not tiers of the product.
     </p>
 
     <h2>Ownership &amp; trust</h2>
@@ -44,7 +44,7 @@ const lifecycle = [
 
     <h2>Reachability</h2>
     <p>
-        Every connection is <strong>outbound-only</strong>. <code>cloudflared</code> dials out from your machine, so the sandbox is reachable from any browser with no inbound ports and no firewall changes. Bring your own Cloudflare zone and it absorbs the tunnel under your domain; bring nothing and intentic provisions one under its own, with a narrow per-tunnel token.
+        Every connection is <strong>outbound-only</strong>. A small tunnel agent inside the sandbox dials out from your machine, so the sandbox is reachable from any browser with no inbound ports and no firewall changes. Its address comes from intentic's own tunnel hub — a per-sandbox grant the box enables with itself, which the platform can revoke but never use to serve anything in your name. Already publishing a sandbox under your own domain? Attach it by address instead, and nothing is provisioned at all.
     </p>
 
     <h2>The lifecycle</h2>

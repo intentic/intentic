@@ -4,11 +4,14 @@
   the flow over to `ic sandbox connect`, which does everything else - the setup-code claim, tunnels, the
   launch, the Docker-in-Docker deploy target (SELF_HOST), desktop sync. The flow lives in _sandbox/ic.
 
-.EXAMPLE
-  $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex                        # intentic-provided tunnel
+  The setup code carries the sandbox's reachability grant on intentic's own tunnel hub; the sandbox enables
+  with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS PC's SSH for the deploy engine.
 
 .EXAMPLE
-  $env:CF_TOKEN='<cf>'; $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex  # own Cloudflare
+  $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex
+
+.EXAMPLE
+  $env:SELF_HOST='1'; $env:CF_TOKEN='<cf>'; $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex
 
 .EXAMPLE
   ./connect.ps1 -ConnectToken <token>   # headless/scripted: raw values, no setup code

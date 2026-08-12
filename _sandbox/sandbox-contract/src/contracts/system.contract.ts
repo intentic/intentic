@@ -5,8 +5,6 @@ import {
     BrowserNameParamSchema,
     BrowsersListSchema,
     DaemonSessionSchema,
-    HostTunnelInputSchema,
-    HostTunnelSchema,
     InfoSchema,
     ManifestProblemsSchema,
     MachineFlowLineSchema,
@@ -42,7 +40,6 @@ export const systemContract = {
         .output(eventIterator(SystemEventSchema)),
     // A tab's activity self-report (view/session/file/idle), fanned back out to every member on /events.
     presence: oc.route({ method: "POST", path: "/system/presence" }).input(PresenceReportSchema).output(OkSchema),
-    hostTunnel: oc.route({ method: "POST", path: "/system/host-tunnel" }).input(HostTunnelInputSchema).output(HostTunnelSchema),
     // Per-account token/cost totals, aggregated from the activity log's turn.completed events.
     usage: oc.route({ method: "GET", path: "/system/usage" }).output(UsageSummarySchema),
     // The web-owned tmux sessions behind the terminal tabs. `terminals` enumerates them (the panel rebuilds a tab

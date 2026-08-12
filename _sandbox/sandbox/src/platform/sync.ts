@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { type MachineReport, sshHostname, zoneFromUrl } from "@intentic/sandbox-contract";
+import type { Config } from "../env.config.js";
 
 // Desktop enrollment for Mutagen: a machine lands its ed25519 public key here (redeeming a browser-minted
 // pairing token), then Mutagen rides SSH with that key for two things — bidirectional FILE sync of /work, and
@@ -331,12 +332,21 @@ export const clearAllEnrollments = async (historyRoot: string): Promise<void> =>
     await persist(historyRoot, []);
 };
 
-// The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest
-// sandbox-tunnel.ts and hostnames.ts use), so the laptop can resolve it from the daemon without guessing.
-// Undefined when the tunnel isn't configured (no connect token / no zone) — e.g. loopback or preview-only.
-export const syncSshHostname = (connectToken: string, zone: string, publicUrl: string): string | undefined => {
-    const resolvedZone = zone !== "" ? zone : zoneFromUrl(publicUrl);
-    const id = sandboxIdFromToken(connectToken);
+/* The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest
+ * sandbox-tunnel.ts and hostnames.ts use), so the laptop can resolve it from the daemon without guessing.
+ * Undefined when the tunnel isn't configured (no connect token / no zone) — e.g. loopback or preview-only.
+ *
+ * Also undefined on the zrok fabric, which carries HTTP shares only: the box's own address resolves there, so
+ * the derivation would happily return an `ssh-…` name of the same zone that answers nothing. Desktop sync over
+ * a private tcpTunnel share is its own piece of work; until then the card says so rather than handing the
+ * laptop a hostname Mutagen will hang on. A sandbox behind the user's OWN tunnel (ZONE set) is unaffected.
+ */
+export const syncSshHostname = (config: Pick<Config, "connectToken" | "sandbox" | "zone" | "zrok">): string | undefined => {
+    if (config.zrok.token !== "") {
+        return undefined;
+    }
+    const resolvedZone = config.zone !== "" ? config.zone : zoneFromUrl(config.sandbox.publicUrl);
+    const id = sandboxIdFromToken(config.connectToken);
     if (id === undefined || resolvedZone === undefined || resolvedZone === "") {
         return undefined;
     }

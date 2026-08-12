@@ -1,6 +1,6 @@
 # @intentic-app/api
 
-The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is an **identity + sandbox-URL store**: it authenticates the user (Google) and stores the sandbox URL the browser tells it so the browser can reach the sandbox directly. It never probes the sandbox or tracks liveness and owns no infrastructure; it sits **off the command path with exactly one exception** — the free trial ([src/trial/](src/trial/)) — and the browser otherwise talks to the sandbox daemon directly over the sandbox's own Cloudflare tunnel. Runs under `tsx` in dev on :6480 (the web dev-server proxies to it). Consumes [`@intentic-app/api-contract`](../../_platform/api-contract) (`implement`) + [`@intentic-app/prisma`](../../_platform/prisma).
+The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is an **identity + sandbox-URL store**: it authenticates the user (Google) and stores the sandbox URL the browser tells it so the browser can reach the sandbox directly. It never probes the sandbox or tracks liveness and owns no infrastructure; it sits **off the command path with exactly one exception** — the free trial ([src/trial/](src/trial/)) — and the browser otherwise talks to the sandbox daemon directly over the sandbox's own tunnel. Runs under `tsx` in dev on :6480 (the web dev-server proxies to it). Consumes [`@intentic-app/api-contract`](../../_platform/api-contract) (`implement`) + [`@intentic-app/prisma`](../../_platform/prisma).
 
 ## Responsibilities
 

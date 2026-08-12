@@ -1,6 +1,6 @@
 # @intentic/sandbox
 
-The **per-project AI-agent dev daemon** — a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own Cloudflare tunnel (Google-backed renewable sessions): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
+The **per-project AI-agent dev daemon** — a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own tunnel (Google-backed renewable sessions): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
 
 The daemon runs in one of two **profiles** ([src/platform/profile.ts](src/platform/profile.ts)). `container`
 (the default) is everything above. `local` is the same daemon as a plain process on the user's own machine,
@@ -179,7 +179,7 @@ reports the profile.
 
 ## How it fits
 
-The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own Cloudflare tunnel; the daemon verifies Google identity when establishing a renewable session, resolves the selected provider's credential from its **own** stored accounts, and starts that provider's runtime per turn. The platform is never on this path and never contacts the sandbox — it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
+The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own tunnel; the daemon verifies Google identity when establishing a renewable session, resolves the selected provider's credential from its **own** stored accounts, and starts that provider's runtime per turn. The platform is never on this path and never contacts the sandbox — it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
 
 Native Codex turns use `codex app-server --stdio`. A subscription turn gives app-server a custom Responses
 provider aimed at the bundled CLIProxyAPI translator; the translator authenticates upstream with the owner's
@@ -216,9 +216,9 @@ exact CLI-version anchor and the locator for a vendored development fallback, no
 - **The hosted flavor** (`SANDBOX_VM=1`) runs this image as a whole microVM the platform created, with one
   persistent volume standing in for the three docker ones (the entrypoint's VM mode links `/work`, `/history`
   and dockerd's data-root onto it — layout in `@intentic/sandbox-run/fly`). Two stated deviations from the
-  container flavor: cloudflared runs **inside** the box as a supervised process (there is no sidecar container
-  to hold the tunnel token, so on hosted the token is necessarily within the agent's reach — its scope is this
-  sandbox's own tunnel and nothing else), and the daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
+  container flavor: the whole box is the platform's machine rather than the user's (so its reachability grant
+  is necessarily within the agent's reach — its scope is this sandbox's own address and nothing else), and the
+  daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
   `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no armed condition watch, no terminal
   output for the window → the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
   knowing: scheduled automations run only while the box is awake. Nested dockerd needs no privilege directive

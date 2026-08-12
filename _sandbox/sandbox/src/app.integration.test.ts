@@ -309,22 +309,6 @@ test("control-token scopes widen: read observes, drive works, only land merges",
     }
 });
 
-test("system.hostTunnel returns the platform's tunnel and translates its failure statuses", async () => {
-    const ok = clientFor(
-        createApp(services({ platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-xyz.example.com", tunnelToken: "ct" } }) })),
-    );
-    expect(await ok.system.hostTunnel({ hostName: "prod" })).toEqual({ hostname: "ssh-xyz.example.com", tunnelToken: "ct" });
-
-    const disabled = clientFor(
-        createApp(services({ platformHostTunnel: async () => ({ status: 404, json: { error: "intentic-provided tunnels are not enabled" } }) })),
-    );
-    expect(await errorCode(disabled.system.hostTunnel({ hostName: "prod" }))).toBe("NOT_FOUND");
-    const badToken = clientFor(createApp(services({ platformHostTunnel: async () => ({ status: 400, json: { error: "bad token" } }) })));
-    expect(await errorCode(badToken.system.hostTunnel({ hostName: "prod" }))).toBe("BAD_REQUEST");
-    const upstream = clientFor(createApp(services({ platformHostTunnel: async () => ({ status: 502, json: undefined }) })));
-    expect(await errorCode(upstream.system.hostTunnel({ hostName: "prod" }))).toBe("BAD_GATEWAY");
-});
-
 test("POST /enroll rejects a wrong connect token and 412s until DevOps (when auth is enforced)", async () => {
     const app = createApp(
         services({

@@ -169,7 +169,7 @@ const groups = [
 
     <h2>Where it is</h2>
     <p>
-        Each sandbox answers on its own hostname, <code>https://sandbox-&lt;id&gt;.&lt;zone&gt;</code>, over its private Cloudflare tunnel.
+        Each sandbox answers on its own hostname, <code>https://sandbox-&lt;id&gt;.&lt;zone&gt;</code>, over its private tunnel.
         The app shows the exact URL on <strong>Sandbox → Overview</strong>. One route stays open: <code>/health</code>, the "is a
         daemon there" probe every launch script and readiness loop makes.
     </p>
@@ -177,8 +177,8 @@ const groups = [
     <p>
         The sandbox id in that answer is how a caller proves it reached <em>this</em> daemon rather than something else on the same port.
         On the machine running the sandbox there is also <code>https://local-&lt;id&gt;.&lt;zone&gt;</code>, a public DNS name that resolves
-        to <code>127.0.0.1</code>: a real certificate on a loopback address, so a browser on that machine skips the round trip to
-        Cloudflare and back.
+        to <code>127.0.0.1</code>: a real certificate on a loopback address, so a browser on that machine skips the round trip out
+        through the tunnel and back.
     </p>
 
     <h2>How a call is authorized</h2>

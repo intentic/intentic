@@ -12,10 +12,10 @@
   with the sandbox's daemon via POST /enroll (authed by the connection token). It does NOT create or recreate a
   sandbox - that already exists from setup. Requires Docker Desktop in Linux-containers mode.
 
-  Two paths, matching the sandbox's setup mode (the Infra screen hands you the right one-liner):
-    own Cloudflare - CF_TOKEN creates this host's tunnel + DNS on your zone.
-    intentic-provided - the platform already minted the tunnel under intentic's zone; the command carries its
-    connector token (HOST_SSH_TUNNEL_TOKEN) + hostname (HOST_SSH_HOSTNAME) instead of a Cloudflare token.
+  CF_TOKEN creates this host's tunnel + DNS on your zone (ZONE optional - a token that names exactly one zone
+  resolves it), which is the form the Infra screen hands you: a deploy target is reached over SSH, and intentic's
+  own tunnels carry web traffic. A tunnel minted elsewhere can be handed in directly instead, as
+  HOST_SSH_TUNNEL_TOKEN + HOST_SSH_HOSTNAME.
 
   Reboot survival is weaker than the Linux host (no systemd): the DinD + connector are `--restart unless-stopped`
   containers, so they only come back if Docker Desktop auto-starts on login. Re-run this command to restore them.

@@ -6,7 +6,7 @@ use crate::health;
 use crate::logfile::Log;
 use crate::platform;
 use crate::sandbox::{
-    container_status, doctor, list_slugs, remove, CONTAINER_PREFIX, TUNNEL_PREFIX,
+    container_status, doctor, list_slugs, remove, CONTAINER_PREFIX,
 };
 use crate::tty;
 use crate::util::{bail, kv_lines, slug_from_token, Result};
@@ -68,17 +68,21 @@ fn connect(
     let web_origin = env_or("WEB_ORIGIN", "https://app.intentic.dev");
     let sandbox_image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
     let preview_port = env_or("PREVIEW_PORT", "5173");
-    let cloudflared_image = env_or("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.7.2");
     let sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
     let agent_auth_volume = env("INTENTIC_AGENT_AUTH_VOLUME");
     let sync_dir = env("SYNC_DIR");
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
-    let mut tunnel_token = env("TUNNEL_TOKEN").unwrap_or_default();
+    // The sandbox's reachability grant on the self-hosted hub — minted by the platform with the setup code
+    // and redeemed at the claim below. The in-box agent enables with it; nothing here dials a tunnel.
+    let mut zrok_token = env("ZROK_TOKEN").unwrap_or_default();
+    let mut zrok_api = env("ZROK_API").unwrap_or_default();
+    let mut zrok_namespace = env("ZROK_NAMESPACE").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
+    // Only SELF_HOST needs a zone now: it publishes THIS machine's sshd for the deploy engine, on the user's
+    // own Cloudflare. The sandbox's own address comes from the platform's hub.
     let mut zone = env("ZONE").unwrap_or_default();
-    let mut subdomain = env("SUBDOMAIN").unwrap_or_default();
     let mut sync_pair_token = env("SYNC_PAIR_TOKEN").unwrap_or_default();
     let mut host_pair_token = env("HOST_PAIR_TOKEN").unwrap_or_default();
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
@@ -121,28 +125,24 @@ fn connect(
     if let Some(code) = &setup_code {
         let claim = platform::claim(platform_url, code)?;
         connect_token = claim.connect_token.unwrap_or(connect_token);
-        tunnel_token = claim.tunnel_token.unwrap_or(tunnel_token);
         sandbox_hostname = claim.sandbox_hostname.unwrap_or(sandbox_hostname);
-        zone = claim.zone.unwrap_or(zone);
-        subdomain = claim.subdomain.unwrap_or(subdomain);
+        zrok_token = claim.zrok_token.unwrap_or(zrok_token);
+        zrok_api = claim.zrok_api.unwrap_or(zrok_api);
+        zrok_namespace = claim.zrok_namespace.unwrap_or(zrok_namespace);
         sync_pair_token = claim.sync_pair_token.unwrap_or(sync_pair_token);
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
     }
-    // The platform can PRE-PROVISION the tunnel (the path for users with no Cloudflare of their own): both
-    // values set means skip every Cloudflare call and just run the sandbox + cloudflared with the token.
-    let provided_tunnel = !tunnel_token.is_empty() && !sandbox_hostname.is_empty();
+    // Reachability comes from the platform's own hub now: the grant plus the address it will answer at.
+    let provided_tunnel = !zrok_token.is_empty() && !sandbox_hostname.is_empty();
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
-    let slug = if !subdomain.is_empty() {
-        subdomain.clone()
-    } else if provided_tunnel {
+    let slug = if provided_tunnel {
         sandbox_hostname.split('.').next().unwrap_or("").to_string()
     } else {
         slug_from_token(&connect_token)
     };
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    let tunnel_container = format!("{TUNNEL_PREFIX}{slug}");
     let network = format!("intentic-workspace-{slug}");
 
     // If OTHER sandboxes already exist, don't silently start one more beside them — surface them and let the
@@ -194,17 +194,16 @@ fn connect(
     if connect_token.is_empty() {
         bail!("CONNECT_TOKEN is required (via the setup code or env) — copy the one-liner from the platform's setup screen.");
     }
-    if provided_tunnel && self_host {
-        bail!("SELF_HOST needs your own Cloudflare API token (CF_TOKEN). On an intentic-provided sandbox,\n       connect this machine from the workspace's Infra screen instead — its one-liner needs no\n       Cloudflare token.");
+    if !provided_tunnel {
+        bail!("this sandbox has no reachability grant — re-open its setup screen and copy the command again\n       (the platform mints the grant with the setup code).");
     }
-    // Cloudflare is intentic's reachability fabric, so the token is required up front rather than failing
-    // later at `intentic deploy apply` — a provided one was already validated by the preflight. It never
-    // reaches the platform: it rides into the sandbox below as the Cloudflare-standard CLOUDFLARE_API_TOKEN.
-    if !provided_tunnel && cf_token.is_empty() {
-        bail!("CF_TOKEN is required — Cloudflare is intentic's reachability fabric (the tunnel that\n       connects your services and exposes them). Create a token at\n       https://dash.cloudflare.com/profile/api-tokens with: Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.");
+    // SELF_HOST still wants the user's OWN Cloudflare token: it publishes THIS machine's sshd so the sandbox
+    // can deploy to it, which is the deploy engine's fabric — not the sandbox's, which the hub now serves.
+    if self_host && cf_token.is_empty() {
+        bail!("SELF_HOST needs your own Cloudflare API token (CF_TOKEN) — it publishes this machine's SSH for\n       the deploy engine. Create one at https://dash.cloudflare.com/profile/api-tokens with:\n       Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.");
     }
-    if !provided_tunnel && zone.is_empty() {
-        zone = cloudflare::resolve_zone(&cf_token, "your sandbox")?;
+    if self_host && zone.is_empty() {
+        zone = cloudflare::resolve_zone(&cf_token, "this machine")?;
     }
 
     // When requested, wire this machine as a deploy target before starting the sandbox — HOST_SSH_KEY and
@@ -238,55 +237,10 @@ fn connect(
     reporter.stage("pulling-image");
     ensure_image(&sandbox_image, &log)?;
 
-    // The sandbox tunnel: platform-provisioned (nothing to do but record the URL), or minted with the
-    // user's token by the bundled CLI — the logic lives in the image, this flow only carries the answer.
-    let sandbox_public_url;
-    if provided_tunnel {
-        sandbox_public_url = format!("https://{sandbox_hostname}");
-    } else {
-        println!("intentic: creating the sandbox tunnel…");
-        reporter.stage("creating-tunnel");
-        let mut tunnel_args: Vec<String> = vec![
-            "run".into(),
-            "--rm".into(),
-            "--entrypoint".into(),
-            "intentic".into(),
-            "-e".into(),
-            format!("CLOUDFLARE_API_TOKEN={cf_token}"),
-            "-e".into(),
-            format!("CONNECT_TOKEN={connect_token}"),
-        ];
-        if !zone.is_empty() {
-            tunnel_args.push("-e".into());
-            tunnel_args.push(format!("ZONE={zone}"));
-        }
-        tunnel_args.extend([
-            sandbox_image.clone(),
-            "tunnel".into(),
-            "sandbox".into(),
-            "--service".into(),
-            format!("http://{ORIGIN_HOST}:8787"),
-            "--preview-service".into(),
-            format!("http://{ORIGIN_HOST}:{preview_port}"),
-            "--ssh-service".into(),
-            format!("ssh://{ORIGIN_HOST}:22"),
-        ]);
-        if !subdomain.is_empty() {
-            tunnel_args.push("--subdomain".into());
-            tunnel_args.push(subdomain.clone());
-        }
-        let arg_refs: Vec<&str> = tunnel_args.iter().map(String::as_str).collect();
-        let tunnel_out = docker::capture(&arg_refs).map_err(|err| {
-            crate::util::Fail(format!("failed to create the sandbox tunnel: {}", err.0))
-        })?;
-        let lookup = kv_lines(&tunnel_out);
-        tunnel_token = lookup("TUNNEL_TOKEN").unwrap_or_default();
-        sandbox_hostname = lookup("SANDBOX_HOSTNAME").unwrap_or_default();
-        if tunnel_token.is_empty() || sandbox_hostname.is_empty() {
-            bail!("failed to create the sandbox tunnel (see the output above).");
-        }
-        sandbox_public_url = format!("https://{sandbox_hostname}");
-    }
+    // The address is the platform's answer, not something this flow provisions: the box enables against the
+    // hub itself and serves its own share. What used to be a Cloudflare tunnel mint plus a sidecar container
+    // is now two env values riding into the container below.
+    let sandbox_public_url = format!("https://{sandbox_hostname}");
 
     // Expose THIS machine's sshd over its own tunnel so the sandbox can deploy to it through `cloudflared
     // access` — a NAT'd local machine the sandbox can't reach by IP.
@@ -369,6 +323,9 @@ fn connect(
         ("HOST_PAIR_TOKEN", &host_pair_token),
         ("HOST_PLATFORM", host_platform()),
         ("HOST_LABEL", &machine_label()),
+        ("ZROK_TOKEN", &zrok_token),
+        ("ZROK_API", &zrok_api),
+        ("ZROK_NAMESPACE", &zrok_namespace),
         ("CLOUDFLARE_API_TOKEN", &cf_token),
         ("HOST_SSH_KEY", &host_ssh_key),
         ("SELF_HOST_USER", &self_host_user),
@@ -415,34 +372,8 @@ fn connect(
         println!("intentic: started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
     }
 
-    // The tunnel connector: cloudflared on the shared network routes sandbox-<id>.<zone> → the daemon and
-    // the preview hostnames → the preview proxy. It retries until the sandbox is up, so ordering is loose.
-    println!("intentic: starting the sandbox tunnel connector…");
-    reporter.stage("starting-connector");
-    docker::quiet(&["rm", "-f", &tunnel_container]);
-    let sidecar = [
-        "run",
-        "-d",
-        "--restart",
-        "unless-stopped",
-        "--name",
-        &tunnel_container,
-        "--network",
-        &network,
-        "--log-opt",
-        "max-size=10m",
-        "--log-opt",
-        "max-file=3",
-        &cloudflared_image,
-        "tunnel",
-        "--no-autoupdate",
-        "run",
-        "--token",
-        &tunnel_token,
-    ];
-    if let Err(err) = docker::capture(&sidecar) {
-        log.line(&err.0);
-    }
+    // No connector container: the sandbox's own entrypoint enables against the hub with the grant below and
+    // serves its share from inside. One less container per sandbox, and the token never sits beside the box.
 
     println!("intentic: waiting for the sandbox daemon to come up…");
     reporter.stage("waiting-health");
@@ -511,7 +442,7 @@ fn connect(
         "Logs: docker logs -f {container} (connect logs: {})",
         crate::logfile::log_dir().display()
     );
-    println!("Stop (keeps your /work): docker stop {container} {tunnel_container}");
+    println!("Stop (keeps your /work): docker stop {container}");
     println!("Reset this sandbox (also removes its /work volume): ic sandbox remove {slug} -y");
     Ok(())
 }

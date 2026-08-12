@@ -5,9 +5,12 @@
 # this file stays the thing a user can read before piping into sh.
 #
 # Usage (the platform's setup screen hands you a copy-paste one-liner):
-#   curl -fsSL https://intentic.dev/connect | sudo sh -s -- <SETUP_CODE>                 (intentic-provided tunnel)
-#   curl -fsSL https://intentic.dev/connect | sudo env CF_TOKEN=… sh -s -- <SETUP_CODE>  (own Cloudflare)
-#   Headless/scripted: skip the code and pass everything as env vars (CONNECT_TOKEN=… CF_TOKEN=… ./connect.sh).
+#   curl -fsSL https://intentic.dev/connect | sudo sh -s -- <SETUP_CODE>
+#   Headless/scripted: skip the code and pass everything as env vars (CONNECT_TOKEN=… ZROK_TOKEN=… ./connect.sh).
+#
+# The setup code carries the sandbox's reachability grant on intentic's own tunnel hub; the sandbox enables
+# with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS machine's SSH for the deploy
+# engine — it has nothing to do with reaching the sandbox.
 #
 # The `sudo` is for INSTALLING DOCKER and nothing else — every other step is a docker/curl call the invoking
 # user can make themselves (SELF_HOST=1 is the one opt-in that needs root for its own reasons; ic acquires it

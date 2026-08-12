@@ -586,7 +586,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             search: async () => [],
             exists: async () => true,
         },
-        platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
         ensurePreviewRoutes: async () => {},
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         /* Loopback mode unless a test asks for the exposed daemon — `auth: undefined` is the mode, so it is the

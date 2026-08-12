@@ -25,10 +25,16 @@ export class ZrokError extends Error {}
 const accountCreatedSchema = z.object({ accountToken: z.string() });
 const namespacesSchema = z.array(z.object({ namespaceToken: z.string(), name: z.string(), open: z.boolean().optional() }));
 
+/* The hub's own media type, not `application/json`: zrok's v2 API declares `application/zrok.v1+json` on every
+ * operation, and go-swagger answers a body sent as plain JSON with `500 no consumer registered for
+ * application/json` — a server error for what is really a header mismatch, which is why it is spelled out
+ * here rather than left to a default. */
+const MEDIA_TYPE = `application/zrok.v1+json`;
+
 const call = async (args: { endpoint: string; token: string; method: string; path: string; body?: unknown }): Promise<unknown> => {
     const response = await fetch(`${args.endpoint}/api/v2${args.path}`, {
         method: args.method,
-        headers: { "x-token": args.token, ...(args.body === undefined ? {} : { "content-type": `application/json` }) },
+        headers: { "x-token": args.token, accept: MEDIA_TYPE, ...(args.body === undefined ? {} : { "content-type": MEDIA_TYPE }) },
         body: args.body === undefined ? null : JSON.stringify(args.body),
         // A stalled hub must reject (surfacing upstream) rather than hang the caller forever.
         signal: AbortSignal.timeout(30_000),
@@ -45,29 +51,44 @@ const call = async (args: { endpoint: string; token: string; method: string; pat
 };
 
 /* One reachability grant = one zrok account. The synthetic email is the account's stable identity on the hub
- * and the reconcile key retention diffs against rows — derived from the sandbox's 12-hex id so the hub's
- * account list reads as the sandbox list. The password is random and immediately discarded: nothing ever logs
- * in with it (the account TOKEN is the credential that matters), and password reset is an admin op. */
+ * derived from the sandbox's own 12-hex id, so the address, the account and the row all name the same thing.
+ * The password is random and immediately discarded: nothing ever logs in with it (the account TOKEN is the
+ * credential that matters), and password reset is an admin op. */
 export const accountEmail = (sandboxId: string, zone: string): string => `sandbox-${sandboxId}@${zone}`;
 
 export const createSandboxAccount = async (
     config: { apiEndpoint: string; adminToken: string; zone: string },
     args: { sandboxId: string; password: string },
 ): Promise<{ accountToken: string }> => {
-    const created = accountCreatedSchema.parse(
-        await call({
-            endpoint: config.apiEndpoint,
-            token: config.adminToken,
-            method: `POST`,
-            path: `/account`,
-            body: { email: accountEmail(args.sandboxId, config.zone), password: args.password },
-        }),
-    );
-    return { accountToken: created.accountToken };
+    const create = async (): Promise<{ accountToken: string }> =>
+        accountCreatedSchema.parse(
+            await call({
+                endpoint: config.apiEndpoint,
+                token: config.adminToken,
+                method: `POST`,
+                path: `/account`,
+                body: { email: accountEmail(args.sandboxId, config.zone), password: args.password },
+            }),
+        );
+    try {
+        return await create();
+    } catch (error) {
+        /* One retry, through a delete. The hub answers a DUPLICATE email with a bare 500 and offers no way to
+         * read an existing account's token back (v2 has create and delete, and nothing else), so a collision
+         * would otherwise strand this sandbox permanently — and a collision can only mean one thing: a
+         * previous mint whose row-write never landed, i.e. an account of OURS that nothing holds. The email is
+         * derived from this sandbox's own id, so this can never reach anybody else's account. */
+        await deleteSandboxAccount(config, args.sandboxId).catch(() => {});
+        try {
+            return await create();
+        } catch {
+            throw error;
+        }
+    }
 };
 
 // Revoke a sandbox's reachability outright: the account goes, and every environment, share and name under it
-// goes with it. Idempotent for the delete flow and the reconcile: an account already gone is a success.
+// goes with it. Idempotent: an account already gone is a success, so a retried removal cannot fail on it.
 export const deleteSandboxAccount = async (
     config: { apiEndpoint: string; adminToken: string; zone: string },
     sandboxId: string,
@@ -101,40 +122,9 @@ export const publicNamespaceToken = async (config: { apiEndpoint: string; adminT
     return open.namespaceToken;
 };
 
-/* THE RECONCILE the daily sweep runs (retention.ts): every account this platform minted whose sandbox row is
- * gone, deleted. The hub's account list is the outer truth and the DB is the inner one; `live` carries the
- * 12-hex ids of the rows that exist, and the synthetic email shape (`sandbox-<id>@<zone>`) is what makes an
- * account recognizably ours — anything else on the hub belongs to somebody else and is never touched.
- *
- * Simpler than the tunnel reaper it replaces, deliberately: there is no idleness heuristic left, because a
- * sandbox being offline says nothing (a sleeping hosted machine is disconnected by design) and a grant costs
- * one row rather than ten DNS records against a quota. */
-const accountListSchema = z.array(z.object({ email: z.string() }));
-export const reconcileZrokAccounts = async (
-    config: { apiEndpoint: string; adminToken: string; zone: string },
-    args: { live: Set<string>; dryRun: boolean; log: (email: string) => void; onError: (email: string, error: unknown) => void },
-): Promise<{ scanned: number; orphaned: number; deleted: number; failed: number }> => {
-    const accounts = accountListSchema.parse(await call({ endpoint: config.apiEndpoint, token: config.adminToken, method: `GET`, path: `/accounts` }));
-    const ours = new RegExp(`^sandbox-([0-9a-f]{12})@${config.zone.replaceAll(`.`, `\\.`)}$`);
-    const orphaned = accounts.filter((account) => {
-        const match = ours.exec(account.email);
-        return match !== null && !args.live.has(match[1] ?? ``);
-    });
-    let deleted = 0;
-    let failed = 0;
-    for (const account of orphaned) {
-        args.log(account.email);
-        if (args.dryRun) {
-            continue;
-        }
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced deletes keep the hub comfortable
-            await call({ endpoint: config.apiEndpoint, token: config.adminToken, method: `DELETE`, path: `/account`, body: { email: account.email } });
-            deleted += 1;
-        } catch (error) {
-            failed += 1;
-            args.onError(account.email, error);
-        }
-    }
-    return { scanned: accounts.length, orphaned: orphaned.length, deleted, failed };
-};
+/* WHY THERE IS NO DAILY RECONCILE (the tunnel reaper's opposite number): zrok v2 exposes account CREATE and
+ * DELETE and nothing else — no listing, no lookup — so the hub cannot be asked what it holds and a forgotten
+ * grant could never be found again. The invariant is kept at the only place it can be: a sandbox's grant is
+ * revoked BEFORE its row is deleted (sandbox.routes.ts), so a hub hiccup fails the removal and leaves the row
+ * — the record of the grant — instead of stranding an address nobody can revoke. The other way an orphan
+ * appears (a mint whose row-write did not land) heals itself on the next mint, above. */
