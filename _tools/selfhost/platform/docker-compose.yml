@@ -70,6 +70,24 @@ services:
             # candidate` log lines, and only then turn it off — the deletes are not recoverable.
             INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS: ${INTENTIC_CLOUDFLARE_REAP_AFTER_DAYS:-7}
             INTENTIC_CLOUDFLARE_REAP_DRY_RUN: ${INTENTIC_CLOUDFLARE_REAP_DRY_RUN:-false}
+            # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
+            # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane
+            # is off and every user sets up their own machine as before. The token must be ORG-scoped
+            # (`fly tokens create org`), and the Cloudflare pair above must be set too: a hosted machine is
+            # reachable only over a platform-provisioned tunnel. A daily reconcile destroys any app under the
+            # prefix whose sandbox is gone — keep the prefix unique to this deployment.
+            HOSTED_FLY_API_TOKEN: ${HOSTED_FLY_API_TOKEN:-}
+            HOSTED_FLY_ORG: ${HOSTED_FLY_ORG:-}
+            HOSTED_REGION: ${HOSTED_REGION:-iad}
+            HOSTED_APP_PREFIX: ${HOSTED_APP_PREFIX:-intentic-sbx}
+            HOSTED_IMAGE: ${HOSTED_IMAGE:-ghcr.io/intentic/sandbox:stable}
+            HOSTED_CPUS: ${HOSTED_CPUS:-4}
+            HOSTED_MEMORY_MB: ${HOSTED_MEMORY_MB:-8192}
+            HOSTED_VOLUME_GB: ${HOSTED_VOLUME_GB:-20}
+            HOSTED_PER_USER: ${HOSTED_PER_USER:-1}
+            # 0 = never sleep, which bills around the clock; the default stops an unused machine after 20 quiet
+            # minutes and the platform wakes it on the next visit.
+            HOSTED_IDLE_STOP_MINUTES: ${HOSTED_IDLE_STOP_MINUTES:-20}
             # Billing (optional — the upgrade flow 404s until set).
             # Sandbox-invite email via Resend (optional — invites are logged server-side until set).
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}

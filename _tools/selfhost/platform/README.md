@@ -58,6 +58,16 @@ volume self-initializes and an image bump self-migrates — no manual db step.
   set. Google + the tunnel + the secrets are the only hard requirements.
 - **Intentic-provided sandbox tunnels** need `INTENTIC_CLOUDFLARE_API_TOKEN` (+ zone). Without it, user setup
   offers only the bring-your-own-Cloudflare flow. This is intentic's own Cloudflare account credential.
+- **Hosted sandboxes** (`HOSTED_FLY_API_TOKEN` + `HOSTED_FLY_ORG`, on top of the Cloudflare pair above) make
+  signing in the whole setup: this deployment creates each new user's machine on its own Fly account and can
+  wake, stop and destroy it. That is a deliberate hole in the boundary the rest of this platform keeps — read
+  the hosted paragraph in [ARCHITECTURE.md](../../../ARCHITECTURE.md) before switching it on, and remember the
+  bill is yours. Off by default; every other setup lane is unaffected. Create the token org-scoped
+  (`fly tokens create org --org <org> --name intentic-hosted`) — a deploy token cannot create apps. Machines
+  sleep after `HOSTED_IDLE_STOP_MINUTES` of nobody-connected-and-nothing-running and wake on the next visit,
+  which is what keeps an idle user's cost at storage alone.
+- **The hosted reaper deletes too.** A daily sweep destroys every Fly app under `HOSTED_APP_PREFIX` whose
+  sandbox row is gone. Keep that prefix unique to this deployment, and do not put unrelated apps behind it.
 - **Scaling:** the api is stateless (DB-backed sessions) and safe to run at `--scale api=N`; the retention
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
 - **No host ports are published** — everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
