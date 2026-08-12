@@ -161,6 +161,11 @@ const syncDir = computed(() => (created.value && setup.value ? syncFolder(create
 // the sandbox, not about how the user chose to reach it. Duplicating either into lane-local state is what makes
 // a lane switch lose typing, so there is deliberately no `attachName`/`attachRow` here.
 const lane = ref<"provision" | "attach">(`provision`);
+/* The one "reach it some other way" disclosure, open. Both ways off the default address — your own Cloudflare
+ * zone, and a domain the sandbox already answers on — used to be their own link in their own place, and
+ * telling them apart needed the distinction they exist to explain. One link, two choices under it, each
+ * described by what the reader already knows about their own machine. */
+const reaching = ref(false);
 const domain = ref(``);
 // The connection token the daemon was started with, revealed only after a `needs-token` probe. Used for that
 // one first-bind request and never persisted — the daemon stops caring the moment an owner is bound, so the
@@ -172,22 +177,11 @@ const attachOutcome = ref<AttachOutcome | undefined>(undefined);
 const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
 const domainProblem = computed(() => daemonUrlProblem(domain.value));
 
-// Step 1 is a summary of a sandbox that already exists, in both lanes. The NAME IS NOT IN THE TITLE any more:
-// "Sandbox: workspace" set the label and the name in one weight and one colour, so the only word on the card
-// the user might want to change was the one that read as chrome. It is a row in the body now, beside the pencil
-// that changes it, where a muted label and a mono value make which is which unmissable.
 // A resumed sandbox that has ACTUALLY run before is being reconnected; one that was named and never started is
-// just being picked back up, and calling that "Reconnect" claims a history it doesn't have.
+// just being picked back up, and calling that "Reconnect" claims a history it doesn't have. Read by the
+// resumed sandbox's own line, which is the only place on the card that says which of the two this is — the
+// provision card carries no title to put it in.
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
-const step1Title = computed(() => {
-    if (lane.value === `attach`) {
-        return `Connect your sandbox`;
-    }
-    if (created.value !== null) {
-        return resuming.value && !neverStarted.value ? `Reconnect your sandbox` : `Your sandbox`;
-    }
-    return creating.value ? `Creating your sandbox…` : `Your sandbox`;
-});
 
 // Step 2 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
@@ -344,9 +338,10 @@ const targetKey = computed<string | undefined>(() => {
 
 // The command can be built only once the chosen target has a code minted for it.
 const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
+// `.title` rather than the NoticeModel itself — interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
     if (mode.value === `intentic`) {
-        return setupError.value ?? `Preparing your intentic domain…`;
+        return setupError.value?.title ?? `Preparing your intentic domain…`;
     }
     if (cfToken.value.length === 0) {
         return `Enter your Cloudflare API token to reveal your install command.`;
@@ -366,7 +361,7 @@ const lockedReason = computed(() => {
     if (!subdomainValid.value) {
         return `Enter a valid subdomain (letters, numbers, hyphens) to reveal your command.`;
     }
-    return setupError.value ?? `Preparing your install command…`;
+    return setupError.value?.title ?? `Preparing your install command…`;
 });
 
 /* --- the handoff (step 2) ---
@@ -754,6 +749,15 @@ const setLane = (next: "provision" | "attach"): void => {
     attachOutcome.value = undefined;
     attachToken.value = ``;
     error.value = null;
+    // The chooser that offered this lane has been answered; coming back must not find it still hanging open.
+    reaching.value = false;
+};
+
+// The chooser's other answer: provision under the reader's own Cloudflare zone, which is a form rather than a
+// lane, so only the mode moves.
+const chooseOwnZone = (): void => {
+    mode.value = `own`;
+    reaching.value = false;
 };
 
 // Mint the setup code for the chosen target (the intentic path provisions the tunnel + DNS server-side before
@@ -1113,181 +1117,148 @@ watch(commandReady, (ready) => {
                  `items-start` is what lets the panel stick while the steps scroll past it. -->
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
-                    <!-- Step 1: the sandbox — what it is called and where it will answer, one line each. Both are
-                 already true when the card renders (created on arrival, address provisioned right behind it),
-                 so this is a summary with two affordances hanging off it: the pencil that renames, and the
-                 escape hatch to the reader's own Cloudflare zone.
-                 It used to be two numbered cards, one per line, which counted to three to say a machine was
-                 ready to be started. Merging them costs nothing — neither line gates the other, and the mint
-                 that fills the second starts the moment the first exists.
-                 Or, in the attach lane, the entire setup: one address for a sandbox that is already running and
-                 reachable. That lane drops the "1" badge — it is the whole flow, not the first of two. -->
-                    <StepSection
-                        :step="lane === `provision` ? 1 : undefined"
-                        :icon="lane === `attach` ? `link` : undefined"
-                        :done="lane === `provision` && created !== null && setup !== null"
-                        :title="step1Title"
-                    >
-                        <!-- The "why a token?" hint rides the step header, the one place this page puts hints (the
-                             run step's reference panel), instead of a second heading inside the body: "Cloudflare
-                             API token" above a field labelled "API token" said the same thing twice and cost a
-                             phone a whole row. A bare (i) in the corner, like the run step's: the two hints are
-                             the same offer on the same card in the same place, and a caption on one of them made
-                             it a different kind of thing.
-                             `v-if` ON THE SLOT, not inside it — an always-provided slot renders its wrapper (and
-                             its gap) in the card's corner on every other path, which quietly shortens the title. -->
-                        <template v-if="lane === `provision` && mode === `own`" #actions>
-                            <InfoHint label="Why the Cloudflare API token is required">
-                                <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
-                                <p class="mb-3 text-2xs leading-relaxed text-muted">
-                                    intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
-                                </p>
-                                <ul class="flex flex-col gap-2 text-2xs text-muted">
-                                    <li class="flex items-start gap-2">
-                                        <Icon name="bolt" class="mt-0.5 text-link" />
-                                        <span>Lets the install command <span class="text-content">create the tunnel</span></span>
-                                    </li>
-                                    <li class="flex items-start gap-2">
-                                        <Icon name="lock" class="mt-0.5 text-success" />
-                                        <span
-                                            ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
-                                            command</span
-                                        >
-                                    </li>
-                                </ul>
-                            </InfoHint>
-                        </template>
-
-                        <template v-if="lane === `attach`">
-                            <p class="text-xs text-muted">
-                                Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it,
-                                then open your workspace. Nothing to install, nothing to provision.
-                            </p>
-                            <label class="ui-field">
-                                <span class="ui-field-label">Domain</span>
-                                <!-- Stacked on a phone: side by side, the field loses half its width to the button and
-                             the address the user is checking scrolls out of view as they type it. -->
-                                <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                                    <input
-                                        v-model="domain"
-                                        autocomplete="off"
-                                        autocapitalize="off"
-                                        spellcheck="false"
-                                        placeholder="sandbox.example.com"
-                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                        @keydown.enter="connectDomain"
-                                    />
-                                    <!-- `attaching` is in the disabled expression, not left to the loading prop: the
-                                 theme defines no disabled tokens, so a busy button would otherwise look and
-                                 feel live while a probe is in flight. -->
-                                    <Button
-                                        label="Connect"
-                                        class="w-full justify-center md:w-auto"
-                                        :loading="attaching"
-                                        :disabled="attaching || normalizedDomain === undefined"
-                                        @click="connectDomain"
-                                    >
-                                        <template #icon><Icon name="link" /></template>
-                                    </Button>
-                                </div>
-                                <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
-                                <span v-else-if="normalizedDomain" class="text-xs text-muted"
-                                    >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
-                                    >.</span
-                                >
-                                <span v-else class="text-xs text-muted"
-                                    >The https address your sandbox already answers on — https:// is optional.</span
-                                >
-                            </label>
-
-                            <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
-                         It arrives filled in — the row was created on the way in — and Connect commits whatever
-                         is in it, so this lane asks for a domain and nothing else unless the user wants to. -->
-                            <label class="ui-field">
-                                <span class="ui-field-label">Name</span>
+                    <!-- THE ATTACH LANE'S WHOLE FLOW: one address for a sandbox that is already running and
+                         reachable. It keeps a titled card because it ASKS for something — a card with a form on
+                         it and no heading is a form nobody knows the purpose of — and it takes an icon rather
+                         than a number, since it is the whole flow and a "1" would promise a step 2 that is never
+                         coming. -->
+                    <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox">
+                        <p class="text-xs text-muted">
+                            Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it,
+                            then open your workspace. Nothing to install, nothing to provision.
+                        </p>
+                        <label class="ui-field">
+                            <span class="ui-field-label">Domain</span>
+                            <!-- Stacked on a phone: side by side, the field loses half its width to the button and
+                         the address the user is checking scrolls out of view as they type it. -->
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center">
                                 <input
-                                    v-model="name"
+                                    v-model="domain"
                                     autocomplete="off"
+                                    autocapitalize="off"
                                     spellcheck="false"
-                                    placeholder="e.g. work, staging, my-laptop"
+                                    placeholder="sandbox.example.com"
                                     :class="cmp.input('w-full font-mono text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
-                                <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
-                            </label>
+                                <!-- `attaching` is in the disabled expression, not left to the loading prop: the
+                             theme defines no disabled tokens, so a busy button would otherwise look and
+                             feel live while a probe is in flight. -->
+                                <Button
+                                    label="Connect"
+                                    class="w-full justify-center md:w-auto"
+                                    :loading="attaching"
+                                    :disabled="attaching || normalizedDomain === undefined"
+                                    @click="connectDomain"
+                                >
+                                    <template #icon><Icon name="link" /></template>
+                                </Button>
+                            </div>
+                            <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
+                            <span v-else-if="normalizedDomain" class="text-xs text-muted"
+                                >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
+                                >.</span
+                            >
+                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on — https:// is optional.</span>
+                        </label>
 
-                            <!-- Each probe failure names the one thing the user can do about it. -->
-                            <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                                <span>Nothing answered at that address.</span>
-                                <span class="text-2xs opacity-80">
-                                    Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
-                                    <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call
-                                    before it's sent.
-                                </span>
-                            </div>
-                            <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                                <span>That address accepted the connection but never answered.</span>
-                                <span class="text-2xs opacity-80">
-                                    Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port.
-                                    Give it a moment and try again.
-                                </span>
-                            </div>
-                            <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
-                         resumed sandbox's container is gone, so name that instead of quoting a 530. -->
-                            <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                                <span>That domain is live, but no sandbox is running behind it.</span>
-                                <span class="text-2xs opacity-80">
-                                    Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
-                                    container<template v-if="created !== null"
-                                        >, or get a domain from intentic and run the install command instead</template
-                                    >.
-                                </span>
-                            </div>
-                            <template v-else-if="attachOutcome?.kind === `needs-token`">
-                                <div :class="cmp.alertWarning('flex flex-col gap-1')">
-                                    <span>Your sandbox is up, but it wouldn't let us in yet.</span>
-                                    <span class="text-2xs opacity-80"
-                                        >It's waiting to be claimed with the connection token it was started with. Paste that
-                                        <code>CONNECT_TOKEN</code> to claim it as yours.</span
-                                    >
-                                </div>
-                                <label class="ui-field">
-                                    <span class="ui-field-label">Connection token</span>
-                                    <input
-                                        v-model="attachToken"
-                                        type="password"
-                                        autocomplete="off"
-                                        autocapitalize="off"
-                                        spellcheck="false"
-                                        placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                        :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                        @keydown.enter="connectDomain"
-                                    />
-                                    <span class="text-xs text-muted">
-                                        Used once to claim the sandbox — the daemon stops asking once you're bound, so intentic never stores it.
-                                    </span>
-                                </label>
-                            </template>
-                            <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                                <span>{{ attachOutcome.message }}</span>
-                                <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
-                            </div>
-                            <Notice
-                                v-else-if="attachOutcome?.kind === `rejected`"
-                                :of="{ tone: `danger`, title: `That sandbox refused the connection.`, detail: attachOutcome.message }"
+                        <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
+                     It arrives filled in — the row was created on the way in — and Connect commits whatever
+                     is in it, so this lane asks for a domain and nothing else unless the user wants to. -->
+                        <label class="ui-field">
+                            <span class="ui-field-label">Name</span>
+                            <input
+                                v-model="name"
+                                autocomplete="off"
+                                spellcheck="false"
+                                placeholder="e.g. work, staging, my-laptop"
+                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                @keydown.enter="connectDomain"
                             />
+                            <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
+                        </label>
 
-                            <Notice v-if="error" :of="error" />
-                            <!-- With a row already in hand, going back CONTINUES that sandbox through the run step rather
-                         than setting a new one up — the label has to say which of the two it is. -->
-                            <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
-                                {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
-                            </button>
+                        <!-- Each probe failure names the one thing the user can do about it. -->
+                        <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                            <span>Nothing answered at that address.</span>
+                            <span class="text-2xs opacity-80">
+                                Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
+                                <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call
+                                before it's sent.
+                            </span>
+                        </div>
+                        <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                            <span>That address accepted the connection but never answered.</span>
+                            <span class="text-2xs opacity-80">
+                                Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port.
+                                Give it a moment and try again.
+                            </span>
+                        </div>
+                        <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
+                     resumed sandbox's container is gone, so name that instead of quoting a 530. -->
+                        <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                            <span>That domain is live, but no sandbox is running behind it.</span>
+                            <span class="text-2xs opacity-80">
+                                Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
+                                container<template v-if="created !== null"
+                                    >, or get a domain from intentic and run the install command instead</template
+                                >.
+                            </span>
+                        </div>
+                        <template v-else-if="attachOutcome?.kind === `needs-token`">
+                            <div :class="cmp.alertWarning('flex flex-col gap-1')">
+                                <span>Your sandbox is up, but it wouldn't let us in yet.</span>
+                                <span class="text-2xs opacity-80"
+                                    >It's waiting to be claimed with the connection token it was started with. Paste that
+                                    <code>CONNECT_TOKEN</code> to claim it as yours.</span
+                                >
+                            </div>
+                            <label class="ui-field">
+                                <span class="ui-field-label">Connection token</span>
+                                <input
+                                    v-model="attachToken"
+                                    type="password"
+                                    autocomplete="off"
+                                    autocapitalize="off"
+                                    spellcheck="false"
+                                    placeholder="The CONNECT_TOKEN your sandbox runs with"
+                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    @keydown.enter="connectDomain"
+                                />
+                                <span class="text-xs text-muted">
+                                    Used once to claim the sandbox — the daemon stops asking once you're bound, so intentic never stores it.
+                                </span>
+                            </label>
                         </template>
+                        <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                            <span>{{ attachOutcome.message }}</span>
+                            <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
+                        </div>
+                        <Notice
+                            v-else-if="attachOutcome?.kind === `rejected`"
+                            :of="{ tone: `danger`, title: `That sandbox refused the connection.`, detail: attachOutcome.message }"
+                        />
+
+                        <Notice v-if="error" :of="error" />
+                        <!-- With a row already in hand, going back CONTINUES that sandbox through the run step rather
+                     than setting a new one up — the label has to say which of the two it is. -->
+                        <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
+                            {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
+                        </button>
+                    </StepSection>
+
+                    <!-- THE SANDBOX, AS FACTS RATHER THAN A STEP: what it is called, and where it will answer.
+                         Both are already true when the card renders — created on arrival, address provisioned
+                         right behind it — so it asks for nothing, and a card that asks for nothing has no
+                         business wearing a step number or a heading. "Your sandbox" above a row labelled "Name"
+                         and a row labelled "Address" was a title that only restated the two labels under it.
+                         The card chrome is StepSection's own, spelled out here because this is the one card on
+                         the page that is deliberately not a step. -->
+                    <section v-else class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 md:p-5">
                         <!-- No row yet, which on this lane means the arrival create is in flight or has failed —
                              never a form waiting to be filled in. Both states are one line, because neither is
                              something the user has to do anything about. -->
-                        <template v-else-if="created === null">
+                        <template v-if="created === null">
                             <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
                                 Setting one up for you — nothing to fill in.
@@ -1374,39 +1345,84 @@ watch(commandReady, (ready) => {
                                 </button>
                             </div>
 
-                            <!-- THE ADDRESS, on the same grid as the name — the two facts this step reports, aligned.
-                                 The intentic path is one line with its escape hatch on it; the own-Cloudflare path is
-                                 a form, so it expands the step in place instead.
-                                 The link names the CLOUDFLARE ZONE, not "my own domain": the attach lane below is the
-                                 literal own-domain path, and two links reading the same would send people to the
-                                 wrong one. This path still provisions a tunnel and still needs the run step. -->
+                            <!-- THE ADDRESS, on the same grid as the name — the two facts this card reports, aligned.
+                                 No padlock: the tunnel is https by construction, so the icon marked every address
+                                 this page can ever show and therefore distinguished none of them — it was decoration
+                                 sitting where a reader looks for the value. -->
                             <template v-if="mode === `intentic`">
-                                <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
-                                    {{ setupError }}
-                                </div>
-                                <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <!-- ONE ROW IN EVERY STATE — provisioned, still minting, or failed — so the escape
+                                     hatch beside it is reachable in all three. It used to hang off the success
+                                     branch alone, which left a reader whose mint had just errored with no way to
+                                     choose a different address at all. -->
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span :class="factLabel">Address</span>
-                                    <span class="flex min-w-0 items-center gap-2 font-mono text-sm text-content">
-                                        <Icon name="lock" class="shrink-0 text-success" />
-                                        <span class="min-w-0 break-words">{{ setup.hostname }}</span>
-                                    </span>
-                                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">
-                                        Use my own Cloudflare zone instead
-                                    </button>
-                                </div>
-                                <div v-else class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span :class="factLabel">Address</span>
-                                    <span class="flex items-center gap-2 text-xs text-muted">
+                                    <!-- `.title` — this is a NoticeModel, and interpolating the object itself put
+                                         its JSON on the card. -->
+                                    <span v-if="setupError" class="min-w-0 text-xs text-danger">{{ setupError.title }}</span>
+                                    <span v-else-if="setup" class="min-w-0 font-mono text-sm break-words text-content">{{ setup.hostname }}</span>
+                                    <span v-else class="flex items-center gap-2 text-xs text-muted">
                                         <Icon name="spinner" spin /> Preparing your intentic domain…
                                     </span>
+                                    <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and "Already
+                                         reachable at a domain? Connect it" were two links, in two places, asking the
+                                         same question — how should this be reached — and the reader had to know the
+                                         difference between provisioning under their zone and attaching an address
+                                         that already answers BEFORE they could tell which link was theirs. Now one
+                                         link opens both, each stating what it does rather than what it is called. -->
+                                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="reaching = !reaching">
+                                        {{ reaching ? `Keep this address` : `Use a different address` }}
+                                    </button>
+                                </div>
+                                <!-- The two ways off the default address, told apart by what the reader already
+                                     knows about their own setup rather than by product vocabulary. -->
+                                <div v-if="reaching" class="flex flex-col gap-1 rounded-lg border border-line bg-canvas p-1">
+                                    <button
+                                        type="button"
+                                        class="flex cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
+                                        @click="chooseOwnZone"
+                                    >
+                                        <span class="text-xs text-content">I have a Cloudflare domain</span>
+                                        <span class="text-2xs text-muted">Your zone, your subdomain — the install command builds the tunnel.</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
+                                        @click="setLane(`attach`)"
+                                    >
+                                        <span class="text-xs text-content">It already answers on a domain</span>
+                                        <span class="text-2xs text-muted">Point us at it — nothing to install, nothing to provision.</span>
+                                    </button>
                                 </div>
                             </template>
 
-                            <!-- Own Cloudflare: token + zone + editable subdomain. -->
+                            <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
+                                 the (i) that explains the token, which is the corner the step header used to keep
+                                 it in — this card has no header to hang it off any more. -->
                             <template v-else>
-                                <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
-                                    ← Use intentic's domain
-                                </button>
+                                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                    <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
+                                        ← Use intentic's domain
+                                    </button>
+                                    <InfoHint label="Why the Cloudflare API token is required">
+                                        <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
+                                        <p class="mb-3 text-2xs leading-relaxed text-muted">
+                                            intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
+                                        </p>
+                                        <ul class="flex flex-col gap-2 text-2xs text-muted">
+                                            <li class="flex items-start gap-2">
+                                                <Icon name="bolt" class="mt-0.5 text-link" />
+                                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <Icon name="lock" class="mt-0.5 text-success" />
+                                                <span
+                                                    ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides
+                                                    the command</span
+                                                >
+                                            </li>
+                                        </ul>
+                                    </InfoHint>
+                                </div>
                                 <CloudflareTokenField
                                     :cf="cf"
                                     storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
@@ -1440,15 +1456,8 @@ watch(commandReady, (ready) => {
                             </template>
 
                             <Notice v-if="error" :of="error" />
-                            <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
-                                 sandbox is already running somewhere the platform never heard from (a daemon with no
-                                 PLATFORM_URL) arrives just as often while staring at the install command below.
-                                 Attaching points THIS row at the domain — it never mints a second sandbox. -->
-                            <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
-                                Already reachable at a domain? Connect it →
-                            </button>
                         </template>
-                    </StepSection>
+                    </section>
 
                     <!-- Step 2: run the sandbox — and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
@@ -1479,7 +1488,11 @@ watch(commandReady, (ready) => {
                  service of a clipboard the target machine cannot read. It is now one line's worth of
                  disclosure, addressed to the one reader it is true for: someone holding an SSH session. -->
 
-                    <StepSection v-if="created && lane === `provision`" :step="2" :title="runTitle">
+                    <!-- No number on the badge. The card above it reports facts and asks for nothing, so it is not
+                         a step and does not wear one — which leaves this as the only thing on the page anybody has
+                         to DO, and a lone "2" beside an unnumbered card counts a spine that isn't there. The icon
+                         says which kind of card this is instead, exactly as the attach lane's does. -->
+                    <StepSection v-if="created && lane === `provision`" icon="terminal" :title="runTitle">
                         <template #actions>
                             <!-- Below xl only: from there up the same content is docked in its own column (see the
                          aside at the foot of this template), where it never lands on the command.

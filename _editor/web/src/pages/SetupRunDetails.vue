@@ -23,31 +23,30 @@ const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: st
 <template>
     <div class="flex flex-col gap-3">
         <p class="text-sm font-medium text-content">What this does</p>
+        <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote — the container names, "nothing
+             deployed", "runs as you, no root" — and a reference panel nobody finishes reading answers nothing.
+             What a reader is actually asking here is where this lands and how to undo it, so each line names
+             one place and stops. -->
         <ul class="flex flex-col gap-2 text-2xs text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0"
-                    >Starts your sandbox in <span class="text-content">Docker</span> — 2 containers, 3 volumes, 1 network, all named
-                    <code>intentic-*</code></span
-                >
+                <span class="min-w-0">Starts your sandbox in <span class="text-content">Docker</span></span>
             </li>
-            <!-- The tunnel and the closed-ports promise are one fact stated twice — a private tunnel IS what
-                 having no inbound ports buys, and two bullets made the list look longer than the news in it. -->
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span> — no inbound ports, nothing deployed</span>
+                <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span> — no inbound ports</span>
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="file" class="mt-0.5 shrink-0 text-link" />
                 <span class="min-w-0"
-                    >Outside Docker: <code>~/.intentic/logs</code
-                    ><template v-if="syncEnabled">, plus <code>~/.intentic/sync</code> — runs as you, no root</template></span
+                    >Writes <code>~/.intentic/logs</code><template v-if="syncEnabled"> and <code>~/.intentic/sync</code></template> — as you, no
+                    root</span
                 >
             </li>
         </ul>
 
         <div class="border-t border-line pt-3 text-2xs text-subtle">
-            <p>Missing Docker is installed for you — you'll be asked first. A first Windows install may need a reboot.</p>
+            <p>Installs Docker if you haven't got it — it asks first.</p>
             <a
                 href="https://docs.docker.com/get-docker/"
                 target="_blank"
@@ -68,7 +67,7 @@ const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: st
                  run — the docked column is sized (Setup.vue's aside) so the command clears its full width. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
-                Removes all of it, whenever
+                Removes all of it
                 <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
             <!-- break-words, not break-all: a phone splits this mid-URL otherwise ("https://intentic.de /
