@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource, DeployServer } from "./contract";
-import { Button, cmp, CountBar, type CountItem, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, timeAgo } from "@intentic/extension-ui";
+import {
+    type AgentRunChoice,
+    Button,
+    cmp,
+    CountBar,
+    type CountItem,
+    Icon,
+    InfoHint,
+    Page,
+    PageAction,
+    PageHeader,
+    RowGroup,
+} from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
 import DeploymentsSkeleton from "./DeploymentsSkeleton.vue";
@@ -9,6 +21,7 @@ import RepoLinkRow from "./RepoLinkRow.vue";
 import ResourceRow from "./ResourceRow.vue";
 import ServerMeta from "./ServerMeta.vue";
 import { INCIDENT_TONE } from "./stateVisual";
+import IncidentRow from "./IncidentRow.vue";
 import { useDeploymentBoard } from "./useDeploymentBoard";
 
 /* The Deployments view: is what is running healthy, and what changed?
@@ -37,7 +50,7 @@ const props = defineProps<{ capability?: string }>();
 // The rail passes the capability id through the activation's props; a directly-mounted view with none falls
 // back to the conventional default id, which is what a single connection is named.
 const capability = computed(() => props.capability ?? `komodo`);
-const { board, error, isPending, act, link, logs, fix, fixModelLabel, refetch } = useDeploymentBoard(toRef(capability));
+const { board, error, isPending, act, link, logs, fix, refetch } = useDeploymentBoard(toRef(capability));
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging incidents now on screen. Only
 // on mount — re-stamping as the board polls would swallow a breakage that lands while the tab sits in the
@@ -203,11 +216,11 @@ const loadLogs = async (resource: DeployResource): Promise<void> => {
 
 // `key` is where a failure lands: the row when the click came from the board, the incident when it came from
 // the strip — either way, next to the button that was pressed.
-const askAgent = async (resource: DeployResource, key: string): Promise<void> => {
+const askAgent = async (resource: DeployResource, key: string, pick?: AgentRunChoice | undefined): Promise<void> => {
     busyId.value = resource.id;
     clearFailure(key);
     try {
-        const { conversationId } = await fix.mutateAsync(resource);
+        const { conversationId } = await fix.mutateAsync({ resource, pick });
         // The conversation id IS the fleet card id — land the board on the card that just started.
         window.location.assign(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (cause) {
@@ -297,32 +310,14 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                         <span class="text-sm font-semibold text-content">Needs you</span>
                     </div>
                     <div class="mt-2 flex flex-col gap-2">
-                        <div v-for="incident in open" :key="incident.alert.id" class="flex flex-col gap-1">
-                            <!-- items-start, not items-center: a summary long enough to wrap ("api running →
-                                 restarting on prod-1" on a phone) otherwise pushes its own dot onto a line of
-                                 its own, and a bullet with nothing beside it reads as a rendering fault. -->
-                            <div class="flex items-start gap-2">
-                                <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="INCIDENT_TONE[incident.tone].dot"></span>
-                                <span class="min-w-0 flex-1 text-sm text-content">
-                                    {{ incident.summary }}
-                                    <span class="whitespace-nowrap text-2xs text-subtle">{{ timeAgo(incident.alert.ts) }}</span>
-                                </span>
-                                <Button
-                                    v-if="resourceFor(incident.alert.resource)"
-                                    label="Ask the agent"
-                                    class="-my-1 shrink-0"
-                                    size="small"
-                                    severity="secondary"
-                                    text
-                                    @click="askAgent(resourceFor(incident.alert.resource)!, incident.alert.id)"
-                                >
-                                    <template #icon><Icon name="sparkles" /></template>
-                                </Button>
-                            </div>
-                            <div v-if="failures.get(incident.alert.id)" :class="cmp.alertDanger(`break-words`)">
-                                {{ failures.get(incident.alert.id) }}
-                            </div>
-                        </div>
+                        <IncidentRow
+                            v-for="incident in open"
+                            :key="incident.alert.id"
+                            :incident="incident"
+                            :resource="resourceFor(incident.alert.resource)"
+                            :failure="failures.get(incident.alert.id)"
+                            @fix="(resource, pick) => askAgent(resource, incident.alert.id, pick)"
+                        />
                     </div>
                 </div>
 
@@ -350,10 +345,9 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                                 :logs="logsFor.get(resource.id)"
                                 :logs-pending="logsPendingId === resource.id"
                                 :error="failures.get(resource.id)"
-                                :fix-model-label="fixModelLabel"
                                 @act="runAction"
                                 @logs="loadLogs"
-                                @fix="askAgent($event, $event.id)"
+                                @fix="(resource, pick) => askAgent(resource, resource.id, pick)"
                             />
                         </RowGroup>
 

@@ -1,4 +1,4 @@
-import { type AgentEvent, type AgentReply, type AgentTurn, type ParkedCard, parsePinned, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentReply, type AgentTurn, type ParkedCard, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -6,6 +6,7 @@ import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { formatAnswers, grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
 import { restoreRequest } from "./agent-requests.js";
+import { agentRunModel } from "./agent-run-model.js";
 import { registerTurn } from "./agent-steering.js";
 import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
@@ -180,8 +181,8 @@ const resumedTurn = (
     };
 };
 
-/* WHAT AN UNATTENDED TURN RUNS ON. A turn a surface started names no model, because there was no picker in
- * front of anyone when it started (see AgentTurn.unattended) — so the owner's `agentRunModel` answers for it,
+/* WHAT AN UNATTENDED TURN RUNS ON. A turn a surface started names no model, because nobody touched the caret
+ * on the button that started it (see AgentTurn.unattended) — so the owner's `agentRunModels` answers for it,
  * and `agentRunEffort` beside it.
  *
  * Resolved HERE, at the one boundary every detached turn passes through, rather than at each of the five
@@ -190,11 +191,16 @@ const resumedTurn = (
  * records it — so a run resumed after a daemon death comes back on the model it was started on rather than
  * re-resolving against a setting the user has since changed.
  *
- * Fills only what is absent, which is what keeps the flag from overriding a real choice: Acceptance names a
- * model per run (it fans one session out per story, so the tier is a per-run decision worth its own control),
- * and every resume below re-runs a turn that already carries whatever this resolved the first time. An empty
- * setting resolves nothing and the turn keeps its unset model — the daemon then falls to the provider's live
- * catalog default exactly as a composer turn with an unloaded catalog does. */
+ * THE SETTING IS A LIST and agentRunModel() walks it, stopping at the first entry this sandbox can actually
+ * start (agent/agent-run-model.ts has the why, and why the walk is narrower than the quick chain's). Walked
+ * once, here, for the same reason the resolution happens here at all: what the journal records has to be the
+ * model the run is on, not a list it might re-read differently tomorrow.
+ *
+ * Fills only what is absent, which is what keeps the flag from overriding a real choice: every one of those
+ * surfaces can name a model for a single run through the shared button's caret, Acceptance names one per run
+ * (it fans one session out per story), and every resume below re-runs a turn that already carries whatever this
+ * resolved the first time. A list that resolves to nothing leaves the turn's model unset — the daemon then
+ * falls to the provider's live catalog default exactly as a composer turn with an unloaded catalog does. */
 const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
     /* A TURN THAT NAMES ITS PROVIDER KEEPS IT, and the `agent` half of this guard is as load-bearing as the
      * `model` half. The pin below carries a provider WITH its model, so filling a turn that already chose one
@@ -209,11 +215,11 @@ const withAgentRunModel = async <T extends AgentTurn>(services: Services, turn: 
     if (turn.unattended !== true || turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
-    const { agentRunModel, agentRunEffort } = await services.sandboxSettings.get();
-    const pinned = parsePinned(agentRunModel);
+    const pinned = await agentRunModel(services);
     if (pinned === undefined) {
         return turn;
     }
+    const { agentRunEffort } = await services.sandboxSettings.get();
     return {
         ...turn,
         // The pin carries the provider too (`${provider}:${model}`), and it has to: a model id is only

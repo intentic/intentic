@@ -29,3 +29,17 @@ authors is a marketplace-phase task.
 
 - [src/index.ts](src/index.ts) — the whole surface: which components and helpers an extension may render with.
 - [src/format.ts](src/format.ts) — the shared formatters, so two extensions render a duration the same way.
+
+## The one control worth calling out
+
+`AgentRunButton` and `useAgentRunPick` are re-exported because four extensions start an agent for the user —
+pipelines, deployments, maintenance, acceptance — and each had reached its own answer about how you choose what
+that costs. Press the primary half and the run opens on the sandbox's standing agent-run model; use the caret
+and it opens on something else, for that run only.
+
+`useAgentRunPick` takes `api.models` as an argument rather than importing it, which is what lets the control
+live in a kit that knows nothing about the extension API. Pass the extension's own host handle:
+
+```ts
+const runModel = useAgentRunPick(() => host().models);
+```

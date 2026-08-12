@@ -2,18 +2,10 @@ import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, Picked
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type ExtensionSummary,
-    parsePinned,
-    providerLabel,
-    sandboxRequestFor,
-    WorkspaceFileSchema,
-} from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ExtensionSummary, providerLabel, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
-import { requestModelPick } from "../composables/chat/hostModelPicker";
 import { modelLabelFor } from "../composables/chat/modelPicker";
+import { agentRunChoice, shellModelPicking } from "../composables/chat/shellModelPicking";
 import { summonChat } from "../composables/chat/summon";
 import { accountsOf, useChat } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
@@ -46,9 +38,6 @@ import { recordSandboxCall } from "./sandboxUsage";
 export interface HostBindings {
     readonly repos: () => readonly RepoFacts[];
     readonly capabilities: () => readonly CapabilityFacts[];
-    // The sandbox's pinned agent-run model as `${provider}:${model}`, "" when nothing is pinned — the floor
-    // `api.models.agentRun()` answers from.
-    readonly agentRunModel: () => string;
 }
 
 /* WHAT TO CALL A SELECTION — the one place a (provider, model, account) triple is turned into words for an
@@ -438,27 +427,20 @@ export const createExtensionApi = (
          * user pointed at, plus the words for it. An account arrives as its opaque daemon id for the same reason,
          * which is also all the daemon needs to run on it. */
         models: {
+            /* Both halves are the SHELL's own (composables/chat/shellModelPicking.ts), not a second reading of
+             * the same settings. An extension's Fix button and one the shell draws are the same button, so the
+             * day these two disagreed about which model a click spends, one of them would be lying to the user
+             * about money. `named` still wraps the answer here because PickedModel carries one field the kit's
+             * structural AgentRunChoice does not — accountLabel, which only this side can look up. */
             agentRun: () => {
-                // The pin carries the provider with the model, because a model id means nothing without the
-                // provider that vends it. Unpinned falls to the owner's own composer, which is what Sandbox ▸
-                // Agent ▸ Models calls this row's floor.
-                const pinned = parsePinned(host.agentRunModel());
-                const chat = useChat();
-                const provider = pinned?.provider ?? chat.provider.value;
-                const model = pinned?.model ?? chat.model.value;
-                return named(provider, model);
+                const choice = agentRunChoice();
+                return named(choice.provider as AgentProvider, choice.model);
             },
             describe: (selection) =>
                 named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
             pick: async (options) => {
-                const choice = await requestModelPick({
-                    anchor: options.anchor,
-                    provider: options.provider as AgentProvider,
-                    model: options.model,
-                    ...(options.account !== undefined ? { account: options.account } : {}),
-                    ...(options.harness !== undefined ? { harness: options.harness as AgentHarness } : {}),
-                });
-                return choice === undefined ? undefined : named(choice.provider, choice.model, choice.account, choice.harness);
+                const choice = await shellModelPicking().pick(options);
+                return choice === undefined ? undefined : named(choice.provider as AgentProvider, choice.model, choice.account, choice.harness as AgentHarness);
             },
         },
         navigate: (path) => {

@@ -66,9 +66,14 @@ vi.mock(`../sandbox/useSandboxSettings`, async () => {
         },
     ];
     return {
-        useSandboxSettings: () => ({ settings: ref({ rules, agentRunModel: `anthropic:sonnet`, agentRunEffort: `high` }) }),
+        useSandboxSettings: () => ({ settings: ref({ rules, agentRunModels: [`claude:claude-sonnet-4-5`], agentRunEffort: `high` }) }),
     };
 });
+
+// The agent-run list resolves against what this sandbox can actually reach, so the flow's proposal names a
+// model that can be sent. Everything is connected here — which provider is ready is agentRunModel.test's
+// business, not this suite's.
+vi.mock(`../chat/access`, () => ({ providerReady: () => true }));
 
 vi.mock(`../sandbox/useSandbox`, async () => {
     const { ref } = await import(`vue`);
@@ -146,9 +151,16 @@ test(`a red check raises a question that outlives the surface that asked`, async
 
     expect(git.syncAll).not.toHaveBeenCalled();
     expect(flow.question.value).toEqual({ kind: `checks`, title: `Checks failed`, command: `pnpm check`, detail: `failed with exit 1.` });
-    // Composed once, from the failure — text, model and effort — and waiting to be edited whenever the user
-    // gets back to it.
+    /* Composed once, from the failure — text, model and effort — and waiting to be edited whenever the user
+     * gets back to it.
+     *
+     * The MODEL is the head of the sandbox's agent-run list, resolved rather than copied out of the setting:
+     * the proposal is a draft the user can see and send, so naming an entry whose account is gone would put a
+     * model in front of them that cannot run. Same answer every other surface-started run gets. */
     expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
+    expect(suggestion.composeSession).toHaveBeenCalledWith(
+        expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true }),
+    );
     expect(flow.proposedFix.value).toBeDefined();
 
     const { usePushFlow } = await import(`./usePushFlow`);

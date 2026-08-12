@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
     DeployActionParamSchema,
     DeployCapabilityParamSchema,
+    DeployFixParamSchema,
     DeployFixResponseSchema,
     DeployLinkParamSchema,
     DeployLogsParamSchema,
@@ -31,7 +32,7 @@ export const komodoContract = {
     // match by name; this is the owner accepting it, or choosing a different one.
     link: oc.route({ method: "POST", path: "/komodo/{capability}/link" }).input(DeployLinkParamSchema).output(OkSchema),
     logs: oc.route({ method: "POST", path: "/komodo/{capability}/logs" }).input(DeployLogsParamSchema).output(DeployLogsResponseSchema),
-    fix: oc.route({ method: "POST", path: "/komodo/{capability}/fix" }).input(DeployLogsParamSchema).output(DeployFixResponseSchema),
+    fix: oc.route({ method: "POST", path: "/komodo/{capability}/fix" }).input(DeployFixParamSchema).output(DeployFixResponseSchema),
     // "I have looked at this connection's deployments" — what silences the rail badge for incidents already
     // read. Per capability, since each tile is its own surface, and the backend stamps its own clock so a
     // skewed browser cannot mark future breakages as already seen.

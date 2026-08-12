@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel } from "@intentic/sandbox-contract/chores";
-import { Button, cmp, PageAction, RowGroup, Segmented, SplitView } from "@intentic/extension-ui";
+import { type AgentRunChoice, Button, cmp, PageAction, RowGroup, Segmented, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
@@ -185,12 +185,14 @@ const onRefreshProbe = (id: string): void => {
     void attempt(`refresh that measurement`, () => refreshProbe(at, id));
 };
 
-const onStart = (verdict: ChoreVerdict): void => {
+// `pick` is set only when the reader used the caret beside this chore's button; otherwise the daemon opens the
+// session on the sandbox's agent-run list, which is the ordinary path.
+const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void => {
     void attempt(`start that turn`, async () => {
         // Straight into the conversation it just started: the turn IS the work, and a page that spawns an agent
         // and then keeps you on the page has hidden the only thing you now care about. The chore row stays
         // behind, and will show the run when you come back.
-        api.chat.openSession(conversationIdOf(await start(verdict)));
+        api.chat.openSession(conversationIdOf(await start(verdict, pick)));
     });
 };
 </script>
@@ -268,7 +270,7 @@ const onStart = (verdict: ChoreVerdict): void => {
                             :show-repo="showRepo"
                             :busy="busy"
                             @toggle="expanded = expanded === rowKey(verdict) ? undefined : rowKey(verdict)"
-                            @start="onStart(verdict)"
+                            @start="(pick) => onStart(verdict, pick)"
                             @snooze="void attempt(`snooze that chore`, () => snooze(verdict, Date.now() + SNOOZE_MS))"
                             @unsnooze="void attempt(`un-snooze that chore`, () => snooze(verdict, 0))"
                             @open="(conversationId) => api.chat.openSession(conversationId)"

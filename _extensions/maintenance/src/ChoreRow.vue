@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
-import { Button, Icon, type IconName, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
+import { AgentRunButton, type AgentRunChoice, Button, Icon, type IconName, StatusBadge, type StatusVariant, timeAgo, useAgentRunPick } from "@intentic/extension-ui";
+import { host } from "./host";
 import { computed } from "vue";
 import type { ChoreRun } from "./useRuns";
 
@@ -18,7 +19,23 @@ import type { ChoreRun } from "./useRuns";
  * is the same word on every row, which is noise; across repositories it is the only thing telling two otherwise
  * identical rows apart. */
 const { verdict, run } = defineProps<{ verdict: ChoreVerdict; run: ChoreRun | undefined; expanded: boolean; showRepo: boolean; busy: boolean }>();
-const emit = defineEmits<{ toggle: []; start: []; snooze: []; unsnooze: []; open: [conversationId: string] }>();
+const emit = defineEmits<{
+    toggle: [];
+    start: [pick: AgentRunChoice | undefined];
+    snooze: [];
+    unsnooze: [];
+    open: [conversationId: string];
+}>();
+
+/* Which model this chore's turn opens on, and the caret that re-points it for this chore alone. Per ROW, because
+ * a board of chores starts many runs and the tier is a judgement about the one in front of you — "look into a
+ * flaky suite" and "fix a dependency bump" are not worth the same session. Seeded from the sandbox's agent-run
+ * list, asked of the host so the button and the daemon cannot disagree about what a click costs. */
+const runModel = useAgentRunPick(() => host().models);
+const startRun = (): void => {
+    emit(`start`, runModel.overridden.value ? runModel.model.value : undefined);
+    runModel.clear();
+};
 
 // The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
 // not measured it, and painting that amber would make every repo without knip look broken.
@@ -108,15 +125,16 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <div class="mt-4 flex flex-wrap items-center gap-2">
                 <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing
                      is wrong is an invitation this surface should not be making. -->
-                <Button
+                <AgentRunButton
                     v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
-                    size="small"
                     :label="verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
+                    icon="play"
+                    :model-label="runModel.model.value.label"
+                    :overridden="runModel.overridden.value"
                     :disabled="busy || liveAgent !== undefined"
-                    @click="emit(`start`)"
-                >
-                    <template #icon><Icon name="play" /></template>
-                </Button>
+                    @run="startRun"
+                    @pick="runModel.choose"
+                />
                 <Button v-if="liveAgent" size="small" severity="secondary" text label="Watch it" @click="emit(`open`, liveAgent)" />
                 <Button
                     v-if="verdict.state === `due`"

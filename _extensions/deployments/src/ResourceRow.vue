@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource } from "./contract";
-import { Button, cmp, Code, Icon, StatusBadge } from "@intentic/extension-ui";
+import { AgentRunButton, type AgentRunChoice, Button, cmp, Code, Icon, StatusBadge, useAgentRunPick } from "@intentic/extension-ui";
+import { host } from "./host";
 import { computed, ref } from "vue";
 import { imageLabel, STATE_TONE } from "./stateVisual";
 
@@ -28,15 +29,21 @@ const props = defineProps<{
     // The last failure from an action on THIS row. It belongs here rather than in a page banner: a 500 from
     // Komodo about `atlas` is unreadable as a red slab at the top of a board of forty rows.
     error: string | undefined;
-    // The model the fix will open on (the sandbox's agent-run model), for the button to name before the click.
-    // Undefined ⇒ nothing pinned, so there is nothing honest to promise.
-    fixModelLabel: string | undefined;
 }>();
 const emit = defineEmits<{
     act: [resource: DeployResource, action: DeployAction];
     logs: [resource: DeployResource];
-    fix: [resource: DeployResource];
+    fix: [resource: DeployResource, pick: AgentRunChoice | undefined];
 }>();
+
+/* Which model this row's fix will spend, and the caret that re-points it for this container alone. Seeded from
+ * the sandbox's agent-run list — asked of the host rather than read here, so the button and the daemon cannot
+ * disagree about what a click costs. Per row, because the choice belongs to the failure you are looking at. */
+const fixModel = useAgentRunPick(() => host().models);
+const startFix = (): void => {
+    emit(`fix`, props.resource, fixModel.overridden.value ? fixModel.model.value : undefined);
+    fixModel.clear();
+};
 
 const tone = computed(() => STATE_TONE[props.resource.state]);
 const expanded = ref(false);
@@ -167,17 +174,18 @@ const logText = computed(() => {
             <div class="mb-3 flex flex-wrap items-center gap-2">
                 <!-- The one thing this surface can do that Komodo's own UI cannot: put an agent on the failure
                      with the repo that holds the bug already open. It is the only primary button on the row,
-                     and it wears the same chrome as Pipelines' "Fix with agent" because it is the same act. -->
-                <Button
+                     and it IS Pipelines' "Fix with agent" — the same component, because it is the same act:
+                     one click on the standing model, a caret for the container that wants a bigger one. -->
+                <AgentRunButton
                     label="Ask the agent to fix"
-                    size="small"
+                    icon="sparkles"
+                    :model-label="fixModel.model.value.label"
+                    :overridden="fixModel.overridden.value"
                     :loading="busy"
                     :disabled="busy"
-                    v-tooltip.top="fixModelLabel === undefined ? undefined : `Opens an isolated agent on ${fixModelLabel}`"
-                    @click="emit(`fix`, resource)"
-                >
-                    <template #icon><Icon name="sparkles" /></template>
-                </Button>
+                    @run="startFix"
+                    @pick="fixModel.choose"
+                />
                 <Button
                     v-if="resource.state !== `stopped`"
                     label="Stop"

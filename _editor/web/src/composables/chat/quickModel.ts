@@ -1,14 +1,8 @@
-import {
-    compareCheapestFirst,
-    NATIVE_PROVIDERS,
-    parsePinned,
-    type QuickModelChoice,
-    quickModelKey,
-    resolveQuickModels,
-} from "@intentic/sandbox-contract";
+import { compareCheapestFirst, NATIVE_PROVIDERS, type QuickModelChoice, quickModelKey, resolveQuickModels } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
+import { type DescribedPin, describeModelPin, modelChoiceLabel } from "./modelPins";
 import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 
 /* WHICH MODELS THE ONE-CLICK HELPERS RUN, AND IN WHAT ORDER, browser-side — the same rule the daemon walks
@@ -55,29 +49,9 @@ export const quickModelGroups = computed<readonly QuickModelGroup[]>(() =>
         })),
 );
 
-// The model's published label, falling back to the raw id — a pinned id the catalog has not caught up with (the
-// picker's custom-model escape hatch) has no label to show, and showing the id is more honest than showing
-// nothing.
-const modelLabel = (choice: QuickModelChoice): string =>
-    modelOptionsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
-
-// What a resolved choice is CALLED, provider included: "Claude Haiku 4.5" already names its vendor, but
-// "GPT-OSS 120B" on Google's channel does not, and which account a click spends is the point of naming it.
-const quickModelLabel = (choice: QuickModelChoice): string => `${providerDisplayLabel(choice.provider)} · ${modelLabel(choice)}`;
-
-/* One entry of the STORED list, as a person reads it — for the settings row, which has to draw the models the
- * user wrote down rather than the ones that survived resolution. That difference is the whole reason this is
- * separate from the labels above: a pin whose account was disconnected drops out of the chain, and a row that
- * silently stopped drawing it would look like the app had eaten the setting.
- *
- * Falls back to the raw key for a malformed one, which is what a hand-edited settings file can hold. */
-export const pinnedQuickModel = (key: string): { readonly choice: QuickModelChoice | undefined; readonly label: string; readonly ready: boolean } => {
-    const choice = parsePinned(key);
-    if (choice === undefined) {
-        return { choice: undefined, label: key, ready: false };
-    }
-    return { choice, label: quickModelLabel(choice), ready: providerReady(choice.provider) };
-};
+// One entry of the STORED list, as a person reads it — shared with the Agent runs row below it, which keeps a
+// list of the same keys and owes the reader the same answer about each (modelPins.ts).
+export const pinnedQuickModel = (key: string): DescribedPin => describeModelPin(key);
 
 export interface QuickModel {
     // Every model a helper may run, in the order it will try them — the pinned list, or Auto's own ladder when
@@ -106,8 +80,8 @@ export function useQuickModel(): QuickModel {
     return {
         chain,
         choice,
-        label: computed(() => (choice.value === undefined ? undefined : quickModelLabel(choice.value))),
-        fallbackLabels: computed(() => chain.value.slice(1).map(quickModelLabel)),
+        label: computed(() => (choice.value === undefined ? undefined : modelChoiceLabel(choice.value))),
+        fallbackLabels: computed(() => chain.value.slice(1).map(modelChoiceLabel)),
         pinned,
     };
 }

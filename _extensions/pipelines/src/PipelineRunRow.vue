@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { Avatar, Button, Dialog, formatTimestamp, Icon, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { AgentRunButton, type AgentRunChoice, Avatar, Button, Dialog, formatTimestamp, Icon, StatusBadge, timeAgo, useAgentRunPick } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import { host } from "./host";
 import PipelineDagGraph from "./PipelineDagGraph.vue";
 import PipelineGraph from "./PipelineGraph.vue";
 import { pipelineStages } from "./pipelineDag";
@@ -22,14 +23,11 @@ const props = defineProps<{
     // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
     open: boolean;
     superseded: PipelineRun | undefined;
-    // The model the fix will open on (the sandbox's agent-run model), for the button to name before the click.
-    // Undefined ⇒ nothing pinned, so there is nothing honest to promise.
-    fixModelLabel: string | undefined;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
     cancel: [run: PipelineRun];
-    fix: [run: PipelineRun];
+    fix: [run: PipelineRun, pick: AgentRunChoice | undefined];
 }>();
 
 // vue-query caches per queryKey, so each row owns its own entry and remounts are free.
@@ -52,26 +50,34 @@ const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
 const jobCount = computed(() => stages.value.reduce((total, stage) => total + stage.jobs.length, 0));
 
-/* WHAT THE BUTTON SAYS ABOUT ITSELF before it spends anything. Two things can be worth saying and they stack.
+/* WHICH MODEL THIS ROW'S FIX WILL SPEND, and the caret that re-points it for this failure alone. Seeded from
+ * the sandbox's agent-run list, which is also what the daemon will resolve if nobody touches it — asked of the
+ * host rather than read here, so the two cannot disagree about what a click costs.
  *
- * WHICH MODEL, always: this is a one-click action that opens a full isolated session, and there is no picker
- * anywhere near it — by design, since a picker per button would be a second place to configure what Sandbox ▸
- * Agent ▸ Models already owns. The cost of that choice is that the button itself has to state the answer.
+ * Per ROW rather than per view: the choice belongs to the failure you are looking at, and the whole reason to
+ * reach for a bigger model is that this particular one beat the standing order. Cleared once the run has
+ * started, so the next fix on the same row opens on the standing list again. */
+const fixModel = useAgentRunPick(() => host().models);
+
+/* WHY THE BUTTON IS QUIET, for a demoted one — a Fix button at Re-run's weight reads as broken otherwise. The
+ * two reasons differ enough to be worth different words: a superseded failure is over, while a failure behind
+ * the head of an open breakage is very much alive, just not the run to start from.
  *
- * WHY IT IS QUIET, for a demoted one — a Fix button at Re-run's weight reads as broken otherwise. The two
- * reasons differ enough to be worth different words: a superseded failure is over, while a failure behind the
- * head of an open breakage is very much alive, just not the run to start from. */
+ * What it will SPEND is no longer part of this sentence: the caret beside it says that, and says it in one
+ * place for every surface in the app that starts an agent. */
 const fixHint = computed<string | undefined>(() => {
-    const opensOn = props.fixModelLabel === undefined ? undefined : `Opens an isolated agent on ${props.fixModelLabel}`;
     if (props.open) {
-        return opensOn;
+        return undefined;
     }
-    const demoted =
-        props.superseded !== undefined
-            ? `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`
-            : `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
-    return opensOn === undefined ? demoted : `${demoted}. ${opensOn}`;
+    return props.superseded !== undefined
+        ? `${props.run.branch} has passed since — this failure is history, but you can still start an agent on it`
+        : `Behind a newer failure on ${props.run.branch} — that one is the run to fix`;
 });
+
+const startFix = (): void => {
+    emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined);
+    fixModel.clear();
+};
 </script>
 
 <template>
@@ -170,16 +176,18 @@ const fixHint = computed<string | undefined>(() => {
                         <!-- Primary only on the branch's open failure. Every other red row keeps the same action at
                              Re-run's weight: a log entry, not a demand — while the vendor's own re-runs and skipped
                              jobs mean a green above is evidence, not proof, so the action stays one click away. -->
-                        <Button
+                        <AgentRunButton
                             v-if="run.status === `failed`"
                             label="Fix with agent"
-                            size="small"
+                            :model-label="fixModel.model.value.label"
+                            :overridden="fixModel.overridden.value"
                             :severity="open ? undefined : `secondary`"
                             :text="!open"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            v-tooltip.top="fixHint"
-                            @click="emit(`fix`, run)"
+                            :hint="fixHint"
+                            @run="startFix"
+                            @pick="fixModel.choose"
                         />
                         <Button
                             v-if="run.status === `running`"

@@ -265,9 +265,11 @@ export const AgentTurnSchema = z
          * opposite defaults — the chat wants the provider's own catalog default, an unattended run wants the
          * tier its owner chose for work that spends money while they are not watching.
          *
-         * The daemon fills `agent`/`model`/`effort` from agentRunModel/agentRunEffort for any turn that says
-         * this and names none of them (startConversationTurn). Naming one still wins: Acceptance picks per run
-         * because it fans a session out per story, and that pick is the user's, made a second ago. */
+         * The daemon fills `agent`/`model`/`effort` from agentRunModels/agentRunEffort for any turn that says
+         * this and names none of them (startConversationTurn), walking that list until one can actually be
+         * started. Naming one still wins: every surface-started run now carries a caret that overrides the list
+         * for that run alone, and Acceptance picks per run because it fans a session out per story. Either way
+         * the pick is the user's, made a second ago. */
         unattended: z.boolean().optional(),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
         // propose → approve → execute flow; 'default' prompts per tool on the permission side channel;
@@ -315,6 +317,20 @@ export const AgentTurnSchema = z
         message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+
+/* A MODEL CHOSEN FOR ONE SURFACE-STARTED RUN — what the caret on the shared run button (<AgentRunButton>) sends
+ * along with the click that starts it.
+ *
+ * Shared rather than re-declared per route because every surface that starts an agent for the user now carries
+ * that caret, and they must all mean the same thing by it: the pair rides onto the turn as `agent`/`model`, and
+ * the daemon's own fill step then leaves it alone (turn-resume.ts fills only what is absent). ABSENT is the
+ * ordinary case and the one to keep cheap — nobody touched the caret, so `agentRunModels` answers.
+ *
+ * Both halves or neither, because a model id is only meaningful to the provider that vends it: half a pick
+ * would send a Codex model id to Claude. Routes that accept this pass it through verbatim; a model this build
+ * has never heard of is a supported pick, since the picker offers a custom-id escape hatch. */
+export const AgentRunPickSchema = z.object({ agent: z.string().min(1), model: z.string().min(1) }).optional();
+export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;
 
 // POST /agent's ack: the daemon-minted id of the detached turn run it started. The turn executes daemon-side
 // regardless of any client connection; every window — the initiator included — renders it via /agent/attach.
@@ -1712,19 +1728,26 @@ export const SandboxSettingsSchema = z.object({
     changelogRepos: z.array(z.string()).max(50).default([]),
     /* WHAT AN AGENT RUN OPENS ON — the tier above quickModel, and the answer for every turn a SURFACE starts
      * rather than a person at a composer: Fix with agent on a pipeline or a deployment, a Maintenance chore, a
-     * Documentation or Acceptance run, the fix a failed pre-push check proposes. `${provider}:${model}`
-     * (quickModelKey) plus the reasoning effort beside it; both empty ⇒ whatever the chat composer would have
-     * started with, which is the honest floor because it is the model the user already chose to work with.
+     * Documentation or Acceptance run, the fix a failed pre-push check proposes. An ORDERED list of
+     * `${provider}:${model}` (quickModelKey) plus the reasoning effort beside it; EMPTY ⇒ whatever the chat
+     * composer would have started with, which is the honest floor because it is the model the user already
+     * chose to work with.
      *
-     * PINNED, NOT DERIVED — the deliberate opposite of quickModel one line above, and the reason these are two
-     * settings rather than one. A quick helper exists to stay OFF the frontier tier, so cheapest-connected is
-     * the right automatic answer. An agent run has to read a failing suite, or a container log, or a story, and
-     * repair the thing: the tier is a judgement about how much the job is worth, nothing here can make it, and
-     * a wrong guess is billed in whole sessions rather than in tokens.
+     * A LIST, for the reason quickModel is one: the account at the head runs out, and every surface-started run
+     * in the sandbox then fails on a credential the user cannot see from the row they pressed. Written in order,
+     * the next one down catches it (turn-resume.ts walks it).
+     *
+     * PINNED, NOT DERIVED — the deliberate difference from quickModel one line above, and the reason these are
+     * two settings rather than one. A quick helper exists to stay OFF the frontier tier, so cheapest-connected
+     * is the right automatic answer and an empty list resolves to Auto. An agent run has to read a failing
+     * suite, or a container log, or a story, and repair the thing: the tier is a judgement about how much the
+     * job is worth, nothing here can make it, and a wrong guess is billed in whole sessions rather than in
+     * tokens. So an empty list here resolves to NOTHING and the composer's own pick answers instead.
      *
      * The daemon applies this to any turn flagged `unattended` that names no model of its own — one rule, so a
-     * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. */
-    agentRunModel: z.string().default(""),
+     * surface added tomorrow inherits it by saying what it is instead of re-deriving where models come from. A
+     * surface MAY still name one (the shared run button's caret, Acceptance's per-run pick), and that wins. */
+    agentRunModels: z.array(z.string()).max(10).default([]),
     agentRunEffort: z.string().default(""),
     // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
     // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
@@ -4906,6 +4929,11 @@ export type CiSeenResponse = z.infer<typeof CiSeenResponseSchema>;
 // so a stale card can't act on a project the workspace no longer maps to.
 export const CiRunParamSchema = z.object({ repo: z.string(), runId: z.number() });
 export type CiRunParam = z.infer<typeof CiRunParamSchema>;
+
+// Fixing takes one thing the vendor proxies do not: which model to open the session on, when the user reached
+// for the caret beside the button rather than pressing it (AgentRunPickSchema). Absent is the ordinary path.
+export const CiFixParamSchema = CiRunParamSchema.extend({ pick: AgentRunPickSchema });
+export type CiFixParam = z.infer<typeof CiFixParamSchema>;
 
 // The fix route opens an isolated conversation (fleet card + chat tab) seeded with the failure context.
 export const CiFixResponseSchema = z.object({ conversationId: z.string() });

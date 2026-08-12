@@ -1,5 +1,7 @@
 export { clipboardOf } from "./clipboard.js";
 export { cmp } from "./cmp.js";
+export { default as AgentRunButton } from "./components/AgentRunButton.vue";
+export { type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
 export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
 export { default as Avatar } from "./components/Avatar.vue";
 export { type Cross, placeAnchored, type Placement, type Side } from "./composables/anchorPlacement.js";

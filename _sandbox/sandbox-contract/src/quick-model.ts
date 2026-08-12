@@ -54,8 +54,9 @@ export interface QuickModelChoice {
 export const quickModelKey = (choice: QuickModelChoice): string => `${choice.provider}:${choice.model}`;
 
 // Split on the FIRST colon only: a provider id never contains one and a model id might. Exported because the
-// key shape is shared: `agentRunModel` pins what a surface-started run opens on the same way, and both the
-// daemon (filling an unattended turn) and the dialogs that seed from it have to read one back.
+// key shape is shared: `agentRunModels` pins what a surface-started run opens with the same keys in the same
+// order (agent-run-model.ts), and both the daemon (filling an unattended turn) and the dialogs that seed from
+// it have to read one back.
 export const parsePinned = (pinned: string): QuickModelChoice | undefined => {
     const separator = pinned.indexOf(`:`);
     if (separator <= 0 || separator === pinned.length - 1) {

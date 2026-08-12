@@ -205,8 +205,9 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
             const conversationId = mintFixConversationId(resource.name, Date.now());
             /* POST /agent — the same detached-run boundary the core route used to reach in-process, now as the
              * declared daemon call it always morally was. Registering on the run map is what gives the fix an
-             * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run model
-             * answer for a click that has no model picker anywhere near it. */
+             * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run list answer
+             * for a click nobody chose a model for — unless they did, using the caret beside the button, in
+             * which case the pair rides on here and the daemon's fill step leaves it alone. */
             await api.daemon
                 .json(`/agent`, {
                     method: "POST",
@@ -215,6 +216,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                         conversationId,
                         isolated: true,
                         unattended: true,
+                        ...(input.pick !== undefined ? { agent: input.pick.agent, model: input.pick.model } : {}),
                         title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
                     }),
                 })

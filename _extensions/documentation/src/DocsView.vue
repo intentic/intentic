@@ -5,7 +5,18 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, PageAction, Panel, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
+import {
+    type AgentRunChoice,
+    Button,
+    cmp,
+    Icon,
+    PageAction,
+    Panel,
+    Picker,
+    type PickerOption,
+    Segmented,
+    SplitView,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
@@ -150,12 +161,15 @@ const confirmPublish = async (): Promise<void> => {
     }
 };
 
-const onStart = (dirs: readonly string[]): void => {
+const onStart = (dirs: readonly string[], pick: AgentRunChoice | undefined): void => {
     void start({
         repo: repo.value,
         label: label.value,
         // An explicit subset only when the user narrowed it; otherwise the map discovers the scope.
         ...(dirs.length === 0 ? {} : { packages: dirs }),
+        // The caret's choice, when they used it. Recorded on the run so the map agent and every package agent
+        // after it open on the same model.
+        ...(pick === undefined ? {} : { pick: { agent: pick.provider, model: pick.model } }),
     });
 };
 

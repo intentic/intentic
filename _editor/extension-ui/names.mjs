@@ -2,6 +2,7 @@
 // (_editor/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
 // src/index.ts; the assertion catches drift on the next dev boot.
 export const extensionUiNames = [
+    "AgentRunButton",
     "AnchoredOverlay",
     "Avatar",
     "BarChart",
@@ -69,6 +70,7 @@ export const extensionUiNames = [
     "timeAgo",
     "timeWindowWords",
     "ToggleSwitch",
+    "useAgentRunPick",
     "useAsyncAction",
     "useCompact",
     "useDevice",

@@ -1,6 +1,7 @@
-import type { PrepushRun } from "@intentic/sandbox-contract";
+import { type PrepushRun, quickModelKey } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../agents/sessionSuggestion";
+import { useAgentRunModel } from "../chat/agentRunModel";
 import type { Conversation } from "../chat/conversation";
 import { useSandbox } from "../sandbox/useSandbox";
 import { prepushCommandOf } from "../sandbox/rules";
@@ -210,6 +211,7 @@ const send = async (push: PendingPush): Promise<void> => {
 export function usePushFlow() {
     git ??= useChanges();
     const { settings } = useSandboxSettings();
+    const agentRun = useAgentRunModel();
     if (sandboxId === undefined) {
         sandboxId = useSandbox().activeSandboxId;
         watch(sandboxId, (id) => readTypical(id), { immediate: true });
@@ -231,7 +233,11 @@ export function usePushFlow() {
             void send(push);
             return;
         }
-        fixWith = { model: settings.value?.agentRunModel, effort: settings.value?.agentRunEffort };
+        // The HEAD of the agent-run list — the entry the daemon would reach for — rather than the raw setting:
+        // this is composed into a draft the user can see and re-point, so it has to name a model that can
+        // actually be sent. `quickModelKey` because composeSession takes the pinned `${provider}:${model}` form.
+        const head = agentRun.choice.value;
+        fixWith = { ...(head === undefined ? {} : { model: quickModelKey(head) }), effort: settings.value?.agentRunEffort };
         enter(push, `checking`);
         void prepush.start().then((settled) => {
             rememberTypical(settled);

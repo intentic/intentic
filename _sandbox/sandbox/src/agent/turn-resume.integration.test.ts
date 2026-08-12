@@ -105,11 +105,44 @@ test("a started turn records its settled transcript, whatever provider ran it", 
 });
 
 /* WHAT AN UNATTENDED TURN RUNS ON. Every surface that starts an agent for the user — Fix with agent, a
- * Maintenance chore, a Documentation or Acceptance run — comes through here naming no model, because there was
- * no picker in front of anybody when it started. These four cases are the whole rule, and the reason it lives at
- * this boundary rather than at each of those five call sites. */
-const ranWith = async (settings: Partial<SandboxSettings>, turn: AgentTurn & { conversationId: string }): Promise<AgentTurn> => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-")));
+ * Maintenance chore, a Documentation or Acceptance run — comes through here naming no model, because nobody
+ * touched the caret on the button that started it. These cases are the whole rule, and the reason it lives at
+ * this boundary rather than at each of those five call sites.
+ *
+ * `connected` is which providers this sandbox can reach, because the setting is an ORDERED LIST and the whole
+ * point of the second entry is to answer when the first one's account is gone. Codex and Claude are routed
+ * through the translator here, which is the cheapest fake that makes `harnessReadyProviders` say yes. */
+const routed = (provider: string, connected: readonly string[]): { name: string; label: string }[] =>
+    connected.includes(provider) ? [{ name: "acct", label: "Account" }] : [];
+
+const withProviders = (services: Services, connected: readonly string[]): Services => ({
+    ...services,
+    config: unstubbed<Services["config"]>("config", {
+        translator: { url: "http://translator.test", token: "tok" },
+        claudeCodeOauthToken: "",
+        anthropicApiKey: "",
+    }),
+    cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+        accounts: async () => ({
+            codex: routed("codex", connected),
+            grok: routed("grok", connected),
+            kimi: routed("kimi", connected),
+            gemini: routed("gemini", connected),
+        }),
+    }),
+    claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+        list: async () => (connected.includes("claude") ? [{ id: "acct", label: "Claude", connectedAt: 0 }] : []),
+    }),
+    // No model endpoints configured — the sandbox's own providers are the whole picture here.
+    capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+});
+
+const ranWith = async (
+    settings: Partial<SandboxSettings>,
+    turn: AgentTurn & { conversationId: string },
+    connected: readonly string[] = ["claude", "codex", "gemini"],
+): Promise<AgentTurn> => {
+    const services = withProviders(fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-"))), connected);
     await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
     const seen: AgentTurn[] = [];
     await startConversationTurn(
@@ -126,7 +159,7 @@ const ranWith = async (settings: Partial<SandboxSettings>, turn: AgentTurn & { c
 
 test("an unattended turn takes the agent-run model, provider and effort", async () => {
     const ran = await ranWith(
-        { agentRunModel: "codex:gpt-5.6", agentRunEffort: "high" },
+        { agentRunModels: ["codex:gpt-5.6"], agentRunEffort: "high" },
         { prompt: "fix CI", conversationId: "ar-fill", unattended: true },
     );
     // The provider rides along with the id and has to: a model id is only meaningful to the provider that vends
@@ -134,10 +167,41 @@ test("an unattended turn takes the agent-run model, provider and effort", async 
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
 });
 
-test("an unattended turn that names its own model keeps it", async () => {
-    // Acceptance's per-run picker: a choice the user made a second ago outranks the standing setting.
+test("the head of the list wins while its account is connected", async () => {
     const ran = await ranWith(
-        { agentRunModel: "codex:gpt-5.6" },
+        { agentRunModels: ["codex:gpt-5.6", "claude:claude-opus-4-5"] },
+        { prompt: "fix CI", conversationId: "ar-head", unattended: true },
+    );
+    expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
+});
+
+test("a disconnected head is stepped over rather than failing the run", async () => {
+    // The whole reason the setting is a list. Without this the user's Codex account going away takes every
+    // surface-started run in the sandbox down, and the row they pressed cannot tell them why.
+    const ran = await ranWith(
+        { agentRunModels: ["codex:gpt-5.6", "claude:claude-opus-4-5"] },
+        { prompt: "fix CI", conversationId: "ar-fallback", unattended: true },
+        ["claude"],
+    );
+    expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
+});
+
+test("a list with nothing reachable left leaves the turn unset — it does not reach for a connected account", async () => {
+    // An agent run is billed in whole sessions, so a list that has stopped saying anything about this sandbox
+    // hands the choice back to the composer's own pick rather than spending Gemini because it happens to be there.
+    const ran = await ranWith({ agentRunModels: ["codex:gpt-5.6"] }, { prompt: "fix CI", conversationId: "ar-none", unattended: true }, [
+        "claude",
+        "gemini",
+    ]);
+    expect(ran.model).toBeUndefined();
+    expect(ran.agent).toBeUndefined();
+});
+
+test("an unattended turn that names its own model keeps it", async () => {
+    // The shared run button's caret, and Acceptance's per-run pick: a choice the user made a second ago
+    // outranks the standing list.
+    const ran = await ranWith(
+        { agentRunModels: ["codex:gpt-5.6"] },
         { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, agent: "claude", model: "claude-opus-4-5" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
@@ -145,15 +209,15 @@ test("an unattended turn that names its own model keeps it", async () => {
 
 test("a turn nobody flagged unattended is left alone", async () => {
     // The chat sends no model whenever its live catalog has not loaded yet. That must still resolve to the
-    // PROVIDER's catalog default, not to the agent-run pin — the two look identical on the wire without the flag,
-    // which is exactly why the flag exists rather than being inferred from a missing model.
-    const ran = await ranWith({ agentRunModel: "codex:gpt-5.6" }, { prompt: "hello", conversationId: "ar-chat" });
+    // PROVIDER's catalog default, not to the agent-run list — the two look identical on the wire without the
+    // flag, which is exactly why the flag exists rather than being inferred from a missing model.
+    const ran = await ranWith({ agentRunModels: ["codex:gpt-5.6"] }, { prompt: "hello", conversationId: "ar-chat" });
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
 });
 
-test("an unpinned agent-run model leaves the turn unset rather than inventing one", async () => {
-    const ran = await ranWith({ agentRunModel: "" }, { prompt: "fix CI", conversationId: "ar-unpinned", unattended: true });
+test("an empty agent-run list leaves the turn unset rather than inventing one", async () => {
+    const ran = await ranWith({ agentRunModels: [] }, { prompt: "fix CI", conversationId: "ar-unpinned", unattended: true });
     expect(ran.model).toBeUndefined();
 });
 

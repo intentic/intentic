@@ -1,5 +1,6 @@
 import type { ChoreVerdict } from "@intentic/sandbox-contract/chores";
 import { type AgentSummary, AgentsListSchema, StartedTurnSchema } from "@intentic/sandbox-contract";
+import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { choresRunsQuery } from "./choresQuery";
@@ -122,7 +123,7 @@ export function useRuns() {
      * run discoverable — if the turn started before it existed and the browser closed in between, there would be
      * a fleet agent with a derived id and nothing on disk saying which chore it belonged to. A manifest with no
      * turn behind it is the recoverable failure; the reverse is not. */
-    const start = async (verdict: ChoreVerdict): Promise<string> => {
+    const start = async (verdict: ChoreVerdict, pick?: AgentRunChoice | undefined): Promise<string> => {
         if (verdict.prompt === undefined) {
             throw new Error(`ext-maintenance: ${verdict.chore.id} has nothing to do`);
         }
@@ -147,10 +148,12 @@ export function useRuns() {
                     title: `${verdict.chore.title} — ${verdict.repo}`.slice(0, 80),
                     conversationId: manifest.conversationId,
                     isolated: true,
-                    // A chore is started by a row, not by a person choosing a model, so the daemon answers with
-                    // the owner's `agentRunModel` (Sandbox ▸ Agent ▸ Models). No picker here on purpose: it
-                    // would be a second place to configure one thing, and this view starts many runs at once.
+                    /* A chore is started by a row rather than by a person at a composer, so the daemon answers
+                     * with the owner's `agentRunModels` (Sandbox ▸ Agent ▸ Models) — unless they used the caret
+                     * on that row's button, in which case the pair rides on here and the daemon's fill step
+                     * leaves it alone. The flag stays either way: it is what the turn IS. */
                     unattended: true,
+                    ...(pick !== undefined ? { agent: pick.provider, model: pick.model } : {}),
                 }),
             }),
         );

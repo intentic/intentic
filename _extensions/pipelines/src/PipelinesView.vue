@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
-import { cmp, CountBar, type CountItem, Icon, InfoHint, PageAction, ProgressRing, RowGroup, SplitView } from "@intentic/extension-ui";
+import {
+    type AgentRunChoice,
+    cmp,
+    CountBar,
+    type CountItem,
+    Icon,
+    InfoHint,
+    PageAction,
+    ProgressRing,
+    RowGroup,
+    SplitView,
+} from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
 import { openFailures, supersededBy } from "./ciStreaks";
@@ -18,7 +29,7 @@ import { usePipelines } from "./usePipelines";
  * chevron expands a full horizontal job flow. */
 
 const api = host();
-const { repos, runs, error, isPending, rerun, cancel, fix, fixModelLabel } = usePipelines();
+const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
 
 // Opening the view IS reading it: stamp read state so the rail stops flagging breakages now on screen. Only
 // on mount — re-stamping as runs stream in would swallow a failure that lands while the tab sits in the
@@ -134,11 +145,13 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     }
 };
 
-const fixRun = async (run: PipelineRun): Promise<void> => {
+// `pick` is set only when the reader used the caret beside this row's button — otherwise the daemon opens the
+// session on the sandbox's agent-run list, which is the ordinary path and the one that stays one click long.
+const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promise<void> => {
     busy.value = actionKey(run);
     actionError.value = undefined;
     try {
-        const { conversationId } = await fix.mutateAsync(run);
+        const { conversationId } = await fix.mutateAsync({ run, pick });
         // The BOARD with the new card focused, not the agent's diff view: the turn started a second ago and has
         // nothing to review yet, so what the user wants is to watch it work beside their other agents. `?focus`
         // is the fleet's own deep link — it waits for the card to reach the roster, then selects and reveals it.
@@ -163,8 +176,9 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                     Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
                     webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent seeded
                     with that run's failed jobs' logs and takes you to its card on the Agents board — it stands out on the failure a branch is
-                    actually stuck on, and stays quiet on older failures a later green run has already left behind. Each row's circles are its stages
-                    — click one for that stage's jobs, or expand the row for the full job graph.
+                    actually stuck on, and stays quiet on older failures a later green run has already left behind. It opens on the model in
+                    Sandbox ▸ Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages — click one for
+                    that stage's jobs, or expand the row for the full job graph.
                 </span>
             </InfoHint>
         </template>
@@ -266,10 +280,9 @@ const fixRun = async (run: PipelineRun): Promise<void> => {
                                 :recurring="recurringFor(run)"
                                 :open="open.has(run)"
                                 :superseded="superseded.get(run)"
-                                :fix-model-label="fixModelLabel"
                                 @rerun="act($event, rerun)"
                                 @cancel="act($event, cancel)"
-                                @fix="fixRun($event)"
+                                @fix="fixRun"
                             />
 
                             <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">No runs yet for this repo.</p>

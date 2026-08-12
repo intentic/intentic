@@ -5,8 +5,9 @@
      that changed. So the presets are "what has no document" and "what the tool says is stale", with everything as
      an explicit choice rather than the path of least resistance. -->
 <script setup lang="ts">
-import { Button, Checkbox, Dialog, Icon } from "@intentic/extension-ui";
+import { AgentRunButton, type AgentRunChoice, Button, Checkbox, Dialog, Icon, useAgentRunPick } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
+import { host } from "./host";
 import type { DocIndex } from "./docModel.js";
 
 const { packages, index, label } = defineProps<{
@@ -18,7 +19,7 @@ const { packages, index, label } = defineProps<{
 }>();
 
 const open = defineModel<boolean>({ required: true });
-const emit = defineEmits<{ start: [dirs: readonly string[]] }>();
+const emit = defineEmits<{ start: [dirs: readonly string[], pick: AgentRunChoice | undefined] }>();
 
 const chosen = ref<string[]>([]);
 
@@ -39,8 +40,15 @@ const toggle = (dir: string): void => {
     chosen.value = chosen.value.includes(dir) ? chosen.value.filter((entry) => entry !== dir) : [...chosen.value, dir];
 };
 
+/* Which model every session in this run opens on, and the caret that re-points them for this run alone. ONE
+ * pick for the whole fan-out rather than one per package: the dialog starts N+1 sessions on one press, and a
+ * per-package model would be N+1 decisions to make a single scope choice. Cleared on start, so re-opening the
+ * dialog is back on the sandbox's standing list. */
+const runModel = useAgentRunPick(() => host().models);
+
 const start = (): void => {
-    emit(`start`, [...chosen.value]);
+    emit(`start`, [...chosen.value], runModel.overridden.value ? runModel.model.value : undefined);
+    runModel.clear();
     open.value = false;
 };
 </script>
@@ -84,7 +92,14 @@ const start = (): void => {
 
             <div class="flex justify-end gap-2">
                 <Button size="small" severity="secondary" text label="Cancel" @click="open = false" />
-                <Button size="small" label="Generate" :disabled="chosen.length === 0" @click="start" />
+                <AgentRunButton
+                    label="Generate"
+                    :model-label="runModel.model.value.label"
+                    :overridden="runModel.overridden.value"
+                    :disabled="chosen.length === 0"
+                    @run="start"
+                    @pick="runModel.choose"
+                />
             </div>
         </div>
     </Dialog>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PickedModel } from "@intentic/extension-api";
-import { Button, cmp, Icon } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { AgentRunButton, cmp, Icon, useAgentRunPick } from "@intentic/extension-ui";
+import { computed } from "vue";
 import { host } from "./host";
 
 /* THE RUN CONTROL — a pill that floats over the list it acts on, inside the page's own column.
@@ -26,10 +26,15 @@ import { host } from "./host";
  *
  * WHAT THE PILL SAYS, left to right, is the sentence "N stories, on this model, are about to cost N sessions —
  * except this is in the way". The scope is on the button (`Run all 21 stories`), because a button that states its
- * own scope needs no separate readout and can never disagree with one. The model sits immediately beside it, so
- * the two operands of the multiplication are read together. What is left — the product, or the reason there
- * won't be one — is the one line to their left, and it is either/or: once something is blocking the run, the
- * price is not what the user has to act on.
+ * own scope needs no separate readout and can never disagree with one. The model is the caret ON that button,
+ * so the two operands of the multiplication cannot be separated. What is left — the product, or the reason
+ * there won't be one — is the one line to their left, and it is either/or: once something is blocking the run,
+ * the price is not what the user has to act on.
+ *
+ * THE MODEL WAS A CHIP OF ITS OWN HERE FIRST, and this view was the only place in the app that had one — which
+ * is precisely why it is now the shared <AgentRunButton> instead. Four other surfaces start the same kind of
+ * run and none of them could choose at all; unifying them on this view's good idea was worth giving up its
+ * bespoke spelling of it.
  *
  * NOTHING TICKED MEANS EVERYTHING, which is what the run dialog's preselect-them-all default meant. So there is
  * no mode to enter, no empty state, and the button always says exactly what pressing it will do.
@@ -52,25 +57,15 @@ const { chosen, total, narrowed, blocked, canRun } = defineProps<{
 }>();
 const emit = defineEmits<{ submit: [PickedModel]; clear: [] }>();
 
-/* WHO RUNS IT, and where that answer comes from before anybody touches the chip: the sandbox's agent-run model
- * (Sandbox ▸ Agent ▸ Models), the same setting every other surface-started run spends — resolved and named by
- * the host, so this view holds no catalog of its own. A hand pick wins from the instant it is made, which is
- * why this is one ref with a fallback rather than a watcher seeding it: a watcher would re-seed under the user
- * the moment the setting refetched, silently undoing a choice they had already made. */
-const picked = ref<PickedModel>();
-const model = computed<PickedModel>(() => picked.value ?? host().models.agentRun());
-
-// The trigger the shell's picker hangs off — a popover on desktop, a sheet on mobile; the host decides.
-const chip = ref<HTMLElement>();
-const choose = async (): Promise<void> => {
-    if (chip.value === undefined) {
-        return;
-    }
-    const next = await host().models.pick({ anchor: chip.value, provider: model.value.provider, model: model.value.model });
-    if (next !== undefined) {
-        picked.value = next;
-    }
-};
+/* WHO RUNS IT — the sandbox's agent-run list (Sandbox ▸ Agent ▸ Models), the same setting every other
+ * surface-started run spends, with the caret overriding it for this run alone.
+ *
+ * THE CHIP THIS ROW USED TO OWN IS GONE, and that is the point of the change rather than a side effect of it.
+ * It was the only surface in the app where you could choose, so the four that could not (both Fix buttons,
+ * Maintenance, Documentation) each grew a tooltip apologising for it. One control now, on all of them, and the
+ * differences that remain here are the ones that are actually about acceptance: the run costs a session PER
+ * STORY, which is what the line to its left is for. */
+const fixModel = useAgentRunPick(() => host().models);
 
 const storyCount = (howMany: number): string => `${howMany} ${howMany === 1 ? `story` : `stories`}`;
 
@@ -101,31 +96,19 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
                 Clear
             </button>
 
-            <!-- A chip, not a button: it names a setting the run carries rather than doing anything. Quiet
-                 border, the app's own chip language (see TargetChip), so the one filled control in the pill stays
-                 the one that spends money. -->
-            <button
-                ref="chip"
-                type="button"
-                class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-line-strong hover:text-content"
-                v-tooltip.top="`Every test session runs on this model — one session per story`"
-                :aria-label="`Model for this run: ${model.label}`"
-                @click="choose"
-            >
-                <Icon name="sparkles" class="shrink-0 text-subtle" />
-                <span class="max-w-[12rem] truncate">{{ model.label }}</span>
-                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-            </button>
-
-            <Button
+            <!-- The app's one run button, here as everywhere else: the scope on the label, the model behind the
+                 caret. `rounded` is dropped — the two halves need square inner edges to read as one control,
+                 and a pill inside a pill was never doing any work. -->
+            <AgentRunButton
                 :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
-                size="small"
-                rounded
+                icon="play"
+                :model-label="fixModel.model.value.label"
+                :overridden="fixModel.overridden.value"
                 :disabled="!canRun"
-                @click="emit(`submit`, model)"
-            >
-                <template #icon><Icon name="play" /></template>
-            </Button>
+                hint="Every test session runs on this model — one session per story"
+                @run="emit(`submit`, fixModel.model.value as PickedModel)"
+                @pick="fixModel.choose"
+            />
         </div>
     </div>
 </template>

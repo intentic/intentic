@@ -50,7 +50,7 @@ import { useTargets } from "./useTargets";
  * monorepo showed six cards agreeing that one dev server was down, two scrollbars fought, and the button you
  * could not yet press was the only thing pinned. All three of its questions were already answerable here: WHICH
  * is ticked in the list, WHERE is stated on the heading the stories sit under (one dev server per repository, so
- * one line per repository), and WHO is the model chip on the run pill (RunControls). Nothing ticked runs
+ * one line per repository), and WHO is the caret on the run button (RunControls). Nothing ticked runs
  * everything, which is what the dialog's preselect-them-all default meant — so there is no mode to enter.
  *
  * THE GATE LIVES HERE, once. A run in scope is waiting on an address or on a stopped server, and that same

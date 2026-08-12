@@ -14,6 +14,17 @@
  * <SplitView> is here for exactly the same reason one level up: five screens are an index beside a body, and the
  * one implementation that had solved it (HubLayout) sat in the web app where no extension could import it. */
 export {
+    /* <AgentRunButton> and its state ship because FOUR extensions start an agent for the user — pipelines,
+     * deployments, maintenance, acceptance — and each of them had reached a different answer about how you
+     * choose what it spends: three had no control at all and named the model in a tooltip, the fourth grew a
+     * chip of its own. That is the same divergence <SplitView> and <Row> were shipped to end, arriving on the
+     * one control in the app where getting it wrong costs money rather than pixels. `useAgentRunPick` is the
+     * half that needs `api.models` and takes it as an argument, so the kit stays free of the extension API. */
+    AgentRunButton,
+    type AgentRunChoice,
+    type AgentRunPicker,
+    type ModelPicking,
+    useAgentRunPick,
     /* <AnchoredOverlay> ships because the alternative on this surface is PrimeVue's <Popover>, and six extension
      * views had already reached for it. Popover measures and dismisses against the OPENER's window, so in a
      * popped-out panel it opens off the bottom edge, over its own trigger, and cannot be clicked shut — the

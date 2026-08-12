@@ -60,6 +60,14 @@ export interface RunManifest {
      * out of `repo.json`. A later run can narrow to a subset — the stale ones — because by then an index exists to
      * choose from. */
     readonly packages?: readonly string[];
+    /* The model every session in this run opens on, when the reader used the caret beside Generate. Absent ⇒
+     * the sandbox's agent-run list answers, which is the ordinary path.
+     *
+     * ON THE MANIFEST rather than held in the view, because a run OUTLIVES the press that started it: only the
+     * map agent starts immediately, and the fan-out is started later by `advance()` — on a later poll, quite
+     * possibly in a browser that has been reloaded since. A pick kept in memory would document the first
+     * package on the model the user chose and the other forty on the standing one. */
+    readonly pick?: { readonly agent: string; readonly model: string };
 }
 
 const parseManifest = (text: string): RunManifest | undefined => {
@@ -68,6 +76,7 @@ const parseManifest = (text: string): RunManifest | undefined => {
         const runId = body[`runId`];
         const repo = body[`repo`];
         const packages = body[`packages`];
+        const pick = body[`pick`] as { agent?: unknown; model?: unknown } | undefined;
         if (typeof runId !== `string` || typeof repo !== `string`) {
             return undefined;
         }
@@ -76,6 +85,9 @@ const parseManifest = (text: string): RunManifest | undefined => {
             repo,
             createdAt: typeof body[`createdAt`] === `number` ? (body[`createdAt`] as number) : 0,
             packages: Array.isArray(packages) ? packages.filter((dir): dir is string => typeof dir === `string`) : undefined,
+            // Both halves or neither: a model id means nothing without the provider that vends it, so half a
+            // pick read back off disk is worse than none.
+            ...(typeof pick?.agent === `string` && typeof pick.model === `string` ? { pick: { agent: pick.agent, model: pick.model } } : {}),
         };
     } catch {
         return undefined;
@@ -98,6 +110,8 @@ export interface StartRunInput {
     readonly label: string;
     // Absent ⇒ document every package the map finds. See RunManifest.packages.
     readonly packages?: readonly string[] | undefined;
+    // The caret's choice, when the reader made one. Recorded on the manifest so the whole fan-out inherits it.
+    readonly pick?: { readonly agent: string; readonly model: string } | undefined;
 }
 
 export function useRuns(repo: Ref<string>) {
@@ -189,15 +203,23 @@ export function useRuns(repo: Ref<string>) {
             });
     });
 
-    /* No provider or model is sent, only `unattended`: the daemon then fills in `agentRunModel`, which is the
-     * one place a documentation run and every other surface-started run get their answer from. A picker here
-     * would be a second place to configure the same thing, and the first surprise of a run finishing on a model
-     * the user did not expect. */
-    const startAgent = async (conversationId: string, prompt: string): Promise<void> => {
+    /* `unattended` and usually no model: the daemon then fills in from `agentRunModels`, which is the one place
+     * a documentation run and every other surface-started run get their answer from.
+     *
+     * `pick` is the run's own override, read back off its manifest so every session in the fan-out opens on the
+     * same model the caret named — including the ones started an hour later by `advance()`. */
+    const startAgent = async (conversationId: string, prompt: string, pick?: RunManifest[`pick`]): Promise<void> => {
         await api.sandbox.request(`/agent`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ prompt, conversationId, isolated: true, permissionMode: `bypassPermissions`, unattended: true }),
+            body: JSON.stringify({
+                prompt,
+                conversationId,
+                isolated: true,
+                permissionMode: `bypassPermissions`,
+                unattended: true,
+                ...(pick !== undefined ? { agent: pick.agent, model: pick.model } : {}),
+            }),
         });
     };
 
@@ -208,11 +230,12 @@ export function useRuns(repo: Ref<string>) {
             createdAt: Date.now(),
             repo: input.repo,
             ...(input.packages === undefined ? {} : { packages: [...input.packages] }),
+            ...(input.pick === undefined ? {} : { pick: input.pick }),
         };
         // The manifest is written BEFORE the first turn starts, so a run that dies mid-launch is still a run the
         // view can show and advance rather than an invisible half-thing.
         await api.workspace.write(runManifestPath(runId), `${JSON.stringify(manifest, undefined, 2)}\n`);
-        await startAgent(mapConversationId(runId), mapBrief({ repo: input.repo, label: input.label }));
+        await startAgent(mapConversationId(runId), mapBrief({ repo: input.repo, label: input.label }), input.pick);
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation-runs`) });
         return runId;
     };
@@ -252,6 +275,7 @@ export function useRuns(repo: Ref<string>) {
                         glossary: repoDoc.glossary,
                         components: repoDoc.components,
                     }),
+                    row.manifest.pick,
                 );
             }
             if (pending.length > 0) {
