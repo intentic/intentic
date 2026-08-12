@@ -596,6 +596,85 @@ describe(`createPopout`, () => {
         open.mockRestore();
     });
 
+    /* The frame the reader left it in must never drag the window back on top of the app. Popping the panel out
+     * is asking to read it BESIDE the app: once it lands on the app's own screen, "where I last left it" has
+     * stopped describing a preference and started describing an accident — the browser clamped the window, or
+     * the reader shoved it aside once — and honouring it turns every later pop-out into the same accident. */
+    it(`opens on the other screen even when it was last closed on the app's own`, () => {
+        desk.screens = [BIG, SMALL];
+        localStorage.setItem(`ui-popout-frame-drifted-panel`, `300,200,800,600`); // squarely on the app's screen
+        const popout = createPopout(`drifted-panel`, `Panel`, size);
+        const open = vi.spyOn(window, `open`).mockReturnValue(null);
+
+        popout.popOut();
+
+        // The other monitor, at the size it was last left — the size is the part of that frame worth keeping.
+        expect(open).toHaveBeenCalledWith(expect.any(String), `drifted-panel`, `popup=1,width=800,height=600,left=3120,top=220`);
+        open.mockRestore();
+    });
+
+    /* WHAT WINDOW.OPEN'S FOUR NUMBERS ACTUALLY ARE: a request. A browser is free to ignore them — and silently
+     * does, clamping the window to the screen the page is on, or dropping bounds handed to a window that is
+     * still being created. Neither says so; the window just opens on the wrong monitor. */
+    it(`hands the frame to the window again when the browser ignored it`, async () => {
+        desk.screens = [BIG, SMALL];
+        const popout = createPopout(`ignored-frame-panel`, `Panel`, size);
+        const win = fakeWindow(`ignored-frame-panel`);
+        win.screenX = 100; // where it actually opened: the app's screen, not the one it was sent to
+        win.screenY = 100;
+        win.outerWidth = 500;
+        win.outerHeight = 400;
+        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
+
+        popout.popOut();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(win.moveTo).toHaveBeenCalledWith(3270, 320);
+
+        // Still on the wrong screen, so it is asked again — twice, a frame apart, and then left alone. A window
+        // manager that refuses to move a window refuses every time, and a placement that keeps trying twitches.
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(win.moveTo).toHaveBeenCalledTimes(3);
+        open.mockRestore();
+    });
+
+    it(`stops asking the moment the window lands on the right screen`, async () => {
+        desk.screens = [BIG, SMALL];
+        const popout = createPopout(`landing-panel`, `Panel`, size);
+        const win = fakeWindow(`landing-panel`);
+        win.screenX = 100;
+        win.screenY = 100;
+        win.outerWidth = 500;
+        win.outerHeight = 400;
+        // A window that accepts the bounds it is handed, which is the ordinary case.
+        win.moveTo.mockImplementation((left: number, top: number) => {
+            win.screenX = left;
+            win.screenY = top;
+        });
+        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
+
+        popout.popOut();
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(win.moveTo).toHaveBeenCalledTimes(1);
+        expect(win.moveTo).toHaveBeenCalledWith(3270, 320);
+        open.mockRestore();
+    });
+
+    // A window that outlived a page reload is one the reader has already placed. Shoving it back to a default is
+    // the same rudeness as leaving it on the wrong screen, in the other direction.
+    it(`leaves a window it did not just open where the reader put it`, () => {
+        desk.screens = [BIG, SMALL];
+        const popout = createPopout(`readopted-frame-panel`, `Panel`, size);
+        const win = fakeWindow(`readopted-frame-panel`);
+
+        adopt(`readopted-frame-panel`, win); // the keeper of a window from before this page's load
+
+        expect(popout.poppedOut.value).toBe(true);
+        expect(win.moveTo).not.toHaveBeenCalled();
+        expect(win.resizeTo).not.toHaveBeenCalled();
+    });
+
     /* THE FIRST POP-OUT OF ALL. The desktop's shape is a permission, the permission is answered in human time,
      * and a window.open that waits on it has spent its click and is blocked as a popup. So the window opens
      * where one screen's worth of information allows, and moves the moment the reader agrees — which is the last

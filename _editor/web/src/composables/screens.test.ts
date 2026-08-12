@@ -67,6 +67,19 @@ describe(`screens`, () => {
         expect(asked).toHaveBeenCalledTimes(1);
     });
 
+    /* "The screen the app is not on" is decided by WHERE a screen is, never by which object the browser handed
+     * back. A browser that describes the current screen with a separate object of its own excludes nothing from
+     * the list, the app's screen wins by being listed first, and the pop-out opens on top of the app it was torn
+     * off — the failure that looks exactly like having no multi-screen support at all. */
+    it(`names the other screen even when the browser describes the current one twice`, async () => {
+        const details = { screens: [BIG, SMALL], currentScreen: { ...BIG } };
+        attachScreens(() => Promise.resolve(details));
+        const screens = await load();
+        await screens.learnScreens();
+
+        expect(screens.otherScreen()).toEqual({ left: 2560, top: 0, width: 1920, height: 1040 });
+    });
+
     it(`has no other screen to offer on a one-monitor desk`, async () => {
         desktop(BIG);
         const screens = await load();

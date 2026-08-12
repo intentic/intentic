@@ -64,16 +64,26 @@ export const knownScreens = (): readonly ScreenRect[] | undefined => details?.sc
 /** The screen the app's own window is on. Undefined for the same reasons as above. */
 export const appScreen = (): ScreenRect | undefined => (details === undefined ? undefined : workArea(details.currentScreen));
 
+/** Two screens are the same one when they occupy the same place — see the note on identity in `otherScreen`. */
+export const sameArea = (a: ScreenRect, b: ScreenRect): boolean =>
+    a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+
 /* The screen to put something on when the reader has expressed no preference: the first one that is not the
  * app's. "First" is the order the browser lists them in, which is the desktop's own left-to-right arrangement —
  * predictable, and on the two-monitor desk this is for it is simply "the other one". Undefined when the app is
- * on the only screen there is. */
+ * on the only screen there is.
+ *
+ * "Not the app's" is decided by WHERE THE SCREEN IS, never by which object the browser handed back. The two are
+ * supposed to be the same object, and when they are not this comparison quietly keeps every screen — including
+ * the one the app is on, which then wins by being listed first, and the window opens on top of the app it was
+ * torn off. A rule with a failure mode that looks exactly like the bug it exists to prevent is not worth the
+ * three characters it saves. */
 export const otherScreen = (): ScreenRect | undefined => {
-    if (details === undefined) {
+    const current = appScreen();
+    if (current === undefined) {
         return undefined;
     }
-    const current = details.currentScreen;
-    return details.screens.filter((screen) => screen !== current).map(workArea)[0];
+    return knownScreens()?.find((screen) => !sameArea(screen, current));
 };
 
 const overlap = (frame: ScreenRect, screen: ScreenRect): number => {
