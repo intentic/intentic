@@ -13,7 +13,7 @@ There are **two stored things** and **one derived thing**. That is the whole mod
 | Word | What it really is | Where it lives |
 | --- | --- | --- |
 | **Capability** | One thing you connected. A GitHub token, a database, a VPN — and, for our purposes, **one login on one site**. | one entry in `.intentic/capabilities.json` |
-| **Persona** | A card that says "these logins are the same someone", plus how that someone sounds and whether it may publish. | one entry in `.intentic/personas.json` (committed to git) |
+| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do and where it works. | one entry in `.intentic/personas.json` (committed to git) |
 | **Browser session** | *Not a thing you create.* It is the signed-in Chromium profile that a browser capability grows once somebody logs in. | files under `.intentic/browser/` |
 
 And one word that people expect to find and **will not**: there is no **Identity** object. See
@@ -39,7 +39,7 @@ the other. Nothing is keyed by the *site* — keying by site is the version of t
 
 ```mermaid
 flowchart LR
-    persona["<b>Persona card</b> — stored<br/>“these logins are one someone”<br/>name · voice · may-publish"]
+    persona["<b>Persona card</b> — stored<br/>“these logins are one someone”<br/>name · what it may do · where it works"]
     cap["<b>Capability</b> — stored<br/>one login on one site<br/>site · optional username + password"]
     disk["<b>What that login grows on disk</b><br/>browser profile · “signed in” marker<br/>its passkey · its skill file"]
     tools["<b>What this turn is handed</b><br/>one browser per allowed account<br/>+ sign-in helper tools"]
@@ -132,14 +132,16 @@ confirmation link, it is told in prose to go look in whatever inbox is connected
 data. If "one person, several accounts, one of them the mailbox the rest were born from" is something we want,
 it is a feature to add — not a tangle to unpick.
 
-**Personas fence browser logins only.** A persona narrows the signed-in *websites* and nothing else. Connector
-credentials — GitHub, Discord, Slack, a mailbox — are handed to the shell of every turn regardless. So an
-unattended job with no persona reaches no website account and still holds those tokens. The code says this is
-where the next line changes when the connectors grow personas of their own.
+**A card carries no wording, and no publish-or-draft switch.** Both used to be fields on it and both are gone.
+The wording was a paragraph on how the persona writes: optional, answered by almost nobody, and a fourth question
+on a form whose other answers all bound something — prose that steers a turn belongs in the workspace's own
+instructions, which every turn already reads. The switch read as a lock and was a sentence: it asked the turn to
+route outward things through the approvals queue and could not stop it posting. The queue is the mechanism, and a
+control that promises more than it delivers is the one an owner trusts. So a card answers three questions — who
+it speaks as, what it may do, where it works — and every field of it changes what a session can reach.
 
-**"May not publish" is advice, not a gate.** A persona marked draft-only adds a sentence to the turn's
-instructions asking it to route outward things through the approvals queue. It shapes behaviour; it does not
-block a tool. The approvals queue itself is the real mechanism.
+The one exception is the desk a Doorbell answers through, whose manner is the product's rather than any
+workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
 
 **A persona is not a security boundary, and does not claim to be.** Its card holds no secret, which is exactly
 what lets it be committed and reviewed like any other project config. What it prevents is the wrong-account

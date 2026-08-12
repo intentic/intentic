@@ -81,11 +81,20 @@ const text = (el: HTMLElement): string => el.textContent ?? ``;
 const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input`)!;
+const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
+    el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 
 // Typing into a v-model field is a value assignment plus the event Vue listens for.
 const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     field.value = value;
     field.dispatchEvent(new Event(`input`));
+    await nextTick();
+};
+
+// The account chooser is folded away until it is asked for (a sandbox can hold twenty accounts and the form has
+// three other sections), so every test that picks an account opens it first — as a person does.
+const chooseAccounts = async (el: HTMLElement): Promise<void> => {
+    buttonLabelled(el, `Choose accounts`)?.click();
     await nextTick();
 };
 
@@ -122,6 +131,7 @@ it(`saves one persona holding accounts on two different sites`, async () => {
     buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
     await type(nameField(el), `Work`);
+    await chooseAccounts(el);
     buttonLabelled(el, `reddit-work`)!.click();
     buttonLabelled(el, `x-company`)!.click();
     await nextTick();
@@ -164,7 +174,9 @@ it(`saves no powers block for a card nobody has bounded`, async () => {
 /* A card that IS bounded says so on its row. Which shelf is off is the form's business; what the list owes a
  * reader scanning six cards is which of them are limited at all. */
 it(`shows how bounded a card is on its row`, () => {
-    personas.value = [{ id: `visitor`, capabilities: [], powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false } }];
+    personas.value = [
+        { id: `visitor`, capabilities: [], powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false } },
+    ];
     expect(text(mount())).toContain(`Read-only`);
 });
 
@@ -192,19 +204,59 @@ it(`does not repeat the site under an account already named after it`, async () 
     const el = mount();
     buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
+    await chooseAccounts(el);
     expect(text(buttonLabelled(el, `reddit`)!).replace(/\s+/g, ` `).trim()).toBe(`reddit`);
     // ...and still says it where the id does not, which is the whole reason the line exists.
     expect(text(buttonLabelled(el, `main-account`)!)).toContain(`reddit`);
 });
 
-// Posture is only worth recording when it RESTRICTS: "publish" is what every account does today, and writing it
-// down would put a field in the committed card that means nothing.
-it(`leaves posture off a persona that publishes`, async () => {
+/* THE FORM IS A FORM AND NOT A WALL. Every account this sandbox has signed into used to render as a chip in the
+ * second field, so on a box with seventeen of them the switches and the folder fence began a screen below the
+ * name they belong to. What is on screen unopened is the ANSWER — the accounts this card speaks through — and the
+ * chooser is one click away. */
+it(`keeps every account out of the form until the chooser is opened`, async () => {
     const el = mount();
     buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
-    await type(nameField(el), `Work`);
-    buttonLabelled(el, `Add persona`)!.click();
+    expect(text(el)).not.toContain(`reddit-personal`);
+    await chooseAccounts(el);
+    expect(text(el)).toContain(`reddit-personal`);
+});
+
+// A card that already speaks through two accounts shows those two, and nothing about the other fifteen.
+it(`shows only the accounts a card speaks through when it is opened for editing`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    byAriaLabel(el, `Edit this persona`)!.click();
+    await nextTick();
+    expect(text(el)).toContain(`reddit-work`);
+    expect(text(el)).not.toContain(`x-company`);
+});
+
+// Clicking a persona's own account chip takes that account off the card — the summary row is the way to remove
+// one without going back into the chooser to hunt for it.
+it(`drops an account when its chip is clicked`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
+    const el = mount();
+    byAriaLabel(el, `Edit this persona`)!.click();
+    await nextTick();
+    byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
+    await nextTick();
+    buttonLabelled(el, `Save`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.calls[0]![0]).not.toHaveProperty(`posture`);
+    expect(save.mock.calls[0]![0].capabilities).toEqual([`x-company`]);
+});
+
+/* The filter exists for the reason the fold does: seventeen accounts, of which one is the one being looked for.
+ * It matches the site as well as the id, so "reddit" finds every Reddit account whatever each one is called. */
+it(`narrows the chooser by name or site`, async () => {
+    // Long enough to be worth filtering — the field only appears once the list is past a glance.
+    accounts.value = [...accounts.value, ...[`a`, `b`, `c`, `d`, `e`].map((suffix) => account(`spam-${suffix}`, `reddit`))];
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await chooseAccounts(el);
+    await type(el.querySelector<HTMLInputElement>(`input[aria-label="Filter accounts"]`)!, `x-comp`);
+    expect(text(el)).toContain(`x-company`);
+    expect(text(el)).not.toContain(`reddit-personal`);
 });

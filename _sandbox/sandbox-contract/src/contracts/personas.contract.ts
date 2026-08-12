@@ -1,8 +1,8 @@
 import { oc } from "@orpc/contract";
 import { PersonasListSchema, PersonaIdParamSchema, PersonaSchema, OkSchema } from "../schemas.js";
 
-/* The sandbox's named personas (PersonaSchema): which connected accounts each one speaks for, how it sounds,
- * whether it may publish. Deliberately a plain three-verb CRUD with no apply step, because a card provisions
+/* The sandbox's named personas (PersonaSchema): which connected accounts each one speaks for, what a session
+ * wearing it may do, where it works. Deliberately a plain three-verb CRUD with no apply step, because a card provisions
  * NOTHING — unlike a capability, saving one connects nothing, installs nothing and spends nothing. It records a
  * decision about accounts that already exist.
  *

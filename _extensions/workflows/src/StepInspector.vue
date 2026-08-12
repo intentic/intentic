@@ -215,7 +215,7 @@ const unpin = (): void => patch({ agent: undefined, model: undefined, account: u
 
 /* WHO THE STEP IS when it reaches outside — the chat composer's persona pill, as a form row. A step is an
  * unattended turn, and unattended-with-no-persona deliberately reaches no logged-in account at all; pinning a
- * card is how a release check gets the one voice, folder scope and account set its owner already wrote down.
+ * card is how a release check gets the folder scope, toolbox and account set its owner already wrote down.
  * The cards are authored on the Personas page — this is only a pointer at one. */
 const { personas } = usePersonas();
 const actsAs = computed({
@@ -473,7 +473,7 @@ const advancedSummary = computed(() => {
                     </div>
                     <span class="text-2xs text-subtle">
                         A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona — the card also sets
-                        its voice and how far its tools go.
+                        how far its tools go and where it works.
                     </span>
                 </div>
             </div>

@@ -768,9 +768,10 @@ it holds no secret). A turn names one via `actsAs`, and `turnPersona()`
 none keeps every account, an **unattended** one naming none gets NONE, a named card gets exactly its accounts,
 and a named card that does not exist gets none — fail-closed, because falling back to "all" would turn a typo
 into the one mistake that cannot be undone. The narrowing filters the MANIFEST before the browser servers are
-built, so a disallowed account has no MCP server, no Chromium and no opened profile. It bounds logged-in
-browsers only — `cli` connector credentials still reach every turn's shell — and `posture: "draft"` is a
-sentence in the turn's instructions, not a tool gate. Two surfaces name one: an automation's form, answered
+built, so a disallowed account has no MCP server, no Chromium and no opened profile. The card also carries what a
+session wearing it may DO (`powers` — the shelves, and the connectors, computers and MCP connections it may reach
+by id) and where it works, and nothing an owner has to compose: a card holds no prose and no publish-or-draft
+switch, because the approvals queue is what actually holds a post back. Two surfaces name one: an automation's form, answered
 once when the job is written, and the chat composer's persona pill, which starts at *anyone* and is per
 conversation rather than remembered — resolved per TURN, so a chat can change who it is mid-conversation. Full
 model, diagrams and the honest limits: [docs/accounts-and-personas.md](docs/accounts-and-personas.md).

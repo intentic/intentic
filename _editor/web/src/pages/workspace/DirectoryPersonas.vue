@@ -21,11 +21,11 @@ import PersonaPowersFields from "../sandbox/PersonaPowersFields.vue";
 
 /* A FOLDER'S PERSONAS, FROM THE FOLDER — opened by the person icon on a directory row in the Workspace tree.
  *
- * The Personas page is where a card is thought about: which accounts it speaks through, how it sounds, whether it
- * publishes. This is the other half of the same feature and a different question — "give me a persona that works
- * HERE" — asked in the place where the answer is obvious, with the starting path filled in from the row that was
- * clicked rather than typed into a text field on another page. So it asks for a name and stops, and the switches
- * that most cards never touch are folded under Advanced.
+ * The Personas page is where a card is thought about: which accounts it speaks through, and everything it may do.
+ * This is the other half of the same feature and a different question — "give me a persona that works HERE" —
+ * asked in the place where the answer is obvious, with the starting path filled in from the row that was clicked
+ * rather than typed into a text field on another page. So it asks for a name and stops, and the switches that
+ * most cards never touch are folded under Advanced.
  *
  * A FOLDER HOLDS SEVERAL, which is why this is a list and not a toggle: "Docs bot" and "Refactor crew" can both
  * start in the same repo with different bounds, and a panel that showed one card would silently edit the wrong one.
@@ -120,8 +120,6 @@ const submit = async (): Promise<void> => {
             // Carried over, not asked about — see the header. A new card starts with no accounts, which is what a
             // persona created to work in a folder rather than to post as somebody wants.
             capabilities: existing?.capabilities ?? [],
-            ...(existing?.voice !== undefined ? { voice: existing.voice } : {}),
-            ...(existing?.posture !== undefined ? { posture: existing.posture } : {}),
             ...(existing?.repos !== undefined ? { repos: existing.repos } : {}),
             // Only worth storing when it says something the id does not.
             ...(named !== `` && named !== cardId.value ? { label: named } : {}),
@@ -228,8 +226,8 @@ const submit = async (): Promise<void> => {
         </div>
 
         <template #footer>
-            <!-- The rest of a card — the accounts it speaks through, its voice, whether it publishes — lives on
-                 the page that owns it, and this is the way there rather than a second copy of it. -->
+            <!-- The rest of a card — the accounts it speaks through, the folders it is fenced to — lives on the
+                 page that owns it, and this is the way there rather than a second copy of it. -->
             <RouterLink to="/sandbox/personas" :class="cmp.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
                 Full editor <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>

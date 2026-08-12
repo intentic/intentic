@@ -1,4 +1,12 @@
-import { type Capability, type Persona, type PersonaPowers, type PersonaWorkspace, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import {
+    type Capability,
+    type Persona,
+    type PersonaPowers,
+    type PersonaWorkspace,
+    FRONT_DESK_PERSONA,
+    PersonaPowersSchema,
+} from "@intentic/sandbox-contract";
+import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
 
 /* WHO A TURN IS AND WHAT IT MAY DO — the whole persona layer in one function, so the rule lives in a single
  * place instead of being re-derived at each surface that needs it.
@@ -50,7 +58,7 @@ export type PersonaReason =
     | "unknown-persona";
 
 export interface TurnPersona {
-    // The card that was named and found, for the turn's voice and posture. Absent in every other case.
+    // The card that was named and found, for the turn's own note. Absent in every other case.
     readonly persona: Persona | undefined;
     // Whether this turn may act through a given capability. The ONE question the turn path asks about the
     // manifest, and it takes the whole entry rather than an id because the answer is per-KIND: an account is
@@ -74,7 +82,17 @@ export interface TurnPersonaInput {
 // Every shelf open — what an unpinned turn gets, and the shape every caller can read without a fallback.
 const FULL: PersonaPowers = PersonaPowersSchema.parse({});
 // Every shelf shut. Only a named-but-missing card gets this; see the header for why that case is the strict one.
-const NONE_POWERS: PersonaPowers = { files: "none", shell: false, web: false, browser: false, delegate: false, sandbox: false, connectors: [], computers: [], mcp: [] };
+const NONE_POWERS: PersonaPowers = {
+    files: "none",
+    shell: false,
+    web: false,
+    browser: false,
+    delegate: false,
+    sandbox: false,
+    connectors: [],
+    computers: [],
+    mcp: [],
+};
 
 /* The three answers that are not "read the card", spelled per KIND rather than as one blanket verdict.
  *
@@ -166,7 +184,9 @@ export const personaCliEnv = (
     persona: TurnPersona,
     envSuffix: (id: string) => string,
 ): Record<string, string> => {
-    const denied = capabilities.filter((capability) => capability.kind === "cli" && !persona.allows(capability)).map((capability) => `_${envSuffix(capability.id)}`);
+    const denied = capabilities
+        .filter((capability) => capability.kind === "cli" && !persona.allows(capability))
+        .map((capability) => `_${envSuffix(capability.id)}`);
     if (denied.length === 0) {
         return cliEnv;
     }
@@ -206,12 +226,16 @@ export const personaDisallowedTools = (persona: TurnPersona): string[] => {
 
 /* What to append to the turn's guidance when a persona is on. Kept SHORT: the model is already told, per
  * account, that its tools belong to exactly one account (see browser-skill.ts) — this says which of them the
- * owner meant for THIS turn, whether it may publish without asking, and where it is expected to work.
+ * owner meant for THIS turn, and where it is expected to work.
  *
  * The shelves are deliberately NOT narrated. A tool that is not in the turn's context needs no explanation, and
  * a paragraph listing what the agent cannot do is a paragraph inviting it to look for a way round — the absence
  * is the better teacher. What DOES need saying is anything the agent cannot discover by trying: which folders
  * it is expected to stay inside, because a refusal there arrives mid-task and reads as a broken tool.
+ *
+ * NOTHING HERE IS AUTHORED BY THE OWNER. Every sentence is derived from a field they SET, so the note cannot say
+ * something they did not decide. The one exception is the desk the daemon writes for a Doorbell, whose manner
+ * belongs to the product rather than to any workspace (front-desk.ts).
  *
  * Returns undefined when there is nothing worth saying: an open attended turn is the status quo, and a turn
  * with no accounts at all is better served by the tools simply not being there than by a paragraph about it. */
@@ -221,15 +245,11 @@ export const personaNote = (persona: TurnPersona): string | undefined => {
         return undefined;
     }
     const name = card.label ?? card.id;
-    const posture =
-        card.posture === "draft"
-            ? ` This persona does NOT publish directly: prepare a draft for the owner to approve instead of posting, replying, or sending.`
-            : ``;
     const folders = card.workspace?.folders;
     const scope =
         folders === undefined || folders.length === 0
             ? ``
             : ` You work inside ${folders.join(", ")} — file tools pointed anywhere else in the workspace are refused, so if the task needs a file outside that, say so rather than working around it.`;
-    const voice = card.voice === undefined ? `` : `\n\n${card.voice}`;
-    return `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${posture}${scope}${voice}`;
+    const desk = card.id === FRONT_DESK_PERSONA ? `\n\n${FRONT_DESK_GUIDANCE}` : ``;
+    return `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${scope}${desk}`;
 };

@@ -50,8 +50,8 @@ test("an invalid card is skipped and reported; the rest survive", async () => {
 // mistake. A write that round-trips to exactly what went in is the guard: no token is minted on the way through.
 test("a written card holds only the owner's own words", async () => {
     const { store, path } = tempStore();
-    await store.upsert({ id: "work", capabilities: ["reddit-work"], label: "Work Reddit", voice: "Dry.", posture: "draft" });
+    await store.upsert({ id: "work", capabilities: ["reddit-work"], label: "Work Reddit", workspace: { startIn: "docs" } });
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual([
-        { id: "work", capabilities: ["reddit-work"], label: "Work Reddit", voice: "Dry.", posture: "draft" },
+        { id: "work", capabilities: ["reddit-work"], label: "Work Reddit", workspace: { startIn: "docs" } },
     ]);
 });

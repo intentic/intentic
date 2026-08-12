@@ -1,4 +1,4 @@
-import { type Capability, type Persona, type PersonaPowers, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Capability, type Persona, type PersonaPowers, FRONT_DESK_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, turnPersona } from "./personas.js";
 
@@ -113,7 +113,9 @@ test("naming a persona no card carries denies everything — accounts and tools 
 
 test("a card's shelves become the tools taken out of the turn", () => {
     const persona = turnPersona({
-        personas: [card("reader", [], { powers: powers({ files: "read", shell: false, web: false, browser: false, delegate: false, sandbox: false }) })],
+        personas: [
+            card("reader", [], { powers: powers({ files: "read", shell: false, web: false, browser: false, delegate: false, sandbox: false }) }),
+        ],
         actsAs: "reader",
         unattended: true,
     });
@@ -183,17 +185,24 @@ test("a card that grants every connector leaves the environment exactly as it wa
 
 // ── What the turn is told ───────────────────────────────────────────────────────────────────────────────────
 
-test("the note names the persona, carries its voice, and says when it may not publish", () => {
+test("the note names the persona and says its accounts are the only ones", () => {
     const note = personaNote(
         turnPersona({
-            personas: [card("work", ["reddit-work"], { label: "Work Reddit", voice: "Dry, no exclamation marks.", posture: "draft" })],
+            personas: [card("work", ["reddit-work"], { label: "Work Reddit" })],
             actsAs: "work",
             unattended: true,
         }),
     );
     expect(note).toContain("Work Reddit");
-    expect(note).toContain("Dry, no exclamation marks.");
-    expect(note).toContain("does NOT publish directly");
+    expect(note).toContain("Only that persona's accounts");
+});
+
+/* The one card whose wording is the PRODUCT's — a public web chat's desk — gets it from the daemon rather than
+ * from a field on the card, so this is what proves the guidance still reaches the turn that needs it. */
+test("the front desk's own manner rides its note, and no other card's", () => {
+    const desk = personaNote(turnPersona({ personas: [card(FRONT_DESK_PERSONA, [])], actsAs: FRONT_DESK_PERSONA, unattended: true }));
+    expect(desk).toContain("You are the front desk");
+    expect(personaNote(turnPersona({ personas: CAST, actsAs: "work", unattended: true }))).not.toContain("front desk");
 });
 
 /* The folder limit IS narrated, unlike the shelves, and the asymmetry is deliberate: a tool that is absent

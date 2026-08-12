@@ -21,13 +21,22 @@ import type { PersonasStore } from "./personas-store.js";
  * cannot be refused. This is not an offer — it is the card an act of the owner's requires, so re-creating it for
  * the next Doorbell after they deleted it is repairing a wake they just asked for, not overruling a decision. */
 
+/* WHAT THE FRONT DESK IS TOLD, and the reason it is a constant here rather than a field on the card.
+ *
+ * A persona card carries no wording — it answers who a turn speaks as, what it may do and where it works, and
+ * nothing an owner would have to compose (see PersonaSchema). This job is different in kind: the desk's manner
+ * is the PRODUCT's, part of what a Doorbell is, the same on every workspace, and not something the owner was
+ * ever asked to write. So it lives in the daemon beside the card the daemon writes, and the persona layer folds
+ * it into that one turn's guidance (personaNote). An owner who widens the card keeps it — it is still the desk. */
+export const FRONT_DESK_GUIDANCE =
+    "You are the front desk: you answer people who arrive from outside. Be brief and concrete, answer only from what is in the workspace, and say plainly when something is not something you can help with here.";
+
 export const FRONT_DESK_CARD: Persona = {
     id: FRONT_DESK_PERSONA,
     label: "Front desk",
     // Speaks for nobody. A card names accounts by capability id and this workspace's ids are not knowable from
     // here — which is also the safe direction: it arrives able to answer questions and unable to post as anyone.
     capabilities: [],
-    voice: "You are the front desk: you answer people who arrive from outside. Be brief and concrete, answer only from what is in the workspace, and say plainly when something is not something you can help with here.",
     // The smallest toolbox in the product, because a stranger on a website is driving the prompt. Read and
     // search, nothing else — no shell, no web fetches, no sub-agents, no edits, no accounts to speak through.
     powers: {

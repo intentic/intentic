@@ -11,9 +11,10 @@ import { identityHue } from "../../composables/identityHue";
 import { FULL_POWERS, grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 
-/* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written — its accounts,
- * its voice, its posture. (A folder's own personas can also be named and bounded from the Workspace tree's row
- * icon; that panel asks for a name and links here for the rest. Both write through personaCard.ts.)
+/* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written — the accounts
+ * it speaks through, what it may do, where it works. (A folder's own personas can also be named and bounded from
+ * the Workspace tree's row icon; that panel asks for a name and links here for the rest. Both write through
+ * personaCard.ts.)
  *
  * A persona is NOT per-site. It is a person the outside world reads: "Work" holds its Reddit account AND its X
  * account AND whatever else belongs to that person, so one card can span every platform the owner signed into
@@ -63,7 +64,7 @@ const NO_SCOPE = { startIn: ``, copy: `` as const, folders: `` };
 
 const startAdd = (): void => {
     saveError.value = undefined;
-    draft.value = { original: undefined, label: ``, capabilities: [], voice: ``, posture: `publish`, ...FULL_POWERS, ...NO_SCOPE };
+    draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE };
 };
 const startEdit = (persona: Persona): void => {
     saveError.value = undefined;
@@ -71,8 +72,6 @@ const startEdit = (persona: Persona): void => {
         original: persona.id,
         label: persona.label ?? persona.id,
         capabilities: [...persona.capabilities],
-        voice: persona.voice ?? ``,
-        posture: persona.posture ?? `publish`,
         ...powersDraftOf(persona),
         startIn: persona.workspace?.startIn ?? ``,
         copy: persona.workspace?.copy ?? ``,
@@ -99,7 +98,7 @@ const submit = async (): Promise<void> => {
     if (draft.value === undefined || !draftValid.value) {
         return;
     }
-    const { label, capabilities: picked, voice, posture, startIn, copy, folders } = draft.value;
+    const { label, capabilities: picked, startIn, copy, folders } = draft.value;
     saveError.value = undefined;
     /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits
      * nothing stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made
@@ -124,9 +123,6 @@ const submit = async (): Promise<void> => {
             // Only worth storing when it says something the id does not.
             ...(label.trim() !== `` && label.trim() !== draftId.value ? { label: label.trim() } : {}),
             capabilities: picked,
-            ...(voice.trim() !== `` ? { voice: voice.trim() } : {}),
-            // "publish" is what every account does today, so only the restrictive posture is worth recording.
-            ...(posture === `draft` ? { posture: `draft` as const } : {}),
             ...(powers !== undefined ? { powers } : {}),
             ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
         });
@@ -247,7 +243,6 @@ const confirmRemove = async (): Promise<void> => {
                              limited at all — that is the difference between "my Doorbell is safe" being a
                              belief and being something they can see. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
-                        <StatusBadge v-if="persona.posture === `draft`" variant="info" size="xs">Drafts only</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
                             Not signed in
                         </StatusBadge>

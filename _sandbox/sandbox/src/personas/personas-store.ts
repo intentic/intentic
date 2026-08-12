@@ -9,7 +9,7 @@ import { statePath } from "../workspace/state-paths.js";
  * provider OAuth, live browser profiles — plus ledgers and transcripts that are machine noise in a review. And
  * history/history.ts writes the exclude rules into the git dir OUTSIDE /work precisely so the agent cannot
  * loosen them. This file is the original deliberate hole in that wall, and it is safe for exactly one reason: a
- * persona card holds no secret. It is a name, a list of capability ids, a paragraph of voice, and a posture. The
+ * persona card holds no secret. It is a name, a list of capability ids, some switches, and a folder or two. The
  * accounts it speaks for keep their cookies and passkeys where they already live, untracked and unexported.
  *
  * Committing it is the point, not a side effect. It means a persona can be added in a pull request and argued about

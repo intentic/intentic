@@ -148,16 +148,14 @@ it(`lists every persona starting in this folder and no others`, async () => {
 });
 
 /* THE SAVE IS AN UPSERT OF THE WHOLE CARD. Editing a name from the tree must carry over everything this panel
- * never shows — the accounts it speaks through, its voice, its posture, the folders it is fenced to — because a
- * field left out of the payload is a field taken off the card. */
+ * never shows — the accounts it speaks through, the projects that prefer it, the folders it is fenced to —
+ * because a field left out of the payload is a field taken off the card. */
 it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     personas.value = [
         {
             id: `docs-bot`,
             label: `Docs bot`,
             capabilities: [`reddit-work`, `x-company`],
-            voice: `Terse.`,
-            posture: `draft`,
             repos: [`intentic`],
             workspace: { startIn: `docs`, copy: `own`, folders: [`docs`] },
         },
@@ -174,8 +172,6 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
         id: `docs-bot`,
         label: `Docs crew`,
         capabilities: [`reddit-work`, `x-company`],
-        voice: `Terse.`,
-        posture: `draft`,
         repos: [`intentic`],
         workspace: { startIn: `docs`, copy: `own`, folders: [`docs`] },
     });

@@ -89,7 +89,6 @@ const openPersonas = (): void => {
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
-                        <StatusBadge v-if="persona.posture === `draft`" variant="info" size="xs">Drafts only</StatusBadge>
                     </span>
                     <span v-if="persona.capabilities.length === 0" class="text-2xs text-warning">No accounts — this persona can't post anywhere</span>
                     <span v-else-if="!ready(persona)" class="truncate text-2xs text-warning">{{ accountsOf(persona) }} — not signed in yet</span>

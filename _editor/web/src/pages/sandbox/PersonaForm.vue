@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { Avatar, BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import { identityHue } from "../../composables/identityHue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
 /* The card editor, used in both places a card is written: opened inside an existing row, and standing alone at
- * the tail of the group for a new one. One component because the two are the same four questions — the only
+ * the tail of the group for a new one. One component because the two are the same three questions — the only
  * difference is the verb on the button — and a second copy is how the edit form and the add form drift into
  * disagreeing about what a persona has.
+ *
+ * THREE QUESTIONS, AND IT USED TO ASK FIVE. A paragraph on how the persona writes and a publish-or-draft switch
+ * sat between the accounts and the switches; both are gone (see PersonaSchema for why the card no longer carries
+ * them). What is left is a name, who it speaks as, what it may do and where — which is short enough that someone
+ * finishes it, and every field of which changes what a session can actually reach.
  *
  * IT SHOWS YOU WHO YOU ARE MAKING. The avatar at the head is not decoration: it takes the name as it is typed
  * and wears the colour that persona will wear in every list it appears in afterwards, so the form reads as
@@ -34,8 +39,6 @@ export interface PersonaDraft extends PersonaPowersDraft {
     original: string | undefined;
     label: string;
     capabilities: string[];
-    voice: string;
-    posture: `publish` | `draft`;
     startIn: string;
     copy: `` | `own` | `shared`;
     folders: string;
@@ -89,10 +92,30 @@ const toggleAccount = (id: string): void => {
     }
 };
 
-const POSTURES = [
-    { label: `Publishes`, value: `publish` as const },
-    { label: `Drafts only`, value: `draft` as const },
-];
+/* THE PICKER IS FOLDED AWAY UNTIL SOMEBODY ASKS FOR IT, and that is not tidiness — it is the difference between
+ * a form and a wall. A sandbox that has signed into seventeen accounts (an ordinary number here: every identity
+ * brings its Reddit, its X, its Product Hunt) rendered seventeen chips in the SECOND field, so the switches and
+ * the folder fence below them started a screen further down than the name they belong to.
+ *
+ * What stays visible is the answer rather than the question: the accounts this card speaks through, as chips that
+ * remove themselves when clicked. That is one line for almost every card, nothing at all for a persona that
+ * speaks nowhere — and it does not grow with the number of accounts the sandbox happens to hold. */
+const open = ref(false);
+const filter = ref(``);
+
+// What the card names, in its own order, whether or not this sandbox has that account. An id with no capability
+// here is a card describing an account nobody has added yet — dropping it from the summary would quietly rewrite
+// what the persona reaches the next time somebody saved the form.
+const pickedMarks = computed(() => draft.capabilities.map((id) => ({ id, account: accounts.find((entry) => entry.id === id) })));
+
+// The filter earns its place only once the list is longer than a glance. Matched against the id and the site, so
+// "reddit" finds every Reddit account and "spam3" finds the one.
+const query = computed(() => filter.value.trim().toLowerCase());
+const shown = computed(() =>
+    query.value === ``
+        ? accounts
+        : accounts.filter((account) => account.id.toLowerCase().includes(query.value) || account.site.toLowerCase().includes(query.value)),
+);
 
 const PLACEMENT = [
     { label: `Whatever started it`, value: `` as const },
@@ -127,67 +150,104 @@ const folderBound = computed(() => draft.folders.trim() !== ``);
         <div class="ui-field">
             <span class="ui-field-label">Speaks through</span>
             <p v-if="accounts.length === 0" class="text-xs text-subtle">Connect an account first — a persona needs one to speak through.</p>
-            <!-- Toggles rather than a multi-select: the list is short, picking several is the normal case, and
-                 every entry carries a second fact a <select> has nowhere to put — whether it is signed in.
-                 The brand mark is what makes a persona reading across two sites visible at a glance. -->
-            <div v-else class="flex flex-wrap gap-2">
-                <button
-                    v-for="account in accounts"
-                    :key="account.id"
-                    type="button"
-                    :aria-pressed="picked(account.id)"
-                    :class="[
-                        `group flex cursor-pointer items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 text-left transition-colors`,
-                        picked(account.id) ? `border-link bg-link/10` : `border-line hover:border-line-strong hover:bg-overlay`,
-                    ]"
-                    @click="toggleAccount(account.id)"
-                >
-                    <!-- The brand keeps its colour whether or not it is picked: colour is how you FIND the
-                         site you meant in a list of five, and draining it until after the click makes the
-                         picker monochrome exactly when it is being scanned. `idle` is kept for its documented
-                         meaning — present but switched off — which here is an account not yet signed in. -->
-                    <BrandMark :size="20" :name="account.site" :logo="account.logo" :icon="account.icon" :idle="!connected.includes(account.id)" />
-                    <!-- ONE LINE, ONE SIZE. The account's name and whatever is left to say about it sit side by
-                         side at `text-xs`, told apart by tone rather than by a second, smaller size — which is
-                         what a two-row chip needed, and what made the picker the noisiest thing on the page. -->
-                    <span class="flex min-w-0 items-baseline gap-1.5 text-xs">
-                        <span class="truncate font-medium" :class="picked(account.id) ? `text-content` : `text-muted`">{{ account.id }}</span>
-                        <span v-if="detailOf(account) !== undefined" class="truncate text-subtle">{{ detailOf(account) }}</span>
-                    </span>
-                    <Icon v-if="picked(account.id)" name="check" class="ml-0.5 shrink-0 text-xs text-link" />
-                </button>
-            </div>
+            <template v-else>
+                <!-- WHAT IT SPEAKS THROUGH, AND THE WAY TO CHANGE IT, on one line. A chip here is a persona's
+                     account and clicking it takes that account away, which is why it wears an × rather than the
+                     tick the chooser's chips wear: in this row every entry is already picked. -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button
+                        v-for="mark in pickedMarks"
+                        :key="mark.id"
+                        type="button"
+                        class="group flex cursor-pointer items-center gap-1.5 rounded-lg border border-link bg-link/10 py-1 pl-1.5 pr-2 text-xs transition-colors hover:border-danger"
+                        :aria-label="`Stop speaking through ${mark.id}`"
+                        @click="toggleAccount(mark.id)"
+                    >
+                        <BrandMark
+                            :size="16"
+                            :name="mark.account?.site ?? mark.id"
+                            :logo="mark.account?.logo"
+                            :icon="mark.account?.icon ?? `globe`"
+                            :idle="!connected.includes(mark.id)"
+                        />
+                        <span class="truncate font-medium text-content">{{ mark.id }}</span>
+                        <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
+                    </button>
+                    <!-- A card that speaks nowhere is a perfectly good card — most personas that work in a
+                         folder are one — so this states the consequence instead of warning about it. -->
+                    <span v-if="pickedMarks.length === 0" class="text-xs text-subtle">Nobody yet — it can work, but not post as anyone.</span>
+                    <button
+                        type="button"
+                        :class="cmp.linkButton('gap-1 text-xs text-muted hover:text-content')"
+                        :aria-expanded="open"
+                        @click="open = !open"
+                    >
+                        <!-- "Add another" and not "Change", because removing one is the chip's own job: the
+                             control that opens the list only ever adds to what is already on the row. -->
+                        <Icon :name="open ? `check` : `plus`" class="text-2xs" />
+                        {{ open ? `Done choosing` : pickedMarks.length === 0 ? `Choose accounts` : `Add another` }}
+                    </button>
+                </div>
+
+                <!-- THE CHOOSER, only while it is being used. Capped and scrollable rather than as tall as the
+                     sandbox is signed into: every account this box holds is pickable, and none of them decides
+                     how much room the rest of the form gets. -->
+                <div v-if="open" class="mt-1 flex flex-col gap-2 rounded-lg border border-line bg-overlay/50 p-2">
+                    <input
+                        v-if="accounts.length > 6"
+                        v-model="filter"
+                        :class="cmp.input('w-full py-1 text-xs')"
+                        placeholder="Filter by name or site"
+                        aria-label="Filter accounts"
+                    />
+                    <!-- Toggles rather than a multi-select: picking several is the normal case, and every entry
+                         carries a second fact a <select> has nowhere to put — whether it is signed in. The brand
+                         mark is what makes a persona reading across two sites visible at a glance. -->
+                    <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
+                        <button
+                            v-for="account in shown"
+                            :key="account.id"
+                            type="button"
+                            :aria-pressed="picked(account.id)"
+                            :class="[
+                                `group flex cursor-pointer items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 text-left transition-colors`,
+                                picked(account.id) ? `border-link bg-link/10` : `border-line hover:border-line-strong hover:bg-card`,
+                            ]"
+                            @click="toggleAccount(account.id)"
+                        >
+                            <!-- The brand keeps its colour whether or not it is picked: colour is how you FIND
+                                 the site you meant in a list of five, and draining it until after the click makes
+                                 the picker monochrome exactly when it is being scanned. `idle` is kept for its
+                                 documented meaning — present but switched off — which here is an account not yet
+                                 signed in. -->
+                            <BrandMark
+                                :size="20"
+                                :name="account.site"
+                                :logo="account.logo"
+                                :icon="account.icon"
+                                :idle="!connected.includes(account.id)"
+                            />
+                            <!-- ONE LINE, ONE SIZE. The account's name and whatever is left to say about it sit
+                                 side by side at `text-xs`, told apart by tone rather than by a second, smaller
+                                 size — which is what a two-row chip needed, and what made the picker the noisiest
+                                 thing on the page. -->
+                            <span class="flex min-w-0 items-baseline gap-1.5 text-xs">
+                                <span class="truncate font-medium" :class="picked(account.id) ? `text-content` : `text-muted`">
+                                    {{ account.id }}
+                                </span>
+                                <span v-if="detailOf(account) !== undefined" class="truncate text-subtle">{{ detailOf(account) }}</span>
+                            </span>
+                            <Icon v-if="picked(account.id)" name="check" class="ml-0.5 shrink-0 text-xs text-link" />
+                        </button>
+                        <span v-if="shown.length === 0" class="px-1 py-1 text-xs text-subtle">No account matches “{{ filter.trim() }}”.</span>
+                    </div>
+                </div>
+            </template>
         </div>
 
-        <!-- Optional and long, so it sits below the two that decide what this persona can do, and opens at two
-             rows rather than the six-row slab that used to dominate the form. -->
-        <label class="ui-field">
-            <span class="ui-field-label">Voice <span class="text-xs font-normal text-subtle">· optional</span></span>
-            <textarea
-                v-model="draft.voice"
-                rows="2"
-                :class="cmp.input('w-full resize-y')"
-                placeholder="How this persona writes, and what it does and doesn't talk about."
-            />
-        </label>
-
-        <div class="ui-field">
-            <span class="ui-field-label">Posture</span>
-            <div class="flex flex-wrap items-center gap-2.5">
-                <Segmented v-model="draft.posture" :options="POSTURES" />
-                <span class="text-xs text-subtle">
-                    {{
-                        draft.posture === `draft`
-                            ? `Prepares posts for you to approve instead of sending them.`
-                            : `Posts, replies and sends without asking first.`
-                    }}
-                </span>
-            </div>
-        </div>
-
-        <!-- WHAT IT MAY DO. Below the identity questions because that is the order people think in — who is
-             this, then what may it touch — and because the account picker above is the one shelf that was here
-             before the rest existed. -->
+        <!-- WHAT IT MAY DO. Below the identity question because that is the order people think in — who is this,
+             then what may it touch — and because the account picker above is the one shelf that was here before
+             the rest existed. -->
         <div class="flex flex-col gap-3 border-t border-line pt-4">
             <div class="flex flex-col gap-0.5">
                 <span class="ui-field-label">What it may do</span>

@@ -3534,8 +3534,21 @@ export type Capability = z.infer<typeof CapabilitySchema>;
 /* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer
  * that decides which connected accounts a given turn may act through.
  *
- * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, how it
- * should sound, whether it may publish. It carries NO credential, which is what lets it be the one thing under
+ * IT ANSWERS THREE QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works. Making one is then
+ * a name, a few accounts and some switches — which is the whole of what an owner is deciding, and short enough
+ * that they finish. Two fields that used to sit here are gone on purpose:
+ *
+ *   NO AUTHORED WORDING. A paragraph on how a persona writes was a fourth question on the form, optional,
+ *   answered by almost nobody, and shaped nothing a person could see afterwards. Prose that steers a turn
+ *   belongs where every turn already reads it — the workspace's own instructions — not on a card whose other
+ *   fields all bound something.
+ *
+ *   NO PUBLISH-OR-DRAFT SWITCH. It read as a lock and was a sentence: it asked the turn to route outward things
+ *   through the approvals queue and could not stop it posting. The queue is the mechanism, and a control whose
+ *   label promises more than it delivers is worse than no control — it is the one an owner trusts.
+ *
+ * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, what a
+ * session wearing it may do, where it works. It carries NO credential, which is what lets it be the one thing under
  * .intentic that is committed and reviewed like the workspace's instructions are (see personas-store.ts for
  * the exclude carve-out that makes that true). The keys — the logged-in browser profile, its cookies, its
  * passkey — stay where they already are: private to the sandbox, never exported without an explicit opt-in. So a
@@ -3625,14 +3638,6 @@ export const PersonaSchema = z.object({
      * An id naming a capability that isn't connected is not an error — it is a card describing an account this
      * sandbox has yet to sign into, which is precisely what a freshly cloned workspace looks like. */
     capabilities: z.array(entryId).max(50),
-    // Folded into the turn's guidance when this persona is the one acting — how it writes, what it does and
-    // doesn't talk about. Optional: a persona that is purely about WHICH account needs no voice at all.
-    voice: z.string().max(4000).optional(),
-    /* Whether this persona may publish on its own. "draft" routes anything outward through the approvals queue the
-     * owner already reads instead of letting the turn post directly; absent ⇒ "publish", which is what every
-     * account does today. Advisory in the same sense the rest of the card is: it shapes the turn's guidance and
-     * the surfaces around it, and is not a substitute for the tool gate. */
-    posture: z.enum(["publish", "draft"]).optional(),
     /* Which workspace repos prefer this persona, so a chat opened on a project starts with the right chip already
      * selected. A PREFERENCE, not a fence — the owner's chosen chat default is still "every account" — and it
      * lives on the card rather than in each project's own config so that one account named by three repos stays
