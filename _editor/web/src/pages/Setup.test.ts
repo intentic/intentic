@@ -119,6 +119,12 @@ const mount = async (): Promise<HTMLElement> => {
 const buttonSaying = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
 
+// The rename affordance is an icon now, so it is found the way a screen reader finds it. Its row is the one
+// that reports the name — asserting on the row rather than the page keeps "workspace" from matching the
+// page's own title ("Set up your workspace").
+const renamePencil = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Rename sandbox"]`)!;
+const nameRow = (): string => renamePencil().parentElement?.textContent ?? ``;
+
 beforeEach(() => {
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
@@ -139,9 +145,9 @@ afterEach(() => {
 
 // The regression this file is named for: a fresh account gets a sandbox by arriving, and is never shown a field.
 it(`creates the sandbox on arrival, with no name asked for`, async () => {
-    const el = await mount();
+    await mount();
     expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(el.textContent).toContain(`Sandbox: workspace`);
+    expect(nameRow()).toContain(`workspace`);
     expect(buttonSaying(`Create`)).toBeUndefined();
 });
 
@@ -160,16 +166,16 @@ it(`resumes an unfinished sandbox rather than making a second`, async () => {
     const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
     sandboxes.value = [unfinished];
     list.mockResolvedValue([unfinished]);
-    const el = await mount();
+    await mount();
     expect(create).not.toHaveBeenCalled();
-    expect(el.textContent).toContain(`my-laptop`);
+    expect(nameRow()).toContain(`my-laptop`);
 });
 
 // The name is a default, not a decision taken away: changing it is one click from the step that reports it, and
 // it goes to the row this page created — never to whichever sandbox happens to be selected.
 it(`renames the sandbox it created, from the step itself`, async () => {
     const el = await mount();
-    buttonSaying(`Rename this sandbox`)!.click();
+    renamePencil().click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input`)!;
     field.value = `shop`;
@@ -178,5 +184,5 @@ it(`renames the sandbox it created, from the step itself`, async () => {
     buttonSaying(`Save`)!.click();
     await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
     await nextTick();
-    expect(el.textContent).toContain(`Sandbox: shop`);
+    expect(nameRow()).toContain(`shop`);
 });

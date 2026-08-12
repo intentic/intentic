@@ -22,7 +22,7 @@ const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: st
 
 <template>
     <div class="flex flex-col gap-3">
-        <p class="text-sm font-semibold text-content">What this does</p>
+        <p class="text-sm font-medium text-content">What this does</p>
         <ul class="flex flex-col gap-2 text-2xs text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />

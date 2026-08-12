@@ -2,7 +2,19 @@
 import type { SandboxSummary, SetupCode, SetupCodeTarget, SetupReport } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import { cmp, Code, commandLang, CopyButton, InfoHint, Notice, type NoticeModel, Segmented, StepSection, useDevice, useOsPreference } from "@intentic/ui";
+import {
+    cmp,
+    Code,
+    commandLang,
+    CopyButton,
+    InfoHint,
+    Notice,
+    type NoticeModel,
+    Segmented,
+    StepSection,
+    useDevice,
+    useOsPreference,
+} from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
@@ -29,27 +41,33 @@ import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon }
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 
-/* The setup gate's destination (outside the workspace shell). Step 1 asks for NOTHING: the sandbox is created on
- * arrival under a name this page picks (autoCreate + setupName.ts), so the step opens already done and carries a
- * rename rather than a form. Step 2 offers two ways to make the sandbox reachable:
+/* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
+ * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
+ * address is provisioned right behind it, so step 1 opens already done and reports two facts — the name, with a
+ * pencil, and the address — one line each. They were two cards until they were two one-liners between them:
+ * a numbered card whose whole body was a rename link, above a numbered card whose whole body was a hostname,
+ * is a spine that counts to three to say the machine is ready to be started.
+ *
+ * The address line is where the two reachability paths part:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
- *     Cloudflare of their own. The subdomain is fixed (server-derived from the connection token).
+ *     Cloudflare of their own. The subdomain is fixed (server-derived from the connection token), so this path IS
+ *     the one-liner and the escape hatch shares its row.
  *   • own Cloudflare: the user pastes their token, picks a zone, and edits the subdomain; the sandbox creates its own
  *     tunnel. The token only reaches the platform for a request-scoped zone listing, then is dropped — on this path it
- *     rides the command as a CF_TOKEN env var, never stored.
+ *     rides the command as a CF_TOKEN env var, never stored. That is a form, and it expands the step in place.
  * Either way the platform mints a SHORT-LIVED SETUP CODE (sandbox.setupCode) for the chosen target; the copy-paste
  * command carries only that code and the connect script redeems it at POST /setup/claim for the real values — so no
- * raw token lands in shell history. Step 3 also offers desktop sync (on by default): the choice + folder ride the
+ * raw token lands in shell history. Step 2 also offers desktop sync (on by default): the choice + folder ride the
  * same code (SYNC_DIR + a platform-minted single-use SYNC_PAIR_TOKEN in the payload), so the one pasted command
- * additionally enrolls the sync agent after the sandbox boots — no second paste. Step 3 also carries the CLOUD
+ * additionally enrolls the sync agent after the sandbox boots — no second paste. Step 2 also carries the CLOUD
  * MACHINE choice (`machine` below, SetupCloud.vue): no computer to paste into, so one is created in the user's
  * own cloud account and its first boot claims this same code headlessly. Once running, the DAEMON announces
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
  * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. That wait is
- * step 3's own footer rather than a fourth step: it asks the user for nothing, so a card of its own was chrome
+ * step 2's own footer rather than a step of its own: it asks the user for nothing, so a card of its own was chrome
  * around one sentence, and the sentence belongs under the command whose result it is reporting.
  *
- * Step 3 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
+ * Step 2 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
  * would, but because it shows up without any of an installer's affordances. So the card states what will be
  * created, what it writes outside Docker and how to remove all of it, and offers the one switch that reshapes
  * the command instead of leaving the reader to abandon it: `hasDocker` (drop the `sudo`, which is only ever there
@@ -57,7 +75,7 @@ import { setupReportView } from "./setupReport";
  *
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
- * records it — no tunnel to provision, no command to run, no announce to wait for, so steps 2-3 never render.
+ * records it — no tunnel to provision, no command to run, no announce to wait for, so step 2 never renders.
  * `lane` decides which spine step 1 is the head of.
  *
  * The two lanes SHARE their state rather than mirroring it. Everything a lane owns is genuinely lane-specific
@@ -65,14 +83,14 @@ import { setupReportView } from "./setupReport";
  * the sandbox itself — its `name` and its `created` row — is one value read by both. That is what makes a lane
  * switch lossless in either direction at any point: a name typed before switching survives, and a row created by
  * an attach whose probe passed but whose attach then failed continues as the provision lane's sandbox instead of
- * being stranded. The attach lane shows that name as a field and the provision lane behind a rename link, but
+ * being stranded. The attach lane shows that name as a field and the provision lane behind a pencil, but
  * both edit the same buffer and commit it the same way (saveName). `targetKey` is gated on the lane for the same reason in reverse — minting is what buys the
  * Cloudflare tunnel, and an attached sandbox is reached over the user's own domain, so it must not mint. */
 
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-// A phone gets a DIFFERENT step 3, not a narrower one — the command runs on a machine this browser is not, so
+// A phone gets a DIFFERENT step 2, not a narrower one — the command runs on a machine this browser is not, so
 // the handoff is the step and the command folds behind a disclosure (see `commandVisible`). The rest of what
 // this drives is content the md: classes below cannot reach: the run tabs' labels, and the size and emphasis
 // of the controls that carry them.
@@ -101,7 +119,7 @@ const nameInput = ref<HTMLInputElement | null>(null);
 // neither is one that has never had a daemon (its shell would open on a connecting gate that never resolves).
 const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
 
-// Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
+// The reachability mode (step 1's address line). Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
 const mode = ref<"intentic" | "own">(`intentic`);
 // Whether the intentic-provided path is offered at all (false once its mint 404s — the server feature flag).
 const intenticAvailable = ref(true);
@@ -126,7 +144,7 @@ const subdomain = ref(``);
 const derivedPrefix = ref(``);
 const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(subdomain.value.trim()));
 
-// --- desktop sync opt-in (step 3) ---
+// --- desktop sync opt-in (step 2) ---
 // On by default: the same pasted command also enrolls the sync agent. The folder rides the command as a
 // SYNC_DIR env var (a path, not a secret), so toggling this just adds/removes it — no re-mint. The folder is
 // derived from the sandbox name AND the hostname the mint just provisioned (not user-editable) — shown as
@@ -136,7 +154,7 @@ const syncEnabled = ref(true);
 const syncDir = computed(() => (created.value && setup.value ? syncFolder(created.value.name, setup.value.hostname) : ``));
 
 // --- attach lane (step 1's one-step alternative) ---
-// Which spine step 1 heads: `provision` (reachability → run → wait, steps 2-4) or `attach` (paste the domain
+// Which spine step 1 heads: `provision` (name + address, then run and wait in step 2) or `attach` (paste the domain
 // the sandbox is ALREADY reachable at → verify → workspace), which finishes inside step 1 itself.
 //
 // Both lanes work on the SAME `name` and the SAME `created` row — a sandbox's name and identity are facts about
@@ -154,24 +172,24 @@ const attachOutcome = ref<AttachOutcome | undefined>(undefined);
 const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
 const domainProblem = computed(() => daemonUrlProblem(domain.value));
 
-// Step 1 is a summary of a sandbox that already exists — its title carries the name — in both lanes. The title
-// reads the SAVED row rather than the edit buffer, so it changes when a rename is committed instead of jittering
-// under the user's typing.
+// Step 1 is a summary of a sandbox that already exists, in both lanes. The NAME IS NOT IN THE TITLE any more:
+// "Sandbox: workspace" set the label and the name in one weight and one colour, so the only word on the card
+// the user might want to change was the one that read as chrome. It is a row in the body now, beside the pencil
+// that changes it, where a muted label and a mono value make which is which unmissable.
 // A resumed sandbox that has ACTUALLY run before is being reconnected; one that was named and never started is
 // just being picked back up, and calling that "Reconnect" claims a history it doesn't have.
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
 const step1Title = computed(() => {
-    const row = created.value;
-    if (row !== null) {
-        return resuming.value && lane.value === `provision` && !neverStarted.value ? `Reconnect "${row.name}"` : `Sandbox: ${row.name}`;
-    }
     if (lane.value === `attach`) {
         return `Connect your sandbox`;
+    }
+    if (created.value !== null) {
+        return resuming.value && !neverStarted.value ? `Reconnect your sandbox` : `Your sandbox`;
     }
     return creating.value ? `Creating your sandbox…` : `Your sandbox`;
 });
 
-// Step 3 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
+// Step 2 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
 
 // The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
@@ -226,7 +244,7 @@ const hasDocker = ref(false);
  * script, so nothing about steps 1-2 or the announce-watch below changes. What it removes is the terminal —
  * which is what people actually balk at here, and what the two switches above can only soften.
  *
- * So inside the app step 3 IS that button, not a second offer beside a command: one line of consequence, the
+ * So inside the app step 2 IS that button, not a second offer beside a command: one line of consequence, the
  * button, and a link for the person who wanted a server after all. Everything below that belongs to the
  * COMMAND rather than to the step — the paste-it-into-a-terminal line, the `sudo` switch, "Copy again" —
  * is gated on the command actually being on screen, because in the app it usually isn't.
@@ -246,7 +264,7 @@ const commandVisible = computed(() => (desktop.value || mobile.value ? showComma
 // Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
-/* WHICH MACHINE runs step 3 — the computer the user already has (the command / handoff / app button), or a
+/* WHICH MACHINE runs step 2 — the computer the user already has (the command / handoff / app button), or a
  * new one created in THEIR cloud account (SetupCloud.vue). A phone defaults to `cloud` because it is the
  * first path a phone can actually finish alone: the email handoff asks for a second computer, this asks for a
  * credential paste. The picker is hidden inside the desktop app (the app IS a computer the user has — its one
@@ -255,7 +273,7 @@ const composeShown = computed(() => commandVisible.value && runTab.value === `co
  * The cloud machine claims the SAME minted setup code the command would, so everything downstream — the
  * locked gate, the claim stamp, the stage report, the announce watch — is untouched; only the card's content
  * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
- * with no Cloudflare of its own), so the form yields to a pointer at step 2 while `mode` says `own`. */
+ * with no Cloudflare of its own), so the form yields to a pointer at step 1 while `mode` says `own`. */
 const machine = ref<"mine" | "cloud">(mobile.value ? `cloud` : `mine`);
 const cloudOffered = computed(() => intenticAvailable.value && !desktop.value);
 // The provisioned machine's display facts (SandboxCloudSchema) — set by the provision response (or a resumed
@@ -289,6 +307,13 @@ const runTitle = computed(() => {
  * The shared min-width is what survives from the chips, and it is the reason the group reads as a group: every
  * caption starts in the same column at any width where the names fit on their caption's line. */
 const optionLabel = `shrink-0 text-content md:min-w-[11.5rem]`;
+
+/* The label column of step 1's two facts. A fixed width is what makes "Name" and "Address" one grid rather
+ * than two sentences that happen to be stacked — and the width is the reason the VALUES line up, which is the
+ * only alignment on the card that carries meaning. Muted and small against a mono value in content colour:
+ * the name used to sit in the step's own heading, in the heading's weight and the heading's colour, where the
+ * one word on the card worth changing read as the label in front of it. */
+const factLabel = `w-16 shrink-0 text-xs text-muted`;
 
 // The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
 const target = computed<SetupCodeTarget | undefined>(() => {
@@ -344,9 +369,9 @@ const lockedReason = computed(() => {
     return setupError.value ?? `Preparing your install command…`;
 });
 
-/* --- the handoff (step 3) ---
+/* --- the handoff (step 2) ---
  *
- * Step 3 is a HANDOFF to a machine this browser cannot see, and every way people get stuck here comes from the
+ * Step 2 is a HANDOFF to a machine this browser cannot see, and every way people get stuck here comes from the
  * card not modelling that. It used to have exactly one state — a spinner and "waiting for your sandbox to report
  * in", shown from the moment the code was minted — so a person who had not opened a terminal and a person whose
  * Docker pull was four minutes deep saw the identical screen, forever. It read as "the platform is provisioning
@@ -418,7 +443,7 @@ const handoff = computed<Handoff>(() => {
  * which hands out a different command. */
 const armedAt = ref<number | undefined>(undefined);
 // The app's one wall clock, armed only while a command is on screen — nothing below reads it before then
-// (waitedMs is 0 without an armedAt, and `claimed` implies one), so an unarmed step 3 costs no tick.
+// (waitedMs is 0 without an armedAt, and `claimed` implies one), so an unarmed step 2 costs no tick.
 const now = useNow(() => armedAt.value !== undefined);
 watch(commandReady, (ready) => {
     armedAt.value = ready ? Date.now() : undefined;
@@ -528,7 +553,7 @@ watch(
     { immediate: true },
 );
 
-// Why we're still waiting (undefined while nothing informative to say) — step 4 shows it so a stuck wait names
+// Why we're still waiting (undefined while nothing informative to say) — the run step shows it so a stuck wait names
 // its cause instead of spinning silently.
 const status = ref<string | undefined>(undefined);
 // A poll is in flight. Purely a re-entrancy guard — the 3s interval must not stack requests behind a slow
@@ -605,7 +630,7 @@ const check = async (): Promise<void> => {
  * word buys nothing at this moment — a name only ever tells sandboxes apart in the switcher, and the first one
  * has nothing to be told apart from — while it costs the two things onboarding can least afford: a decision
  * before anything has been seen, and the seconds of tunnel provisioning that cannot start until a row exists.
- * Naming it here starts step 2's mint immediately, so the first screen a new account sees is the command.
+ * Naming it here starts the address mint immediately, so the first screen a new account sees is the command.
  *
  * The name is still the user's (setupName.ts picks it, the summary renames it), it is simply no longer a gate.
  */
@@ -1008,7 +1033,7 @@ watch(
 // Google-signed JWT the daemon verifies; minting it needs no daemon, so having it cached means the workspace is
 // reachable the instant the daemon reports in (no connecting-gate stall). Fired once.
 //
-// SILENT, and it must stay that way. This fires the moment step 3 renders a command — the sandbox does not
+// SILENT, and it must stay that way. This fires the moment step 2 renders a command — the sandbox does not
 // exist yet, the command has not been copied, and the user may well close the tab instead. Warming through
 // `getIdToken` put a full-screen sign-in gate over that command whenever Google couldn't renew quietly (One Tap
 // cooldown, a browser that blocks FedCM), which reads as being asked to sign in twice to set up a machine that
@@ -1065,7 +1090,11 @@ watch(commandReady, (ready) => {
                      of its own, so the promise gets the whole width instead of a 200px column. From md up the
                      wrapper is a normal block again and the two stack beside the logo as before. -->
                 <div class="contents md:block md:min-w-0 md:flex-1">
-                    <h1 class="min-w-0 flex-1 text-xl font-semibold md:text-2xl">Set up your workspace</h1>
+                    <!-- Medium, not semibold, and every heading under it follows: at a screen's worth of dark
+                         surfaces this page was set almost entirely in bold — page title, three step headings, the
+                         panel's — and a hierarchy in which everything is emphasised has none. Size and colour
+                         carry it now; weight only marks the step you are being asked to read. -->
+                    <h1 class="min-w-0 flex-1 text-xl font-medium md:text-2xl">Set up your workspace</h1>
                     <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
                          work the attach lane doesn't do. -->
                     <p class="w-full text-sm text-muted">
@@ -1080,20 +1109,55 @@ watch(commandReady, (ready) => {
             </header>
 
             <!-- Two columns from xl: the steps, and a docked reference panel that stops covering them. Below xl
-                 this is the same single column as before and the panel folds back into step 3's (i) hint.
+                 this is the same single column as before and the panel folds back into step 2's (i) hint.
                  `items-start` is what lets the panel stick while the steps scroll past it. -->
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
-                    <!-- Step 1: the sandbox, created on arrival and summarised here with the rename that is the only
-                 thing left to do about it — or, in the attach lane, the entire setup: one address for a sandbox
-                 that is already running and reachable.
-                 The attach lane drops the "1" badge: it is the whole flow, not the first of four. -->
+                    <!-- Step 1: the sandbox — what it is called and where it will answer, one line each. Both are
+                 already true when the card renders (created on arrival, address provisioned right behind it),
+                 so this is a summary with two affordances hanging off it: the pencil that renames, and the
+                 escape hatch to the reader's own Cloudflare zone.
+                 It used to be two numbered cards, one per line, which counted to three to say a machine was
+                 ready to be started. Merging them costs nothing — neither line gates the other, and the mint
+                 that fills the second starts the moment the first exists.
+                 Or, in the attach lane, the entire setup: one address for a sandbox that is already running and
+                 reachable. That lane drops the "1" badge — it is the whole flow, not the first of two. -->
                     <StepSection
                         :step="lane === `provision` ? 1 : undefined"
                         :icon="lane === `attach` ? `link` : undefined"
-                        :done="lane === `provision` && created !== null"
+                        :done="lane === `provision` && created !== null && setup !== null"
                         :title="step1Title"
                     >
+                        <!-- The "why a token?" hint rides the step header, the one place this page puts hints (the
+                             run step's reference panel), instead of a second heading inside the body: "Cloudflare
+                             API token" above a field labelled "API token" said the same thing twice and cost a
+                             phone a whole row. A bare (i) in the corner, like the run step's: the two hints are
+                             the same offer on the same card in the same place, and a caption on one of them made
+                             it a different kind of thing.
+                             `v-if` ON THE SLOT, not inside it — an always-provided slot renders its wrapper (and
+                             its gap) in the card's corner on every other path, which quietly shortens the title. -->
+                        <template v-if="lane === `provision` && mode === `own`" #actions>
+                            <InfoHint label="Why the Cloudflare API token is required">
+                                <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
+                                <p class="mb-3 text-2xs leading-relaxed text-muted">
+                                    intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
+                                </p>
+                                <ul class="flex flex-col gap-2 text-2xs text-muted">
+                                    <li class="flex items-start gap-2">
+                                        <Icon name="bolt" class="mt-0.5 text-link" />
+                                        <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                                    </li>
+                                    <li class="flex items-start gap-2">
+                                        <Icon name="lock" class="mt-0.5 text-success" />
+                                        <span
+                                            ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
+                                            command</span
+                                        >
+                                    </li>
+                                </ul>
+                            </InfoHint>
+                        </template>
+
                         <template v-if="lane === `attach`">
                             <p class="text-xs text-muted">
                                 Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it,
@@ -1214,7 +1278,7 @@ watch(commandReady, (ready) => {
                             />
 
                             <Notice v-if="error" :of="error" />
-                            <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
+                            <!-- With a row already in hand, going back CONTINUES that sandbox through the run step rather
                          than setting a new one up — the label has to say which of the two it is. -->
                             <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
                                 {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
@@ -1260,9 +1324,13 @@ watch(commandReady, (ready) => {
                                     Not this one? Create a new sandbox instead
                                 </button>
                             </template>
-                            <!-- Nobody typed this name, so the card that reports it is also where it can be changed.
-                                 A footnote to a step that is already done, never a gate in front of the next one:
-                                 the command below is ready whether or not this is ever opened. -->
+                            <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
+                                 it is also where it is changed — and the change is a pencil, not a sentence: the
+                                 card used to spend a paragraph explaining that the name was a default and a link
+                                 saying so again, which is three lines of apology for a word the user can simply
+                                 overwrite. The label is muted and the name is mono, so the value is the thing the
+                                 eye lands on. Never a gate: the command below is ready whether or not this is
+                                 ever touched. -->
                             <div v-if="renaming" class="flex flex-col gap-2 md:flex-row md:items-center">
                                 <input
                                     ref="nameInput"
@@ -1290,118 +1358,102 @@ watch(commandReady, (ready) => {
                                     @click="cancelRename"
                                 />
                             </div>
-                            <template v-else>
-                                <p v-if="!resuming" class="text-xs text-muted">
-                                    We named it for you so nothing stood between you and the next step — it's yours to change.
-                                </p>
-                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startRename">
-                                    Rename this sandbox
+                            <div v-else class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span :class="factLabel">Name</span>
+                                <span class="min-w-0 font-mono text-sm break-words text-content">{{ created.name }}</span>
+                                <!-- 32px rather than the recipe's 24: this one is not in a toolbar of its peers,
+                                     it is alone beside a line of text on a card people reach on a phone. -->
+                                <button
+                                    type="button"
+                                    :class="cmp.iconButton(`h-8 w-8`)"
+                                    aria-label="Rename sandbox"
+                                    v-tooltip.bottom="`Rename sandbox`"
+                                    @click="startRename"
+                                >
+                                    <Icon name="pencil" />
                                 </button>
+                            </div>
+
+                            <!-- THE ADDRESS, on the same grid as the name — the two facts this step reports, aligned.
+                                 The intentic path is one line with its escape hatch on it; the own-Cloudflare path is
+                                 a form, so it expands the step in place instead.
+                                 The link names the CLOUDFLARE ZONE, not "my own domain": the attach lane below is the
+                                 literal own-domain path, and two links reading the same would send people to the
+                                 wrong one. This path still provisions a tunnel and still needs the run step. -->
+                            <template v-if="mode === `intentic`">
+                                <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
+                                    {{ setupError }}
+                                </div>
+                                <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <span :class="factLabel">Address</span>
+                                    <span class="flex min-w-0 items-center gap-2 font-mono text-sm text-content">
+                                        <Icon name="lock" class="shrink-0 text-success" />
+                                        <span class="min-w-0 break-words">{{ setup.hostname }}</span>
+                                    </span>
+                                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">
+                                        Use my own Cloudflare zone instead
+                                    </button>
+                                </div>
+                                <div v-else class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span :class="factLabel">Address</span>
+                                    <span class="flex items-center gap-2 text-xs text-muted">
+                                        <Icon name="spinner" spin /> Preparing your intentic domain…
+                                    </span>
+                                </div>
                             </template>
+
+                            <!-- Own Cloudflare: token + zone + editable subdomain. -->
+                            <template v-else>
+                                <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
+                                    ← Use intentic's domain
+                                </button>
+                                <CloudflareTokenField
+                                    :cf="cf"
+                                    storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
+                                />
+
+                                <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps
+                                     to its own line rather than stealing width from the one part that is editable — an
+                                     account's zone can be long, and on a phone the two together left no field to type
+                                     in. -->
+                                <label v-if="selectedZone" class="ui-field">
+                                    <span class="ui-field-label">Domain</span>
+                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <input
+                                            :value="subdomain"
+                                            @input="subdomain = ($event.target as HTMLInputElement).value"
+                                            autocomplete="off"
+                                            autocapitalize="off"
+                                            spellcheck="false"
+                                            placeholder="sandbox"
+                                            :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                        />
+                                        <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
+                                    </div>
+                                    <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
+                                    <span v-else class="text-xs text-success"
+                                        >✓ Your sandbox will be reachable at
+                                        <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                                        >.</span
+                                    >
+                                </label>
+                            </template>
+
                             <Notice v-if="error" :of="error" />
                             <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
-                         sandbox is already running somewhere the platform never heard from (a daemon with no
-                         PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching
-                         points THIS row at the domain — it never mints a second sandbox. -->
+                                 sandbox is already running somewhere the platform never heard from (a daemon with no
+                                 PLATFORM_URL) arrives just as often while staring at the install command below.
+                                 Attaching points THIS row at the domain — it never mints a second sandbox. -->
                             <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
                                 Already reachable at a domain? Connect it →
                             </button>
                         </template>
                     </StepSection>
 
-                    <!-- Step 2: how to reach the sandbox (intentic domain collapses to a summary; own-CF form on demand). -->
-                    <StepSection v-if="created && lane === `provision`" :step="2" :done="setup !== null" title="How should we reach your sandbox?">
-                        <!-- The "why a token?" hint rides the step header, the one place this page puts hints (step 3's
-                     reference panel), instead of a second heading inside the body: "Cloudflare API token"
-                     above a field labelled "API token" said the same thing twice and cost a phone a whole row.
-                     A bare (i) in the corner, like step 3's: the two hints are the same offer on the same
-                     card in the same place, and a caption on one of them made it a different kind of thing. -->
-                        <template #actions>
-                            <InfoHint v-if="mode === `own`" label="Why the Cloudflare API token is required">
-                                <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
-                                <p class="mb-3 text-2xs leading-relaxed text-muted">
-                                    intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
-                                </p>
-                                <ul class="flex flex-col gap-2 text-2xs text-muted">
-                                    <li class="flex items-start gap-2">
-                                        <Icon name="bolt" class="mt-0.5 text-link" />
-                                        <span>Lets the install command <span class="text-content">create the tunnel</span></span>
-                                    </li>
-                                    <li class="flex items-start gap-2">
-                                        <Icon name="lock" class="mt-0.5 text-success" />
-                                        <span
-                                            ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides the
-                                            command</span
-                                        >
-                                    </li>
-                                </ul>
-                            </InfoHint>
-                        </template>
-
-                        <!-- Intentic-provided: fixed, read-only domain. -->
-                        <template v-if="mode === `intentic`">
-                            <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">
-                                {{ setupError }}
-                            </div>
-                            <!-- One row, not a bordered box inside the card: the hostname is a fact this step reports,
-                         and framing it bought a second border and 24px to say nothing. The escape hatch shares
-                         the line at desktop widths and wraps under it on a phone, where the hostname fills it.
-                         The link names the CLOUDFLARE ZONE, not "my own domain": step 1's attach lane is the
-                         literal own-domain path, and two links reading the same would send people to the wrong
-                         one. This path still provisions a tunnel and still needs the run step. -->
-                            <div v-else-if="setup" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <span class="flex min-w-0 items-start gap-2 font-mono text-sm text-content">
-                                    <Icon name="lock" class="mt-0.5 shrink-0 text-success" />
-                                    <span class="min-w-0 break-words">{{ setup.hostname }}</span>
-                                </span>
-                                <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="mode = `own`">
-                                    Use my own Cloudflare zone instead
-                                </button>
-                            </div>
-                            <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
-                        </template>
-
-                        <!-- Own Cloudflare: token + zone + editable subdomain. -->
-                        <template v-else>
-                            <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
-                                ← Use intentic's domain
-                            </button>
-                            <CloudflareTokenField
-                                :cf="cf"
-                                storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
-                            />
-
-                            <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps to
-                         its own line rather than stealing width from the one part that is editable — an
-                         account's zone can be long, and on a phone the two together left no field to type in. -->
-                            <label v-if="selectedZone" class="ui-field">
-                                <span class="ui-field-label">Domain</span>
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <input
-                                        :value="subdomain"
-                                        @input="subdomain = ($event.target as HTMLInputElement).value"
-                                        autocomplete="off"
-                                        autocapitalize="off"
-                                        spellcheck="false"
-                                        placeholder="sandbox"
-                                        :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
-                                    />
-                                    <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
-                                </div>
-                                <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
-                                <span v-else class="text-xs text-success"
-                                    >✓ Your sandbox will be reachable at
-                                    <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
-                                    >.</span
-                                >
-                            </label>
-                        </template>
-                    </StepSection>
-
-                    <!-- Step 3: run the sandbox — and the whole reason this page loses people. A copy-paste command is
+                    <!-- Step 2: run the sandbox — and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
                  publisher, no preview of what will happen, no list of what it changes, no uninstaller.
-                 Step 4 folded in here too: waiting for the daemon asked nothing of the user, so a card of its
+                 The wait folded in here too: watching for the daemon asked nothing of the user, so a card of its
                  own was chrome around one sentence — and that sentence belongs under the command that causes it.
 
                  EVERY VISIBLE ACTOR ON THIS CARD IS THE USER. The title used to read "Run your sandbox", which
@@ -1427,7 +1479,7 @@ watch(commandReady, (ready) => {
                  service of a clipboard the target machine cannot read. It is now one line's worth of
                  disclosure, addressed to the one reader it is true for: someone holding an SSH session. -->
 
-                    <StepSection v-if="created && lane === `provision`" :step="3" :title="runTitle">
+                    <StepSection v-if="created && lane === `provision`" :step="2" :title="runTitle">
                         <template #actions>
                             <!-- Below xl only: from there up the same content is docked in its own column (see the
                          aside at the foot of this template), where it never lands on the command.
@@ -1470,7 +1522,7 @@ watch(commandReady, (ready) => {
                                      to be walked back before the form is any use. -->
                                 <p v-if="mode !== `intentic`" class="flex items-start gap-2 text-xs text-muted">
                                     <Icon name="info-circle" class="mt-0.5 shrink-0" />
-                                    <span>Cloud machines use intentic's domain — switch step 2 back to “Use intentic's domain” to create one.</span>
+                                    <span>Cloud machines use intentic's domain — switch step 1 back to “Use intentic's domain” to create one.</span>
                                 </p>
                                 <!-- Provisioned: the form's work is done, and the one fact worth keeping on screen
                                      is where the machine lives — the wait below narrates the rest. -->
@@ -1703,7 +1755,7 @@ watch(commandReady, (ready) => {
                             </template>
                         </template>
 
-                        <!-- Step 4's whole job, as the footer of the step it reports on — now saying WHICH of the two
+                        <!-- The wait's whole job, as the footer of the step it reports on — now saying WHICH of the two
                      waits this is. A spinner from the moment a code was minted is what made a screen where the
                      user has done nothing look identical to one where Docker is four minutes into an image
                      pull, and "your workspace opens automatically" is a promise about the second that reads, in
@@ -1884,10 +1936,10 @@ watch(commandReady, (ready) => {
                     </StepSection>
                 </div>
 
-                <!-- The docked half of step 3's reference material (SetupRunDetails carries the reasoning).
-                     Present only while step 3 is, because it is that step's material and nothing else's — the
+                <!-- The docked half of the run step's reference material (SetupRunDetails carries the reasoning).
+                     Present only while the run step is, because it is that step's material and nothing else's — the
                      attach lane runs no command and has nothing to explain here. `hidden` below xl: the same
-                     content is on step 3's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
+                     content is on the run step's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
                      exactly one of the two is reachable at any width.
                      The width is measured, not picked: 22rem is what the longest cleanup one-liner (the sh
                      one, 44 mono characters at text-2xs) needs to sit on a single line inside the card's
