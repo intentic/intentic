@@ -17,10 +17,23 @@ import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "../composables/extensions/useCapabilities";
+import { formatCredits } from "../composables/membership/creditMeter";
+import { useMembership } from "../composables/membership/useMembership";
 import { checksOk, checksProblem } from "../pages/sandbox/discoverListing";
 
 /** What this card installs — the rows of any other kind are not its to offer. */
 const props = defineProps<{ kind: CapabilityKind }>();
+
+/* A premium row's price, from the platform rather than from a sentence typed here — the same figure the
+ * extension catalogue quotes, since it is the same donation. This card only PRE-FILLS the install form, so the
+ * spend is still a step away; naming the number here is what stops it being a surprise at the end of it. */
+const { donationCredits } = useMembership();
+
+const premiumHint = computed(() =>
+    donationCredits.value > 0
+        ? `Premium — installing pays its creator ${formatCredits(donationCredits.value)} credits from your daily allowance, once a month`
+        : `Premium — needs an intentic membership; installing donates credits to its creator`,
+);
 
 const emit = defineEmits<{
     /** A row's install coordinates, ready for the form. */
@@ -117,7 +130,7 @@ const pick = (entry: RegistryEntry): void => {
                     <span
                         v-if="entry.tier === 'premium'"
                         class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                        v-tooltip.top="`Premium — needs an intentic membership; installing donates credits to its creator`"
+                        v-tooltip.top="premiumHint"
                         >Premium</span
                     >
                     <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>

@@ -2,8 +2,8 @@
 import type { NavGroup } from "@intentic/ui";
 import HubLayout from "../hub/HubLayout.vue";
 import type { HubTab } from "../hub/hubNav";
-import { computed, onMounted, ref } from "vue";
-import { apiClient } from "../composables/useApi";
+import { computed } from "vue";
+import { useMembership } from "../composables/membership/useMembership";
 import SettingsAppearance from "./settings/SettingsAppearance.vue";
 import SettingsData from "./settings/SettingsData.vue";
 import SettingsKeybindings from "./settings/SettingsKeybindings.vue";
@@ -25,19 +25,16 @@ import SettingsProfile from "./settings/SettingsProfile.vue";
  * Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
 
 /* Membership only exists on a platform that sells one (the pool is off by default, and self-hosted platforms
- * keep it off) — probed once, and the tab appears when the answer is yes. Until the probe lands the tab is
- * simply absent, which is also the right rendering for a platform where it will never land.
+ * keep it off), and the tab appears when the answer is yes. Until the answer lands the tab is simply absent,
+ * which is also the right rendering for a platform where it will never land — a failed read costs nothing but
+ * the row.
  *
  * Payouts ride the SAME answer rather than a second probe: both sides of the pool are switched on by the same
- * platform configuration, so a second round-trip could only ever agree with this one. */
-const membershipOffered = ref(false);
-onMounted(async () => {
-    try {
-        membershipOffered.value = (await apiClient.pool.membership()).enabled;
-    } catch {
-        // No platform answer, no tab — the failure that costs nothing.
-    }
-});
+ * platform configuration, so a second round-trip could only ever agree with this one.
+ *
+ * Read through the app's shared membership entry, so opening Settings from the account menu — which is already
+ * showing this account's credit balance from that same entry — costs no further round-trip. */
+const { offered: membershipOffered } = useMembership();
 
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
     {

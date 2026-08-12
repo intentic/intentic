@@ -9,6 +9,7 @@ import { startAgent } from "../../composables/agents/agentActions";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { useExtensions } from "../../composables/extensions/useExtensions";
 import { useRegistry } from "../../composables/extensions/useRegistry";
+import { useMembership } from "../../composables/membership/useMembership";
 import { useRole } from "../../composables/sandbox/useRole";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
@@ -47,6 +48,8 @@ const { isOwner } = useRole();
 const { entries, registryName, url, token, isOfficial, isLoading, isFetching, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
+// Re-read the credit balance the moment a premium install has spent from it — see the install handler.
+const { spent } = useMembership();
 
 const query = ref(``);
 const mode = ref<`all` | `verified`>(`all`);
@@ -157,6 +160,15 @@ const install = async (listing: DiscoverListing): Promise<void> => {
         // Installed, but nothing of it is RUNNING until the host runs again — the same convergence the
         // Extensions tab's reload button performs, done here so the extension works without a page reload.
         await reloadExtensions();
+        /* A premium install has just spent credits, so every surface showing a balance is now wrong by exactly
+         * the donation — the account menu, this catalogue's next cost block, the composer's pill. Re-read once
+         * here rather than letting each of them discover it on its own timer: the number the reader will look at
+         * to check what just happened is the one that must not be the pre-spend figure. Cheap and unconditional
+         * for a premium row, including the reinstall the platform charged nothing for — "nothing changed" is a
+         * perfectly good answer to arrive at from the platform rather than to assume. */
+        if (listing.entry.tier === `premium`) {
+            await spent();
+        }
         detailOpen.value = false;
     } catch (err) {
         failure.value = noticeFrom(err, `Could not install ${listing.entry.name}.`);

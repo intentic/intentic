@@ -26,6 +26,8 @@ import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf 
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
 import { useLoadingReveal } from "../composables/loadingReveal";
+import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
+import { useMembership } from "../composables/membership/useMembership";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
@@ -391,6 +393,32 @@ const usageChip = computed(() => {
     // where a limit bites.
     const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
     return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
+});
+
+/* MEMBERSHIP CREDITS, IN THE ROOM WHERE THEY GET SPENT.
+ *
+ * The other way a credit leaves is a premium SERVICE run, and it is agreed to here, in chat: the agent quotes a
+ * price and waits for a yes. That etiquette is written into the services tool, which means the figure reached the
+ * reader only if the model remembered to type it — the interface itself said nothing, and a number the product
+ * refuses to vouch for is a number nobody should have to trust. This pill is the app saying it too.
+ *
+ * IT APPEARS ONCE THE DAY'S ALLOWANCE IS IN PLAY, and not before — the same rule the plan-limit chip beside it
+ * follows for the same reason: a composer must not pin an untouched 1,000 to a session that has not asked for
+ * anything. Nothing spent, nothing to report. From the first spend on it is the running answer to "how much of
+ * today have I used", which is exactly when that question starts being asked.
+ *
+ * NOT A RING, though it sits between two of them. Those measure a rate limit FILLING UP towards a wall; this is a
+ * wallet emptying, and it is scoped to the person rather than to this conversation's provider account. Dressed as
+ * a third ring it would read as a third rate limit — so it takes the membership's own star and a plain figure,
+ * and cannot be mistaken for its neighbours. */
+const { meter: creditMeter } = useMembership();
+
+const creditChip = computed(() => {
+    const meter = creditMeter.value;
+    if (meter === undefined || !meter.touched) {
+        return undefined;
+    }
+    return { label: formatCredits(meter.remaining), spent: meter.spent, hint: creditSummary(meter) };
 });
 
 // Per-conversation context-window fill — a ring that warns as the chat approaches auto-compaction.
@@ -1983,6 +2011,23 @@ watch(
                     <UsageRing :headroom="usageChip.headroom"
                         ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
                     >
+                </button>
+                <!-- What is left of today's membership allowance, once any of it has gone. The star is the
+                     membership's glyph everywhere else in the app, which is what keeps this from reading as a
+                     third rate limit; a click goes to the page that explains what a credit buys. Warning-tinted
+                     only when the allowance is gone — and that is a statement, not an alarm: the money went to
+                     the people who wrote what was used, which is what the membership is for. -->
+                <button
+                    v-if="creditChip"
+                    type="button"
+                    class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
+                    :class="creditChip.spent ? `text-warning` : ``"
+                    :aria-label="creditChip.hint"
+                    v-tooltip.top="creditChip.hint"
+                    @click="router.push('/settings/membership')"
+                >
+                    <Icon name="star" class="shrink-0 text-2xs" />
+                    <span class="tabular-nums @max-xs:hidden">{{ creditChip.label }}</span>
                 </button>
                 <button
                     type="button"

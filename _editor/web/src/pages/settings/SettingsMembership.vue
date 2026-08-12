@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { MembershipState } from "@intentic-app/api-contract";
 import { Card, Icon, Notice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { formatCredits as n, installsFor, resetsAtLocal } from "../../composables/membership/creditMeter";
+import { useMembership } from "../../composables/membership/useMembership";
 import { apiClient } from "../../composables/useApi";
 import { environment } from "../../environments/environment";
 
@@ -26,19 +27,16 @@ import { environment } from "../../environments/environment";
  * The economics are said out loud on purpose (the price, the creators' share, the public ledger link): the
  * pool's promise is transparency, and the buying surface is the cheapest place in the product to keep it. */
 
-const membership = ref<MembershipState | null>(null);
-const loadError = ref<string | undefined>(undefined);
+/* The state, and the credit meter's arithmetic, both come from the app's ONE membership read
+ * (composables/membership) — the same entry the account menu, the premium install dialog and the chat composer
+ * observe. This card is no longer the only place credits appear, so it must not be the place they are computed:
+ * a second copy of "what percent is left" is how four surfaces start disagreeing. */
+const { state: membership, meter: credits, donationCredits, dailyCredits, error, refetch } = useMembership();
+
 const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
-const load = async (): Promise<void> => {
-    try {
-        membership.value = await apiClient.pool.membership();
-        loadError.value = undefined;
-    } catch (err) {
-        loadError.value = errorMessage(err, `Couldn't load the membership state.`);
-    }
-};
+const loadError = computed(() => (error.value === null ? undefined : errorMessage(error.value, `Couldn't load the membership state.`)));
 
 /* THE POST-CHECKOUT GAP. Stripe sends the browser back with ?membership=welcome, but the webhook that makes
  * the membership real can land seconds later — so the first read after a completed payment often still says
@@ -63,15 +61,14 @@ const stopPolling = (): void => {
 
 onUnmounted(stopPolling);
 
-onMounted(async () => {
-    await load();
+onMounted(() => {
     if (!justJoined.value || membership.value?.member === true) {
         return;
     }
     activating.value = true;
     const until = Date.now() + POLL_FOR_MS;
     poll = setInterval(() => {
-        void load().then(() => {
+        void refetch().then(() => {
             if (membership.value?.member === true || Date.now() > until) {
                 stopPolling();
             }
@@ -81,17 +78,12 @@ onMounted(async () => {
 
 // ---- the published figures, and what they come to -------------------------------------------------------
 
-const n = (value: number): string => value.toLocaleString();
-
 const priceUsd = computed(() => membership.value?.priceUsd ?? 0);
 const sharePercent = computed(() => Math.round((membership.value?.creatorShare ?? 0) * 100));
 const platformPercent = computed(() => 100 - sharePercent.value);
-const dailyCredits = computed(() => membership.value?.dailyCredits ?? 0);
-const donationCredits = computed(() => membership.value?.donationCredits ?? 0);
 
-// What a day's allowance buys, in the one unit every reader of this page already understands. Guarded
-// against a zero donation price, which is a configuration a self-hosted platform is allowed to have.
-const installsPerDay = computed(() => (donationCredits.value > 0 ? Math.floor(dailyCredits.value / donationCredits.value) : 0));
+// What a day's allowance buys, in the one unit every reader of this page already understands.
+const installsPerDay = computed(() => installsFor(dailyCredits.value, donationCredits.value));
 
 const renewsOn = computed(() => {
     const stamp = membership.value?.renewsAt;
@@ -100,25 +92,11 @@ const renewsOn = computed(() => {
 
 // ---- the member's meter ---------------------------------------------------------------------------------
 
-const credits = computed(() => membership.value?.credits);
-
-// Reset is UTC midnight; rendered as the reader's local time so "resets at" is a clock they own.
-const resetsAt = computed(() => {
-    const at = credits.value?.resetsAt;
-    return at === undefined ? undefined : new Date(at).toLocaleTimeString(undefined, { hour: `numeric`, minute: `2-digit` });
-});
-
-const remainingPercent = computed(() => {
-    const meter = credits.value;
-    if (meter === undefined || meter.allowance <= 0) {
-        return 0;
-    }
-    return Math.round((meter.remaining / meter.allowance) * 100);
-});
+const resetsAt = computed(() => resetsAtLocal(credits.value));
 
 // What is LEFT, in installs — the same arithmetic as the offer, against today's remainder rather than the
 // allowance. A member reading a meter wants to know what they can still do, not what they could have done.
-const installsLeft = computed(() => (donationCredits.value > 0 ? Math.floor((credits.value?.remaining ?? 0) / donationCredits.value) : 0));
+const installsLeft = computed(() => installsFor(credits.value?.remaining ?? 0, donationCredits.value));
 
 /* ---- LAPSED IS NOT THE SAME AS NEVER ------------------------------------------------------------------
  *
@@ -223,7 +201,7 @@ const assurances = computed(() => [
                         <span v-if="resetsAt" class="ml-auto text-xs text-subtle">resets at {{ resetsAt }}</span>
                     </div>
                     <div class="h-1.5 overflow-hidden rounded-full bg-content/10">
-                        <div class="h-full rounded-full bg-primary-fill transition-[width]" :style="{ width: `${remainingPercent}%` }" />
+                        <div class="h-full rounded-full bg-primary-fill transition-[width]" :style="{ width: `${credits.remainingPercent}%` }" />
                     </div>
                     <!-- What is left, and where to put it. An unspent allowance pays nobody and reads, a month
                          later, as a membership that bought nothing — so the meter names the next step instead

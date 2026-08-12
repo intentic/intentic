@@ -3,14 +3,34 @@ import { Avatar } from "@intentic/ui";
 import Popover from "primevue/popover";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import { creditSummary } from "../composables/membership/creditMeter";
+import { useMembership } from "../composables/membership/useMembership";
 import { useAuth } from "../composables/useAuth";
+import AccountCredits from "./AccountCredits.vue";
 
-/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name)
- * and the account actions (Settings, Sign out). The sandbox and its status live in the rail's top switcher;
- * personal preferences (theme) live on the /settings page. */
+/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name), the
+ * day's credit balance, and the account actions (Settings, Sign out). The sandbox and its status live in the
+ * rail's top switcher; personal preferences (theme) live on the /settings page.
+ *
+ * CREDITS BELONG TO THE PERSON, WHICH IS WHY THEY ARE HERE — see AccountCredits for the whole argument. What
+ * this file adds on top of that row is the only part of it that reaches the app frame: the tooltip, and a dot
+ * when the allowance is gone. */
 
 const { user, signOut } = useAuth();
 const router = useRouter();
+
+/* THE BALANCE, WITHOUT OPENING ANYTHING. Two escalating steps, and deliberately no third:
+ *
+ *  - The tooltip already existed and said "Account", which is what the avatar plainly is. Given a meter it says
+ *    the balance instead — so a member can learn what is left by resting a pointer, and nothing is added to the
+ *    rail to make that true.
+ *  - A dot, and ONLY when the allowance is actually spent. That is the one credit state where something a person
+ *    tries will be refused, so it is the one worth a mark on the frame. Not for "low": running out later today
+ *    is not news that has to interrupt anybody, and a permanent gauge on the rail would read as the metering
+ *    this product promises it does not do. */
+const { meter } = useMembership();
+
+const accountHint = computed(() => (meter.value === undefined ? `Account` : creditSummary(meter.value)));
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
 const avatarFailed = ref(false);
@@ -33,16 +53,34 @@ const logout = async (): Promise<void> => {
 </script>
 
 <template>
-    <button
-        type="button"
-        class="account-control mt-auto flex items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
-        aria-label="Account"
-        v-tooltip.right="'Account'"
-        @click="panel?.toggle($event)"
-    >
-        <img v-if="avatarImage" :src="avatarImage" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover" @error="avatarLoadFailed" />
-        <Icon name="user" v-else class="text-base" />
-    </button>
+    <!-- The dot sits OUTSIDE the avatar's clipping circle, so the wrapper carries the position and the button
+         keeps its overflow-hidden (an avatar image has to be clipped round; a marker must not be). -->
+    <div class="account-control relative mt-auto shrink-0">
+        <button
+            type="button"
+            class="flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
+            :aria-label="accountHint"
+            v-tooltip.right="accountHint"
+            @click="panel?.toggle($event)"
+        >
+            <img
+                v-if="avatarImage"
+                :src="avatarImage"
+                alt=""
+                referrerpolicy="no-referrer"
+                class="h-full w-full object-cover"
+                @error="avatarLoadFailed"
+            />
+            <Icon name="user" v-else class="text-base" />
+        </button>
+        <!-- Ringed in the rail's own background so it reads as a marker ON the avatar rather than a stray pixel
+             beside it. aria-hidden: the button's label already says the balance in words. -->
+        <span
+            v-if="meter?.spent"
+            class="pointer-events-none absolute -right-px -top-px size-2 rounded-full bg-warning ring-2 ring-canvas"
+            aria-hidden="true"
+        />
+    </div>
 
     <!-- Same inset as the sandbox switcher above it in the rail: the theme's popover padding is a content
          card's, and these are menu rows that carry their own. -->
@@ -58,6 +96,13 @@ const logout = async (): Promise<void> => {
             </div>
 
             <div class="my-1 border-t border-line"></div>
+
+            <!-- The day's allowance, between who you are and what you can do — it is a fact about the account,
+                 and it is the reason somebody opens this menu without wanting either Settings or Sign out.
+                 Dismisses the menu on its way to the membership page like every other row here. -->
+            <AccountCredits @click="panel?.hide()" />
+
+            <div v-if="meter" class="my-1 border-t border-line"></div>
 
             <button
                 type="button"

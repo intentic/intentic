@@ -13,6 +13,7 @@ import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import AccountCredits from "../shell/AccountCredits.vue";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
  * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
@@ -242,6 +243,9 @@ const logout = async (): Promise<void> => {
                     <span v-if="user?.name" class="block truncate text-xs text-muted">{{ user.name }}</span>
                 </span>
             </div>
+            <!-- The day's credit allowance, the same row the desktop avatar menu carries: it is a fact about this
+                 account, and a phone is where somebody is most likely to be checking rather than spending. -->
+            <AccountCredits />
             <button
                 type="button"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"

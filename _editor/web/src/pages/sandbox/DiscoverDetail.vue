@@ -4,7 +4,10 @@ import Dialog from "primevue/dialog";
 import { githubRepoOf } from "@intentic/registry";
 import { BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
+import { formatCredits } from "../../composables/membership/creditMeter";
+import { useMembership } from "../../composables/membership/useMembership";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
+import PremiumCost from "./PremiumCost.vue";
 
 /* ONE LISTING, READ BEFORE IT IS RUN — and the surface where this product's actual argument about trust gets
  * made instead of implied.
@@ -54,6 +57,25 @@ const auditable = computed(() => ref40.value !== undefined && listing.state.kind
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
 // The audit leads wherever the registry has not vouched for the code. See the block comment above.
 const auditLeads = computed(() => auditable.value && !verified.value);
+
+/* ---- THE MONEY, WHERE IT IS ABOUT TO BE SPENT --------------------------------------------------------------
+ *
+ * A premium install donates to the creator from the owner's daily allowance, and this dialog is the last thing
+ * read before that happens. The cost block below states the price and the balance; what is HERE is the other
+ * half of the same fix — the price on the button. A reader who skips the body and goes straight for the action
+ * still cannot spend without seeing what it costs, which is the point.
+ *
+ * Only where a spend is actually pending: an already-installed listing has no button, and a free one has no
+ * price. The `premiumSpend` flag is deliberately about the ACTION rather than the tier, so the block does not
+ * quote a price at somebody who is merely reading about an extension they already have. */
+const { donationCredits } = useMembership();
+
+const premiumSpend = computed(() => listing.entry.tier === `premium` && actionable.value);
+const priceLabel = computed(() =>
+    premiumSpend.value && donationCredits.value > 0
+        ? `${listing.state.action} · ${formatCredits(donationCredits.value)} credits`
+        : listing.state.action,
+);
 </script>
 
 <template>
@@ -207,6 +229,11 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 Lives in <code class="ui-code">{{ listing.entry.install.path }}</code> inside that repository.
             </p>
 
+            <!-- LAST THING IN THE BODY, so it is the last thing read before the footer's button. A premium
+                 listing nobody here can act on says nothing: the price of a spend that cannot happen is not a
+                 disclosure, it is clutter. -->
+            <PremiumCost v-if="premiumSpend" :update="listing.state.kind === `update`" />
+
             <Notice v-if="failure" :of="failure" />
             <p v-if="listing.state.action !== undefined && !canInstall" class="text-2xs text-subtle">
                 Only the sandbox owner can install extensions.
@@ -229,7 +256,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             </Button>
             <Button
                 v-if="actionable"
-                :label="listing.state.action"
+                :label="priceLabel"
                 size="small"
                 :loading="installing"
                 :severity="auditLeads ? `secondary` : undefined"
