@@ -12,7 +12,15 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../composables/agents/useAgents";
-import { resetChat, useChat } from "../composables/chat/useChat";
+import { draftConversation, resetChat, reveal, useChat } from "../composables/chat/useChat";
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
+
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { queryClient } from "../composables/queryPersistence";
 import { router } from "../router";
@@ -76,7 +84,7 @@ const openThree = (): readonly string[] => {
     const chat = useChat();
     const ids: string[] = [];
     for (let at = 0; at < 3; at++) {
-        const conversation = at === 0 ? chat.active.value : chat.newChat();
+        const conversation = at === 0 ? chat.active.value : newChat();
         conversation.draft.value = `tab ${at}`;
         ids.push(conversation.conversationId);
     }

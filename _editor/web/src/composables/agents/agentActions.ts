@@ -2,7 +2,8 @@ import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../chat/conversation";
-import { focusComposer, useChat } from "../chat/useChat";
+import { summonChat } from "../chat/summon";
+import { draftConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -22,16 +23,25 @@ import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 // the chat strip's "+", and the mobile strip's "+". They all mean the same thing — a fresh isolated
 // conversation, focused and ready to type into — so they must all do the same thing, whole. That is three
 // steps, and a surface that skips any of them reads as a press that did nothing:
-//   · open the tab (the fleet's draft card and the chat's tab are the same conversation under two skins)
+//   · summon the tab, in EVERY window (the fleet's draft card and the chat's tab are the same conversation
+//     under two skins, and the chat panel showing it may be another window's — see summon.ts)
 //   · put the caret in its composer, which is what makes the new tab visible as the thing you now type into
+//     (the summons' caret flag)
 //   · on mobile, go to it — there is no docked chat there, so the agent's own screen IS the result (and a "+"
 //     pressed from an agent's screen would otherwise leave the route pointing at the agent you just left)
+//
+// A press over an existing untouched draft summons THAT draft (useChat.draftConversation) — the press is about
+// the caret and the focus, and a second empty draft has nothing to be. Every window converges on the same tab
+// either way: a receiving window holding its own untouched draft has it swept by the same write that seats the
+// summoned one.
 //
 // `prompt` is the same action with its first turn already written — what a surface holding a composed task
 // presses (the codebase-health panel's per-row refactor). It goes through `enqueue`, so it is an ORDINARY user
 // message: it sits in the transcript to be read and argued with, the caret is already in the composer to steer
 // it, and Stop works on it like anything else. Not awaited — enqueue's promise settles when the TURN does, and
-// the turn reports itself in the transcript (the same reason askAgentToResolve voids it).
+// the turn reports itself in the transcript (the same reason askAgentToResolve voids it). Enqueued HERE only,
+// never through the summons: an act happens once, in the window that was pressed, and reaches the other
+// windows as the daemon-side turn it becomes.
 //
 // Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
 // reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
@@ -40,19 +50,20 @@ export const startAgent = (prompt?: string): void => {
     // on, opening the app lands on the workspace rather than the board (firstRun.ts). Recorded on the press
     // rather than on the turn completing — the user has seen what the board is for either way.
     markAgentStarted(useSandbox().activeSandboxId.value);
-    const conversation = useChat().newChat();
+    const conversation = draftConversation();
+    summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
     if (prompt !== undefined) {
         void conversation.enqueue(prompt);
     }
 };
 
-// The two steps that turn a conversation the user cannot see into the one they are now looking at. Shared with
-// the suggested-session box (sessionSuggestion.ts), which mints and configures its conversation before any
-// tab exists for it and so cannot go through `newChat` — but must land in exactly the same place once accepted,
-// or "start a fix agent" and "New agent" would leave the user in two different states.
+// The navigation half of a summons, in the window that was pressed: mobile has no docked panel, so the agent's
+// own screen is where the summoned chat shows. Local on purpose — a background window navigating itself is a
+// route yanked out from under whoever returns to it. Shared with the suggested-session box
+// (sessionSuggestion.ts), which must land exactly where "New agent" does once accepted, or the two doors into
+// a fresh session open onto two different rooms.
 export const revealConversation = (conversation: Conversation): void => {
-    focusComposer();
     if (useDevice().mobile.value) {
         void router.push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
     }

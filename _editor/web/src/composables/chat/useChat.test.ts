@@ -63,7 +63,15 @@ const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?
 };
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
-const { hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
+const { draftConversation, hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, reveal, useChat } = await import("./useChat");
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
+
 const { usageStatusByAccount } = await import("./usageStatus");
 const { Conversation } = await import("./conversation");
 const { turnDefaults } = await import("./turnDefaults");
@@ -270,7 +278,7 @@ describe(`the remembered account`, () => {
         expect(chat.account.value).toBe(`second`);
 
         // ...and so does the next new chat in that window, which is what "default" means.
-        chat.newChat();
+        newChat();
         expect(chat.account.value).toBe(`second`);
     });
 
@@ -295,7 +303,7 @@ describe(`the remembered account`, () => {
         chat.selectAccount(`first`);
         chat.draft.value = `keep this tab real`;
 
-        const other = chat.newChat();
+        const other = newChat();
         chat.selectAccount(`second`);
         other.draft.value = `and this one`;
 
@@ -361,7 +369,7 @@ describe(`the remembered account`, () => {
         // The draft is what makes the next tab real — newChat hands back an untouched one rather than minting a
         // second, and a restored empty tab carries its own pin, which would answer for the preference.
         chat.draft.value = `this tab is in use`;
-        chat.newChat();
+        newChat();
         expect(chat.account.value).toBe(`second`);
     });
 
@@ -384,7 +392,7 @@ describe(`the remembered account`, () => {
         resetChat();
         await loadAccountStatus();
         chat.draft.value = `this tab is in use`;
-        chat.newChat();
+        newChat();
         expect(chat.account.value).toBe(`second`);
     });
 });
@@ -400,7 +408,7 @@ describe(`per-tab drafts`, () => {
         const first = chat.active.value.conversationId;
         chat.draft.value = `hello A`;
 
-        chat.newChat();
+        newChat();
         expect(chat.draft.value).toBe(``);
 
         chat.setActive(first);
@@ -411,7 +419,7 @@ describe(`per-tab drafts`, () => {
         const chat = useChat();
         chat.draft.value = `draft one`;
         chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `${STATE_DIR}/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 }];
-        chat.newChat();
+        newChat();
         chat.draft.value = `draft two`;
         await nextTick(); // flush the persistence watch
 
@@ -463,7 +471,7 @@ describe(`per-tab turn settings`, () => {
         chat.effort.value = `medium`;
         chat.thinking.value = false;
 
-        chat.newChat();
+        newChat();
         chat.draft.value = `and me`;
         chat.selectModel({ provider: `claude`, value: `claude-opus-4-1-20250805` });
         await nextTick(); // flush the persistence watch
@@ -530,7 +538,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         const chat = useChat();
         const kept = chat.active.value.conversationId;
         chat.draft.value = `keep me`; // content — the focus-leave sweep must not take the tab `closed` steals focus from
-        const closed = chat.newChat().conversationId;
+        const closed = newChat().conversationId;
         await nextTick();
 
         chat.closeTabs(new Set([closed]));
@@ -621,7 +629,7 @@ describe(`closing tabs`, () => {
         const chat = useChat();
         const ids: string[] = [];
         for (let at = 0; at < 4; at++) {
-            const conversation = at === 0 ? chat.active.value : chat.newChat();
+            const conversation = at === 0 ? chat.active.value : newChat();
             conversation.draft.value = `tab ${at}`;
             ids.push(conversation.conversationId);
         }
@@ -718,7 +726,7 @@ describe(`abandoned drafts`, () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
         chat.draft.value = `real work`;
-        const abandoned = chat.newChat();
+        const abandoned = newChat();
         abandoned.draft.value = `   `;
 
         chat.setActive(first);
@@ -731,7 +739,7 @@ describe(`abandoned drafts`, () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
         chat.draft.value = `real work`;
-        const kept = chat.newChat();
+        const kept = newChat();
         kept.draft.value = `half a thought`;
         await nextTick();
 
@@ -749,9 +757,9 @@ describe(`abandoned drafts`, () => {
     it(`hands back the untouched draft already open instead of minting a second`, () => {
         const chat = useChat();
         chat.draft.value = `real work`;
-        const first = chat.newChat();
+        const first = newChat();
 
-        const again = chat.newChat();
+        const again = newChat();
 
         expect(again).toBe(first);
         expect(chat.conversations.value).toHaveLength(2);
@@ -764,12 +772,12 @@ describe(`abandoned drafts`, () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
         chat.draft.value = `real work`;
-        const draft = chat.newChat();
+        const draft = newChat();
         // A conversation that opened alongside it (a fleet card, a history row) takes the focus but not the draft.
         const opened = openAgentConversation({ id: `agent-1`, provider: `claude`, harness: `native`, title: `Someone else's work` });
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, opened.conversationId]);
 
-        const pressed = chat.newChat();
+        const pressed = newChat();
 
         expect(pressed).not.toBe(draft); // that one went with the focus it lost
         expect(chat.activeId.value).toBe(pressed.conversationId);
@@ -779,7 +787,7 @@ describe(`abandoned drafts`, () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
         chat.draft.value = `real work`;
-        const registered = chat.newChat();
+        const registered = newChat();
         registered.registered.value = true;
         await nextTick();
 
@@ -972,7 +980,7 @@ describe(`effort/thinking pairing`, () => {
         expect(chat.effort.value).toBe(`xhigh`);
 
         // The next new conversation seeds from turnDefaults; it must not inherit the pair the API rejects.
-        chat.newChat();
+        newChat();
         expect(chat.effort.value).toBe(`xhigh`);
     });
 
@@ -1001,7 +1009,7 @@ describe(`chat panes`, () => {
         const chat = useChat();
         const ids: string[] = [];
         for (let at = 0; at < 3; at++) {
-            const conversation = at === 0 ? chat.active.value : chat.newChat();
+            const conversation = at === 0 ? chat.active.value : newChat();
             conversation.draft.value = `tab ${at}`;
             ids.push(conversation.conversationId);
         }
@@ -1145,7 +1153,7 @@ describe(`chat panes`, () => {
         chat.openBeside(ids[1]!);
         expect(chat.panes.value).toEqual([ids[0], ids[1]]);
 
-        const fresh = chat.newChat();
+        const fresh = newChat();
 
         expect(chat.panes.value).toEqual([fresh.conversationId]);
         expect(chat.activeId.value).toBe(fresh.conversationId);
@@ -1159,13 +1167,13 @@ describe(`chat panes`, () => {
     it(`gives the whole panel back when New agent hands over the draft it already opened`, () => {
         const chat = useChat();
         const ids = openThree();
-        const fresh = chat.newChat();
+        const fresh = newChat();
         // A Shift-range on the rail: a second column, with the focus left on the draft — the one way a draft
         // survives alongside another pane, since any move of the focus off it reaps it.
         chat.setPanes([fresh.conversationId, ids[1]!]);
         expect(chat.panes.value).toEqual([fresh.conversationId, ids[1]]);
 
-        const again = chat.newChat();
+        const again = newChat();
 
         expect(again.conversationId).toBe(fresh.conversationId);
         expect(chat.panes.value).toEqual([fresh.conversationId]);

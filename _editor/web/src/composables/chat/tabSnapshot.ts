@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import type { Conversation } from "./conversation";
 import { readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
@@ -56,6 +57,37 @@ export interface StoredTab {
     // deliberately dropped: it points at a selection this window no longer has.
     readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
 }
+
+/* One live conversation, as its persisted shape — StoredTab is the ONE portable description of a tab, and this
+ * is the one place a Conversation is folded into it. Two readers with different lifetimes share it: the
+ * tab-snapshot watch (useChat), which persists every open tab on every change, and the summons channel
+ * (summon.ts), which sends a tab to the app's OTHER windows so a chat summoned anywhere is on screen
+ * everywhere. JSON.stringify drops the undefined keys, matching StoredTab's optional fields. */
+export const snapshotTab = (conversation: Conversation): StoredTab => ({
+    conversationId: conversation.conversationId,
+    isolated: conversation.isolated.value,
+    registered: conversation.registered.value,
+    provider: conversation.provider.value,
+    account: conversation.account.value,
+    model: conversation.model.value,
+    effort: conversation.effortPick.value,
+    actsAs: conversation.actsAs.value,
+    thinking: conversation.thinking.value,
+    fast: conversation.fast.value,
+    harness: conversation.harness.value,
+    session: conversation.session.value && {
+        id: conversation.session.value.id,
+        provider: conversation.session.value.provider,
+        account: conversation.session.value.account,
+    },
+    title: conversation.title.value ?? undefined,
+    draft: conversation.draft.value,
+    attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
+    queued: conversation.queued.value.map((message) => ({
+        text: message.text,
+        attachments: message.attachments.map((file) => ({ name: file.name, path: file.path })),
+    })),
+});
 
 // A sandbox's whole strip: the open tabs, which one is focused, and which of them are on screen at once (the
 // panes, in their column order). Coherent by construction — `active` always names one of `tabs`, every pane

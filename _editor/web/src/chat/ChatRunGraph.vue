@@ -3,7 +3,8 @@ import { DagGraph, Icon } from "@intentic/ui";
 import { workflowDag, WorkflowNodeCard } from "@intentic/ext-workflows";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { RUN_NODE_HEIGHT, RUN_NODE_WIDTH, runColumns, type RunSession } from "../composables/chat/chatRun";
+import type { RunSession } from "../composables/chat/chatRun";
+import { RUN_NODE_HEIGHT, RUN_NODE_WIDTH, runColumns } from "../composables/chat/runColumns";
 
 /* THE RUN'S DIAGRAM, IN THE CHAT PANEL — the map you come back to in order to choose a different part of the
  * run, one press behind the sessions themselves.

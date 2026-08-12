@@ -87,7 +87,14 @@ vi.mocked(sandboxJson).mockImplementation((path: string) =>
 );
 
 // Imported last, so the seeded stores are what its module-scope restore reads.
-const { loadAccountStatus, useChat } = await import("./useChat");
+const { draftConversation, loadAccountStatus, reveal, useChat } = await import("./useChat");
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
 
 it(`comes back from a refresh on the accounts the tabs were using, and opens a new chat on the last pick`, async () => {
     const chat = useChat();
@@ -107,6 +114,6 @@ it(`comes back from a refresh on the accounts the tabs were using, and opens a n
     expect(accountOf(`tab-b`)).toBe(`second`);
 
     // A chat started after the refresh inherits the remembered pick, not the first account.
-    chat.newChat();
+    newChat();
     expect(chat.account.value).toBe(`second`);
 });

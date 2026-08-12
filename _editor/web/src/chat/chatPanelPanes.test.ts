@@ -19,7 +19,15 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { chatRun, showRun } from "../composables/chat/chatRun";
-import { resetChat, useChat } from "../composables/chat/useChat";
+import { draftConversation, resetChat, reveal, useChat } from "../composables/chat/useChat";
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
+
 import { queryClient } from "../composables/queryPersistence";
 import { useLayout } from "../composables/useLayout";
 import { router } from "../router";
@@ -99,7 +107,7 @@ const onScreen = (): string[] =>
 // A conversation the panel can be asked to show, named so the DOM says which one it is.
 const namedChat = (name: string, id?: string) => {
     const chat = useChat();
-    const conversation = id === undefined ? chat.newChat() : chat.active.value;
+    const conversation = id === undefined ? newChat() : chat.active.value;
     conversation.restoreMessages([{ role: `user`, text: `shows-${name}` }]);
     return conversation;
 };

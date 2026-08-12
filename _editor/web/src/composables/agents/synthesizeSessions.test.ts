@@ -43,7 +43,15 @@ const { sandboxRequest, sandboxUpload } = await import("../sandbox/sandboxClient
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxUploadMock = vi.mocked(sandboxUpload);
 const { revealConversation } = await import("./agentActions");
-const { resetChat, useChat } = await import("../chat/useChat");
+const { draftConversation, resetChat, reveal, useChat } = await import("../chat/useChat");
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
+
 const { renderTranscript, synthesisPrompt, synthesizeSessions } = await import("./synthesizeSessions");
 
 beforeEach(() => {
@@ -70,7 +78,7 @@ const openTwoPanes = (): readonly [string, string] => {
         { role: `assistant`, text: `done it one way` },
     ]);
     first.title.value = `Approach one`;
-    const second = chat.newChat();
+    const second = newChat();
     second.restoreMessages([
         { role: `user`, text: `try approach two` },
         { role: `assistant`, text: `done it another way` },

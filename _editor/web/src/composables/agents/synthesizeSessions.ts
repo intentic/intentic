@@ -2,7 +2,8 @@ import type { RestoredMessage, RestoredToolCall, ToolCallContent } from "@intent
 import { ref } from "vue";
 import { track } from "../analytics";
 import type { Conversation } from "../chat/conversation";
-import { adoptConversation, useChat } from "../chat/useChat";
+import { summonChat } from "../chat/summon";
+import { useChat } from "../chat/useChat";
 import { sandboxRequest, sandboxUpload } from "../sandbox/sandboxClient";
 import { revealConversation } from "./agentActions";
 import { composeSession } from "./sessionSuggestion";
@@ -217,7 +218,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
             status: `done`,
             progress: 1,
         }));
-        adoptConversation(conversation);
+        summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
         revealConversation(conversation);
         track(`sessions_synthesized`, { sources: settled.length });
         return { started: true };

@@ -20,7 +20,15 @@ import { createApp, h, nextTick } from "vue";
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { resetChat, useChat } from "../composables/chat/useChat";
+import { draftConversation, resetChat, reveal, useChat } from "../composables/chat/useChat";
+// The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
+// suites open extra tabs with.
+const newChat = () => {
+    const conversation = draftConversation();
+    reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
+    return conversation;
+};
+
 import { queryClient } from "../composables/queryPersistence";
 import { router } from "../router";
 
@@ -97,7 +105,7 @@ const openTabs = (count: number): string[] => {
     const chat = useChat();
     const ids: string[] = [];
     for (let at = 0; at < count; at++) {
-        const conversation = at === 0 ? chat.active.value : chat.newChat();
+        const conversation = at === 0 ? chat.active.value : newChat();
         conversation.draft.value = `pinned ${at}`;
         ids.push(conversation.conversationId);
     }

@@ -1,6 +1,6 @@
 import { parsePinned } from "@intentic/sandbox-contract";
 import { Conversation } from "../chat/conversation";
-import { adoptConversation } from "../chat/useChat";
+import { summonChat } from "../chat/summon";
 import { revealConversation } from "./agentActions";
 
 /* SUGGESTING A SESSION — the app proposing a specific piece of agent work, with the turn already composed, and
@@ -60,10 +60,12 @@ export const composeSession = (draft: SessionDraft): Conversation => {
     return conversation;
 };
 
-/* Accept: the draft becomes a real tab, in the same place and the same state "New agent" would have left it,
- * and its composed text goes out as an ORDINARY first message. `enqueue` and not a bespoke send, so the prompt
- * sits in the transcript to be read and argued with, the caret is in the composer to steer it, and Stop works
- * on it like anything else. Not awaited — enqueue settles when the TURN does, and the turn reports itself.
+/* Accept: the draft becomes a real tab, in the same place and the same state "New agent" would have left it —
+ * a SUMMONS, so the chat panel showing it may be any window's (summon.ts) — and its composed text goes out as
+ * an ORDINARY first message. `enqueue` and not a bespoke send, so the prompt sits in the transcript to be read
+ * and argued with, the caret is in the composer to steer it, and Stop works on it like anything else. Not
+ * awaited — enqueue settles when the TURN does, and the turn reports itself. Enqueued here only, never through
+ * the summons: the turn it becomes reaches the other windows from the daemon.
  *
  * An emptied box starts nothing: the user deleted the proposal rather than editing it, and minting a tab for a
  * turn with no message would leave them staring at a blank agent they did not ask for. */
@@ -73,7 +75,7 @@ export const startSession = (conversation: Conversation): void => {
         return;
     }
     conversation.draft.value = ``;
-    adoptConversation(conversation);
+    summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
     void conversation.enqueue(prompt);
 };

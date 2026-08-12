@@ -14,6 +14,7 @@ import {
 import { watch } from "vue";
 import { requestModelPick } from "../composables/chat/hostModelPicker";
 import { modelLabelFor } from "../composables/chat/modelPicker";
+import { summonChat } from "../composables/chat/summon";
 import { accountsOf, useChat } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
 import { startAgent } from "../composables/agents/agentActions";
@@ -395,6 +396,8 @@ export const createExtensionApi = (
         chat: {
             // Automation runs now carry stable conversation ids. Prefer the unified registry transcript and
             // retain the history-session fallback for extension callers opening an actual provider session.
+            // Both roads are a SUMMONS (an extension panel is a surface outside the chat), so the chat showing
+            // the result may be any window's — agents.open broadcasts itself, the fallback broadcasts here.
             openSession: (id) =>
                 void (async () => {
                     const agents = useAgents();
@@ -405,7 +408,14 @@ export const createExtensionApi = (
                     if (agent !== undefined) {
                         agents.open(agent);
                     } else {
-                        await useChat().openConversation(id);
+                        const conversationId = crypto.randomUUID();
+                        summonChat({
+                            kind: `reveal`,
+                            verb: `show`,
+                            entries: [{ conversationId, sessionRef: id }],
+                            focus: conversationId,
+                            caret: false,
+                        });
                     }
                 })(),
             /* A new chat with the workflow badge already set — `startAgent` is the same call "New agent" makes,

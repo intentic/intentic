@@ -42,7 +42,7 @@ import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
-import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
+import { readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
@@ -65,7 +65,13 @@ export interface ChatSession {
  * tabs), plus the global account connection and turn preferences. A singleton
  * so the open conversations survive navigation between workspace areas (the chat panel lives in the
  * persistent shell). Each Conversation owns its own stream, so a background tab keeps generating while the
- * user views another. */
+ * user views another.
+ *
+ * A singleton PER WINDOW: every browser window runs a full copy of the app with its own tab set (windowStore
+ * has why), and only daemon-backed state converges between them on its own. What does cross windows is the
+ * SUMMONS — a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
+ * in every window — so the popped-out chat (drawn by whichever window opened it) follows a click made in any
+ * of them. */
 
 const { activeSandboxId, reachable } = useSandbox();
 
@@ -300,34 +306,7 @@ watch(
         JSON.stringify({
             active: activeId.value,
             panes: panes.value,
-            tabs: conversations.value.map((conversation) => ({
-                // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
-                conversationId: conversation.conversationId,
-                isolated: conversation.isolated.value,
-                registered: conversation.registered.value,
-                provider: conversation.provider.value,
-                account: conversation.account.value,
-                model: conversation.model.value,
-                effort: conversation.effortPick.value,
-                actsAs: conversation.actsAs.value,
-                thinking: conversation.thinking.value,
-                fast: conversation.fast.value,
-                harness: conversation.harness.value,
-                session: conversation.session.value && {
-                    id: conversation.session.value.id,
-                    provider: conversation.session.value.provider,
-                    account: conversation.session.value.account,
-                },
-                title: conversation.title.value ?? undefined,
-                draft: conversation.draft.value,
-                attachments: conversation.attachments.value
-                    .filter((file) => file.status === `done`)
-                    .map((file) => ({ name: file.name, path: file.path })),
-                queued: conversation.queued.value.map((message) => ({
-                    text: message.text,
-                    attachments: message.attachments.map((file) => ({ name: file.name, path: file.path })),
-                })),
-            })),
+            tabs: conversations.value.map(snapshotTab),
         }),
     (json) => {
         if (scopedSandboxId !== undefined) {
@@ -1161,52 +1140,215 @@ export const resetChat = (): void => {
 };
 
 // --- Tabs -------------------------------------------------------------------------------------
-/* Open a fresh empty conversation and focus it. The store half of "New agent" — every surface that offers the
- * action goes through startAgent (agents/agentActions.ts), which is the one place that also puts the caret in
- * the composer and, on mobile, navigates to the new agent's screen. Other tabs keep streaming.
+/* --- Reveal: what every summons of the chat applies -----------------------------------------------------
  *
- * IDEMPOTENT, because the strip holds at most one untouched draft (see setConversations): pressed while such a
- * tab is already open, this hands that one back and focuses it rather than minting a second the write would drop
- * on the spot. The two are indistinguishable to the user — an empty draft has nothing in it to tell them apart —
- * so the difference was only ever visible as a "+" that did nothing. What the press is FOR then is the caret,
- * which startAgent asks for either way.
+ * ONE verb set, applied identically wherever the summons was pressed AND in whichever window it lands. The
+ * surfaces outside the panel — the fleet board, New agent, a suggestion box, an extension — never touch the
+ * tab list directly: they describe what the chat should show and hand it to the summons channel (summon.ts),
+ * which runs this same function in this window and broadcasts it to the app's other windows. That is the whole
+ * cure for "I clicked New agent and the popped-out chat kept showing an old conversation": the popped-out
+ * window is drawn by whichever window opened it, so a summons that only mutated the clicking window's own
+ * store was invisible out there. The panel's OWN controls (its rail, its tabs, its panes) keep calling the
+ * plain store verbs — a gesture inside the panel acts on the panel it was made in.
  *
- * IT TAKES THE WHOLE PANEL, not the column the focus happened to be in. Every other arrival here — a board card,
- * a deep link, a history row — is "show me THIS chat", and swapping one column for it is right, because the
- * other columns are chats the reader deliberately put up beside it. A fresh agent is not an arrival, it is a
- * fresh START: nothing has been said in it yet, so there is nothing for the chat still sitting in the next
- * column to be beside. Replacing one half of a split left the reader looking at a brand-new empty composer with
- * somebody else's transcript pinned next to it, and the only way back to one chat was to dismantle the split by
- * hand. The other chats stay OPEN — this gives their columns back, it does not close them. */
-const newChat = (): Conversation => {
-    const open = conversations.value.find(untouchedDraft);
-    const conversation = open ?? new Conversation();
-    if (open === undefined) {
-        setConversations([...conversations.value, conversation], conversation.conversationId, `new-chat`);
-    } else {
-        setConversations(conversations.value, conversation.conversationId, `new-chat-reuse`);
+ *   · show   — this one chat as the whole panel (the panes collapse to it): a card click, New agent, an
+ *              accepted suggestion, a history row. A fresh start and an arrival land the same way on purpose:
+ *              the other chats keep their tabs, they give their columns back.
+ *   · focus  — this one chat in the focused column, the split left standing. What `show` is minus the
+ *              collapse: the collapse belongs to a plain click on a SELECTION surface (the ringed cards are
+ *              the pane set, so pointing elsewhere replaces it), and a link inside the panel — a fork's
+ *              source, a history row under a split being compared — is no such click.
+ *   · beside — this chat in a column of its own, right of the focused pane (Alt/Ctrl on a board card).
+ *   · panes  — exactly this set, side by side, in this order (a Shift-run on the board).
+ *   · unpane — take the chat's column back (Ctrl on an already-ringed card).
+ */
+export type RevealVerb = `show` | `focus` | `beside` | `panes` | `unpane`;
+
+/* A chat, in whatever form the summoning surface holds it:
+ *   · a live Conversation — the surface just built and configured it (New agent, an accepted suggestion);
+ *   · a StoredTab — the portable description of a tab (tabSnapshot), which is also what every live entry
+ *     becomes on the wire between windows;
+ *   · a session reference — a history row: nothing exists but the daemon-side session and a title, and the
+ *     summoner mints the conversationId so every window agrees on the tab's identity.
+ * All three carry `conversationId`, which is the identity a reveal's `focus` names. */
+export type RevealEntry = Conversation | StoredTab | { readonly conversationId: string; readonly sessionRef: string; readonly title?: string };
+
+export interface Reveal {
+    readonly verb: RevealVerb;
+    readonly entries: readonly RevealEntry[];
+    // Which entry holds the focus, by the conversationId the SUMMONER knows — a session already open in this
+    // window under another id resolves to that tab instead.
+    readonly focus: string;
+    // Put the caret in the composer: what the press is FOR when it starts something to type into.
+    readonly caret: boolean;
+}
+
+// The transcript round-trip behind a session entry, off the reveal's synchronous path.
+const loadSession = async (conversation: Conversation, sessionRef: string, title: string | null): Promise<void> => {
+    try {
+        const restored = await fetchTranscript(conversation, sessionRef);
+        if (restored !== undefined) {
+            conversation.loadTranscript(restored, sessionRef, title);
+        }
+    } finally {
+        conversation.loading.value = false;
     }
-    // After the write, so the column kept is the one the fresh chat has just been seated in.
-    collapsePanes();
+};
+
+/* One entry, resolved to the open Conversation it means in THIS window — matching an open tab by id and a
+ * session by the session it shows, so a summons broadcast twice (or a chat this window already opened by hand)
+ * focuses the tab it already has rather than minting a twin. What has to join the strip goes into `additions`,
+ * so the reveal lands as ONE list write however many chats it carries. */
+const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversation => {
+    const opened = [...conversations.value, ...additions];
+    const byId = opened.find((conversation) => conversation.conversationId === entry.conversationId);
+    if (entry instanceof Conversation) {
+        if (byId !== undefined) {
+            return byId;
+        }
+        additions.push(entry);
+        return entry;
+    }
+    if (`sessionRef` in entry) {
+        const existing = opened.find((conversation) => conversation.session.value?.id === entry.sessionRef) ?? byId;
+        if (existing !== undefined) {
+            return existing;
+        }
+        const conversation = new Conversation(entry.conversationId);
+        // Titled from the row BEFORE the transcript round-trip: a nameless empty tab awaiting its fetch is
+        // indistinguishable from an untouched draft, and the focus-leave sweep would close it mid-load.
+        conversation.title.value = entry.title ?? null;
+        conversation.loading.value = true;
+        void loadSession(conversation, entry.sessionRef, entry.title ?? null);
+        additions.push(conversation);
+        return conversation;
+    }
+    const session = entry.session;
+    const existing = byId ?? (session === undefined ? undefined : opened.find((conversation) => conversation.session.value?.id === session.id));
+    if (existing !== undefined) {
+        // The summoner says the fleet knows this agent, however the tab came to be open — the latch that keeps
+        // an opened card from re-appearing on the board as a phantom draft (see the registered flag's note).
+        if (entry.registered) {
+            existing.registered.value = true;
+            existing.isolated.value = entry.isolated;
+        }
+        /* Opening is an explicit request to look again, however much the tab already shows — it may be a STUB
+         * from an attach that died mid-turn, which is the one state that never heals on its own. Skipped while
+         * streaming: this tab IS the stream, and rewriting under it is the one thing a summons must not do. */
+        if (!existing.streaming.value) {
+            hydrateOnce(existing);
+        }
+        return existing;
+    }
+    // Never open in this window: built from the snapshot exactly as a reload restores it. Hydrated OUTRIGHT
+    // rather than left to the reachability watch — a turn running daemon-side attaches and renders live, a
+    // settled one replays its record, and an unreachable daemon leaves the tab as it stands for that watch to
+    // retry (hydrateOnce clears its mark on failure).
+    const conversation = restoreTab(entry);
+    additions.push(conversation);
+    hydrateOnce(conversation);
     return conversation;
 };
 
-/* Put an already-built conversation into the strip and focus it. `newChat` cannot serve this and the difference
- * is the point: it MINTS the conversation, whereas a suggested session has to exist — configured with a model,
- * an effort and a first message the user can still edit — for as long as the dialog is open, and may be
- * dismissed without ever becoming a tab (agents/sessionSuggestion.ts).
- *
- * Safe against the one-untouched-draft rule because a suggestion always arrives carrying its prompt in `draft`,
- * which is exactly what `untouchedDraft` reads as touched: this conversation is kept, and any empty draft the
- * strip was holding is reaped by the same write, which is the correct outcome either way.
- *
- * It collapses the split for the same reason `newChat` does, and that is not a coincidence to be tidied away
- * later: an accepted suggestion has to land exactly where "New agent" would have left the user, or the two
- * doors into a fresh session open onto two different rooms. */
-export const adoptConversation = (conversation: Conversation): void => {
-    setConversations([...conversations.value, conversation], conversation.conversationId, `adopt-suggested`);
-    collapsePanes();
+// Reveal returns the conversation the focus resolved to — the summoning surface may still need the live
+// instance (a fork link, a test fixture). `unpane` shows nothing, so it returns nothing.
+export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | undefined => {
+    if (verb === `unpane`) {
+        closePane(focus);
+        return undefined;
+    }
+    const additions: Conversation[] = [];
+    const resolved = entries.map((entry) => resolveEntry(entry, additions));
+    // The focus as THIS window knows it (see resolveEntry's aliasing).
+    const at = entries.findIndex((entry) => entry.conversationId === focus);
+    const focusId = (at === -1 ? undefined : resolved[at]?.conversationId) ?? focus;
+    /* The column is claimed BEFORE the list write (openBeside's rule): the write reconciles the panes, and an
+     * arriving chat with no column of its own takes the focused pane's on its way in. */
+    if (verb === `beside` && !panes.value.includes(focusId)) {
+        const beside = panes.value.indexOf(activeId.value);
+        panes.value = panes.value.toSpliced(beside === -1 ? panes.value.length : beside + 1, 0, focusId);
+    }
+    if (additions.length > 0) {
+        setConversations([...conversations.value, ...additions], focusId, `reveal-${verb}`);
+    }
+    // Through setActive even when the write above already seated the focus: the reveal counter is what brings
+    // the tab into view in a scrolled rail, and asking again for the focused tab is still a distinct request.
+    setActive(focusId);
+    if (verb === `panes`) {
+        setPanes(resolved.map((conversation) => conversation.conversationId));
+    } else if (verb === `show`) {
+        // After the write, so the column kept is the one the summoned chat has just been seated in. The other
+        // chats stay OPEN — this gives their columns back, it does not close them.
+        collapsePanes();
+    }
+    if (caret) {
+        focusComposer();
+    }
+    return resolved.find((conversation) => conversation.conversationId === focusId);
 };
+
+/* An agent's registry summary, folded into the portable tab shape — what a fleet surface holds when it opens a
+ * chat that may not have a tab anywhere yet. The daemon's provider-neutral transcript record hydrates workspace
+ * and isolated conversations alike, so no provider store or placement gets a separate open path. */
+export interface AgentTabSeed {
+    id: string;
+    sessionId?: string;
+    title?: string;
+    provider: AgentProvider;
+    harness: AgentHarness;
+    // Present exactly when this conversation owns an isolated worktree. A registry-opened workspace
+    // conversation must explicitly clear Conversation's isolated-by-default posture before its next turn.
+    branch?: string;
+    account?: string;
+    // What the agent's turns actually ran with, as the registry recorded them. Absent only for an agent that
+    // has never run one (the board's draft card) — a real agent's settings are facts about it, and seeding the
+    // tab from the remembered picks instead is what made the composer claim a model the session never used.
+    model?: string;
+    effort?: string;
+    thinking?: boolean;
+    fast?: boolean;
+    // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
+    // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
+    // the focus-leave sweep when abandoned) until a first turn registers it.
+    registered?: boolean;
+}
+
+export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
+    const registered = agent.registered ?? true;
+    return {
+        conversationId: agent.id,
+        // A registered agent's isolation is its branch fact; a draft keeps a fresh conversation's own
+        // isolated-by-default posture.
+        isolated: registered ? agent.branch !== undefined : true,
+        registered,
+        provider: agent.provider,
+        harness: agent.harness,
+        account: agent.account,
+        model: agent.model,
+        effort: agent.effort,
+        thinking: agent.thinking,
+        fast: agent.fast,
+        title: agent.title,
+        session: agent.sessionId === undefined ? undefined : { id: agent.sessionId, provider: agent.provider, account: agent.account },
+        draft: ``,
+        attachments: [],
+        queued: [],
+    };
+};
+
+// Open (or focus) the tab bound to a fleet agent's conversationId in THIS window — reveal's `focus`, seeded
+// through agentTabOf. The panel's own surfaces use it directly (a fork's source link, a claimed column being
+// filled); the surfaces outside the panel summon instead (summon.ts), which applies the very same fold in
+// every window.
+export const openAgentConversation = (agent: AgentTabSeed): Conversation =>
+    reveal({ verb: `focus`, entries: [agentTabOf(agent)], focus: agent.id, caret: false }) ?? active.value;
+
+/* The conversation "New agent" summons: the untouched draft already open (there is at most one — the one-draft
+ * invariant setConversations holds), else a fresh one. Handing the existing draft back rather than minting a
+ * twin is what keeps a second press from reading as a press that did nothing: an empty draft has nothing in it
+ * to tell two apart, so the press is about the caret — and about the FOCUS landing on the draft, which is a
+ * visible tab switch when it was pressed from another tab. */
+export const draftConversation = (): Conversation => conversations.value.find(untouchedDraft) ?? new Conversation();
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
 // the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a popped-out
@@ -1282,8 +1424,8 @@ const closePane = (conversationId: string): void => {
  * That also keeps it out of setActive, where it would wrongly collapse a deep link's or a history row's
  * arrival — those are not gestures on a selection.
  *
- * Its other caller is `newChat` (and `adoptConversation` with it), which is the same shape of act: a fresh
- * session is a fresh start, so it lands as the one chat on screen rather than as half of somebody else's split. */
+ * Its other caller is reveal's `show` verb, which is the same shape of act wherever the summons came from: a
+ * card click, New agent, an accepted suggestion — one chat asked for, one chat on screen. */
 const collapsePanes = (): void => {
     if (panes.value.length > 1) {
         panes.value = [activeId.value];
@@ -1593,114 +1735,17 @@ export const hydrateOnce = (conversation: Conversation): void => {
         .finally(() => hydrateInFlight.delete(conversation));
 };
 
-// Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry summary.
-// The daemon's provider-neutral transcript record hydrates workspace and isolated conversations alike, so no
-// provider store or placement gets a separate open path. Exported for useAgents.open.
-export const openAgentConversation = (agent: {
-    id: string;
-    sessionId?: string;
-    title?: string;
-    provider: AgentProvider;
-    harness: AgentHarness;
-    // Present exactly when this conversation owns an isolated worktree. A registry-opened workspace
-    // conversation must explicitly clear Conversation's isolated-by-default posture before its next turn.
-    branch?: string;
-    account?: string;
-    // What the agent's turns actually ran with, as the registry recorded them. Absent only for an agent that
-    // has never run one (the board's draft card) — a real agent's settings are facts about it, and seeding the
-    // tab from the remembered picks instead is what made the composer claim a model the session never used.
-    model?: string;
-    effort?: string;
-    thinking?: boolean;
-    fast?: boolean;
-    // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
-    // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
-    // the focus-leave sweep when abandoned) until a first turn registers it.
-    registered?: boolean;
-}): Conversation => {
-    const registered = agent.registered ?? true;
-    const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
-    // The id a card handed us, before anything acts on it — the anchor every later line is read against.
-    traceFocus(`open-agent`, { id: agent.id, existing: existing !== undefined, registered });
-    if (existing !== undefined) {
-        setActive(existing.conversationId);
-        // The fleet handed us this id, so the tab is a view of a real agent whatever the live roster says right
-        // now — which is how an ARCHIVED agent opened from the archive view stopped painting a phantom "New
-        // agent" card back onto the Active lane it had just left.
-        if (registered) {
-            existing.registered.value = true;
-            existing.isolated.value = agent.branch !== undefined;
-        }
-        /* Opening the card is an explicit request to look again, however much the tab already shows. What it
-         * shows may be a STUB: an attach that engaged and then died mid-turn (a closed pop-out, a dropped
-         * stream) persists whatever had arrived — for a workflow step opened at run start, one user bubble —
-         * and a tab was only ever re-read while it was EMPTY, so the stub was the one state that could never
-         * heal: the reattach probe 404s once the turn is over, and nothing else asked the record again.
-         * hydrate covers every case in order — a live turn attaches (and a tab already streaming returns from
-         * the probe immediately), a settled one is reconciled against the daemon's own record, and a daemon
-         * with nothing to say leaves the transcript as it stands (replayStoredSession paints only a non-empty
-         * replay). Skipped while streaming: this tab is the stream, and rewriting under it is the one thing a
-         * focus click must not do. */
-        if (!existing.streaming.value) {
-            hydrateOnce(existing);
-        }
-        return existing;
-    }
-    const conversation = new Conversation(agent.id);
-    conversation.registered.value = registered;
-    conversation.isolated.value = agent.branch !== undefined;
-    conversation.provider.value = agent.provider;
-    conversation.harness.value = agent.harness;
-    conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
-    conversation.model.value = agent.model ?? rememberedModelFor(agent.provider);
-    if (agent.thinking !== undefined) {
-        conversation.thinking.value = agent.thinking;
-    }
-    if (agent.fast !== undefined) {
-        conversation.fast.value = agent.fast;
-    }
-    if (agent.effort !== undefined) {
-        conversation.effortPick.value = agent.effort;
-    }
-    conversation.title.value = agent.title ?? null;
-    if (agent.sessionId !== undefined) {
-        conversation.session.value = {
-            id: agent.sessionId,
-            provider: agent.provider,
-            account: conversation.account.value,
-            harness: agent.harness,
-        };
-    }
-    setConversations([...conversations.value, conversation], conversation.conversationId, `open-agent`);
-    // The agent may be mid-turn right now — attach and render it live (the head synthesizes the prompt
-    // bubble). Marked as hydrating so the restore watch above doesn't race a second attach; an idle agent's
-    // probe just 404s and its stored transcript is replayed instead.
-    hydrateOnce(conversation);
-    return conversation;
-};
-
-// Open a past conversation: focus its tab if already open, else load its transcript into a new tab.
-const openConversation = async (id: string): Promise<void> => {
-    const existing = conversations.value.find((conversation) => conversation.session.value?.id === id);
-    if (existing) {
-        setActive(existing.conversationId);
-        return;
-    }
-    const conversation = new Conversation();
-    // Titled from the history row BEFORE the transcript round-trip: a nameless empty tab awaiting its fetch
-    // is indistinguishable from an untouched draft, and the focus-leave sweep would close it mid-load.
-    const title = sessions.value.find((session) => session.id === id)?.title ?? null;
-    conversation.title.value = title;
-    conversation.loading.value = true;
-    setConversations([...conversations.value, conversation], conversation.conversationId, `open-session`);
-    try {
-        const restored = await fetchTranscript(conversation, id);
-        if (restored !== undefined) {
-            conversation.loadTranscript(restored, id, title);
-        }
-    } finally {
-        conversation.loading.value = false;
-    }
+// Open a past conversation from the panel's own history rows: focus its tab when one already shows that
+// session, else load its transcript into a new tab (reveal's session entry). Panel-internal, so it reveals in
+// THIS window only — the surfaces outside the panel go through the summons channel (summon.ts) instead.
+const openConversation = (id: string): void => {
+    const conversationId = crypto.randomUUID();
+    reveal({
+        verb: `focus`,
+        entries: [{ conversationId, sessionRef: id, title: sessions.value.find((session) => session.id === id)?.title }],
+        focus: conversationId,
+        caret: false,
+    });
 };
 
 // Restored tabs persist as session + title only — once their daemon is reachable, first try to ATTACH: a
@@ -2055,7 +2100,6 @@ export function useChat() {
         accountsLoaded,
         accountBusy,
         translatorKey,
-        newChat,
         composerFocus,
         tabReveal,
         setActive,

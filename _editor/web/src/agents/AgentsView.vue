@@ -18,13 +18,14 @@ import { dropActionLabel, dropRejection, type PendingAction } from "../composabl
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetLane, reviewAction, unregistered } from "../composables/agents/agentStatus";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
+import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
-import { useChat } from "../composables/chat/useChat";
+import { summonChat } from "../composables/chat/summon";
+import { agentTabOf, useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -87,6 +88,7 @@ const {
     releaseHeld,
     refresh,
     open,
+    markSeen,
     markAllSeen,
     archived,
     archiveLoading,
@@ -104,7 +106,7 @@ const {
     busyIds,
     agentById,
 } = useAgents();
-const { active, openConversation, panes, openBeside, closePane, collapsePanes, closeTabs, setPanes } = useChat();
+const { active, panes, closeTabs } = useChat();
 const { popOut: popOutChat, poppedOut } = useChatPopout();
 // A refusal lands on the board's notice strip — the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
@@ -325,9 +327,17 @@ const beyondLabel = computed(() => {
     }
     return parts.join(` · `);
 });
-// A never-carded conversation opens as an ordinary tab — the same route the History menu's rows take.
+// A never-carded conversation opens as an ordinary tab — the board is a surface outside the panel, so the
+// open is a summons (every window, the popped-out chat included) with the tab's identity minted here.
 const openSession = (id: string): void => {
-    void openConversation(id);
+    const conversationId = crypto.randomUUID();
+    summonChat({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [{ conversationId, sessionRef: id, title: sessionMatches.value.find((session) => session.id === id)?.title }],
+        focus: conversationId,
+        caret: false,
+    });
 };
 // What the board says to a screen reader, since neither of its two visual reports — the archive counter's
 // pulse, the receipt pill — is anything one can convey. Every archive lands here (see the archivedFlash watch
@@ -708,10 +718,11 @@ watch(
     },
     { immediate: true },
 );
-// Card click FOCUSES, it does not navigate: on desktop it only points the docked chat (the ONE chat surface)
-// at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
-// The view-change to the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock,
-// so a tap there IS the way into the conversation — it navigates.
+// Card click FOCUSES, it does not navigate: on desktop it only points the chat surface — this window's docked
+// panel and, through the summons channel, every other window's, the popped-out chat included — at this agent
+// and highlights the card. Cheap and reversible, so the user can click down a lane to skim. The view-change to
+// the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock, so a tap there IS
+// the way into the conversation — it navigates.
 /* --- Cards into chat panes ----------------------------------------------------------------------
  * The chat rail's gestures (ChatTabList.onRowClick), on the board — because at N panes the two are the same
  * act: what is selected IS what is on screen, so a card picked here is a chat given a column there.
@@ -725,23 +736,23 @@ watch(
  * selection you cannot replace by pointing somewhere else is not one — the split outlived every later click
  * and had to be dismantled a × at a time.
  *
- * The pane is claimed BEFORE `open` (see useChat.openBeside): the opening would otherwise take the focused
- * pane's column on its way in, and the chat the user was reading would vanish to make room. */
+ * Every gesture here is a SUMMONS (summon.ts): the panel it composes may be another window's popped-out chat,
+ * so the reveal is broadcast and each window applies the identical verb to its own panel. */
 const paneOrder = computed<FleetAgent[]>(() => LANES.flatMap((lane) => cardsFor(lane.key)));
 const paneAnchor = ref<string>();
+const summonCards = (verb: `show` | `beside` | `panes`, cards: readonly FleetAgent[], focus: string): void => {
+    summonChat({ kind: `reveal`, verb, entries: cards.map((card) => agentTabOf(agentSeed(card))), focus, caret: false });
+    for (const card of cards) {
+        markSeen(card.id);
+    }
+};
 const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
     if (event.shiftKey) {
         const order = paneOrder.value;
         const from = order.findIndex((card) => card.id === (paneAnchor.value ?? active.value.conversationId));
         const to = order.findIndex((card) => card.id === agent.id);
         const run = from === -1 ? [agent] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
-        // Every card in the run has to BE a chat before the set can name it, and each open lands in the column
-        // the claim reserved for it.
-        for (const card of run) {
-            openBeside(card.id);
-            open(card);
-        }
-        setPanes(run.map((card) => card.id));
+        summonCards(`panes`, run, agent.id);
         return true;
     }
     if (!event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -750,11 +761,10 @@ const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
     paneAnchor.value = agent.id;
     // Ctrl/Cmd toggles; Alt only ever adds, which is what makes it the safe one-shot.
     if ((event.ctrlKey || event.metaKey) && !event.altKey && panes.value.includes(agent.id) && panes.value.length > 1) {
-        closePane(agent.id);
+        summonChat({ kind: `reveal`, verb: `unpane`, entries: [], focus: agent.id, caret: false });
         return true;
     }
-    openBeside(agent.id);
-    open(agent);
+    summonCards(`beside`, [agent], agent.id);
     return true;
 };
 
@@ -775,17 +785,13 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
         return;
     }
     paneAnchor.value = agent.id;
+    // ...and an UNMODIFIED one is the reset those modifiers are defined against: `show` collapses the split
+    // (reveal's rule), so whatever else was ringed gives its column back and "just this one" needs no cleanup
+    // after it. The split is one Alt+click away again and the chats that left the screen are still in the rail.
     open(agent);
     if (mobile.value) {
         void router.push(`/agents/${encodeURIComponent(agent.id)}`);
-        return;
     }
-    // ...and an UNMODIFIED one is the reset those modifiers are defined against: whatever else was ringed gives
-    // its column back, so "just this one" needs no cleanup after it. The split is one Alt+click away again and
-    // the chats that left the screen are still in the rail, which is what makes this the cheap direction — and
-    // it is the only thing that keeps a stale column out of the actions scoped to what is on screen
-    // (Synthesize). Collapsing AFTER the open, since the chat to keep is the one the click just focused.
-    collapsePanes();
 };
 // The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
 // card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it

@@ -4,7 +4,8 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
-import { openAgentConversation, useChat } from "../chat/useChat";
+import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
+import { summonChat } from "../chat/summon";
 import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -957,36 +958,43 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
 
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
-const open = (
+// A card, as the seed every window can rebuild its tab from (useChat.agentTabOf takes it from here).
+export const agentSeed = (
     agent: Pick<
         FleetAgent,
         "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "fast" | "status" | "branch"
     >,
-): void => {
-    openAgentConversation({
-        id: agent.id,
-        provider: agent.provider,
-        harness: agent.harness,
-        ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
-        /* A client-only card — a draft, a refused send, a turn the daemon has not filed yet — is NOT a
-         * registered conversation, and claiming so here would erase the card under the click and pin the empty
-         * tab open past the focus-leave sweep.
-         *
-         * The erasure is not hypothetical: while a sent-but-unfiled turn reported the wire's `running`, this
-         * read it as registered and latched the tab, and the card left the board on the very click meant to open
-         * it — the drafts half skips a registered conversation and the registry has no entry to draw instead, so
-         * the agent was on no lane at all until a reload re-derived it. See `starting` in agentStatus.ts. */
-        registered: !unregistered(agent.status),
-        ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
-        ...(agent.title !== undefined ? { title: agent.title } : {}),
-        ...(agent.account !== undefined ? { account: agent.account } : {}),
-        // The settings this agent's turns ran under, so the composer opens describing THIS agent rather than
-        // the last pick made in some other tab. Absent on a draft — it has run nothing to describe.
-        ...(agent.model !== undefined ? { model: agent.model } : {}),
-        ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
-        ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
-        ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
-    });
+): AgentTabSeed => ({
+    id: agent.id,
+    provider: agent.provider,
+    harness: agent.harness,
+    ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
+    /* A client-only card — a draft, a refused send, a turn the daemon has not filed yet — is NOT a
+     * registered conversation, and claiming so here would erase the card under the click and pin the empty
+     * tab open past the focus-leave sweep.
+     *
+     * The erasure is not hypothetical: while a sent-but-unfiled turn reported the wire's `running`, this
+     * read it as registered and latched the tab, and the card left the board on the very click meant to open
+     * it — the drafts half skips a registered conversation and the registry has no entry to draw instead, so
+     * the agent was on no lane at all until a reload re-derived it. See `starting` in agentStatus.ts. */
+    registered: !unregistered(agent.status),
+    ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
+    ...(agent.title !== undefined ? { title: agent.title } : {}),
+    ...(agent.account !== undefined ? { account: agent.account } : {}),
+    // The settings this agent's turns ran under, so the composer opens describing THIS agent rather than
+    // the last pick made in some other tab. Absent on a draft — it has run nothing to describe.
+    ...(agent.model !== undefined ? { model: agent.model } : {}),
+    ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+    ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+    ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
+});
+
+// Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's
+// (the popped-out chat is drawn by whichever window opened it), so the reveal is broadcast and every window —
+// this one included — applies the same thing (summon.ts).
+const open = (agent: Parameters<typeof agentSeed>[0]): void => {
+    const seed = agentSeed(agent);
+    summonChat({ kind: `reveal`, verb: `show`, entries: [agentTabOf(seed)], focus: seed.id, caret: false });
     markSeen(agent.id);
 };
 

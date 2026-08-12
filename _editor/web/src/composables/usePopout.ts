@@ -48,8 +48,14 @@ import { appScreen, centreIn, fitInto, knownScreens, learnScreens, otherScreen, 
  * shows is rendered by a realm in ANOTHER window, so the moment that realm goes away the panel out there stops
  * being a view of the app and becomes a photograph of it — same pixels, no state behind them. Selecting a chat
  * on the board leaves it unmoved; the tabs it lists are the ones that were open when the realm died; a draft
- * that has since been swept sits there focused. Every "the popped-out window is out of sync" report is this,
+ * that has since been swept sits there focused. A DEAD "the popped-out window is out of sync" report is this,
  * because two windows CANNOT hold divergent state while one realm drives both.
+ *
+ * The LIVE version of that report is the app's other windows: every browser window runs a full copy of the
+ * app, and this window obeys only the copy that opened it — a click on some other copy's board used to be
+ * invisible out here, with both windows perfectly healthy. That is not a liveness problem and no handshake
+ * can catch it; it is why every chat-summoning gesture is broadcast to all windows instead of applied to one
+ * store (chat/summon.ts).
  *
  * So the keeper's tick is a question, not an announcement, and the answer below is the whole contract. It has
  * three values because the window needs two facts and a boolean carries one: whether a live page is behind it

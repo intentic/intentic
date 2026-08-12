@@ -14,7 +14,8 @@ vi.hoisted(() => {
     });
 });
 
-import { modeForSessions, paneShowsRun, runColumns, runOnFocus, runToFollow, showingRunGraph } from "./chatRun";
+import { modeForSessions, paneShowsRun, runOnFocus, runToFollow, showingRunGraph } from "./chatRun";
+import { runColumns } from "./runColumns";
 
 /* WHICH SESSIONS A COLUMN OPENS. The graph's one gesture is "click a step, get its whole column", so this is
  * the arithmetic between a click and a pane set — and it is the part that cannot be checked by looking, since

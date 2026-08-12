@@ -33,11 +33,13 @@ vi.mock("../chat/useChat", () => ({
     useChat: () => ({
         conversations: chat.conversations,
         active: { value: { conversationId: undefined } },
-        newChat: () => ({ conversationId: `c1`, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     }),
-    focusComposer: () => {},
-    openAgentConversation: () => {},
+    draftConversation: () => ({ conversationId: `c1`, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    agentTabOf: () => ({}),
 }));
+// The summons channel is the seam startAgent shows the new tab through — a broadcast this suite has no second
+// window to receive; what it asserts is the prompt spend, which stays local by design.
+vi.mock("../chat/summon", () => ({ summonChat: () => {} }));
 vi.mock("../queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../sandbox/useSandbox", () => ({
