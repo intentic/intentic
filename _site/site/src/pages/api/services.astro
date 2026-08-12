@@ -33,6 +33,32 @@ HTTP/1.1 200 OK
 content-type: application/json
 
 { "communities": [ … ], "timing": "…", "confidence": 0.82 }`;
+
+/* THE RUN, DRAWN — geometry for the round-trip figure, computed so the picture cannot show a party or a hop
+ * the prose beside it doesn't. Three actors across the width; the call travels right along one row and the
+ * answer travels back left along the next; the dashed row underneath is the model's honesty as geometry —
+ * "no answer, no charge". The reader's own column (YOU) is the tinted one, the way Earn is on the lifecycle. */
+const RUN = { w: 600, h: 210 };
+const runActors = [
+    { id: "member", label: "MEMBER", sub: "their agent · holds credits", cx: 92 },
+    { id: "platform", label: "PLATFORM", sub: "the ledger · the relay", cx: 300 },
+    { id: "you", label: "YOU", sub: "one HTTPS endpoint", cx: 508 },
+];
+const runBox = { w: 132, h: 34, y: 12 };
+const runLane = { y1: 66, y2: 192 };
+const [MX, PX, YX] = runActors.map((a) => a.cx);
+const RUN_FWD = 100;
+const RUN_RET = 140;
+const RUN_REF = 180;
+const RUN_PAD = 10;
+// The same round trip as ordered steps, for phone widths where the wave would set its labels at a few pixels.
+const runSteps = [
+    "The <strong>member</strong> approves a priced run in chat — nothing is spent yet.",
+    "The <strong>platform</strong> charges the member's credits and forwards one <strong>signed</strong> call to your endpoint.",
+    "You <strong>verify the signature</strong> and answer — JSON in, JSON out, up to a minute, no streaming.",
+    "The platform <strong>relays your answer back verbatim</strong>, and you're paid.",
+    "No answer — a 5xx or a timeout — and the <strong>charge is reversed</strong>. You aren't paid; it cost the member nothing.",
+];
 ---
 
 <DocsLayout
@@ -48,12 +74,115 @@ content-type: application/json
 
     <h2>The shape of a run</h2>
     <p>
-        The platform is the intermediary, and the whole exchange is one HTTP round trip: it spends the member's credits atomically, forwards
-        the caller's JSON to your endpoint with a signature, and relays your JSON answer verbatim. <strong>JSON in, JSON out, up to a
-        minute, with no streaming</strong>. Version 1 is sized for research-and-answer services rather than live feeds. You never handle
-        the user's identity (you are never told who ran it) and their money (credits are the platform's ledger, not your checkout).
+        The platform is the intermediary, and the whole thing is <strong>one HTTP round trip</strong>: it charges the member's credits
+        atomically, forwards their JSON to you with a signature, and relays your answer back verbatim. Version 1 is sized for
+        research-and-answer services, not live feeds.
     </p>
-    <DocsCodeBlock code={exchange} lang="http" title="One metered run, on the wire" />
+
+    <div class="docs-embed mt-6">
+        {/* The round trip, on wide screens: the call travels right, the answer travels back, and the honest branch drops underneath. */}
+        <figure class="relative hidden overflow-hidden rounded-2xl border border-line bg-canvas/60 sm:block">
+            <div class="grid-overlay"></div>
+            <div
+                class="pointer-events-none absolute top-1/2 left-1/2 h-64 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 13%, transparent), transparent 70%)"
+                aria-hidden="true"
+            >
+            </div>
+            <div class="relative p-4 sm:p-5">
+                <svg
+                    viewBox={`0 0 ${RUN.w} ${RUN.h}`}
+                    class="h-auto w-full text-link"
+                    role="img"
+                    aria-label="One paid run as a round trip: the member approves, the platform charges the member's credits and forwards a signed call, your endpoint verifies it and answers, and the answer is relayed back verbatim and paid. If you do not answer, the platform reverses the charge."
+                >
+                    <defs>
+                        <marker id="run-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                        </marker>
+                        <marker id="run-refund" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="var(--color-success)" />
+                        </marker>
+                    </defs>
+
+                    {/* A faint lifeline under each actor, so every arrow end maps to who acts. */}
+                    {runActors.map((a) => <line x1={a.cx} y1={runLane.y1} x2={a.cx} y2={runLane.y2} stroke="var(--color-line)" stroke-width="1" stroke-dasharray="3 5" />)}
+
+                    {/* Forward: the call, charged and signed, travelling right. */}
+                    <path d={`M ${MX + RUN_PAD} ${RUN_FWD} L ${PX - RUN_PAD} ${RUN_FWD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <path d={`M ${PX + RUN_PAD} ${RUN_FWD} L ${YX - RUN_PAD} ${RUN_FWD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <text x={(MX + PX) / 2} y={RUN_FWD - 8} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">approves a priced run</text>
+                    <text x={(PX + YX) / 2} y={RUN_FWD - 8} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">charge · sign · forward</text>
+                    <text x={(PX + YX) / 2} y={RUN_FWD + 13} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">HMAC signature</text>
+
+                    {/* Return: your answer travelling back, relayed verbatim and paid. */}
+                    <path d={`M ${YX - RUN_PAD} ${RUN_RET} L ${PX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <path d={`M ${PX - RUN_PAD} ${RUN_RET} L ${MX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <text x={(PX + YX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">your JSON answer</text>
+                    <text x={(MX + PX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">relayed verbatim · paid</text>
+
+                    {/* What you do, on your own lane, between arrival and answer. */}
+                    <rect
+                        x={YX - 58}
+                        y={(RUN_FWD + RUN_RET) / 2 - 13}
+                        width="116"
+                        height="26"
+                        rx="8"
+                        fill="color-mix(in srgb, var(--color-primary-500) 12%, var(--color-canvas))"
+                        stroke="color-mix(in srgb, var(--color-primary-500) 45%, transparent)"
+                        stroke-width="1"
+                    />
+                    <text x={YX} y={(RUN_FWD + RUN_RET) / 2 + 1} text-anchor="middle" dominant-baseline="central" font-size="9.5" font-weight="600" style="fill: var(--color-link)">verify · answer ≤ 60s</text>
+
+                    {/* The honest branch: no answer, no charge. Drawn to the member, past the platform that reverses it. */}
+                    <path d={`M ${YX - RUN_PAD} ${RUN_REF} L ${MX + RUN_PAD} ${RUN_REF}`} fill="none" stroke="var(--color-success)" stroke-opacity="0.9" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#run-refund)" />
+                    <circle cx={PX} cy={RUN_REF} r="2.5" fill="var(--color-success)" />
+                    <text x={(MX + YX) / 2} y={RUN_REF - 7} text-anchor="middle" font-size="9" style="fill: var(--color-success)">no answer (5xx · timeout) → the platform reverses the charge</text>
+
+                    {/* The three parties, drawn last so they sit above the flow. YOU is tinted: it is the reader. */}
+                    {
+                        runActors.map((a) => (
+                            <Fragment>
+                                <rect
+                                    x={a.cx - runBox.w / 2}
+                                    y={runBox.y}
+                                    width={runBox.w}
+                                    height={runBox.h}
+                                    rx="10"
+                                    fill={a.id === "you" ? "color-mix(in srgb, var(--color-primary-500) 12%, var(--color-canvas))" : "var(--color-canvas)"}
+                                    stroke={a.id === "you" ? "color-mix(in srgb, var(--color-primary-500) 50%, transparent)" : "var(--color-line-strong)"}
+                                    stroke-width="1.25"
+                                />
+                                <text x={a.cx} y={runBox.y + runBox.h / 2} text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" letter-spacing="0.5" style={a.id === "you" ? "fill: var(--color-link)" : "fill: var(--color-content)"}>
+                                    {a.label}
+                                </text>
+                                <text x={a.cx} y={runBox.y + runBox.h + 12} text-anchor="middle" font-size="9" style="fill: var(--color-subtle)">
+                                    {a.sub}
+                                </text>
+                            </Fragment>
+                        ))
+                    }
+                </svg>
+            </div>
+            <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
+                The platform is the only party that holds the money or learns who is asking. You get a signed call and return JSON — the answer is your whole side of it, never the member's identity or their wallet.
+            </figcaption>
+        </figure>
+
+        {/* Phone: the same round trip as ordered steps, where the wave would render its labels at a few pixels. */}
+        <ol class="flex flex-col gap-2.5 sm:hidden">
+            {
+                runSteps.map((step, i) => (
+                    <li class="flex gap-3">
+                        <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">{i + 1}</span>
+                        <p class="text-sm leading-relaxed text-muted" set:html={step} />
+                    </li>
+                ))
+            }
+        </ol>
+    </div>
+
+    <DocsCodeBlock code={exchange} lang="http" title="The same round trip, on the wire" />
 
     <h2>Verify the signature</h2>
     <p>
