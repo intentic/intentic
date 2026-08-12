@@ -157,6 +157,14 @@ test("a page where nothing is happening settles into silence", { timeout: 120_00
     }
 });
 
+/* FOCUS THE FIELD, DON'T ASK THE PAGE TO. `autofocus` is not applied when the document finishes loading — it is
+ * applied when the WINDOW gains focus, which a freshly launched Chromium does on its own timetable, after
+ * `goto` has long since resolved. On an idle box that arrives first and every one of these tests reads as if
+ * the attribute worked; on a loaded one the input frame lands while `document.activeElement` is still the body,
+ * where a chord selects the whole document instead of the field and a paste has nowhere to go. Focusing by hand
+ * is the same precondition stated deterministically — and it is a precondition here, never the subject: what
+ * each test is actually about is what the FOCUSED element does with the frame. */
+
 /* WHERE A PASTE ENDS UP. The user's clipboard cannot reach the Chromium in the sandbox, so both surfaces turn
  * Ctrl/Cmd+V into a `text` frame and this is the far end of that: a password arriving whole in the field the
  * person clicked, in one insert rather than as a string of synthetic keystrokes. Worth a real page because the
@@ -169,7 +177,8 @@ test("a text frame lands in whatever field the page has focused", { timeout: 120
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
         const page = await context.newPage();
-        await page.goto(`data:text/html,${encodeURIComponent(`<input id="password" type="password" autofocus>`)}`);
+        await page.goto(`data:text/html,${encodeURIComponent(`<input id="password" type="password">`)}`);
+        await page.focus("#password");
         const session = await context.newCDPSession(page);
 
         const pasted = "correct horse battery staple";
@@ -200,7 +209,8 @@ test("editing chords land as editing commands in the page", { timeout: 120_000 }
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
         const page = await context.newPage();
-        await page.goto(`data:text/html,${encodeURIComponent(`<input id="a" value="hello world" autofocus><input id="b">`)}`);
+        await page.goto(`data:text/html,${encodeURIComponent(`<input id="a" value="hello world"><input id="b">`)}`);
+        await page.focus("#a");
         const session = await context.newCDPSession(page);
         const selection = async (): Promise<{ start: number | null; end: number | null }> =>
             page.evaluate(() => {
@@ -328,7 +338,8 @@ test("the selection is read back out of a field, and out of an embedded frame", 
     try {
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
         const page = await context.newPage();
-        await page.goto(`data:text/html,${encodeURIComponent(`<input id="code" value="one-time 314159" autofocus><p>page prose</p>`)}`);
+        await page.goto(`data:text/html,${encodeURIComponent(`<input id="code" value="one-time 314159"><p>page prose</p>`)}`);
+        await page.focus("#code");
         const session = await context.newCDPSession(page);
 
         // Nothing selected yet, and an empty answer is an answer — the client must not put stale text on a
