@@ -4,6 +4,7 @@ import { apiBook, apiHref, apiPages } from "@intentic-dev/site-content/api";
 import { bookHref, bookPlacements } from "@intentic-dev/site-content/book";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsBook, docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { landingContent } from "@intentic-dev/site-content/landing";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
@@ -111,6 +112,11 @@ export default defineConfig({
                 // answer engine most often has to resolve about a young domain, and the page is the answer.
                 { label: "Overview", paths: ["/", "/about/"] },
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
+                /* The guides, above Compare because they answer the question a reader has BEFORE they know
+                 * this product exists: "how do I run several agents at once", not "intentic or Conductor".
+                 * Each page opens with a standalone answer, so this section is the part of the site a model
+                 * can quote without needing the rest of it. */
+                { label: "Guides", paths: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))] },
                 { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
                 // The authoring book as its own section, not folded into Docs: an answer engine asked "how do I

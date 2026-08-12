@@ -1,7 +1,8 @@
 # Directories and listings — where intentic.dev gets posted
 
-The non-GitHub half of the listing surface. [awesome-lists.md](awesome-lists.md) covers curated GitHub lists;
-this page covers product directories, launch platforms, company profiles and the one-shot community posts.
+The non-GitHub half of the listing surface. [awesome-lists.md](awesome-lists.md) covers curated GitHub lists,
+[article-mentions.md](article-mentions.md) covers the editorial articles answer engines quote; this page
+covers product directories, launch platforms, company profiles and the one-shot community posts.
 Researched and executed 2026-08-10 against the live sites.
 
 **The fact that orders everything below.** As of 2026-08-10 the domain has **no third-party presence at all** —

@@ -2,6 +2,7 @@ import { aboutMeta } from "./about";
 import { apiHref, apiPages } from "./api";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
+import { guidePages, guidesHref, guidesIndex } from "./guides";
 import { landingContent } from "./landing";
 import { productHref, productPages } from "./product";
 
@@ -79,10 +80,12 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-11",
     },
     [compareHref("")]: compareIndex.meta,
+    [guidesHref("")]: guidesIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(apiPages.map((page) => [apiHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
     ...Object.fromEntries(comparePages.map((page) => [compareHref(page.slug), page.meta])),
+    ...Object.fromEntries(guidePages.map((page) => [guidesHref(page.slug), page.meta])),
 };
 
 function normalize(path: string): string {

@@ -244,7 +244,9 @@ Codex list a legitimate target rather than a stretch.
 5. **2026-12-05** — awesome-selfhosted, with the YAML above.
 
 The directories, launch platforms and community posts that are not GitHub lists live in
-[directories.md](directories.md).
+[directories.md](directories.md). The editorial articles that already own our category queries, which gate on
+relevance rather than on stars and are therefore open to us today, live in
+[article-mentions.md](article-mentions.md).
 
 The canonical one-line description for standard awesome format, reused everywhere so the wording compounds:
 

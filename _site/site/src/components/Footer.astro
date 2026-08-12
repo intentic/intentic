@@ -2,6 +2,7 @@
 import { apiHref } from "@intentic-dev/site-content/api";
 import { compareHref, comparePages } from "@intentic-dev/site-content/compare";
 import { docsDestinations } from "@intentic-dev/site-content/docs";
+import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { Image } from "astro:assets";
@@ -46,6 +47,17 @@ const columns: { label: string; links: { href: string; label: string; external?:
         ],
     },
     {
+        /* The guides, named one by one rather than as a single hub row. These are the pages someone reaches
+         * from a question rather than from this site, so their job is to be findable at all: a sitewide link
+         * per guide is how each one gets crawled and re-crawled on its own, and the titles are the questions
+         * people actually type. The hub sits on top for the reader who wants the shelf. */
+        label: "Guides",
+        links: [
+            { href: guidesHref(""), label: "All guides" },
+            ...guidePages.map((page) => ({ href: guidesHref(page.slug), label: page.navLabel })),
+        ],
+    },
+    {
         // The hub first: it is the page that reframes the question, and the comparisons below it are the long
         // tail a search engine wants as its own links.
         label: "Compare",
@@ -83,9 +95,11 @@ const legalLinks = [
 ---
 
 <footer class="mt-auto border-t border-line pt-12 pb-10">
-    {/* Six cells at lg: the brand plus five columns. The gap tightens with the extra column so the row still
-        fits 80rem without the link labels wrapping. */}
-    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-6 lg:gap-8">
+    {/* Seven cells: the brand plus six columns. All seven only go on one row at xl, where 80rem leaves each
+        column wide enough for labels like "Earn & the creator pool" to stay on one line. Between lg and xl
+        there is not room for seven, so it breaks to four and three rather than squeezing every column until
+        half the labels wrap. */}
+    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-4 lg:gap-8 xl:grid-cols-7 xl:gap-6">
         <div class="col-span-2 sm:col-span-1">
             <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} class="h-6 w-auto" />
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>

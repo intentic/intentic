@@ -1,0 +1,308 @@
+---
+import { guidePages, guidesHref, type GuidePage } from "@intentic-dev/site-content/guides";
+import { APP_URL, githubIssuesUrl } from "@intentic-dev/site-content/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* One template, one page per question.
+ *
+ * The ORDER is the whole design, and it is not the order a marketing page would use. A reader arriving here
+ * came from a question, and so did the machine that quoted this page into somebody's chat window. Both get
+ * served by the same thing: the answer, immediately, in a block that survives being lifted out of the page.
+ *
+ *   h1 (the question) → the answer → what is checkably true → every approach → the recommendation → depth → FAQ
+ *
+ * The answer sits directly after the h1 with no hero art, no eyebrow line and no call to action between them,
+ * because anything in that gap is what gets extracted instead. The options table comes BEFORE the verdict for
+ * the same reason the compare shelf puts the losing rows in: a page that answers only "use our thing" is
+ * discounted by readers and models alike, and the recommendation is worth more once the alternatives have been
+ * given honestly.
+ *
+ * The FAQ at the foot carries the neighbouring phrasings of the same question, and rides into the page's
+ * FAQPage schema through BaseLayout, so each one is separately quotable.
+ */
+
+export function getStaticPaths() {
+    return guidePages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}
+
+interface Props {
+    page: GuidePage;
+}
+
+const { page } = Astro.props;
+const index = guidePages.indexOf(page);
+const next = guidePages[(index + 1) % guidePages.length];
+
+// The body FAQ is also the page's structured data: one list, so the two can never disagree.
+const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: entry.answer }));
+---
+
+<BaseLayout
+    breadcrumbs={[{ name: "Guides", path: guidesHref("") }, { name: page.navLabel, path: guidesHref(page.slug) }]}
+    faq={faqEntries}
+>
+    <Nav />
+    <main class="flex-1">
+        <!-- The question, then the answer. Nothing between them: whatever sits in that gap is what a model
+             lifts instead of the answer. -->
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32 lg:pb-16">
+                <a href={guidesHref("")} class="eyebrow transition-colors hover:text-link">Guides</a>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.question}</h1>
+
+                <div class="mt-7 border-l-2 border-primary-600/50 pl-5 lg:pl-6">
+                    <div class="eyebrow text-primary-400">The short answer</div>
+                    <p class="mt-2 max-w-copy text-lg leading-relaxed text-content sm:text-xl">{page.answer}</p>
+                </div>
+
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href="/product/">See the product</a>
+                </div>
+            </div>
+        </section>
+
+        <div class="mx-auto max-w-7xl px-6">
+            <!-- The checkable part. Specifics with numbers and names, because a page with nothing falsifiable
+                 in it has nothing anyone can cite. -->
+            <section class="border-b border-line py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">What is true regardless of what you pick</h2>
+                <ul class="mt-6 grid gap-x-10 gap-y-4 md:grid-cols-2">
+                    {
+                        page.facts.map((fact) => (
+                            <li class="flex gap-3">
+                                <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" aria-hidden="true" />
+                                <span class="max-w-copy text-sm leading-relaxed text-muted">{fact}</span>
+                            </li>
+                        ))
+                    }
+                </ul>
+            </section>
+
+            <!-- Every approach, including the ones that are not this product, each with where it stops
+                 working. This is the section that earns the verdict below it. -->
+            <section class="fade-in border-b border-line py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">Your options, and where each one stops</h2>
+                <table class="opts mt-7 w-full">
+                    <thead>
+                        <tr>
+                            <th scope="col">Approach</th>
+                            <th scope="col">Good for</th>
+                            <th scope="col">Breaks when</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {
+                            page.options.map((option) => (
+                                <tr>
+                                    <th scope="row">
+                                        {/* <strong> rather than a plain span: it is what makes the Markdown
+                                            mirror read "**Name** what it is" instead of running the two
+                                            together into one sentence. font-medium keeps the visual weight. */}
+                                        <strong class="block font-medium text-content">{option.name}</strong>
+                                        <span class="mt-1 block text-2xs leading-relaxed font-normal text-subtle">{option.what}</span>
+                                    </th>
+                                    <td data-side="Good for">{option.goodFor}</td>
+                                    <td data-side="Breaks when">{option.breaksWhen}</td>
+                                </tr>
+                            ))
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- The recommendation, after the alternatives have been given their due. -->
+            <section class="fade-in border-b border-line py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">What to actually do</h2>
+                <div class="mt-5 space-y-4">
+                    {page.verdict.map((paragraph) => <p class="max-w-copy text-base leading-relaxed text-content">{paragraph}</p>)}
+                </div>
+            </section>
+
+            <!-- Depth. Each heading is a statement and the first sentence under it answers that statement,
+                 so a section survives being read on its own. -->
+            {
+                page.sections.map((section) => (
+                    <section class="fade-in border-b border-line py-14 lg:py-16">
+                        <h2 class="max-w-3xl text-xl font-semibold tracking-tight text-content">{section.heading}</h2>
+                        <div class="mt-5 space-y-4">
+                            {section.body.map((paragraph) => (
+                                <p class="max-w-copy text-base leading-relaxed text-muted">{paragraph}</p>
+                            ))}
+                        </div>
+                        {section.points && (
+                            <ul class="mt-6 space-y-3">
+                                {section.points.map((point) => (
+                                    <li class="flex gap-3">
+                                        <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" aria-hidden="true" />
+                                        <span class="max-w-copy text-sm leading-relaxed text-muted">{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </section>
+                ))
+            }
+
+            <!-- The same question, asked the other nineteen ways. Each answer stands alone because each one
+                 is separately quotable, and each carries an id so it can be linked on its own. -->
+            <section class="fade-in border-b border-line py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">Related questions</h2>
+                <div class="mt-7 space-y-7">
+                    {
+                        page.faq.map((entry) => (
+                            <div id={entry.id} class="scroll-mt-28">
+                                <h3 class="max-w-3xl text-base font-medium text-content">
+                                    <a href={`#${entry.id}`} class="transition-colors hover:text-link">
+                                        {entry.question}
+                                    </a>
+                                </h3>
+                                <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{entry.answer}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+            </section>
+
+            <section class="fade-in py-14 lg:py-16">
+                <h2 class="text-xl font-semibold tracking-tight text-content">Read next</h2>
+                <div class="mt-5 flex flex-wrap gap-2">
+                    {
+                        page.related.map((link) => (
+                            <a
+                                href={link.href}
+                                class="rounded-lg border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                            >
+                                {link.label}
+                            </a>
+                        ))
+                    }
+                </div>
+                <p class="mt-7 max-w-copy text-sm leading-relaxed text-subtle">
+                    Written against the state of the field in {page.meta.datePublished.slice(0, 7)}. This area moves fast. Spot
+                    something out of date or wrong?{" "}
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>{" "}
+                    and it is fixed in the next build.
+                </p>
+            </section>
+        </div>
+
+        <section class="border-t border-line">
+            <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
+                <a href={guidesHref(next.slug)} class="group">
+                    <div class="eyebrow">Next guide</div>
+                    <div class="mt-1 max-w-lg text-lg font-semibold tracking-tight text-content group-hover:text-link">
+                        {next.question} →
+                    </div>
+                </a>
+                <div class="flex flex-wrap gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href={guidesHref("")}>All guides</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+
+    <style>
+        /* Three columns on a desktop, a stack of labelled cards on a phone: the same bargain the comparison
+           table makes, and for the same reason. `data-side` carries the column header down into the stacked
+           view so a cell never floats free of what it was answering. */
+        .opts {
+            border-collapse: collapse;
+        }
+
+        .opts thead th {
+            padding: 0 18px 10px 0;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: var(--color-subtle);
+            border-bottom: 1px solid var(--color-line-strong);
+        }
+
+        .opts tbody th {
+            width: 24%;
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .opts tbody td {
+            width: 38%;
+            color: var(--color-muted);
+        }
+
+        .opts tbody th,
+        .opts tbody td {
+            padding: 16px 18px 16px 0;
+            font-size: 0.875rem;
+            line-height: 1.55;
+            vertical-align: top;
+            border-bottom: 1px solid var(--color-line);
+        }
+
+        @media (max-width: 48rem) {
+            .opts thead {
+                display: none;
+            }
+            .opts,
+            .opts tbody,
+            .opts tr,
+            .opts tbody th,
+            .opts tbody td {
+                display: block;
+                width: auto;
+            }
+            .opts tr {
+                border: 1px solid var(--color-line);
+                border-radius: var(--radius-lg);
+                padding: 14px 16px;
+                margin-bottom: 10px;
+            }
+            .opts tbody th {
+                padding: 0 0 10px;
+                border-bottom: 1px solid var(--color-line);
+            }
+            .opts tbody td {
+                padding: 10px 0 0;
+                border-bottom: none;
+            }
+            .opts tbody td::before {
+                content: attr(data-side);
+                display: block;
+                margin-bottom: 2px;
+                font-size: var(--text-2xs);
+                font-weight: 600;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                color: var(--color-subtle);
+            }
+        }
+    </style>
+
+    <script>
+        const targets = document.querySelectorAll(".fade-in");
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("visible");
+                            observer.unobserve(entry.target);
+                        }
+                    }
+                },
+                { threshold: 0.12 },
+            );
+            targets.forEach((el) => observer.observe(el));
+        } else {
+            targets.forEach((el) => el.classList.add("visible"));
+        }
+    </script>
+</BaseLayout>

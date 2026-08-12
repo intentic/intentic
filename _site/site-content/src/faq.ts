@@ -1,5 +1,6 @@
 import { compareHref } from "./compare";
 import { docsHref } from "./docs";
+import { guidesHref } from "./guides";
 
 export interface FaqItem {
     /** Anchor id: a question is linkable on its own (`/#can-intentic-read-my-secrets`). */
@@ -43,6 +44,10 @@ export const faqGroups: FaqGroup[] = [
                     "Nothing happens to the runs. The agents live on your machine, not in the tab. Terminals stay open and turns finish without you.",
                     "Reopen from any device, including a phone, and the same fleet is there, sorted by who now needs you.",
                 ],
+                more: {
+                    label: "What keeps an agent running when a machine sleeps",
+                    href: guidesHref("keep-a-coding-agent-running-after-you-close-your-laptop"),
+                },
             },
             {
                 id: "how-is-this-different",
@@ -122,6 +127,7 @@ export const faqGroups: FaqGroup[] = [
                     "It starts in plan mode: it proposes, you approve. Every change is a diff you can discard, and Dockerfile changes need explicit approval.",
                     "Stricter and looser permission modes are one click away.",
                 ],
+                more: { label: "How to review what an agent wrote before it lands", href: guidesHref("review-ai-generated-code-changes") },
             },
             {
                 id: "production-ready",
@@ -145,6 +151,7 @@ export const faqGroups: FaqGroup[] = [
                     "On your machine. The sandbox runs where you start it, and your browser reaches it over a private tunnel.",
                     "The platform stores your identity and the sandbox's URL. It never relays your files.",
                 ],
+                more: { label: "Where your code goes with any coding agent", href: guidesHref("where-your-code-goes-with-cloud-coding-agents") },
             },
             {
                 id: "can-intentic-read-my-secrets",
@@ -153,6 +160,10 @@ export const faqGroups: FaqGroup[] = [
                     "No. Your capability credentials live inside your sandbox and the platform never receives them. It stores only the connection secrets that pair a browser with a sandbox, encrypted at rest with AES-256-GCM.",
                     "Secret files like .env are denylisted from the file relay, so they never leave the sandbox.",
                 ],
+                more: {
+                    label: "Giving an agent credentials without leaking them",
+                    href: guidesHref("give-an-ai-agent-database-and-api-access-safely"),
+                },
             },
             {
                 id: "open-source",
