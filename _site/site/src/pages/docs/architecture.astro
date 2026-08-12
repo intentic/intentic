@@ -1,4 +1,5 @@
 ---
+import ArchitectureFigure from "../../components/ArchitectureFigure.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 
 const lifecycle = [
@@ -16,24 +17,11 @@ const lifecycle = [
     lead="intentic is two tiers: a thin platform for identity, and a per-agent sandbox on your hardware. Only the sandbox ever holds your code. It's where the agent, your workspace, and everything it can do actually live."
 >
     <h2>The two tiers</h2>
+    {/* The same figure the overview opens with, deliberately: a reader who followed the link from there should
+        recognise the picture they arrived on, and the two pages describing one architecture with two different
+        drawings of it was the reason to draw it properly once. */}
     <div class="docs-embed my-8">
-        <div class="card p-4 text-center">
-            <div class="eyebrow">Operator</div>
-            <div class="mt-1 text-sm font-medium text-content">Your browser</div>
-            <p class="mt-1 text-xs text-muted">chat · files · editor · terminals</p>
-        </div>
-        <div class="py-2 text-center text-2xs text-link">↓&nbsp;&nbsp;Google sign-in · private tunnel, direct</div>
-        <div class="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
-            <div class="card border-primary-600/30 p-4">
-                <div class="eyebrow text-link">Your sandbox · your machine</div>
-                <p class="mt-1 text-sm text-content">Agent · workspace · capabilities · automations</p>
-                <p class="mt-1 text-xs text-muted">one container per agent, on your hardware</p>
-            </div>
-            <div class="rounded-2xl border border-dashed border-line p-4">
-                <div class="eyebrow">intentic platform</div>
-                <p class="mt-1 text-xs text-subtle">Identity + sandbox URL. Off the command path.</p>
-            </div>
-        </div>
+        <ArchitectureFigure />
     </div>
 
     <h3>The platform</h3>

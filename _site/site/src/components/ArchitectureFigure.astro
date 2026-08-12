@@ -1,0 +1,478 @@
+---
+/* WHAT INTENTIC IS, IN ONE PICTURE: you, a tunnel, and a machine you own — with the platform standing beside
+ * the path rather than on it.
+ *
+ * THE ARGUMENT IS CARRIED BY TWO INKS, not by the labels. Everything on the command path — your browser, the
+ * tunnel, your machine, the sandbox inside it — is drawn solid, in the brand colour. Everything to do with the
+ * platform is drawn grey and dashed. A reader who never reads a word still sees one unbroken orange spine from
+ * the person to their own hardware, and a grey box hanging off the side of it. That is the security story and
+ * the product story at once.
+ *
+ * The arrows into the platform say what actually crosses that gap, and nothing else does: your browser signs
+ * in, and the sandbox announces its URL when it boots. No arrow leaves the platform toward the sandbox,
+ * because nothing does.
+ *
+ * TWO LAYOUTS, ONE SOURCE — the same bargain SpendFigure.astro makes, for the same reason. A 640-wide viewBox
+ * squeezed onto a phone renders its labels at six pixels, which is a diagram nobody can read pretending to be
+ * one they can. So the geometry is data, stated twice at two aspect ratios, and the markup below is written
+ * once against it: the narrow variant re-flows the canvas instead of shrinking the type, so an 11pt label
+ * lands at 11 real pixels on a phone and 11 on a desktop.
+ *
+ * The two differ in more than scale, because at 342 pixels the side-by-side of the wide canvas stops fitting.
+ * There, your machine takes the full width and the platform sits in the corner ABOVE it — still off the spine,
+ * which is the part that may not change, since a platform stacked in line with the sandbox would read as
+ * another step in the chain. What the narrow variant gives up is only ornament: the two connector captions,
+ * and the aside naming what "your machine" might be. Every box, every arrow and every item survives.
+ *
+ * Only one variant is ever visible; the other costs a few hundred bytes of inline path data and no request. */
+
+interface Box {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+}
+
+type Point = readonly [number, number];
+
+/** A cubic leaving one box's edge and landing on another's, stated as its four control points. */
+interface Curve {
+    readonly from: Point;
+    readonly c1: Point;
+    readonly c2: Point;
+    readonly to: Point;
+}
+
+interface Variant {
+    readonly id: string;
+    // Which width this one is for.
+    readonly cls: string;
+    readonly w: number;
+    readonly h: number;
+    readonly pad: number;
+    readonly browser: Box;
+    // The tunnel's badge, drawn over the spine so the two read as one line interrupted by a label.
+    readonly chip: Box;
+    readonly chipText: string;
+    readonly machine: Box;
+    readonly sandbox: Box;
+    // The four things inside the sandbox: one tile's size, and how many sit per row.
+    readonly tile: Box & { readonly cols: number; readonly gapX: number; readonly gapY: number };
+    readonly platform: Box;
+    // Rows inside the platform card, as offsets from its top edge.
+    readonly platformRows: { readonly eyebrow: number; readonly body: number; readonly rule: number; readonly punch: number };
+    readonly platformBody: readonly string[];
+    readonly signIn: Curve;
+    readonly announce: Curve;
+    /* Wide captions its two grey arrows and names what your machine might be; narrow has room for neither, and
+     * says so by leaving them out rather than by setting them at a size nobody reads. */
+    readonly captions: boolean;
+    readonly font: { title: number; sub: number; eyebrow: number; chip: number; item: number; itemSub: number; note: number };
+}
+
+const VARIANTS: readonly Variant[] = [
+    {
+        id: `wide`,
+        cls: `hidden sm:block`,
+        w: 640,
+        h: 392,
+        pad: 16,
+        browser: { x: 58, y: 10, w: 300, h: 56 },
+        chip: { x: 110, y: 84, w: 196, h: 26 },
+        chipText: `private tunnel · outbound only`,
+        machine: { x: 12, y: 140, w: 392, h: 240 },
+        sandbox: { x: 26, y: 178, w: 364, h: 188 },
+        tile: { x: 42, y: 212, w: 160, h: 64, cols: 2, gapX: 12, gapY: 12 },
+        platform: { x: 436, y: 96, w: 192, h: 112 },
+        platformRows: { eyebrow: 20, body: 44, rule: 74, punch: 90 },
+        platformBody: [`Stores your identity`, `and your sandbox's URL.`],
+        signIn: { from: [362, 38], c1: [402, 38], c2: [436, 102], to: [432, 130] },
+        announce: { from: [408, 250], c1: [454, 250], c2: [532, 232], to: [532, 212] },
+        captions: true,
+        font: { title: 13.5, sub: 10.5, eyebrow: 9.5, chip: 10.5, item: 11, itemSub: 9, note: 9.5 },
+    },
+    {
+        id: `tall`,
+        cls: `sm:hidden`,
+        w: 342,
+        h: 366,
+        pad: 12,
+        browser: { x: 6, y: 8, w: 150, h: 48 },
+        chip: { x: 16, y: 76, w: 130, h: 24 },
+        chipText: `private tunnel`,
+        machine: { x: 6, y: 140, w: 330, h: 218 },
+        sandbox: { x: 18, y: 176, w: 306, h: 170 },
+        tile: { x: 30, y: 212, w: 136, h: 56, cols: 2, gapX: 10, gapY: 10 },
+        platform: { x: 196, y: 8, w: 140, h: 92 },
+        platformRows: { eyebrow: 20, body: 42, rule: 60, punch: 76 },
+        platformBody: [`identity + sandbox URL`],
+        signIn: { from: [160, 32], c1: [170, 32], c2: [182, 32], to: [192, 32] },
+        announce: { from: [250, 138], c1: [250, 128], c2: [250, 114], to: [250, 104] },
+        captions: false,
+        font: { title: 12.5, sub: 9.5, eyebrow: 9, chip: 10, item: 11, itemSub: 8.5, note: 9 },
+    },
+];
+
+/* What a sandbox is made of. `sub` is the wide variant's detail line; `subTight` is the narrow one's, shortened
+ * to fit a 136-wide tile rather than be clipped by the renderer. */
+const CONTENTS = [
+    {
+        label: `Agent`,
+        sub: `Claude · Codex · Grok`,
+        subTight: `Claude · Codex · Grok`,
+        d: '<path d="m12 3 1.7 4.8 4.8 1.7-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7z"/><path d="M18 16.5v3"/><path d="M16.5 18h3"/>',
+    },
+    {
+        label: `Workspace`,
+        sub: `repos · editor · terminals`,
+        subTight: `repos · editor · terminals`,
+        d: '<path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h3.2l2 2.2h7.8A1.5 1.5 0 0 1 20 9.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/>',
+    },
+    {
+        label: `Capabilities`,
+        sub: `GitHub · databases · SSH · MCP`,
+        subTight: `GitHub · DBs · SSH · MCP`,
+        d: '<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6.5 8h11v2.5a5.5 5.5 0 0 1-11 0z"/><path d="M12 16v5"/>',
+    },
+    {
+        label: `Automations`,
+        sub: `schedules · webhooks · events`,
+        subTight: `schedules · webhooks`,
+        d: '<path d="M13.5 2.5 5 13.5h5.5L10 21.5 19 10.5h-6z"/>',
+    },
+];
+
+const ICON = {
+    browser: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 9.5h18"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+    machine:
+        '<rect x="3" y="5" width="18" height="5.5" rx="1.5"/><rect x="3" y="13.5" width="18" height="5.5" rx="1.5"/><path d="M6.5 7.75h.01"/><path d="M6.5 16.25h.01"/>',
+};
+
+const glyph = (paths: string, x: number, y: number, size: number) =>
+    `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+
+const curve = (c: Curve) => `M ${c.from[0]} ${c.from[1]} C ${c.c1[0]} ${c.c1[1]} ${c.c2[0]} ${c.c2[1]} ${c.to[0]} ${c.to[1]}`;
+
+/** One tile's box, from its index and the variant's grid. */
+const tileBox = (v: Variant, i: number): Box => ({
+    x: v.tile.x + (i % v.tile.cols) * (v.tile.w + v.tile.gapX),
+    y: v.tile.y + Math.floor(i / v.tile.cols) * (v.tile.h + v.tile.gapY),
+    w: v.tile.w,
+    h: v.tile.h,
+});
+
+const label =
+    `intentic in one picture. Your browser drives your sandbox directly, over a private tunnel that dials out from your own machine, ` +
+    `so there are no inbound ports to open. The sandbox is one container per agent, running on hardware you own, and it holds the agent ` +
+    `itself, your workspace, the capabilities it can operate and the automations that wake it. The intentic platform stands off to the ` +
+    `side of that path rather than on it: your browser signs in to it, and the sandbox announces its address when it boots. Nothing else ` +
+    `passes through it, and your code and credentials never leave your machine.`;
+---
+
+{
+    VARIANTS.map((v) => {
+        const spine = v.browser.x + v.browser.w / 2;
+        const machineRight = v.machine.x + v.machine.w;
+        const rows = v.platformRows;
+
+        /* BOTH variants carry the description, and neither is marked aria-hidden. The one that is not for this
+         * width is `display: none`, which already drops it out of the accessibility tree, so there is no double
+         * announcement to prevent — and hiding the narrow one from assistive tech by hand is how a phone reader
+         * ends up with a figure that says nothing at all. */
+        return (
+            <svg viewBox={`0 0 ${v.w} ${v.h}`} class={`mx-auto h-auto w-full text-link ${v.cls}`} role="img" aria-label={label}>
+                <defs>
+                    {/* Two arrowheads, because the two inks never mix: the spine's resolves against the root's
+                        brand colour, the connectors' is stated grey. `auto-start-reverse` lets the sign-in line
+                        carry one at each end from a single definition. */}
+                    <marker id={`arch-lead-${v.id}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                    </marker>
+                    <marker
+                        id={`arch-tick-${v.id}`}
+                        viewBox="0 0 10 10"
+                        refX="7"
+                        refY="5"
+                        markerWidth="5"
+                        markerHeight="5"
+                        orient="auto-start-reverse"
+                    >
+                        <path d="M0 0 L10 5 L0 10 z" fill="var(--color-line-strong)" />
+                    </marker>
+                </defs>
+
+                {/* ── the platform, drawn first so the spine always wins an overlap ───────────────── */}
+                <rect
+                    x={v.platform.x}
+                    y={v.platform.y}
+                    width={v.platform.w}
+                    height={v.platform.h}
+                    rx="14"
+                    fill="transparent"
+                    stroke="var(--color-line-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                />
+                <text
+                    x={v.platform.x + v.pad}
+                    y={v.platform.y + rows.eyebrow}
+                    font-size={v.font.eyebrow}
+                    font-weight="600"
+                    letter-spacing="0.05em"
+                    style="fill: var(--color-subtle)"
+                    dominant-baseline="central"
+                >
+                    INTENTIC PLATFORM
+                </text>
+                {v.platformBody.map((line, i) => (
+                    <text
+                        x={v.platform.x + v.pad}
+                        y={v.platform.y + rows.body + i * 14}
+                        font-size={v.font.note}
+                        style="fill: var(--color-muted)"
+                        dominant-baseline="central"
+                    >
+                        {line}
+                    </text>
+                ))}
+                <path
+                    d={`M ${v.platform.x + v.pad} ${v.platform.y + rows.rule} H ${v.platform.x + v.platform.w - v.pad}`}
+                    stroke="var(--color-line)"
+                    stroke-width="1"
+                />
+                <text
+                    x={v.platform.x + v.pad}
+                    y={v.platform.y + rows.punch}
+                    font-size={v.font.note}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                    dominant-baseline="central"
+                >
+                    Off the command path
+                </text>
+
+                {/* ── what crosses to it, and nothing else ────────────────────────────────────────── */}
+                <path
+                    d={curve(v.signIn)}
+                    fill="none"
+                    stroke="var(--color-line-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="4 3"
+                    marker-start={`url(#arch-tick-${v.id})`}
+                    marker-end={`url(#arch-tick-${v.id})`}
+                />
+                <path
+                    d={curve(v.announce)}
+                    fill="none"
+                    stroke="var(--color-line-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="4 3"
+                    marker-end={`url(#arch-tick-${v.id})`}
+                />
+                {/* Captions sit in the gutter each curve leaves from, not along it: the run between the browser
+                    and the platform is seventy pixels, and a caption worth reading does not fit there without
+                    landing on the card it points away from. What the platform HOLDS is written inside the
+                    platform, so the arrows only have to say who speaks. */}
+                {v.captions && (
+                    <Fragment>
+                        <text
+                            x={v.signIn.from[0] + 34}
+                            y={v.browser.y + 12}
+                            text-anchor="middle"
+                            font-size={v.font.itemSub}
+                            style="fill: var(--color-subtle)"
+                            dominant-baseline="central"
+                        >
+                            sign in
+                        </text>
+                        <text
+                            x={v.announce.from[0] + 64}
+                            y={v.announce.from[1] + 20}
+                            text-anchor="middle"
+                            font-size={v.font.itemSub}
+                            style="fill: var(--color-subtle)"
+                            dominant-baseline="central"
+                        >
+                            announces its URL
+                        </text>
+                    </Fragment>
+                )}
+
+                {/* ── you ─────────────────────────────────────────────────────────────────────────── */}
+                <rect
+                    x={v.browser.x}
+                    y={v.browser.y}
+                    width={v.browser.w}
+                    height={v.browser.h}
+                    rx="14"
+                    fill="var(--color-card)"
+                    stroke="var(--color-line-strong)"
+                    stroke-width="1.5"
+                />
+                <g style="color: var(--color-link)">
+                    <Fragment set:html={glyph(ICON.browser, v.browser.x + 24, v.browser.y + v.browser.h / 2, 18)} />
+                </g>
+                <text
+                    x={v.browser.x + 42}
+                    y={v.browser.y + v.browser.h / 2 - 8}
+                    font-size={v.font.title}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                    dominant-baseline="central"
+                >
+                    Your browser
+                </text>
+                <text
+                    x={v.browser.x + 42}
+                    y={v.browser.y + v.browser.h / 2 + 10}
+                    font-size={v.font.sub}
+                    style="fill: var(--color-muted)"
+                    dominant-baseline="central"
+                >
+                    {v.captions ? `chat · files · editor · terminals` : `chat · files · editor`}
+                </text>
+
+                {/* ── the one path that matters, badged with what makes it safe ───────────────────── */}
+                <path
+                    d={`M ${spine} ${v.browser.y + v.browser.h} L ${spine} ${v.machine.y - 3}`}
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    marker-end={`url(#arch-lead-${v.id})`}
+                />
+                <rect
+                    x={v.chip.x}
+                    y={v.chip.y}
+                    width={v.chip.w}
+                    height={v.chip.h}
+                    rx={v.chip.h / 2}
+                    fill="var(--color-canvas)"
+                    stroke="color-mix(in srgb, var(--color-primary-500) 48%, transparent)"
+                    stroke-width="1.5"
+                />
+                <g style="color: var(--color-link)">
+                    <Fragment set:html={glyph(ICON.lock, v.chip.x + 20, v.chip.y + v.chip.h / 2, 13)} />
+                </g>
+                <text
+                    x={v.chip.x + 32}
+                    y={v.chip.y + v.chip.h / 2}
+                    font-size={v.font.chip}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                    dominant-baseline="central"
+                >
+                    {v.chipText}
+                </text>
+
+                {/* ── your hardware, and the sandbox that is the product ──────────────────────────── */}
+                <rect
+                    x={v.machine.x}
+                    y={v.machine.y}
+                    width={v.machine.w}
+                    height={v.machine.h}
+                    rx="18"
+                    fill="color-mix(in srgb, var(--color-primary-500) 6%, transparent)"
+                    stroke="color-mix(in srgb, var(--color-primary-500) 34%, transparent)"
+                    stroke-width="1.5"
+                />
+                <g style="color: var(--color-link)">
+                    <Fragment set:html={glyph(ICON.machine, v.machine.x + v.pad + 7, v.machine.y + 22, 14)} />
+                </g>
+                <text
+                    x={v.machine.x + v.pad + 20}
+                    y={v.machine.y + 22}
+                    font-size={v.font.eyebrow}
+                    font-weight="600"
+                    letter-spacing="0.05em"
+                    style="fill: var(--color-content)"
+                    dominant-baseline="central"
+                >
+                    YOUR MACHINE
+                </text>
+                {v.captions && (
+                    <text
+                        x={machineRight - v.pad}
+                        y={v.machine.y + 22}
+                        text-anchor="end"
+                        font-size={v.font.note}
+                        style="fill: var(--color-muted)"
+                        dominant-baseline="central"
+                    >
+                        your PC, or your server
+                    </text>
+                )}
+
+                <rect
+                    x={v.sandbox.x}
+                    y={v.sandbox.y}
+                    width={v.sandbox.w}
+                    height={v.sandbox.h}
+                    rx="14"
+                    fill="var(--color-card)"
+                    stroke="var(--color-line)"
+                    stroke-width="1.5"
+                />
+                <text
+                    x={v.sandbox.x + v.pad}
+                    y={v.sandbox.y + 18}
+                    font-size={v.font.title}
+                    font-weight="600"
+                    style="fill: var(--color-content)"
+                    dominant-baseline="central"
+                >
+                    Sandbox
+                </text>
+                <text
+                    x={v.sandbox.x + v.sandbox.w - v.pad}
+                    y={v.sandbox.y + 18}
+                    text-anchor="end"
+                    font-size={v.font.note}
+                    style="fill: var(--color-muted)"
+                    dominant-baseline="central"
+                >
+                    one container per agent
+                </text>
+
+                {CONTENTS.map((item, i) => {
+                    const box = tileBox(v, i);
+                    return (
+                        <Fragment>
+                            <rect
+                                x={box.x}
+                                y={box.y}
+                                width={box.w}
+                                height={box.h}
+                                rx="10"
+                                fill="color-mix(in srgb, var(--color-content) 4%, transparent)"
+                                stroke="var(--color-line)"
+                                stroke-width="1"
+                            />
+                            <g style="color: var(--color-link)">
+                                <Fragment set:html={glyph(item.d, box.x + 18, box.y + 22, 15)} />
+                            </g>
+                            <text
+                                x={box.x + 32}
+                                y={box.y + 22}
+                                font-size={v.font.item}
+                                font-weight="600"
+                                style="fill: var(--color-content)"
+                                dominant-baseline="central"
+                            >
+                                {item.label}
+                            </text>
+                            <text
+                                x={box.x + 14}
+                                y={box.y + 44}
+                                font-size={v.font.itemSub}
+                                style="fill: var(--color-muted)"
+                                dominant-baseline="central"
+                            >
+                                {v.captions ? item.sub : item.subTight}
+                            </text>
+                        </Fragment>
+                    );
+                })}
+            </svg>
+        );
+    })
+}

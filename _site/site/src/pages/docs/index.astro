@@ -1,5 +1,6 @@
 ---
 import { docsHref, docsSections } from "@intentic-dev/site-content/docs";
+import ArchitectureFigure from "../../components/ArchitectureFigure.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 
 /* The overview's job is to ROUTE, not to summarise.
@@ -78,6 +79,11 @@ const contentsOf = (label: string): string[] => {
         markdown file. It is a real container, on a machine you control, with the libraries, dev-tools, system access, and curated context a
         specific job needs. You drive it from any browser; it runs where you started it.
     </p>
+    {/* The whole product in one look, before the prose names its parts: a reader who scrolls past everything
+        else should still leave knowing where their code sits and what the platform can reach. */}
+    <div class="docs-embed my-8">
+        <ArchitectureFigure />
+    </div>
     <p>Two tiers make that work, and only your sandbox holds your code:</p>
     <ul>
         <li><strong>The platform</strong>: a thin hub that stores your identity and your sandbox's URL. It sits off the command path and can't reach in.</li>
