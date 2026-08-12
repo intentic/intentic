@@ -68,7 +68,10 @@ hop=()
 [ -n "${INTENTIC_TMUX_NS:-}" ] && hop=(nsenter "--mount=$INTENTIC_TMUX_NS" --)
 tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
 
-d="$(mktemp -d)" || fallback
+# Named so the daemon's temp sweep can attribute it (platform/reaper.ts matches the intentic-run- prefix):
+# the soft-timeout path below deliberately leaves this dir behind for the still-running command to tee into,
+# and a SIGKILLed wrapper skips its trap — both used to be permanent /tmp residents.
+d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback
 printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
 # Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
@@ -139,6 +142,15 @@ else
     pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback
 fi
 [ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
+
+# Stamp the session with the conversation that owns it (a tmux user option the daemon's reaper lists by —
+# platform/reaper.ts). On the SESSION rather than in any pane's environment, because the fact has to outlive
+# every pane: a session whose commands have all finished has no process left to read an environ from. The
+# stamp arrives in this wrapper's own environment, inherited from the turn's CLI (agent.ts workloadStamp).
+# `=<name>:` — set-option refuses the bare `=<name>` exact form ("no such session"); the trailing colon makes
+# it read the target as a SESSION, exactly as capture-pane needs (src/terminal/terminal-session.ts).
+# Idempotent per command; best-effort like everything else here.
+[ -n "${INTENTIC_TURN_OWNER:-}" ] && tmux set-option -t "=$session:" @intentic_owner "$INTENTIC_TURN_OWNER" 2>/dev/null
 
 # Prune windows of finished commands, so the last output stays readable until the next command but dead
 # windows don't accumulate. AFTER this command's window exists, never before: with no bootstrap shell holding

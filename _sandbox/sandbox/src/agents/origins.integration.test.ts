@@ -300,6 +300,40 @@ test("advancing HEAD does not re-read a merge-base — the branch point cannot m
     expect(calls.filter((args) => args[0] === "merge-base")).toEqual([]);
 });
 
+/* THE LEAK REGRESSION. The expiry span ends at the MOVING head, and it used to be cached under a key that
+ * included it — one dead entry per landing at every commit, holding a path list whose sliced strings pinned the
+ * whole diff listing they were split from. On a real fleet (~800 landings, ~100 commits a day) that was
+ * gigabytes of daemon heap per day, released only by a restart. The contract now: a superseded head's entry is
+ * REPLACED, so the caches stay flat however far HEAD runs — and a retired landing takes its entries with it. */
+test("advancing HEAD replaces the expiry entry — the caches do not grow with the commit count", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+    const { pathCharacters: _content, ...settled } = origins.metrics();
+
+    // Three commits of the user's own file — three head moves, each re-measuring the claim.
+    for (let round = 0; round < 3; round += 1) {
+        await writeFile(join(work, "unrelated.ts"), `user work ${round}\n`);
+        await sh(work, "add", "unrelated.ts");
+        await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", `user commit ${round}`);
+        expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+    }
+    // Same cardinalities as after the first scan: nothing accumulated per head move. (The expiry's CONTENT
+    // may grow — the diff since the land legitimately names the user's new file — but as a replaced slot,
+    // never as more entries.)
+    const { pathCharacters: _grown, ...after } = origins.metrics();
+    expect(after).toEqual(settled);
+
+    // The user commits the landed work — the claim retires, and its cached spans go with it.
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
+    expect(await origins.forRepo("root", work)).toEqual({});
+    expect(origins.metrics()).toEqual({ spans: 0, expiries: 0, anchors: 0, spent: 1, pathCharacters: 0 });
+});
+
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));

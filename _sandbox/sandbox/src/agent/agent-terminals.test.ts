@@ -71,6 +71,16 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
     expect(await preToolUse({ command: "/usr/local/bin/tmux-run -e FOO agent-x 'ls' run" }, bashTmuxHooks(["FOO"]))).toEqual({});
 });
 
+test("stamps the pane command with the conversation owner, and refuses one outside the safe charset", async () => {
+    // The owner rides beside the session stamp, so a pane's whole tree is attributable to its conversation
+    // (the reaper's licence over `setsid` survivors — platform/reaper.ts).
+    const owned = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv-1"));
+    expect(owned).toBe(wrap("echo hi", `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted("echo hi")}`, "run"));
+    // It lands unquoted-adjacent in the shell line every command flows through, so a hostile id stays out.
+    const unsafe = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv;rm -rf /"));
+    expect(unsafe).toBe(wrap("echo hi", born(demoted("echo hi")), "run"));
+});
+
 test("forwards env key NAMES as sorted -e flags before the session — never values", async () => {
     const hooks = bashTmuxHooks(["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);

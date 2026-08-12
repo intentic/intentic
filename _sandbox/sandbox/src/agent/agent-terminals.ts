@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
 import { AGENT_SESSION_ENV } from "../platform/container-owner.js";
+import { WORKLOAD_ENV } from "../platform/leftovers.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
@@ -111,6 +112,13 @@ export const bashTmuxHooks = (
      *    (worktree-redirect.ts), which is the same substitution the mounts would have made.
      */
     isolation?: TurnPlacement,
+    /* The conversation this turn belongs to — the same owner the SDK subprocess is stamped with (agent.ts
+     * workloadStamp). Carried onto every pane command too, because a pane's processes are forked by the tmux
+     * SERVER and inherit nothing from the CLI: without this a `nohup`d survivor of a killed session is a
+     * stamped-nowhere process nothing can attribute. The reaper's whole licence over pane trees is this stamp
+     * (platform/reaper.ts). Charset-guarded like the delegation id — it lands unquoted-adjacent in the shell
+     * line every Bash command flows through. */
+    owner?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -160,7 +168,7 @@ export const bashTmuxHooks = (
                          * agent to run, and twice on 2026-08-11 that second daemon's first sweep killed every
                          * turn in flight. A daemon that can see it was started from a conversation knows it is a
                          * run of the code rather than this sandbox's daemon, and claims nothing. */
-                        const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${delegation ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} ` : ""}`;
+                        const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ` : ""}${delegation ? `INTENTIC_DELEGATION_ID=${input.tool_use_id} ` : ""}`;
                         // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
                         // where the server and the pane logs are. The polite prefix goes with the command
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.

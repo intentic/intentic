@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
+import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 
 // Shared naming rules for the web terminal's tmux sessions, used by both the WebSocket route (which spawns
 // `tmux new-session -s <name>`) and the control-plane list/kill routes (which run `tmux kill-session -t <name>`).
@@ -66,23 +66,24 @@ export const captureScrollback = async (session: string, lines: number): Promise
 // RETENTION — the hourly sweep that keeps the tmux server from silting up.
 //
 // Two clocks, because the two kinds of session mean different things. A web-* shell is a PLACE the user works
-// in: it only ages out when it has plainly been abandoned. An agent-* or job-* session is the shell work HAPPENED
-// in, and the browser lists none of them once they finish — no tab, no popover row (see the web app's
-// useTerminal and useWorkTerminals). This window is the grace period on that: long enough that the surfaces
-// naming ONE directly — the chat's Bash card on the turn that just ended, the Capabilities page on the install
-// that just landed — still open something, then gone.
+// in: it only ages out when it has plainly been abandoned. A job-* session is the shell work HAPPENED in, and
+// the browser lists none of them once they finish — no tab, no popover row (see the web app's useTerminal and
+// useWorkTerminals). This window is the grace period on that: long enough that the surface naming ONE directly
+// — the Capabilities page on the install that just landed — still opens something, then gone.
+//
+// agent-* sessions are NOT this sweep's any more: they belong to a conversation, and the reaper retires them on
+// the conversation's own stop clock — live panes included (platform/reaper.ts). This sweep would need a second
+// definition of "finished" to touch them, and a session with one still-running dev server pane would have sat
+// here forever, exactly as it used to.
 //
 // Reaping one costs NOTHING, which is what lets this run unattended: every pane's bytes are already on disk
-// under historyRoot/logs/terminals (logs/log-files.ts, its own 30-day prune), and an agent's commands are in its
-// transcript besides. The tab was never the record.
+// under historyRoot/logs/terminals (logs/log-files.ts, its own 30-day prune). The tab was never the record.
 //
 // The guards are about not yanking something out from under someone, not about disk:
 //   · attached — a browser is looking at this session RIGHT NOW
 //   · live — any pane still running (a long unattended build keeps refreshing its activity stamp too)
-//   · keep — an agent between two commands, or a job whose runner still has work queued: every pane is dead
-//     but the flow is not finished (system.routes draws the same line for `running`). A PREDICATE rather than
-//     a list because that is the shape both sources come in: the fleet registry enumerates its live agents,
-//     the terminal runner only answers per session.
+//   · keep — a job whose runner still has work queued: every pane is dead but the flow is not finished
+//     (system.routes draws the same line for `running`).
 // The terminal route's ws-level liveness terminates vanished browsers, so `session_attached` 0 is trustworthy.
 const REAP_IDLE_MS = 48 * 3_600_000;
 const REAP_FINISHED_MS = 2 * 3_600_000;
@@ -115,10 +116,11 @@ export const reapableSessions = (stdout: string, now: number, keep: (session: st
             if (name.startsWith(WEB_SESSION_PREFIX)) {
                 return activityAt <= now - REAP_IDLE_MS;
             }
-            if (name.startsWith(AGENT_SESSION_PREFIX) || name.startsWith(JOB_SESSION_PREFIX)) {
+            if (name.startsWith(JOB_SESSION_PREFIX)) {
                 return !live && activityAt <= now - REAP_FINISHED_MS;
             }
-            // panel-* sessions are managed dev servers — started and stopped explicitly, never aged out.
+            // agent-* sessions are the reaper's (owner-clocked, platform/reaper.ts); panel-* sessions are
+            // managed dev servers — started and stopped explicitly. Neither ages out here.
             return false;
         })
         .map(([name]) => name);

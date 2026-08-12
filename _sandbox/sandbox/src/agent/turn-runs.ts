@@ -124,6 +124,26 @@ export class TurnRun {
 
 const runs = new Map<string, TurnRun>();
 
+/* The module-level settle event, beside the per-run observer rather than inside it: the observer is the run
+ * STARTER's channel (notifications, wording), while this is for machinery that cares about every run however it
+ * was started — the resource reaper seeds its stop clock here. Guarded like `tell`: a listener that throws must
+ * never reach a turn that is otherwise finished. */
+const settleListeners = new Set<(conversationId: string) => void>();
+export const onTurnSettled = (listener: (conversationId: string) => void): (() => void) => {
+    settleListeners.add(listener);
+    return () => settleListeners.delete(listener);
+};
+
+const notifySettled = (conversationId: string): void => {
+    for (const listener of settleListeners) {
+        try {
+            listener(conversationId);
+        } catch {
+            // Nothing to do and nowhere to report it: the turn is the thing that matters.
+        }
+    }
+};
+
 const sweep = (): void => {
     const now = Date.now();
     for (const [conversationId, run] of runs) {
@@ -299,6 +319,7 @@ export function startTurnRun(
             // Queued behind the writes above, never racing them (see the note where journalOp is defined).
             journalOp((target) => target.clearTurn(input.conversationId));
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
+            notifySettled(input.conversationId);
         }
     })();
     return run;

@@ -298,7 +298,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     const agents = createAgentsRegistry(
         { load: async () => [], save: async () => {} },
         { of: () => "idle", refresh: async () => false, forget: () => {} },
-        { of: () => undefined, refresh: async () => false, forget: () => {} },
+        { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
     );
     const workspace = workspacePaths(WORKSPACE_ROOT);
     /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
@@ -505,6 +505,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             ...git,
         }),
         agents,
+        // Inert: archive/discard call its hard stop on every press, and a route suite has no tmux server,
+        // no stamped processes and no browsers to reap — the reaper's own policy is covered in its unit suite.
+        reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
         agentWorktrees: {
             conversationDir,
             worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
@@ -546,7 +549,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         turnIsolation: noIsolation(WORKSPACE_ROOT),
         // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
         // ids to attribute, `identify` has nobody to resolve.
-        agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
+        agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         files: fakeFiles(),
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0 }),
         // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.

@@ -13,6 +13,21 @@ import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace
 // its own third state (there is no stage 0 for it at all; the index holds stages 1/2/3 instead).
 const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed", U: "conflicted" };
 
+/* The paths in one `-z` git listing, each COPIED OUT of the string it arrived in — for callers that CACHE
+ * what this returns.
+ *
+ * `split` answers with V8 sliced strings: views into the parent, which therefore pin the ENTIRE stdout — a
+ * fleet-wide `--name-only` span runs to megabytes — for as long as ONE cached path lives. That was most of the
+ * daemon's heap: the attribution caches (agents/origins.ts, agents/landed-presence.ts) held path lists whose
+ * every element secretly retained a quarter-megabyte diff listing, ~180 MB per pass over the fleet's landings,
+ * repinned at every new HEAD, never released. The Buffer round-trip allocates each path as its own flat string,
+ * so the parent dies with this call frame. Callers that consume paths transiently can keep plain split(). */
+export const materializedPaths = (stdout: string): string[] =>
+    stdout
+        .split("\0")
+        .filter((path) => path !== "")
+        .map((path) => Buffer.from(path, "utf8").toString("utf8"));
+
 // Parse `--name-status -z` output (from `git diff` or `git diff-tree`) into GitChanges. NUL-separated records
 // are `STATUS\0path\0`, except renames/copies which span three fields (`R<score>\0old\0new\0`) — a cursor walk,
 // not a fixed stride. Keyed by the (new) path so a later record for the same path wins — EXCEPT that

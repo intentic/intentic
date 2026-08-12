@@ -63,6 +63,10 @@ interface PageRecord {
 // before that is what the hook could say without looking.
 interface BrowserSessionRecord {
     readonly name: string;
+    // The conversation whose turn drives it — the reaper's key (platform/reaper.ts): a stopped conversation's
+    // records are closed by owner, without deriving anything from the session name. Undefined for a turn with
+    // no conversation behind it (the bench), which only ever ages out on the retention prune.
+    readonly owner: string | undefined;
     // Which MCP server drives it: `web` (the credential-free browser) or a logged-in capability's id.
     readonly server: string;
     readonly port: number;
@@ -256,6 +260,7 @@ export const openBrowserSession = (input: {
     readonly server: string;
     readonly port: number;
     readonly passkeyStore?: string | undefined;
+    readonly owner?: string | undefined;
 }): string | undefined => {
     const name = browserSessionName(input.sessionId);
     if (name === undefined) {
@@ -271,6 +276,7 @@ export const openBrowserSession = (input: {
     }
     const record: BrowserSessionRecord = {
         name,
+        owner: input.owner,
         server: input.server,
         port: input.port,
         passkeyStore: input.passkeyStore,
@@ -423,6 +429,20 @@ export const closeBrowserSession = async (name: string): Promise<void> => {
     await browser?.close().catch(() => undefined);
 };
 
+// Close every running record a conversation owns — the reaper's door (platform/reaper.ts). Chromium normally
+// dies with the turn's own process tree; this is the backstop for a record whose disconnect never fired, and
+// the hard stop when the conversation is archived or discarded.
+export const closeBrowserSessionsFor = async (owner: string): Promise<void> => {
+    const mine = [...sessions.values()].filter((record) => record.owner === owner && record.finishedAt === undefined);
+    await Promise.all(mine.map((record) => closeBrowserSession(record.name)));
+};
+
+// Every owner with a RUNNING record — what the reaper walks so a browser whose conversation stopped without
+// leaving a terminal behind still lands on the stop clock (platform/reaper.ts sweepBrowsers).
+export const runningBrowserOwners = (): string[] => [
+    ...new Set([...sessions.values()].flatMap((record) => (record.finishedAt === undefined && record.owner !== undefined ? [record.owner] : []))),
+];
+
 /* The hooks that make the above happen. PreToolUse fires with the browser tool's name and the SDK session id —
  * everything needed to name the session and start watching — while the tool itself is still launching Chromium,
  * so the session appears on the rail at the START of the first navigation rather than after it. PostToolUse
@@ -435,6 +455,9 @@ export const closeBrowserSession = async (name: string): Promise<void> => {
 export const browserSessionHooks = (
     ports: Record<string, number>,
     passkeys: Record<string, string> = {},
+    // The conversation this turn belongs to — rides every record the hook opens, so the reaper can close a
+    // stopped conversation's browsers by owner (platform/reaper.ts).
+    owner?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const matcher = "mcp__.+__browser_.+";
     const touch = async (tool: string, sessionId: string): Promise<void> => {
@@ -443,7 +466,7 @@ export const browserSessionHooks = (
         if (server === undefined || port === undefined) {
             return;
         }
-        openBrowserSession({ sessionId, server, port, passkeyStore: passkeys[server] });
+        openBrowserSession({ sessionId, server, port, passkeyStore: passkeys[server], owner });
     };
     return {
         PreToolUse: [

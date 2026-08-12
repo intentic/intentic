@@ -164,8 +164,12 @@ import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
+import { agentSessionName } from "@intentic/sandbox-contract/session-names";
+import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
+import { DAEMON_OWNER } from "./platform/leftovers.js";
+import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -536,6 +540,10 @@ export interface Services {
     readonly agents: AgentsRegistry;
     // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
     readonly agentWorktrees: AgentWorktrees;
+    // Everything a stopped conversation still holds — its processes, terminals, browsers, temp state — reclaimed
+    // on the conversation's own stop clock. main starts it (container role only); archive/discard call its hard
+    // stop (see platform/reaper.ts for the whole policy).
+    readonly reaper: ResourceReaper;
     // Which copy of the workspace a file read means — the shared tree, or one conversation's checkout (see
     // workspace/workspace-scope.ts). Composed once here because the two surfaces that serve files ask the same
     // question: the oRPC workspace routes, and the raw/media byte routes in app.ts.
@@ -749,11 +757,30 @@ export const createServices = (config: Config, logger: Logger): Services => {
     );
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
-    const agents = createAgentsRegistry(
-        fileAgentsStore(join(config.historyRoot, "agents.json")),
-        createLandStandings(agentWorktrees),
-        createLandedPresences(agentWorktrees, logger),
-    );
+    // The presences are held by name too, because their caches report into the resource series below.
+    const landedPresences = createLandedPresences(agentWorktrees, logger);
+    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees), landedPresences);
+    /* The reaper, keyed to the same three facts everything else keys to: whose work (the workload stamp),
+     * whether it is live (the turn registry), and whether it is OURS (this registry knows the conversation).
+     * The reserved owners answer for themselves — what the daemon keeps warm on purpose (the ACP/Pi pools, the
+     * translator) is live for as long as this daemon is, and a helper one-shot never is. */
+    const reaper = createResourceReaper({
+        ownerLive: (owner) => owner === DAEMON_OWNER || turnRunOf(owner)?.done === false,
+        ownerKnown: (owner) => agents.entry(owner) !== undefined,
+        liveSessionNames: () =>
+            new Set(
+                agents.liveSessionIds().flatMap((sessionId) => {
+                    const session = agentSessionName(sessionId);
+                    return session === undefined ? [] : [session];
+                }),
+            ),
+        panePids,
+        onOwnerStopped: onTurnSettled,
+        logger,
+    });
+    // Hoisted like the presences above, and for the same reason: the attribution caches report into the
+    // resource series — they are the structures whose silent growth was once the daemon's memory leak.
+    const agentOrigins = createAgentOrigins({ agents, logger });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
     /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): every consumer of
      * `capabilities` — the translator's compat entries, the endpoint catalog, the picker's provider list —
@@ -858,6 +885,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             return {
                 transcriptSearch: transcriptSearchMetrics(),
                 conversationTranscriptSearch: transcriptLines.metrics(),
+                agentOrigins: agentOrigins.metrics(),
+                landedPresences: landedPresences.metrics(),
                 iq: iq.metrics(),
                 perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
             };
@@ -1012,13 +1041,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         agents,
         agentWorktrees,
+        reaper,
         workspaceScope: {
             main: workspace.root,
             entry: (id) => agents.entry(id),
             worktreeDir: (id) => agentWorktrees.conversationDir(id),
         },
         turnIsolation,
-        agentOrigins: createAgentOrigins({ agents, logger }),
+        agentOrigins,
         files: {
             read: readWorkspaceFile,
             readWindow: readWorkspaceFileWindow,

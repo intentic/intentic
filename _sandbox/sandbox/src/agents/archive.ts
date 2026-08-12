@@ -1,5 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
+import type { ResourceReaper } from "../platform/reaper.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -55,6 +56,10 @@ export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
+    // The hard stop for everything a filed-away conversation still runs — its terminals, browsers, processes
+    // (platform/reaper.ts). Archiving already committed whatever the worktree held, so nothing a shell was
+    // mid-writing is owed a grace window; attached viewers included, because the user just closed the card.
+    readonly reaper?: Pick<ResourceReaper, "reapConversation">;
     readonly purgeConversationState?: (removed: readonly PersistedAgent[], retained: readonly PersistedAgent[]) => Promise<void>;
 }
 
@@ -112,6 +117,11 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
     const archived = done.filter((id) => id !== undefined);
     if (archived.length > 0) {
         await deps.agents.setArchived(archived, now);
+        // The marker is down; whatever the conversation still runs goes with it. After the registry write on
+        // purpose — an archive that half-fails must not have killed the shells of agents still on the board.
+        for (const id of archived) {
+            await deps.reaper?.reapConversation(id, { force: true });
+        }
     }
     return archived;
 };

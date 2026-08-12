@@ -618,7 +618,7 @@ export const planHarnessTurn = async (
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
         // the account in itself when it is still pending — filtered to the accounts this turn's persona
         // speaks for.
-        services.perf.track("turn.plan.browser", {}, () => browserServersOf(granted, services.workspace.root, persona.powers.browser)),
+        services.perf.track("turn.plan.browser", {}, () => browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId)),
         services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind

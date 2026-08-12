@@ -11,10 +11,11 @@ const tree = (owner: string, pgrp = 7): ScannedProcess[] => [
     { pid: 102, ppid: 101, pgrp, owner },
 ];
 
-// The default is this daemon's own group, with nothing of its work still live.
+// The default is this daemon's own group, with nothing of its work still live and no registry of its own.
 const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}) => ({
     group: 7,
     ownerLive: () => false,
+    ownerKnown: () => false,
     panePids: new Set<number>(),
     ...overrides,
 });
@@ -54,6 +55,23 @@ test("another daemon's processes are not this daemon's business, however they ar
     expect(leftoverProcesses(theirs, policy())).toEqual([]);
     // Including when their owner is one this daemon would otherwise recognise as finished work of its own.
     expect(leftoverProcesses([...theirs, ...tree("conv-1")], policy()).map((entry) => entry.pid)).toEqual([100, 101, 102]);
+});
+
+/* The second licence: a pane's processes are forked by the tmux server (their group is the pane's, never this
+ * daemon's), so a `setsid` survivor of a killed agent session is stamped, out-of-group — and reachable exactly
+ * because its owner is a conversation this daemon's registry knows. */
+test("an out-of-group survivor whose owner this registry knows is reclaimed once its pane is gone", () => {
+    const survivor: ScannedProcess[] = [{ pid: 600, ppid: 1, pgrp: 601, owner: "conv-1" }];
+    expect(leftoverProcesses(survivor, policy({ ownerKnown: (owner) => owner === "conv-1" })).map((entry) => entry.pid)).toEqual([600]);
+    // Not while its owner still runs, and never for an owner this registry has no entry for.
+    expect(leftoverProcesses(survivor, policy({ ownerKnown: () => true, ownerLive: () => true }))).toEqual([]);
+    expect(leftoverProcesses(survivor, policy())).toEqual([]);
+});
+
+test("the reserved owners never pass the registry licence — the pools stay group-ruled", () => {
+    const pooled: ScannedProcess[] = [{ pid: 700, ppid: 1, pgrp: 701, owner: "daemon" }];
+    // ownerKnown is the registry's answer, and "daemon" is not a conversation — the composition wires it so.
+    expect(leftoverProcesses(pooled, policy({ ownerKnown: (owner) => owner !== "daemon" }))).toEqual([]);
 });
 
 test("unstamped processes are never touched — a sandbox is somebody's machine too", () => {

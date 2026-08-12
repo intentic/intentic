@@ -242,6 +242,7 @@ test("git.commit answers with the committed repo's post-commit rows, and omits t
                 agentOrigins: {
                     forRepo: async (_repo, dir) => (dir === left ? { "notes.md": ["a1"] } : {}),
                     identify: (ids) => Object.fromEntries([...ids].map((id) => [id, { title: "Write notes", provider: "claude" }])),
+                    metrics: () => ({}),
                 },
             }),
         ),

@@ -339,6 +339,9 @@ export const createAgentsRoutes = (services: Services) => {
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
+            // Resources first, worktree second: a shell or dev server the conversation left running must not
+            // be mid-write in a tree that is being deleted under it (platform/reaper.ts).
+            await services.reaper.reapConversation(entry.id, { force: true });
             await services.agentWorktrees.remove(entry.id, entry.repos);
             await services.agents.remove([entry.id]);
             return { ok: true } as const;

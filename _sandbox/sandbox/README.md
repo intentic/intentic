@@ -93,16 +93,22 @@ reports the profile.
   its parent without anyone propagating anything:
   [src/platform/workload-priority.ts](src/platform/workload-priority.ts) renices every direct child so the
   control plane outranks the work it started, and
-  [src/platform/leftovers.ts](src/platform/leftovers.ts) stamps each one with WHOSE turn it is, so the provider
-  CLI's MCP servers and their headless browsers — three levels down, and nothing here holds a handle on them —
-  can be reclaimed once that turn has finished. Anything under a tmux pane is exempt: that has a watcher, and
-  [src/terminal/terminal-session.ts](src/terminal/terminal-session.ts) ages it out on its own policy. WHICH of
-  those processes are this daemon's at all is not a stamp but the PROCESS GROUP — a container can hold two
-  daemons, a second one is in the group of the shell that started it, and a sweep enumerates its own group and
-  never learns the other's processes exist. That is deliberately not a check the sweep can get wrong: twice on
-  2026-08-11 a source run of this daemon read the live one's processes as a dead life's leavings and killed four
-  agent turns mid-answer, and no amount of care in this file would have helped, because the file doing the
-  killing was a checkout from a branch that predated the care.
+  [src/platform/reaper.ts](src/platform/reaper.ts) reclaims everything a STOPPED conversation still holds, on
+  one clock — how long since its turn settled. The provider CLI's MCP servers and headless browsers (three
+  levels down, nothing here holds a handle on them) carry the conversation's stamp
+  ([src/platform/leftovers.ts](src/platform/leftovers.ts)) and go a couple of minutes after the stop; the
+  conversation's `agent-*` tmux sessions — live panes included, so a left-behind dev server no longer outlives
+  its turn by days — go minutes later unless somebody is attached; its browser records close; and the temp
+  state turns mint (tmux-run capture dirs, land/classify patch dirs, delegation signals) is swept by prefix and
+  age. Archive and discard are the hard stop: their press reaps the conversation on the spot. WHICH of those
+  processes are this daemon's at all is the PROCESS GROUP for everything it forked itself — a container can
+  hold two daemons, a second one is in the group of the shell that started it, and a sweep enumerates its own
+  group and never learns the other's processes exist — plus, for pane trees the tmux server forked, the
+  registry: a stamped survivor is reclaimed only when its owner is a conversation this daemon's own roster
+  knows. The group check is deliberately not one the sweep can get wrong: twice on 2026-08-11 a source run of
+  this daemon read the live one's processes as a dead life's leavings and killed four agent turns mid-answer,
+  and no amount of care in this file would have helped, because the file doing the killing was a checkout from
+  a branch that predated the care.
 - [src/platform/container-owner.ts](src/platform/container-owner.ts) — which daemon this one is. This repository
   is the sandbox, so an agent working in it runs the daemon from source to watch a change work, and everything
   held once per container (HOME, the tmux server, the process sweep, the translator, the platform registration,
@@ -130,7 +136,12 @@ reports the profile.
 - [src/browser/session-store.ts](src/browser/session-store.ts) — whose browser an account lives in. An
   IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
   accounts born from it share that browser — which is what makes a site's "Continue with Google" one click —
-  while a hand-connected account keeps its own. The owner signs the email provider in themselves in a live
+  while a hand-connected account keeps its own. A turn's account browsers exist ONLY once a tool call arrives
+  for one: the harness handshakes every configured server at startup, so what it spawns per account is a ~1 MB
+  socat bridge into a per-turn mux ([bin/browser-mux.mjs](bin/browser-mux.mjs), launched by
+  [src/browser/browser-tools.ts](src/browser/browser-tools.ts)) that answers the handshake and the tool list
+  from a version-keyed schema cache — before this, every turn started one node+playwright process per connected
+  account, ~3.5 GB a turn for browsers mostly never touched. The owner signs the email provider in themselves in a live
   window (`browser-profile.ts`); the agent connects accounts through
   [src/browser/accounts-tools.ts](src/browser/accounts-tools.ts) — stored credentials are typed for it, never
   shown to it; a linked mailbox answers "the newest code from this site" and nothing more

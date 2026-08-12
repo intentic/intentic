@@ -1,19 +1,24 @@
+import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
+import { workloadStamp } from "../platform/leftovers.js";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
-// The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
-// servers. We don't reimplement browser tools — this is pure wiring. There are two kinds, and they exist for
-// different reasons:
+// The agent's browser tools come from Microsoft's official @playwright/mcp, one stdio MCP server per turn per
+// kind — though for the account kind what the harness spawns is a thin bridge, and the real server starts only
+// when a tool call actually arrives (see THE LAZY PATH below). We don't reimplement browser tools — this is
+// pure wiring. There are two kinds, and they exist for different reasons:
 //
 //   - `web` — ALWAYS available, credential-free, profile in memory (`--isolated`). Reading a page is an
 //     ordinary part of coding work: check a docs page, screenshot your own dev server, look at the site you
@@ -30,6 +35,9 @@ import { ensureStealthScript } from "./stealth.js";
 
 const nodeRequire = createRequire(import.meta.url);
 let mcpCli: string | undefined;
+// The schema cache's key (bin/browser-mux.mjs): the tool list is a property of the @playwright/mcp version,
+// so a cached answer outlives every turn and dies with an upgrade. Filled beside the CLI resolution below.
+let mcpVersion = "unknown";
 
 // Resolve the @playwright/mcp CLI from its package.json `bin` (path is version-stable via the manifest, not a
 // hardcoded internal file). Memoized; throws only if the dep is absent (then browserServersOf yields none).
@@ -38,8 +46,9 @@ const resolveMcpCli = (): string => {
         return mcpCli;
     }
     const pkgJsonPath = nodeRequire.resolve("@playwright/mcp/package.json");
-    const bin = (nodeRequire("@playwright/mcp/package.json") as { bin: string | Record<string, string> }).bin;
-    const rel = typeof bin === "string" ? bin : (Object.values(bin)[0] ?? "cli.js");
+    const pkg = nodeRequire("@playwright/mcp/package.json") as { bin: string | Record<string, string>; version?: string };
+    const rel = typeof pkg.bin === "string" ? pkg.bin : (Object.values(pkg.bin)[0] ?? "cli.js");
+    mcpVersion = pkg.version ?? "unknown";
     mcpCli = join(dirname(pkgJsonPath), rel);
     return mcpCli;
 };
@@ -207,6 +216,40 @@ export const isolatedBrowserSpec = (cli: string, executablePath: string, outputD
  * reads and moves on from. */
 const BROWSER_CALL_TIMEOUT_MS = 120_000;
 
+/* THE LAZY PATH for the logged-in browsers — why a turn no longer starts one process per connected account.
+ *
+ * The harness connects to every configured stdio server at startup and runs the handshake (initialize +
+ * tools/list) whether or not the turn ever uses it — verified against the real binary: DEFERRED servers are
+ * spawned and handshaken at startup too; deferral only keeps their schemas out of the prompt. One
+ * node+playwright process per account meant ~30 processes and ~3.5 GB per turn before the agent said a word,
+ * times every concurrent turn — the sandbox's single largest memory load, nearly all of it for browsers nobody
+ * would touch that turn.
+ *
+ * So the per-account server is now a ~1 MB socat bridge into ONE per-turn mux (bin/browser-mux.mjs, a daemon
+ * child): the mux answers the startup questions from a version-keyed schema cache, and the account's REAL
+ * server — this very spec — is spawned by the mux only when a tool call actually arrives for it. The specs
+ * below therefore describe what the mux launches, not what the harness does.
+ *
+ * The mux is stamped with the conversation like every other turn workload, so the reaper's ordinary rules own
+ * it; each backend additionally dies the moment its bridge closes — i.e. with its turn. Everything degrades to
+ * the eager spec (fail-open): no socat in the image, no mux beside this build, or a turn with no conversation
+ * behind it (the bench), and the harness simply spawns the account servers directly as it always did. */
+const MUX_SCRIPT = fileURLToPath(new URL("../../bin/browser-mux.mjs", import.meta.url));
+const SOCAT_PATHS = ["/usr/bin/socat", "/usr/local/bin/socat"];
+const muxAvailable = (): string | undefined => (existsSync(MUX_SCRIPT) ? SOCAT_PATHS.find((path) => existsSync(path)) : undefined);
+
+// The bridge the harness actually spawns for one account: a byte pipe into the mux's per-account socket. Same
+// per-call timeout and the same alwaysLoad as the real server, because from the SDK's side this IS the server —
+// the tools stay in the prompt exactly as before; alwaysLoad's startup handshake now lands on the mux, which
+// answers it without a browser process anywhere.
+const bridgeSpec = (socat: string, socket: string): McpServerConfig => ({
+    type: "stdio",
+    command: socat,
+    args: ["STDIO", `UNIX-CONNECT:${socket}`],
+    timeout: BROWSER_CALL_TIMEOUT_MS,
+    alwaysLoad: true,
+});
+
 // What both server kinds need before either can run.
 interface BrowserRuntime {
     readonly cli: string;
@@ -258,7 +301,14 @@ export interface BrowserTurnTools {
 // parameter rather than the unconditional server it used to be. It is asked separately from the accounts above
 // because it is a different question: that one is "whose name may this turn use", this one is "may it read the
 // web at all", and a persona that reads docs pages while touching nobody's account is an ordinary answer.
-export const browserServersOf = async (capabilities: readonly Capability[], root: string, anonymous = true): Promise<BrowserTurnTools> => {
+export const browserServersOf = async (
+    capabilities: readonly Capability[],
+    root: string,
+    anonymous = true,
+    // The conversation the turn belongs to — the mux's workload stamp. Absent (the bench) keeps the eager path:
+    // a lazy fleet nothing could reap is worse than the spawn it saves.
+    conversationId?: string,
+): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
         return { servers: {}, ports: {}, passkeys: {} };
@@ -285,11 +335,12 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
     // must not start a virtual display just to have a browser available.
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
+    const specs: Record<string, McpServerConfig> = {};
     for (const owner of owners) {
         const port = await freePort();
         ports[owner] = port;
         passkeys[owner] = passkeyPath(root, owner);
-        servers[owner] = browserServerSpec(
+        specs[owner] = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
             sessionDir(root, owner),
@@ -298,5 +349,66 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
             await writeBrowserConfig(owner, port),
         );
     }
-    return { servers, ports, passkeys };
+    const socat = muxAvailable();
+    const lazy = socat !== undefined && conversationId !== undefined ? await startBrowserMux(specs, { display, conversationId, socat, runtime }) : undefined;
+    return { servers: { ...servers, ...(lazy ?? specs) }, ports, passkeys };
+};
+
+/* Launch the per-turn mux and answer with the bridge specs — or undefined when it could not come up, which
+ * hands the caller back the eager specs (fail-open, the tmux-run posture). The manifest carries argv and the
+ * DISPLAY delta only, never the environment: the mux is a daemon child and its backends inherit the rest —
+ * the conversation stamp included — at spawn time. */
+const startBrowserMux = async (
+    specs: Readonly<Record<string, McpServerConfig>>,
+    context: { readonly display: string; readonly conversationId: string; readonly socat: string; readonly runtime: BrowserRuntime },
+): Promise<Record<string, McpServerConfig> | undefined> => {
+    const nonce = randomBytes(4).toString("hex");
+    const owners: Record<string, { socket: string; command: string; args: readonly string[]; env: Record<string, string> }> = {};
+    const bridges: Record<string, McpServerConfig> = {};
+    let index = 0;
+    for (const [owner, spec] of Object.entries(specs)) {
+        if (spec.type !== "stdio") {
+            return undefined;
+        }
+        // Socket paths must clear the 108-char sun_path ceiling, so the owner rides in the manifest, not the name.
+        const socket = join(configDir, `s-${nonce}-${index}.sock`);
+        index += 1;
+        owners[owner] = { socket, command: spec.command, args: spec.args ?? [], env: { DISPLAY: context.display } };
+        bridges[owner] = bridgeSpec(context.socat, socket);
+    }
+    const manifest = {
+        schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
+        // The schema probe: an isolated headless server, initialize + tools/list and gone. The tool list is a
+        // property of the MCP package, not of any launch flag — profile, display and ports shape the browser,
+        // never the tool surface.
+        probe: {
+            command: process.execPath,
+            args: [context.runtime.cli, "--browser", "chromium", "--executable-path", context.runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
+        },
+        owners,
+    };
+    const manifestPath = join(configDir, `mux-${nonce}.json`);
+    try {
+        await writeFile(manifestPath, JSON.stringify(manifest));
+        const mux = spawn(process.execPath, [MUX_SCRIPT, manifestPath], {
+            env: { ...process.env, ...workloadStamp(context.conversationId) },
+            stdio: ["ignore", "ignore", "ignore"],
+        });
+        mux.on("error", () => undefined);
+        mux.unref();
+        /* The harness dials the bridges as soon as its CLI boots, and a socat that finds no listener exits —
+         * the harness would file that account's server as failed for the whole turn. The listeners appear as
+         * socket FILES in one synchronous pass of the mux's startup, so their presence is awaited here, briefly:
+         * a mux that produced no sockets within the window has plainly died, and the eager specs take over. */
+        const last = Object.values(owners).at(-1)?.socket;
+        for (let waited = 0; last !== undefined && !existsSync(last); waited += 50) {
+            if (waited >= 3_000 || mux.exitCode !== null) {
+                return undefined;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return bridges;
+    } catch {
+        return undefined;
+    }
 };

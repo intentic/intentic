@@ -525,7 +525,7 @@ const baseOptions = (
                   signal: request.signal,
               })
             : {},
-        tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation) : {},
+        tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId) : {},
         /* Every stored credential blanked out of every tool RESULT. The Bash filter masks the terminal lane and
          * only that one, so which of Read/Grep/an MCP call fetched a secret decided whether the model saw it —
          * this makes the answer the same for all of them (agent/agent-redaction.ts). */
@@ -559,7 +559,7 @@ const baseOptions = (
         // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
         // is where the watchable session is registered. The hook only names what already exists — the browser
         // is the MCP's to launch and to kill (browser/browser-sessions.ts).
-        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}) : {},
+        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.conversationId) : {},
         // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
         // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
         // record-keeping — the card already learned the child exists from the task stream.

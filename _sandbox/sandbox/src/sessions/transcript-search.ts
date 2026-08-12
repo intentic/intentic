@@ -88,7 +88,14 @@ export const transcriptSearchMetrics = (): Readonly<Record<string, number>> => (
 
 const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
     const trimmed = text.trim();
-    return trimmed.length === 0 ? [] : [{ text: trimmed, speaker }];
+    if (trimmed.length === 0) {
+        return [];
+    }
+    /* Copied out of its parent, never sliced from it: every line here reaches a process-lifetime cache, and
+     * the strip/parse steps above answer with V8 slices — views that pin the WHOLE original message (a prompt
+     * with its preamble and history envelope runs to hundreds of KB) for as long as one cached line lives.
+     * Same mechanics as git/changes.ts materializedPaths, at this module's own single point of construction. */
+    return [{ text: Buffer.from(trimmed, "utf8").toString("utf8"), speaker }];
 };
 
 /* A stored USER message, cleaned of daemon protocol. A runtime handoff carries the earlier conversation inside

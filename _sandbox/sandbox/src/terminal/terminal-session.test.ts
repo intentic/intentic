@@ -16,24 +16,28 @@ const listPanes = (...panes: Pane[]): string =>
 const nothingWorking = (): boolean => false;
 const reap = (stdout: string, keep: (session: string) => boolean = nothingWorking): string[] => reapableSessions(stdout, NOW, keep);
 
-test("finished agent and job sessions age out; the ones that just finished stay", () => {
-    const stdout = listPanes(["agent-old", 0, 3 * HOUR, 1], ["job-capability-demo", 0, 5 * HOUR, 1], ["agent-recent", 0, 10 * 60_000, 1]);
-    expect(reap(stdout).toSorted()).toEqual(["agent-old", "job-capability-demo"]);
+test("finished job sessions age out; the ones that just finished stay", () => {
+    const stdout = listPanes(["job-capability-demo", 0, 5 * HOUR, 1], ["job-recent", 0, 10 * 60_000, 1]);
+    expect(reap(stdout)).toEqual(["job-capability-demo"]);
+});
+
+test("agent-* sessions are not this sweep's — they retire on their conversation's stop clock (platform/reaper.ts)", () => {
+    expect(reap(listPanes(["agent-old", 0, 300 * HOUR, 1]))).toEqual([]);
 });
 
 test("a session with ANY live pane is never reaped, however old its stamp", () => {
-    // A long unattended build: one dead window from an earlier command, one still running.
-    const stdout = listPanes(["agent-busy", 0, 9 * HOUR, 1], ["agent-busy", 0, 9 * HOUR, 0]);
+    // A long unattended job: one dead window from an earlier command, one still running.
+    const stdout = listPanes(["job-busy", 0, 9 * HOUR, 1], ["job-busy", 0, 9 * HOUR, 0]);
     expect(reap(stdout)).toEqual([]);
 });
 
 test("an attached session is never reaped — a browser is looking at it right now", () => {
-    expect(reap(listPanes(["agent-watched", 1, 9 * HOUR, 1]))).toEqual([]);
+    expect(reap(listPanes(["job-watched", 1, 9 * HOUR, 1]))).toEqual([]);
 });
 
-test("`keep` spares work the panes can't see: an agent between two commands, a job with more queued", () => {
-    const stdout = listPanes(["agent-thinking", 0, 3 * HOUR, 1], ["job-infra-check", 0, 3 * HOUR, 1]);
-    expect(reap(stdout, (session) => session === "agent-thinking")).toEqual(["job-infra-check"]);
+test("`keep` spares work the panes can't see: a job whose runner has more queued", () => {
+    const stdout = listPanes(["job-slow", 0, 3 * HOUR, 1], ["job-infra-check", 0, 3 * HOUR, 1]);
+    expect(reap(stdout, (session) => session === "job-slow")).toEqual(["job-infra-check"]);
 });
 
 test("web-* shells keep their own, far longer clock — they are the user's own places, not records", () => {
@@ -46,7 +50,7 @@ test("panel-* dev servers are never aged out — they are started and stopped ex
 });
 
 test("an unreadable activity stamp reads as just-now, so the sweep leaves it alone", () => {
-    expect(reap("agent-nostamp 0  1")).toEqual([]);
+    expect(reap("job-nostamp 0  1")).toEqual([]);
 });
 
 test("no tmux server (empty output) and blank lines yield nothing", () => {

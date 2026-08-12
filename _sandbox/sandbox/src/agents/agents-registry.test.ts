@@ -37,6 +37,7 @@ const presences = (): LandedPresences & { set: (id: string, presence: LandedPres
                 readings.delete(id);
             }
         },
+        metrics: () => ({}),
         set: (id, presence) => readings.set(id, presence),
     };
 };

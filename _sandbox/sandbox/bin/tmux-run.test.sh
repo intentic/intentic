@@ -65,6 +65,15 @@ bash "$W" "$S" 'exit 7' run >/dev/null; [ $? = 7 ] || { echo "FAIL: exit-code no
 out="$(bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: got out='$out' rc=$rc (want hi/3)"; exit 1; }
 
+# The owner stamp lands on the SESSION (a tmux user option the daemon's reaper lists by), from the wrapper's
+# own environment — and a run without the stamp leaves the option untouched rather than blanking it.
+INTENTIC_TURN_OWNER=conv-reap-test bash "$W" "$S" 'true' run >/dev/null
+owner="$(tmux show-options -t "=$S:" -v @intentic_owner 2>/dev/null)"
+[ "$owner" = conv-reap-test ] || { echo "FAIL: session owner option got '$owner' (want conv-reap-test)"; exit 1; }
+bash "$W" "$S" 'true' run >/dev/null
+owner="$(tmux show-options -t "=$S:" -v @intentic_owner 2>/dev/null)"
+[ "$owner" = conv-reap-test ] || { echo "FAIL: unstamped run disturbed the owner option: '$owner'"; exit 1; }
+
 # Both halves of the finished-session contract, checked on a session whose every command has completed.
 # 1. The session SURVIVES with its last command's output still readable — a dead window (remain-on-exit) is
 #    what the terminal panel shows after a turn. remain-on-exit has to be set from inside the pane: a fast

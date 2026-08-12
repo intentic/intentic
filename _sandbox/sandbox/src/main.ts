@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { STATE_DIR } from "@intentic/constants";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
-import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -61,14 +60,13 @@ import { claimContainer } from "./platform/container-owner.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/profile.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { startResourceMetrics } from "./platform/resource-metrics.js";
-import { DAEMON_OWNER, startLeftoverSweep } from "./platform/leftovers.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
-import { turnRunMetrics, turnRunOf } from "./agent/turn-runs.js";
+import { turnRunMetrics } from "./agent/turn-runs.js";
 import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
-import { panePids, reapFinishedSessions } from "./terminal/terminal-session.js";
+import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { recordNewestRun } from "./store/newest-run.js";
 import { startReleaseNotesCheck } from "./platform/release-notes.js";
@@ -234,7 +232,7 @@ const main = async (): Promise<void> => {
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
-        owners: () => ({ ...services.resourceOwners(), turnRuns: turnRunMetrics(), browserSessions: browserSessionMetrics() }),
+        owners: () => ({ ...services.resourceOwners(), turnRuns: turnRunMetrics(), browserSessions: browserSessionMetrics(), reaper: services.reaper.metrics() }),
     });
     shutdown.push(() => resourceMetrics.stop());
     /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs — the Changes scan's
@@ -865,35 +863,26 @@ const main = async (): Promise<void> => {
     shutdown.push(() => clearInterval(logsSweep));
 
     // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
-    // because they're the user's own, plus the agent-*/job-* sessions of work that finished hours ago and that
-    // the panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to
-    // run unattended: an agent BETWEEN two commands has only dead panes, and so does a job whose runner still
-    // has something queued — the same two facts system.routes reports as `running`.
-    const stillWorking = (session: string): boolean =>
-        services.terminalRun.running(session) || services.agents.liveSessionIds().some((sessionId) => agentSessionName(sessionId) === session);
+    // because they're the user's own, plus the job-* sessions of flows that finished hours ago and that the
+    // panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to run
+    // unattended: a job whose runner still has something queued has only dead panes but is not finished — the
+    // same fact system.routes reports as `running`. agent-* sessions belong to the reaper below.
+    const stillWorking = (session: string): boolean => services.terminalRun.running(session);
     if (role.container) {
         void reapFinishedSessions(stillWorking);
     }
     const sessionSweep = role.container ? setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000) : undefined;
     shutdown.push(() => clearInterval(sessionSweep));
 
-    /* Process retention (platform/leftovers.ts): the provider CLIs, MCP servers and headless browsers a turn
-     * started, reclaimed once the turn that owns them has finished. Sessions above are the tmux half of the same
-     * job and this is the half nothing was doing — a turn's tree below the CLI has no handle anyone here holds,
-     * so a stopped turn, a killed CLI or a replaced daemon simply left it running.
-     *
-     * Owner liveness is the turn registry and nothing else, so there is no second definition of alive to keep
-     * true. The two reserved owners answer for themselves: what the daemon keeps warm on purpose (the ACP/Pi
-     * pools, the translator) is live for as long as this daemon is, and a helper one-shot never is. */
-    const leftovers = !role.container
-        ? undefined
-        : startLeftoverSweep({
-              ownerLive: (owner) => owner === DAEMON_OWNER || turnRunOf(owner)?.done === false,
-              panePids,
-              logger,
-          });
-    shutdown.push(() => leftovers?.stop());
-    void leftovers?.sweep();
+    /* THE REAPER (platform/reaper.ts): everything a stopped conversation still holds — the provider CLI tree
+     * with its MCP servers and browsers, its agent-* tmux sessions live panes included, its browser records,
+     * and the temp state turns mint — reclaimed on the conversation's own stop clock, seeded by the settle
+     * event. Container-role only, exactly like the sweeps it replaced: a guest daemon owns none of this. */
+    if (role.container) {
+        services.reaper.start();
+        void services.reaper.sweep();
+    }
+    shutdown.push(() => services.reaper.stop());
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due. The stock automations
     // it fires were seeded up in the `seeds` boot step, ahead of the baseline commit.

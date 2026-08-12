@@ -38,7 +38,7 @@ const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
 
 // The registry stub the archive paths drive: they only ever ask it for the roster and write the markers back.
 const noStandings = { of: () => "idle" as const, refresh: async () => false, forget: () => {} };
-const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {} };
+const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
 
 // Only `retire` (archive) and `remove` (purge) are exercised here; the rest of the interface is unreachable
 // from these paths.

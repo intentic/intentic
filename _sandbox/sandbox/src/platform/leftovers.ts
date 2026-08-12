@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import type { Logger } from "pino";
 
 /* LEFTOVERS — everything a turn started, reclaimed once nobody owns it any more.
  *
@@ -43,12 +42,12 @@ import type { Logger } from "pino";
  * same pid every restart, so a successor leads the same group its predecessor did and simply inherits the
  * orphans: they are processes in my group whose owner is not live, which is the ordinary rule below.
  *
- * WHAT IS DELIBERATELY EXEMPT is anything under a tmux pane. A pane is a place with a watcher: the user has a tab
- * on it, the terminals list shows it, and terminal-session.ts already ages it out on a policy that knows about
- * attachment and dead panes. A `codex exec` delegation inherits its parent turn's stamp and can legitimately run
- * on past the turn that started it, with the owner reading along — reaping that would be this sweep destroying
- * work someone is watching. Ancestry is walked rather than matched on the pane's own pid, because the thing
- * actually holding the memory is several forks below the shell.
+ * WHAT IS DELIBERATELY EXEMPT is anything under a LIVE tmux pane. A pane is a place with a watcher: the user has
+ * a tab on it, the terminals list shows it, and the reaper (platform/reaper.ts) retires the SESSION as a unit
+ * once its conversation has stopped — killing a pane's tree out from under a session that is about to die whole
+ * would only race that. A `codex exec` delegation inherits its parent turn's stamp and can legitimately run on
+ * briefly past the turn that started it, with the owner reading along. Ancestry is walked rather than matched on
+ * the pane's own pid, because the thing actually holding the memory is several forks below the shell.
  *
  * And the sweep only ever touches what carries OUR stamp. A sandbox is a machine people run their own daemons on;
  * a rule phrased as "orphaned processes" would eventually meet somebody's deliberate `nohup … &` and be right
@@ -103,8 +102,16 @@ export interface LeftoverPolicy {
     // Whether this owner still has work in flight. Injected because the answer lives in the turn registry, and
     // this module deliberately knows nothing about turns.
     readonly ownerLive: (owner: string) => boolean;
+    /* The SECOND licence, for what the group cannot see: a pane's processes are forked by the tmux server (their
+     * group is the pane's, never this daemon's), so a `setsid`/`nohup` survivor of a killed agent session would
+     * be stamped, orphaned — and permanently out of reach of a group-keyed sweep. A stamped process OUTSIDE the
+     * group may be reclaimed exactly when its owner is a conversation THIS daemon's registry knows: another
+     * daemon's conversations are not in it, and the two reserved owners (daemon/one-shot) deliberately fail it,
+     * so the group rule still decides for everything the daemon forked itself. */
+    readonly ownerKnown: (owner: string) => boolean;
     // Every live tmux pane's root pid. A stamped process descending from one of these is somebody's visible
-    // work and is never touched here.
+    // work and is never touched here — the pane's SESSION is the unit that dies (platform/reaper.ts), and
+    // whatever survives that death is caught by the ownerKnown licence above on a later pass.
     readonly panePids: ReadonlySet<number>;
 }
 
@@ -127,14 +134,15 @@ const underPane = (pid: number, parents: ReadonlyMap<number, number>, panePids: 
     return false;
 };
 
-/* The pure decision: which of MY processes nobody owns any more. Three conditions, in the order that makes the
- * dangerous one unreachable — not in my group is not my business, whatever it is stamped with. No clock: the
- * grace window belongs to the sweep, which is the only thing that can say how long a pid has been in this state. */
-export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, ownerLive, panePids }: LeftoverPolicy): Leftover[] => {
+/* The pure decision: which of MY processes nobody owns any more. The conditions are ordered so the dangerous
+ * one stays unreachable — neither in my group nor mine by registry is not my business, whatever it is stamped
+ * with. No clock: the grace window belongs to the sweep, which is the only thing that can say how long a pid
+ * has been in this state. */
+export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, ownerLive, ownerKnown, panePids }: LeftoverPolicy): Leftover[] => {
     const parents = new Map(scanned.map((entry) => [entry.pid, entry.ppid]));
     const leftovers: Leftover[] = [];
     for (const { pid, pgrp, owner } of scanned) {
-        if (owner === undefined || pgrp !== group || underPane(pid, parents, panePids)) {
+        if (owner === undefined || (pgrp !== group && !ownerKnown(owner)) || underPane(pid, parents, panePids)) {
             continue;
         }
         if (!ownerLive(owner)) {
@@ -192,99 +200,18 @@ export const scanProcesses = async (): Promise<ScannedProcess[]> => {
     return scanned.filter((entry): entry is ScannedProcess => entry !== undefined);
 };
 
-/* HOW LONG AN OWNER MAY BE GONE before its processes are. Long enough that a turn's own unwind — the SDK's
- * stdin-EOF, its grace, its SIGTERM, and whatever the CLI then does to its MCP servers — has plainly had its
- * chance and not taken it; short enough that a browser profile does not sit on half a gigabyte for the rest of
- * the afternoon. */
-const GRACE_MS = 3 * 60_000;
-
 // SIGTERM first and SIGKILL only on the pass after, so a process with a shutdown path gets to run it. The two
-// signals are a window apart by construction: `killed` remembers what has already been asked nicely.
-const signalFor = (pid: number, asked: ReadonlySet<number>): NodeJS.Signals => (asked.has(pid) ? "SIGKILL" : "SIGTERM");
+// signals are a window apart by construction: `asked` remembers what has already been asked nicely.
+export const signalFor = (pid: number, asked: ReadonlySet<number>): NodeJS.Signals => (asked.has(pid) ? "SIGKILL" : "SIGTERM");
 
-/* THIS DAEMON'S GROUP, read once from procfs — the sweep's whole licence, and the reason it cannot reach another
- * daemon's work. Undefined off Linux and on any procfs that will not answer, and the sweep then does nothing at
- * all: a daemon that cannot establish which processes are its own has no business signalling any of them. */
-const ownProcessGroup = (): number | undefined => {
+/* THIS DAEMON'S GROUP, read once from procfs — the group half of the sweep's licence, and the reason it cannot
+ * reach another daemon's work. Undefined off Linux and on any procfs that will not answer, and the sweep then
+ * does nothing at all: a daemon that cannot establish which processes are its own has no business signalling
+ * any of them. */
+export const ownProcessGroup = (): number | undefined => {
     try {
         return parseProcStat(readFileSync("/proc/self/stat", "utf8"))?.pgrp;
     } catch {
         return undefined;
     }
-};
-
-export interface LeftoverSweep {
-    readonly sweep: () => Promise<void>;
-    readonly stop: () => void;
-}
-
-export interface LeftoverSweepOptions {
-    readonly ownerLive: (owner: string) => boolean;
-    readonly panePids: () => Promise<Map<number, string>>;
-    readonly logger: Logger;
-    readonly graceMs?: number;
-    readonly intervalMs?: number;
-}
-
-/* The sweep itself: stateful only in the two things a single pass cannot know — since when a pid has been
- * unowned, and which pids have already been asked to leave. Both are keyed by pid and pruned to what the current
- * pass can still see, so a pid that exits (or is reused) carries nothing forward. */
-export const startLeftoverSweep = ({ ownerLive, panePids, logger, graceMs = GRACE_MS, intervalMs = 60_000 }: LeftoverSweepOptions): LeftoverSweep => {
-    const unownedSince = new Map<number, number>();
-    const asked = new Set<number>();
-    const group = ownProcessGroup();
-    let running = false;
-
-    const sweep = async (): Promise<void> => {
-        if (running || group === undefined || process.platform !== "linux") {
-            return;
-        }
-        running = true;
-        try {
-            const [scanned, panes] = await Promise.all([scanProcesses(), panePids().catch(() => new Map<number, string>())]);
-            const leftovers = leftoverProcesses(scanned, { group, ownerLive, panePids: new Set(panes.keys()) });
-            const seen = new Set(leftovers.map((entry) => entry.pid));
-            for (const pid of unownedSince.keys()) {
-                if (!seen.has(pid)) {
-                    unownedSince.delete(pid);
-                    asked.delete(pid);
-                }
-            }
-            const now = Date.now();
-            const reclaimed: Leftover[] = [];
-            for (const leftover of leftovers) {
-                const since = unownedSince.get(leftover.pid) ?? now;
-                unownedSince.set(leftover.pid, since);
-                if (now - since < graceMs) {
-                    continue;
-                }
-                try {
-                    process.kill(leftover.pid, signalFor(leftover.pid, asked));
-                    reclaimed.push(leftover);
-                    asked.add(leftover.pid);
-                } catch {
-                    // Already gone, or not ours to signal. Either way the next pass sees the truth.
-                }
-            }
-            if (reclaimed.length > 0) {
-                logger.info(
-                    {
-                        reclaimed: reclaimed.length,
-                        group,
-                        owners: [...new Set(reclaimed.map((entry) => entry.owner))].slice(0, 10),
-                    },
-                    "leftovers: reclaimed processes whose turn had finished",
-                );
-            }
-        } catch (error) {
-            logger.warn({ err: error }, "leftovers: sweep failed");
-        } finally {
-            running = false;
-        }
-    };
-
-    const timer = setInterval(() => void sweep(), intervalMs);
-    // The sweep must never be what keeps the daemon alive.
-    timer.unref();
-    return { sweep, stop: () => clearInterval(timer) };
 };

@@ -1,6 +1,6 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
-import { headSha } from "../git/changes.js";
+import { headSha, materializedPaths } from "../git/changes.js";
 import { anchorOf } from "./agent-changes.js";
 import type { IsolatedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -53,6 +53,9 @@ export interface LandedPresences {
     // Re-read these agents, and say whether any reading MOVED (the caller broadcasts on true).
     readonly refresh: (entries: readonly IsolatedAgent[]) => Promise<boolean>;
     readonly forget: (ids: readonly string[]) => void;
+    // Cache cardinalities and text weight, for the durable resource series — same accounting, and the same
+    // reason, as origins.metrics.
+    readonly metrics: () => Readonly<Record<string, number>>;
 }
 
 // A landing, identified by what it did rather than by who did it — the same key origins.ts retires on, and for
@@ -61,11 +64,12 @@ const landingKey = (repo: string, head: string, tip: string): string => `${repo}
 
 export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger, git: GitRunner = defaultGit): LandedPresences => {
     const readings = new Map<string, LandedPresence>();
-    /* Every span here is between two shas, so one diff per span is all it ever costs however often the board
-     * polls. Kept for the life of the process: a span nothing asks about again simply stops being read.
-     * `--no-renames` for the reason origins.ts spells out at length — a rename is TWO paths in a working
-     * tree, and detection reports it at the destination alone, which would leave the source uncounted on
-     * both sides of the comparison. */
+    /* Every span in HERE is between two FIXED shas, so one diff per span is all it ever costs however often the
+     * board polls; a landing's entries are dropped when it settles, so the map is bounded by the unsettled
+     * landings. `--no-renames` for the reason origins.ts spells out at length — a rename is TWO paths in a
+     * working tree, and detection reports it at the destination alone, which would leave the source uncounted
+     * on both sides of the comparison. The paths are COPIED out of the stdout (materializedPaths): a cached
+     * sliced path pins its whole parent listing, which is the leak origins.ts documents at `expiries`. */
     const spans = new Map<string, readonly string[]>();
     const pathsBetween = async (dir: string, key: string, from: string, to: string): Promise<readonly string[]> => {
         const hit = spans.get(key);
@@ -73,8 +77,23 @@ export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger,
             return hit;
         }
         const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", from, to]);
-        const paths = stdout.split("\0").filter((path) => path !== "");
+        const paths = materializedPaths(stdout);
         spans.set(key, paths);
+        return paths;
+    };
+    /* The expiry span, whose far end is the MOVING head — one REPLACED slot per landing, never one cache entry
+     * per (landing, head): keying the shared map on the head minted a fresh dead entry per landing at every
+     * commit, which was this file's half of the daemon's memory leak (origins.ts documents the whole of it). */
+    const expiries = new Map<string, { readonly head: string; readonly paths: readonly string[] }>();
+    const committedSince = async (dir: string, repo: string, landedHead: string, head: string): Promise<readonly string[]> => {
+        const key = `${repo} ${landedHead}`;
+        const hit = expiries.get(key);
+        if (hit !== undefined && hit.head === head) {
+            return hit.paths;
+        }
+        const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", landedHead, head]);
+        const paths = materializedPaths(stdout);
+        expiries.set(key, { head, paths });
         return paths;
     };
     /* LANDINGS HISTORY HAS TAKEN WHOLE, so this never pays for them again. Once every path a landing put in
@@ -88,11 +107,13 @@ export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger,
      * repos "3 of 5 still in your workspace" over work that was 10 files — a smaller lie than the one this
      * module exists to end, but the same kind. */
     const settled = new Map<string, number>();
-    // Where the branch left the main line, so the count is the agent's own work and not the main-line commits a
-    // rebase pulled into its branch. Keyed on the tip and main's head — the two things that move it.
+    /* Where the branch left the main line, so the count is the agent's own work and not the main-line commits a
+     * rebase pulled into its branch. Keyed on the TIP alone, for the reason origins.ts spells out at its own
+     * anchor: a merge-base does not move as HEAD advances — only a rebase moves it, and a rebase is a new tip
+     * and so already a new key. Keying on the head as well minted one dead entry per landing per commit. */
     const anchors = new Map<string, string>();
-    const anchorFor = async (dir: string, repo: string, head: string, tip: string, base: string): Promise<string> => {
-        const key = `${repo} ${head} ${tip}`;
+    const anchorFor = async (dir: string, repo: string, tip: string, base: string): Promise<string> => {
+        const key = `${repo} ${tip}`;
         const hit = anchors.get(key);
         if (hit !== undefined) {
             return hit;
@@ -102,7 +123,25 @@ export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger,
         return anchor;
     };
 
+    const pathChars = (lists: Iterable<readonly string[]>): number => {
+        let total = 0;
+        for (const paths of lists) {
+            for (const path of paths) {
+                total += path.length;
+            }
+        }
+        return total;
+    };
+
     return {
+        metrics: () => ({
+            spans: spans.size,
+            expiries: expiries.size,
+            anchors: anchors.size,
+            settled: settled.size,
+            readings: readings.size,
+            pathCharacters: pathChars(spans.values()) + pathChars([...expiries.values()].map((entry) => entry.paths)),
+        }),
         of: (id) => readings.get(id),
         forget: (ids) => {
             for (const id of ids) {
@@ -169,9 +208,9 @@ export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger,
                         // left the main line) narrowed to what the patch actually carried against the head it
                         // went in on. Either span alone over-counts — see origins.ts, same intersection.
                         const applied = new Set(await pathsBetween(dir, `applied ${repo} ${landedHead} ${landedTip}`, landedHead, landedTip));
-                        const anchor = await anchorFor(dir, repo, head, landedTip, base);
+                        const anchor = await anchorFor(dir, repo, landedTip, base);
                         const own = await pathsBetween(dir, `own ${repo} ${anchor} ${landedTip}`, anchor, landedTip);
-                        const committed = new Set(await pathsBetween(dir, `since ${repo} ${landedHead} ${head}`, landedHead, head));
+                        const committed = new Set(await committedSince(dir, repo, landedHead, head));
                         const uncommitted = await dirtyIn(repo, dir);
                         let count = 0;
                         let here = 0;
@@ -194,9 +233,14 @@ export const createLandedPresences = (worktrees: AgentWorktrees, logger: Logger,
                         present += here;
                         // Retired only when HISTORY accounts for every path — never merely because they are
                         // all still dirty, which the user's next gesture can undo. A landing that put nothing
-                        // in the tree at all settles here too, at a size of zero.
+                        // in the tree at all settles here too, at a size of zero. Its cached spans go with it:
+                        // a settled landing is answered from `settled` before any of them is read again.
                         if (absorbed === count) {
                             settled.set(landingKey(repo, landedHead, landedTip), count);
+                            spans.delete(`applied ${repo} ${landedHead} ${landedTip}`);
+                            spans.delete(`own ${repo} ${anchor} ${landedTip}`);
+                            expiries.delete(`${repo} ${landedHead}`);
+                            anchors.delete(`${repo} ${landedTip}`);
                         }
                     } catch (error) {
                         /* A pruned branch, a rewritten history or a main checkout that has gone leaves these
