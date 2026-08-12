@@ -57,7 +57,7 @@ export const inThreadScorer = (options: InThreadScorerOptions): QueryScorer => (
         }
         const pending = options.topUpEmbeddings
             ? await embedPending(options.db, embedder, options.cache())
-            : Number(options.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
+            : Number(options.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"] ?? 0);
         return { hits: semanticSearch(options.db, await embedder.embedQuery(query), allowed), pending };
     },
     async rerank(query, passages) {

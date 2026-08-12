@@ -59,6 +59,7 @@
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
+        "sqlite-vec": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"
     },

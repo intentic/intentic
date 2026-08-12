@@ -58,7 +58,7 @@ const insertChunks = (db: IndexDb, texts: readonly string[]): void => {
 
 const storedVectors = (db: IndexDb): Map<string, Uint8Array> => {
     const map = new Map<string, Uint8Array>();
-    for (const row of db.all("SELECT hash, embedding FROM chunks WHERE embedding IS NOT NULL")) {
+    for (const row of db.all("SELECT c.hash, v.embedding FROM chunks c JOIN chunk_vectors v ON v.chunk_id = c.id")) {
         map.set(row["hash"] as string, row["embedding"] as Uint8Array);
     }
     return map;
@@ -110,7 +110,7 @@ test("identical text in two chunks is embedded once and fans out", async () => {
     const cache = openVectorCache(vectorCachePath(indexDir), "fake");
     expect(await embedPending(db, embedder, cache)).toBe(0);
     expect(embedded).toEqual([text]);
-    expect(Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL")?.["n"])).toBe(2);
+    expect(Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 1")?.["n"])).toBe(2);
     db.close();
     cache!.close();
 });

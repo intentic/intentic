@@ -4,15 +4,16 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Embedder } from "../embed/embedder.js";
 import { openIndex, type IndexDb } from "../store/db.js";
+import { putVector } from "../store/vectors.js";
 import { embedPending, semanticSearch } from "./semantic.js";
 
 let dir: string;
 let db: IndexDb;
 
-const vec = (values: number[]): Uint8Array => {
+const vec = (values: number[]): Float32Array => {
     const f = new Float32Array(384);
     values.forEach((value, i) => (f[i] = value));
-    return new Uint8Array(f.buffer);
+    return f;
 };
 
 // Deterministic fake: text containing "widget" → e1, else e2.
@@ -38,14 +39,11 @@ beforeAll(async () => {
     db = openIndex(dir, "write");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a/widget.ts', 0, 1, 'h1')");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('b/other.ts', 0, 1, 'h2')");
-    db.run(
-        "INSERT INTO chunks (file_id, start_line, end_line, hash, text, embedding) VALUES (1, 1, 5, 'c1', 'a/widget.ts § widget\\ncreates a widget', ?)",
-        vec([1, 0]),
-    );
-    db.run(
-        "INSERT INTO chunks (file_id, start_line, end_line, hash, text, embedding) VALUES (2, 1, 5, 'c2', 'b/other.ts § other\\nsomething else', ?)",
-        vec([0, 1]),
-    );
+    db.run("INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (1, 1, 5, 'c1', 'a/widget.ts § widget\\ncreates a widget')");
+    putVector(db, 1, 1, vec([1, 0]));
+    db.run("INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (2, 1, 5, 'c2', 'b/other.ts § other\\nsomething else')");
+    putVector(db, 2, 2, vec([0, 1]));
+    // Left unembedded on purpose — embedPending's backlog.
     db.run("INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (2, 6, 9, 'c3', 'b/other.ts § pending widget text')");
 });
 afterAll(async () => {
@@ -53,7 +51,7 @@ afterAll(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 
-test("semanticSearch ranks by dot product and respects the allowed set", () => {
+test("semanticSearch ranks by cosine similarity and respects the allowed set", () => {
     const query = new Float32Array(384);
     query[0] = 1;
     const hits = semanticSearch(db, query, new Set(["a/widget.ts", "b/other.ts"]));
@@ -62,7 +60,7 @@ test("semanticSearch ranks by dot product and respects the allowed set", () => {
     expect(semanticSearch(db, query, new Set(["b/other.ts"])).every((hit) => hit.path === "b/other.ts")).toBe(true);
 });
 
-test("embedPending fills NULL embeddings and reports the remainder", async () => {
+test("embedPending fills missing embeddings and reports the remainder", async () => {
     expect(await embedPending(db, fakeEmbedder)).toBe(0);
     const query = new Float32Array(384);
     query[0] = 1;

@@ -237,6 +237,9 @@ catalog:
   # the vulnerable line.
   sharp: 0.35.3
   shiki: 4.4.1
+  # The vector index behind iq's semantic tier. Ships as prebuilt loadable extensions, one optional dependency
+  # per platform (linux/darwin x64+arm64, windows x64) and no build script, so nothing is compiled on install.
+  sqlite-vec: 0.1.9
   ssh2: 1.17.0
   tailwind-merge: 3.6.0
   tailwindcss: 4.3.3

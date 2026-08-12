@@ -13,6 +13,7 @@ import {
     type StoredFile,
     touchFile,
 } from "../store/index-store.js";
+import { clearVectors } from "../store/vectors.js";
 import type { ChunkRow, FileEntry, SymbolRow } from "../types.js";
 import { langOf } from "../workspace/scan.js";
 
@@ -46,7 +47,7 @@ export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
         return;
     }
     if (getMeta(db, "model_id") !== MODEL_ID) {
-        db.run("UPDATE chunks SET embedding = NULL");
+        clearVectors(db);
         setMeta(db, "model_id", MODEL_ID);
     }
 };

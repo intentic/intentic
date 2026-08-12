@@ -65,7 +65,7 @@ const answer = async (request: QueryWorkerRequest): Promise<QueryWorkerResponse>
         }
         // Counted here rather than on the host: it is one more read of the same index this thread already has
         // open, and the only reason the host wants the number is to print "embeddings 87%" beside the results.
-        const pending = Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
+        const pending = Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"] ?? 0);
         const hits = semanticSearch(db, await embedder.embedQuery(request.query), new Set(request.allowed));
         return { type: "semantic", id, hits, pending };
     }

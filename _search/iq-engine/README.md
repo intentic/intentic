@@ -9,6 +9,15 @@ The rebuildable index lives at `.intentic/cache/iq/`. Fresh databases use SQLite
 completed writer pass compacts when at least 25% of the file is freelist pages, so delete-heavy reindexes do not
 leave a gigabyte-scale sparse cache behind.
 
+Chunk embeddings live in a `sqlite-vec` table beside the chunks, one signed byte per dimension, and the nearest
+ones to a query are found inside SQLite rather than by handing every vector to JavaScript. On this workspace —
+4,039 files, 67k embedded chunks — that is the difference between 286ms and 31ms a query, 451MB and 79MB of peak
+memory, and a 212MB index and an 85MB one. What the quantizing costs is measured rather than assumed: against
+the float scorer over 30 natural-language queries, the top hit is identical every time, 97.4% of the top 24 are,
+and no displayed score moves by more than the 0.01 it is rounded to. A vector is also a pure function of chunk
+text, so nothing here is precious — [embed/vector-cache.ts](src/embed/vector-cache.ts) keeps full-precision
+copies in a sidecar the index dir's own deletion never touches.
+
 Two engines answer "orient me" rather than "find X", and read the index rather than searching it:
 [engines/map.ts](src/engines/map.ts) PageRanks files over the import graph — specifiers captured by
 [indexer/imports.ts](src/indexer/imports.ts) at index time, resolved against the indexed file set at query
@@ -32,8 +41,10 @@ there to disturb.
 `createResidentEngine` is the daemon's, and the daemon's thread is also serving every agent stream, the routes
 and the browser. Both of the expensive halves of search are moved off it. Keeping the index current is one
 thread ([indexer/index-worker.ts](src/indexer/index-worker.ts)); answering the model stages of a query is the
-other ([query/query-worker.ts](src/query/query-worker.ts)) — measured against a real workspace index, scoring
-every embedded chunk costs ~300ms and the cross-encoder another ~400ms, and neither yields while it runs.
+other ([query/query-worker.ts](src/query/query-worker.ts)). The cross-encoder is what still earns that thread —
+a few hundred milliseconds per query, tokenized in JS, yielding at no point. Scoring used to cost about as much
+again and no longer does: since the vector table took over the ranking it is tens of milliseconds, and it is the
+reranker alone that would otherwise stall every agent stream the daemon is serving.
 
 ```dag
 { "title": "One index, three threads", "direction": "LR",

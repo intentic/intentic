@@ -1,5 +1,6 @@
 import type { ChunkRow, IndexStatus, SymbolRow } from "../types.js";
 import type { IndexDb } from "./db.js";
+import { copyVector, vectorsOfFile } from "./vectors.js";
 
 export interface StoredFile {
     readonly id: number;
@@ -44,13 +45,7 @@ export const replaceFile = (
     chunks: readonly ChunkRow[],
     imports: readonly string[],
 ): void => {
-    const previousEmbeddings = new Map<string, Uint8Array>();
-    for (const row of db.all(
-        "SELECT c.hash, c.embedding FROM chunks c JOIN files f ON f.id = c.file_id WHERE f.path = ? AND c.embedding IS NOT NULL",
-        file.path,
-    )) {
-        previousEmbeddings.set(row["hash"] as string, row["embedding"] as Uint8Array);
-    }
+    const previousEmbeddings = vectorsOfFile(db, file.path);
     db.run("DELETE FROM files WHERE path = ?", file.path);
     db.run(
         "INSERT INTO files (path, repo, lang, mtime_ms, size, hash, complexity) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -80,15 +75,20 @@ export const replaceFile = (
         db.run("INSERT INTO imports (file_id, specifier) VALUES (?, ?)", id, specifier);
     }
     for (const chunk of chunks) {
-        db.run(
-            "INSERT INTO chunks (file_id, start_line, end_line, hash, text, embedding) VALUES (?, ?, ?, ?, ?, ?)",
+        // RETURNING rather than a follow-up lookup: the vector table is keyed by chunk id, and this is the only
+        // place that mints one.
+        const inserted = db.get(
+            "INSERT INTO chunks (file_id, start_line, end_line, hash, text) VALUES (?, ?, ?, ?, ?) RETURNING id",
             id,
             chunk.startLine,
             chunk.endLine,
             chunk.hash,
             chunk.text,
-            previousEmbeddings.get(chunk.hash) ?? null,
         );
+        const carried = previousEmbeddings.get(chunk.hash);
+        if (carried !== undefined) {
+            copyVector(db, Number(inserted!["id"]), id, carried);
+        }
     }
 };
 
@@ -115,7 +115,7 @@ export const readIndexStatus = (db: IndexDb, generation: number): IndexStatus =>
         files: count("SELECT COUNT(*) AS n FROM files"),
         symbols: count("SELECT COUNT(*) AS n FROM symbols"),
         chunks: count("SELECT COUNT(*) AS n FROM chunks"),
-        embedded: count("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL"),
+        embedded: count("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 1"),
         generation,
         freshness: { state: "fresh", ageMs: 0 },
     };
