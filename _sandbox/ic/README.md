@@ -22,6 +22,8 @@ once, here, in Rust — a single static binary with no runtime to ship.
   with its fix, exit 1 when anything is broken.
 - `ic sandbox update / rebuild / rollback / dev` — swap the container onto a different image, preserving
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
+  A swap that cannot read the approved environment out of a sandbox built from one stops there: dropping an
+  environment is never a side effect of asking for a newer image.
 - `ic sandbox list / remove` — what is on this machine, and its careful removal (named volumes included).
 - `ic machine enroll / remove` — a Linux server as a deploy target: service user, sshd, its own tunnel, the
   POST /enroll self-registration — and the full teardown.

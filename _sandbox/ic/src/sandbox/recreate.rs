@@ -114,8 +114,8 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             // Copy the approved overlay out ONCE and hash/build that same copy — byte-exact, no window
             // between the check and the build. The overlay lives on the workspace volume the agent can
             // write, so only content that still hashes to what the owner reviewed is ever built.
-            if !docker::cp_out(&container, APPROVED_FILE, &overlay_path) {
-                bail!("no approved overlay found in the sandbox — approve the proposal on the Environment card first.");
+            if let Some(reason) = docker::cp_out(&container, APPROVED_FILE, &overlay_path) {
+                bail!("no approved overlay could be read from the sandbox — approve the proposal on the Environment card first, or fix what docker reported.\n       docker: {reason}");
             }
             let have = sha256_hex(&std::fs::read(&overlay_path)?);
             if have != *hash {
@@ -148,7 +148,7 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
                 return Ok(());
             }
             // Re-apply the approved overlay (if any) FROM the fresh base, so the extended environment carries on.
-            copy_overlay_or_empty(&container, &overlay_path)?;
+            stage_overlay(&container, &overlay_path)?;
         }
         Mode::Rollback => {
             let Some(previous) = saved.previous.clone() else {
@@ -166,7 +166,7 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
                 let _ = docker::pull(&registry_image, &log);
             }
             println!("intentic: rolling back to {registry_image}…");
-            copy_overlay_or_empty(&container, &overlay_path)?;
+            stage_overlay(&container, &overlay_path)?;
             /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now
              * points at the very build being rolled back from. Hash the APPROVED content first — what the
              * owner reviewed IS what gets applied, re-based onto a target no agent can choose (the record is
@@ -185,10 +185,16 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             // mutually exclusive: this flow would hand you a fresh daemon missing the docker/vpn
             // capability's packages, while rebuild would hand you the packages on the LAST RELEASE's
             // daemon. The FROM is rewritten to the dev tag; --base-image below keeps composing against it.
-            copy_overlay_or_empty(&container, &overlay_path)?;
+            let staged = stage_overlay(&container, &overlay_path)?;
             let overlay = std::fs::read_to_string(&overlay_path)?;
             if !overlay.is_empty() {
                 std::fs::write(&overlay_path, rewrite_from(&overlay, DEV_TAG))?;
+            }
+            // Said out loud, because this is the loop a developer runs a dozen times a day: the one shape
+            // where a dev swap legitimately hands back a bare image is a sandbox that has nothing approved,
+            // and it should look different on screen from one that kept its environment.
+            if !staged {
+                println!("intentic: no approved environment recipe on this sandbox — recreating it from {DEV_TAG} alone.");
             }
         }
     }
@@ -456,12 +462,56 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn copy_overlay_or_empty(container: &str, dest: &Path) -> Result<()> {
-    if !docker::cp_out(container, APPROVED_FILE, dest) {
-        std::fs::write(dest, b"")
-            .map_err(|err| Fail(format!("could not stage the overlay: {err}")))?;
+/// What a copy of the approved overlay came back with. `Stock` is a sandbox that has no overlay at all — no
+/// capability enabled, nothing approved — and staging an empty file for it is right: there is nothing to
+/// re-apply. `Lost` is the same empty answer from a sandbox that HAS one, which is not a shape but a fault.
+enum Overlay {
+    Copied,
+    Stock,
+    Lost,
+}
+
+/* Treating those two alike is what made a dev rebuild able to strip a sandbox in silence: the copy came back
+ * with nothing, the flow staged an empty overlay, and every step after it read that as "this sandbox never had
+ * an environment" — no overlay image built, no runtime directives, no hash stamped. `pnpm rebuild:sandbox`
+ * then handed back the fresh daemon it was asked for on a container with no ffmpeg, no rust toolchain and no
+ * privileges for the docker capability, printing the same success line as a rebuild that had kept all three.
+ * The only report was the Environment card going back to "pending rebuild", which reads as a stale badge. */
+fn overlay_outcome(copied: bool, has_one: bool) -> Overlay {
+    match (copied, has_one) {
+        (true, _) => Overlay::Copied,
+        (false, false) => Overlay::Stock,
+        (false, true) => Overlay::Lost,
     }
-    Ok(())
+}
+
+/* Whether the sandbox has an approved overlay ANYWAY, asked two ways because the copy's own answer is the one
+ * in doubt. The file is there to be seen (a different docker verb, so a copy that breaks on its own terms
+ * cannot hide it) — or the container is running an image built from a recipe, which the runner stamps at
+ * creation and no sandbox carries without having had one. Both are only worth asking after a copy came back
+ * with nothing, so the ordinary swap spends no extra round-trip on the daemon. */
+fn overlay_exists(container: &str) -> bool {
+    docker::exec_ok(container, &["test", "-f", APPROVED_FILE])
+        || container_env(container, "SANDBOX_ENVIRONMENT_HASH").is_some()
+}
+
+/// Stage the sandbox's approved overlay at `dest` for the flow to build from. True when there is one; false
+/// for a stock sandbox, whose empty file every caller reads as "nothing to re-apply".
+fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
+    let reason = docker::cp_out(container, APPROVED_FILE, dest);
+    let copied = reason.is_none();
+    match overlay_outcome(copied, !copied && overlay_exists(container)) {
+        Overlay::Copied => Ok(true),
+        Overlay::Stock => {
+            std::fs::write(dest, b"")
+                .map_err(|err| Fail(format!("could not stage the overlay: {err}")))?;
+            Ok(false)
+        }
+        Overlay::Lost => bail!(
+            "this sandbox has an approved environment, but its recipe could not be read out of {container}:\n       {}\n       Recreating now would drop everything the recipe installs, so the sandbox is untouched.",
+            reason.unwrap_or_default()
+        ),
+    }
 }
 
 /// Stdin build (`docker build -t <tag> -`), progress live on the terminal and teed into the log. Failure is
@@ -616,6 +666,32 @@ mod tests {
             current: current.map(str::to_string),
             previous: previous.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn a_sandbox_with_nothing_approved_stages_an_empty_overlay_and_carries_on() {
+        // The stock shape: no capability enabled, no custom section, no file to copy. Every flow reads the
+        // empty overlay as "nothing to re-apply", which is exactly right here.
+        assert!(matches!(overlay_outcome(false, false), Overlay::Stock));
+    }
+
+    #[test]
+    fn a_sandbox_that_has_a_recipe_the_copy_cannot_read_stops_the_flow_instead_of_stripping_it() {
+        /* The dev loop's silent downgrade. A `pnpm rebuild:sandbox` whose copy came back with nothing staged
+         * an empty overlay and recreated the sandbox from the bare dev image: ffmpeg, bun and the rust
+         * toolchain gone, the docker capability left without the privileges its recipe asks for, and the same
+         * "sandbox is live" line printed as on the rebuild before it. Anything that says the recipe IS there
+         * makes an unreadable one a fault rather than an absence — and the flow stops on a fault. */
+        assert!(matches!(overlay_outcome(false, true), Overlay::Lost));
+    }
+
+    #[test]
+    fn a_copy_that_lands_is_built_without_a_second_opinion() {
+        // The evidence is only ever gathered for a copy that failed, so both answers must build the same
+        // thing: an approved-but-never-built overlay carries no stamp yet, and that FIRST rebuild after an
+        // approval is the one that must work.
+        assert!(matches!(overlay_outcome(true, false), Overlay::Copied));
+        assert!(matches!(overlay_outcome(true, true), Overlay::Copied));
     }
 
     #[test]

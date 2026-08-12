@@ -311,13 +311,31 @@ pub fn container_env_nul(container: &str) -> Result<Vec<u8>> {
 }
 
 /// `docker cp` a file out of the container to `dest` — byte-exact (command substitution would strip trailing
-/// newlines and change the overlay's hash), and it too works on a stopped container. False when absent.
-pub fn cp_out(container: &str, path: &str, dest: &std::path::Path) -> bool {
-    ok(&[
+/// newlines and change the overlay's hash), and it too works on a stopped container. `None` when the file
+/// landed; otherwise what docker SAID it could not do. The message is the answer, not a nicety: "this sandbox
+/// has no such file" and "the copy broke" leave the same exit code behind, and only one of them may be
+/// treated as "there is nothing to re-apply" (see `stage_overlay`).
+pub fn cp_out(container: &str, path: &str, dest: &std::path::Path) -> Option<String> {
+    let out = docker(&[
         "cp",
         &format!("{container}:{path}"),
         &dest.to_string_lossy(),
     ])
+    .output();
+    match out {
+        Ok(out) if out.status.success() => None,
+        Ok(out) => Some(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        Err(err) => Some(format!("could not run docker: {err}")),
+    }
+}
+
+/// Run a command IN the container, true when it exited 0. Only a second opinion is asked of this (does the
+/// file `cp_out` could not read exist at all?), so a container that is not running — where exec is refused —
+/// answering false costs the caller nothing but the extra evidence.
+pub fn exec_ok(container: &str, argv: &[&str]) -> bool {
+    let mut args = vec!["exec", container];
+    args.extend_from_slice(argv);
+    ok(&args)
 }
 
 /// The container's log tail into OUR log — captured before an rm destroys it.
