@@ -69,8 +69,21 @@ const runSteps = [
 >
     <h2>What a service is for</h2>
     <p>
-        Most tools should be free extensions. A <strong>service</strong> is for cases where every run costs <em>you</em> real money: a paid data API, heavy compute, a licensed corpus. Giving it away per run would mean paying to be used. Services are priced in credits per run, and the member's agent offers them in chat with the price shown before anything is spent. What that looks like from the member's seat is on <a href="/earn/">Earn</a>. This page covers the provider's side.
+        Most tools should be free extensions. Reach for a <strong>service</strong> only when every run costs <em>you</em> real money —
+        a paid data API, heavy compute, a licensed corpus — so giving it away per run would mean paying to be used. This page is the
+        provider's side; what a run looks like from the member's seat is on <a href="/earn/">Earn</a>.
     </p>
+    <table>
+        <thead>
+            <tr><th></th><th>Extension</th><th>Service</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>What it is</strong></td><td>Code of yours, run in someone's sandbox</td><td>One HTTPS endpoint, run by you</td></tr>
+            <tr><td><strong>Every run</strong></td><td>Free, forever</td><td>Costs credits, priced by you</td></tr>
+            <tr><td><strong>What ships</strong></td><td>A repo pointer, pinned to a commit</td><td>Nothing — a signed call reaches your endpoint</td></tr>
+            <tr><td><strong>You're paid</strong></td><td>Donations from the monthly pool</td><td>A share of every paid run</td></tr>
+        </tbody>
+    </table>
 
     <h2>The shape of a run</h2>
     <p>
@@ -193,44 +206,87 @@ const runSteps = [
 
     <h2>What's paid, what refunds</h2>
     <p>
-        The line is <strong>whether you answered</strong>, not whether the caller liked the answer:
+        The line is <strong>whether you answered</strong>, not whether the caller liked the answer. Anything below 500 is an answer —
+        including your 4xx.
     </p>
-    <ul>
-        <li><strong>Any completed response below 500 is served.</strong> That includes your 4xx. "Your query was malformed" is an answer, so the member pays for it and receives it verbatim. Validate loudly; it is the paid, honest thing to do.</li>
-        <li><strong>A 5xx, a timeout or a dead socket refunds automatically.</strong> Credits were spent atomically before the call and come straight back; the member is told the run cost nothing. You are not paid for failing to serve.</li>
-    </ul>
+    <table>
+        <thead>
+            <tr><th>Your response</th><th>The member</th><th>You</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>2xx</code> — a normal answer</td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>4xx</code> — "your query was malformed"</td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>5xx</code> — your endpoint failed</td><td>refunded</td><td>not paid</td></tr>
+            <tr><td>Timeout or dead socket</td><td>refunded</td><td>not paid</td></tr>
+        </tbody>
+    </table>
+    <p>
+        Credits are spent atomically before the call, so a refund is immediate and the member is told the run cost nothing. Validate
+        loudly: a clear <code>4xx</code> is a real answer, and the paid, honest thing to serve.
+    </p>
 
     <h2>Pricing &amp; the split</h2>
     <p>
-        You publish one number: <strong>credits per run</strong>. Every surface shows it before the run, and a refusal for lack of credits
-        tells the member what's left and when it resets. Price your real cost plus margin, not a teaser. {creatorSharePct}% of every
-        spent credit's dollar value is yours; the split, your run counts and your earnings are on the public ledger, per service, for
-        anyone to read. <a href="/earn/">Earn</a> explains what a credit is worth and why the model is unfarmable.
+        You publish one number — <strong>credits per run</strong> — shown on every surface before the run. Price your real cost plus
+        margin, not a teaser; a refusal for lack of credits tells the member what's left and when it resets.
     </p>
+    <table>
+        <tbody>
+            <tr><th scope="row">You set</th><td><strong>Credits per run</strong>: one number, shown before every run.</td></tr>
+            <tr><th scope="row">You keep</th><td><strong>{creatorSharePct}%</strong> of every spent credit's dollar value.</td></tr>
+            <tr><th scope="row">Public</th><td>Your run counts, credits and earnings — per service, month by month, for anyone to read.</td></tr>
+        </tbody>
+    </table>
+    <p><a href="/earn/">Earn</a> explains what a credit is worth and why the model is unfarmable.</p>
 
     <h2>Admission &amp; the watch</h2>
     <p>
-        Extensions pass an automated code audit because their code runs in somebody's browser and sandbox. A service has nothing to put
-        through that pipeline (no code of yours ships to anyone), so the gate is a different kind: <strong>admission is curated</strong>. Every row in the catalog is created by the platform after a human review of who you are, what the listing claims and whether the price fits. There is no form that puts an endpoint in front of members' agents unreviewed.
+        A service has no code to audit — none of yours ships to anyone — so the gate is human, not a pipeline. <strong>Admission is
+        curated</strong>: every listing is created by the platform after a review of who you are, what it claims, and whether the price
+        fits. No form puts an endpoint in front of members' agents unreviewed.
     </p>
-    <p>After admission, the watch is behavioral, because with a service, behavior is the artifact:</p>
-    <ul>
-        <li><strong>Every run is on the ledger.</strong> Your service's runs, credits and earnings are public, month by month. A track record is not something either of us can dress up.</li>
-        <li><strong>The mechanical case never becomes a dispute.</strong> No answer, no charge: the refund is the platform's code, not a support queue, so the commonest conflict resolves itself before anyone argues.</li>
-        <li><strong>Quality is a delisting question, not a chargeback.</strong> A served answer is paid even when it disappoints. A service that keeps disappointing is switched off: removed from the catalog with its run history kept, the same way a bad extension listing is blocked.</li>
-    </ul>
+    <p>After that, the watch is behavioral — with a service, behavior is the artifact:</p>
+    <table>
+        <thead>
+            <tr><th>What's watched</th><th>How it works</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Every run</strong></td><td>Public on the ledger, month by month — a track record neither of us can dress up.</td></tr>
+            <tr><td><strong>Disputes</strong></td><td>Almost none to have: "no answer, no charge" is the platform's code, not a support queue.</td></tr>
+            <tr><td><strong>Quality</strong></td><td>A service that keeps disappointing is delisted, its run history kept — the way a bad extension listing is blocked.</td></tr>
+        </tbody>
+    </table>
     <p>
-        And the member keeps their own guard the whole way through: the agent only <em>discovers</em>. It offers from this curated catalog,
-        and nothing is spent until the owner says yes to a priced run. Discovery is the agent's job, admission is the platform's, spending
-        stays the member's.
+        Throughout, the member keeps their guard: the agent only <em>discovers</em> and offers, and nothing is spent until the owner says
+        yes to a priced run. Discovery is the agent's job, admission is the platform's, spending stays the member's.
     </p>
 
     <h2>Getting onboarded, honestly</h2>
     <p>
-        There is no self-serve provider signup yet: the first services are onboarded by hand, which buys each one a real conversation about
-        pricing and shape. Bring an endpoint that answers the exchange above and <a href={discordUrl}>say hello on Discord</a>. You'll
-        leave with a secret and a listing. The catalog's own <code>demo-research</code> service is the living reference: its upstream is
-        run by the platform and verifies exactly the signature on this page, so what this page documents is what the forward actually sends.
+        There's no self-serve signup yet: the first services are onboarded by hand, which buys each one a real conversation about price
+        and shape.
+    </p>
+    <ol class="mt-5 flex list-none flex-col gap-2.5 pl-0">
+        <li class="flex gap-3">
+            <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">1</span>
+            <div class="text-base leading-relaxed">Bring an endpoint that answers the exchange above.</div>
+        </li>
+        <li class="flex gap-3">
+            <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">2</span>
+            <div class="text-base leading-relaxed"><a href={discordUrl}>Say hello on Discord</a> — that's where onboarding starts.</div>
+        </li>
+        <li class="flex gap-3">
+            <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">3</span>
+            <div class="text-base leading-relaxed">We review it together: who you are, what the listing claims, and whether the price fits.</div>
+        </li>
+        <li class="flex gap-3">
+            <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">4</span>
+            <div class="text-base leading-relaxed">You leave with a secret and a listing.</div>
+        </li>
+    </ol>
+    <p class="mt-5">
+        The catalog's own <code>demo-research</code> service is the living reference: its upstream is run by the platform and verifies
+        exactly the signature on this page, so what this page documents is what the forward actually sends.
     </p>
 
     <DocsRelated
