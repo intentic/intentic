@@ -2,8 +2,10 @@ import { parentPort, workerData } from "node:worker_threads";
 import type { Logger } from "pino";
 import { createWorkspaceWatch } from "./workspace-watch.js";
 
-/* The recursive chokidar owner. This file is a separate compiled entry because its whole purpose is to keep
- * thousands of libuv filesystem handles and their burst processing off the daemon's control-plane isolate. */
+/* The recursive watcher's owner. A separate compiled entry because it was the only way to keep thousands of
+ * libuv filesystem handles off the daemon's control-plane isolate; the native backend has since reduced those
+ * to one, so what stays off the control plane here is the burst processing. See createIsolatedWorkspaceWatch
+ * for why the thread is kept regardless. */
 const port = parentPort;
 if (port === null) {
     throw new Error("workspace watch worker requires a parent port");

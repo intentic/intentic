@@ -46,6 +46,7 @@
         "@orpc/client": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
+        "@parcel/watcher": "catalog:",
         "@playwright/mcp": "catalog:",
         "@puristic/env": "catalog:",
         "@xterm/headless": "catalog:",
