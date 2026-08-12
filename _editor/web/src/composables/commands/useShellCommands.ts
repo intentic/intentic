@@ -1,8 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { registerCommand, type RegisteredCommand } from "./useCommands";
-import { tabSurfaceOf } from "./tabSurface";
+import { type CommandRegistration, registerCommand } from "./useCommands";
 import { useChatPopout } from "../chat/useChatPopout";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
@@ -29,7 +28,7 @@ export function useShellCommands(): void {
     onMounted(() => {
         // Explicitly typed: the members are heterogeneous (some carry a keybinding, some don't), so without the
         // annotation TS infers a narrow union off the first entries and rejects the later push.
-        const entries: Omit<RegisteredCommand, `owner`>[] = [
+        const entries: Omit<CommandRegistration, `owner`>[] = [
             {
                 command: `workspace.goToFile`,
                 title: `Go to File…`,
@@ -103,7 +102,7 @@ export function useShellCommands(): void {
                 },
                 icon: `external-link`,
                 keybinding: `F9`,
-                when: (event: KeyboardEvent): boolean => tabSurfaceOf(event) !== `terminal`,
+                when: `tabSurface != 'terminal'`,
                 handler: () => chat.toggle(),
             },
             {

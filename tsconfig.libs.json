@@ -1,6 +1,7 @@
 {
     "files": [],
     "references": [
+        { "path": "_tools/base" },
         { "path": "_deploy/graph" },
         { "path": "_deploy/resources" },
         { "path": "_deploy/need-resolver" },

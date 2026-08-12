@@ -12,6 +12,7 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useRole } from "../composables/sandbox/useRole";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
+import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
@@ -313,13 +314,14 @@ onMounted(() => {
         // Gated on `reachable`, exactly as the tiles themselves are inert while the daemon is unreachable: every
         // area behind them is served by that machine, so a chord that navigates there would only swap one gate
         // screen for another. (The sandbox switcher above deliberately does NOT gate — that is the way out.)
+        publishContextKey(`sandboxReachable`, reachable),
         registerCommand({
             owner: `builtin`,
             command: `view.previousArea`,
             title: `Previous Rail Area`,
             icon: `chevron-up`,
             keybinding: `Alt+ArrowUp`,
-            when: () => reachable.value,
+            when: `sandboxReachable`,
             handler: () => cycleArea(-1),
         }),
         registerCommand({
@@ -328,7 +330,7 @@ onMounted(() => {
             title: `Next Rail Area`,
             icon: `chevron-down`,
             keybinding: `Alt+ArrowDown`,
-            when: () => reachable.value,
+            when: `sandboxReachable`,
             handler: () => cycleArea(1),
         }),
     ];

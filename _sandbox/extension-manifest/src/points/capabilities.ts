@@ -1,3 +1,4 @@
+import { evaluateWhen, isWhenExpression, parseWhen } from "@intentic/base/when";
 import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 import { MARK_FIELDS } from "../mark.js";
@@ -51,7 +52,20 @@ export const CapabilityFieldSchema = z.object({
         .array(z.object({ value: z.string(), label: z.string() }))
         .optional()
         .describe("Turns the field into a select."),
-    when: z.object({ key: z.string(), value: z.string() }).optional().describe("Only show this field when another field currently holds that value."),
+    /* Gates this field on the answers already given — the SSH credential that only applies to the auth mode
+     * chosen, the gateway fields that belong to one VPN provider. A `when` condition (@intentic/base/when)
+     * evaluated against the form's live values, so it re-reads as the user toggles.
+     *
+     * Refused at parse when it does not parse. A card is data an extension ships, and a condition nobody can
+     * evaluate is not a field that is always shown or always hidden — it is a card whose author believes it
+     * asks something it never asks. Failing the manifest names the card; failing at render names nothing. */
+    when: z
+        .string()
+        .refine(isWhenExpression, { message: "not a valid `when` condition" })
+        .optional()
+        .describe(
+            "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+        ),
     // A fixed value baked into the config rather than asked for — how a card pins a discriminator
     // (platform="reddit", provider="stripe"). Rendered as nothing; sent as itself.
     value: z
@@ -73,6 +87,22 @@ export const CapabilityFieldSchema = z.object({
         ),
 });
 export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
+
+/* WHETHER A FIELD IS IN PLAY, given what has been answered so far — and the only place that decides it.
+ *
+ * Two tiers ask this question about the same card. The web's form asks it to decide what to draw and what to
+ * validate; the daemon asks it at install to decide which fields it may demand. They used to answer it with
+ * their own copies of the same comparison, in different packages, and the answers only had to diverge once for
+ * a card to become unusable in exactly one direction: a field the form never showed, refused at submit for
+ * being empty. Nothing in either copy referred to the other, so the divergence would have arrived as a bug
+ * report about one card rather than as a broken rule.
+ *
+ * It lives beside the schema for the reason the description does: this is a fact about the shape, and the two
+ * consumers are in different packages. Parsed per call rather than cached — a card has a handful of fields,
+ * this runs on a keystroke at worst, and a cache keyed by manifest strings is a map that outlives every
+ * extension that ever declared one. */
+export const fieldApplies = (field: CapabilityField, values: Readonly<Record<string, unknown>>): boolean =>
+    field.when === undefined || evaluateWhen(parseWhen(field.when), values);
 
 // The "+" card an entry renders: how it looks in the grid and how the user gets the credential it asks for.
 // Shared by every arm below, because none of that varies with the kind.

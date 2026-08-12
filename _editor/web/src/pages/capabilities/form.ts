@@ -1,5 +1,5 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
-import type { CapabilityField } from "@intentic/extension-manifest";
+import { type CapabilityField, fieldApplies } from "@intentic/extension-manifest";
 import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 
 /* THE ADD FORM: what it starts as, what it refuses, and what it sends.
@@ -65,14 +65,11 @@ export const fieldError = (field: CapabilityField, value: string | undefined): s
     return undefined;
 };
 
-// A `when`-gated field applies only while its referenced field holds the given value (e.g. the SSH credential
-// matching the chosen auth mode). Read from the live form values, so it re-evaluates as the user toggles.
-const whenMet = (field: CapabilityField, values: FormValues): boolean => field.when === undefined || values[field.when.key] === field.when.value;
-
 // The fields shown as inputs (const-valued ones are baked into config, not rendered; when-gated ones only while
-// their condition holds).
+// their condition holds — `fieldApplies` is the same decision the daemon makes at install, imported rather
+// than restated so the form cannot show a field the daemon will not accept, or hide one it demands).
 export const shownFields = (entry: CapabilityCatalogEntry, values: FormValues): readonly CapabilityField[] =>
-    entry.fields.filter((field) => field.value === undefined && whenMet(field, values));
+    entry.fields.filter((field) => field.value === undefined && fieldApplies(field, values));
 
 /* WHICH FIELDS ANSWER THEMSELVES BESIDE THEIR LABEL rather than under it. A switch always does. A picker does
  * when its answers are short enough to sit in the same line as the question — and the test is the WIDTH of the
@@ -188,7 +185,7 @@ export const forticlientAnswers = (fields: readonly CapabilityField[], connectio
  * carries both from the row it was picked on. */
 export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues): Record<string, string> =>
     fieldConfig(entry, (field) => {
-        if (!whenMet(field, values)) {
+        if (!fieldApplies(field, values)) {
             return undefined;
         }
         const value = (values[field.key] ?? ``).trim();

@@ -1,0 +1,70 @@
+{
+    "name": "@intentic/base",
+    "version": "0.0.0",
+    "description": "Runtime primitives every tier shares — when-expressions, disposal, and the async schedulers",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_tools/base"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        "./when": {
+            "types": "./dist/when.d.ts",
+            "import": {
+                "@intentic/src": "./src/when.ts",
+                "default": "./dist/when.js"
+            },
+            "require": {
+                "@intentic/src": "./src/when.ts",
+                "default": "./dist/when.js"
+            }
+        },
+        "./lifecycle": {
+            "types": "./dist/lifecycle.d.ts",
+            "import": {
+                "@intentic/src": "./src/lifecycle.ts",
+                "default": "./dist/lifecycle.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lifecycle.ts",
+                "default": "./dist/lifecycle.js"
+            }
+        },
+        "./async": {
+            "types": "./dist/async.d.ts",
+            "import": {
+                "@intentic/src": "./src/async.ts",
+                "default": "./dist/async.js"
+            },
+            "require": {
+                "@intentic/src": "./src/async.ts",
+                "default": "./dist/async.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

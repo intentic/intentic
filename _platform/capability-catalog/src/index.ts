@@ -79,8 +79,9 @@ export interface AddCapabilityInput {
 /* The form field shape is `CapabilityField` from @intentic/extension-api — ONE definition for the fields a
  * static card authors here and the fields an extension declares in its manifest, because the dialog renders
  * them with the same code and a second copy is a second thing to keep in step. `secret` withholds the value
- * from every echo, `value` pins a field the user never sees (a discriminator), `when` gates one field on
- * another, and `multiline` matters: a single-line input strips the newlines out of a pasted PEM key. */
+ * from every echo, `value` pins a field the user never sees (a discriminator), `when` gates one field on the
+ * answers already given (a condition string — see @intentic/base/when), and `multiline` matters: a single-line
+ * input strips the newlines out of a pasted PEM key. */
 
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
 // technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
@@ -329,8 +330,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "password", label: "Password" },
                 ],
             },
-            { key: "privateKey", label: "Private key", secret: true, multiline: true, when: { key: "auth", value: "key" } },
-            { key: "password", label: "Password", secret: true, when: { key: "auth", value: "password" } },
+            { key: "privateKey", label: "Private key", secret: true, multiline: true, when: "auth == 'key'" },
+            { key: "password", label: "Password", secret: true, when: "auth == 'password'" },
         ],
         hint: 'The name is the alias the agent uses (ssh <name> "…").',
         guide: {
@@ -368,41 +369,41 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 secret: true,
                 multiline: true,
                 placeholder: "[Interface]\nPrivateKey = …\n\n[Peer]\n…",
-                when: { key: "provider", value: "wireguard" },
+                when: "provider == 'wireguard'",
             },
 
             // FortiGate SSL-VPN — the <sslvpn> connections in a FortiClient export. Import fills these in.
-            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: { key: "provider", value: "fortinet" } },
-            { key: "port", label: "Port", default: "443", when: { key: "provider", value: "fortinet" } },
-            { key: "username", label: "Username", when: { key: "provider", value: "fortinet" } },
-            { key: "password", label: "Password", secret: true, when: { key: "provider", value: "fortinet" } },
+            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: "provider == 'fortinet'" },
+            { key: "port", label: "Port", default: "443", when: "provider == 'fortinet'" },
+            { key: "username", label: "Username", when: "provider == 'fortinet'" },
+            { key: "password", label: "Password", secret: true, when: "provider == 'fortinet'" },
             {
                 key: "realm",
                 label: "Realm / user group",
                 optional: true,
                 placeholder: "only if your gateway uses one",
-                when: { key: "provider", value: "fortinet" },
+                when: "provider == 'fortinet'",
             },
             {
                 key: "trustedCert",
                 label: "Trusted certificate",
                 optional: true,
                 placeholder: "sha256:… (only for a self-signed gateway)",
-                when: { key: "provider", value: "fortinet" },
+                when: "provider == 'fortinet'",
             },
 
             // IPsec — the <ipsecvpn> connections in a FortiClient export.
-            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: { key: "provider", value: "ipsec" } },
-            { key: "presharedKey", label: "Pre-shared key", secret: true, when: { key: "provider", value: "ipsec" } },
+            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: "provider == 'ipsec'" },
+            { key: "presharedKey", label: "Pre-shared key", secret: true, when: "provider == 'ipsec'" },
             {
                 key: "localId",
                 label: "Local ID",
                 optional: true,
                 placeholder: "the group name your gateway expects",
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
-            { key: "username", label: "XAuth username", optional: true, when: { key: "provider", value: "ipsec" } },
-            { key: "password", label: "XAuth password", secret: true, optional: true, when: { key: "provider", value: "ipsec" } },
+            { key: "username", label: "XAuth username", optional: true, when: "provider == 'ipsec'" },
+            { key: "password", label: "XAuth password", secret: true, optional: true, when: "provider == 'ipsec'" },
             {
                 key: "ikeVersion",
                 label: "IKE version",
@@ -411,7 +412,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "1", label: "IKEv1" },
                     { value: "2", label: "IKEv2" },
                 ],
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
             {
                 key: "pfs",
@@ -421,7 +422,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "on", label: "On" },
                     { value: "off", label: "Off" },
                 ],
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
             {
                 key: "dhGroup",
@@ -436,7 +437,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "19", label: "19 (ECP256)" },
                     { value: "20", label: "20 (ECP384)" },
                 ],
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
             {
                 key: "aggressive",
@@ -446,7 +447,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "on", label: "On" },
                     { value: "off", label: "Off" },
                 ],
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
             // The split-vs-full tunnel decision, and the one ipsec setting whose wrong value has no symptom the
             // user can attribute: a gateway that doesn't route the internet accepts 0.0.0.0/0 and then drops
@@ -458,7 +459,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 default: "0.0.0.0/0",
                 placeholder: "10.0.0.0/8,192.168.0.0/16",
                 hint: "Which networks go through the tunnel. 0.0.0.0/0 sends everything, including this sandbox's own internet access — if the gateway doesn't route the internet, list only the networks behind it.",
-                when: { key: "provider", value: "ipsec" },
+                when: "provider == 'ipsec'",
             },
 
             // Shared: the only persisted connection intent. Connecting itself is a live action on the Status card.

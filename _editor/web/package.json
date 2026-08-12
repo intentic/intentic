@@ -41,6 +41,7 @@
         "@intentic/ext-viewers": "workspace:*",
         "@intentic/ext-workflows": "workspace:*",
         "@intentic/extension-api": "workspace:*",
+        "@intentic/base": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "@intentic/registry": "workspace:*",

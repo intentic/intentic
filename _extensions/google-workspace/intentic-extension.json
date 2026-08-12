@@ -76,27 +76,27 @@
                         "key": "clientId",
                         "label": "OAuth client ID",
                         "placeholder": "…apps.googleusercontent.com",
-                        "when": { "key": "mode", "value": "user" }
+                        "when": "mode == 'user'"
                     },
                     {
                         "key": "refreshToken",
                         "label": "Refresh token",
                         "secret": true,
-                        "when": { "key": "mode", "value": "user" },
+                        "when": "mode == 'user'",
                         "hint": "Rotate this here when Google revokes it — a password change, six months idle, or a hundredth token on the same client all do that."
                     },
                     {
                         "key": "clientSecret",
                         "label": "OAuth client secret",
                         "secret": true,
-                        "when": { "key": "mode", "value": "user" }
+                        "when": "mode == 'user'"
                     },
                     {
                         "key": "serviceAccountKey",
                         "label": "Service account key (JSON)",
                         "secret": true,
                         "multiline": true,
-                        "when": { "key": "mode", "value": "domain" },
+                        "when": "mode == 'domain'",
                         "hint": "The whole downloaded JSON file, pasted."
                     },
                     {

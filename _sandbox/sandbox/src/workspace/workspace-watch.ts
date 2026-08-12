@@ -1,5 +1,6 @@
 import { sep } from "node:path";
 import { Worker } from "node:worker_threads";
+import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
@@ -64,9 +65,7 @@ export const DEBOUNCE_MS = 250;
 // isn't worth the frame size at that scale.
 export const MAX_PATHS = 200;
 
-export interface PathBatcher {
-    readonly add: (path: string) => void;
-}
+export type PathBatcher = Coalescer<string>;
 
 // The coalescing rule itself, apart from the watcher that feeds it: paths accumulate into a set (so a file
 // touched twice in a window is announced once) and go out as one batch when the window closes.
@@ -75,27 +74,16 @@ export interface PathBatcher {
 // count against a real filesystem measures how fast a loaded machine delivers inotify events, not what this
 // code does — the same "green on a box, red on a busy runner" trap _tools/testing/src/vitest.ts describes.
 // Reached without a watcher in front of it, the rule answers to timers the test owns.
-export const createPathBatcher = (emit: (paths: string[]) => void): PathBatcher => {
-    const pending = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const flush = (): void => {
-        timer = undefined;
-        if (pending.size === 0) {
-            return;
-        }
-        const paths = pending.size > MAX_PATHS ? [] : [...pending];
-        pending.clear();
-        emit(paths);
-    };
-
-    return {
-        add(path) {
-            pending.add(path);
-            timer ??= setTimeout(flush, DEBOUNCE_MS);
-        },
-    };
-};
+export const createPathBatcher = (emit: (paths: string[]) => void): PathBatcher =>
+    /* A Coalescer, not a Delayer, and that is the whole design decision: its window opens on the FIRST path of
+     * a burst and later ones join it rather than pushing the deadline out. An agent editing continuously never
+     * goes quiet, so a trailing debounce here would either never fire or fire only once the agent stopped —
+     * which is exactly when the browser no longer needs telling. */
+    new Coalescer<string>(DEBOUNCE_MS, (batch) => {
+        // A file touched twice inside one window is announced once.
+        const paths = new Set(batch);
+        emit(paths.size > MAX_PATHS ? [] : [...paths]);
+    });
 
 export interface WorkspaceWatch {
     subscribe(listener: (paths: string[]) => void): () => void;

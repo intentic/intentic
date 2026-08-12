@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type CapabilityContribution, contributionDiscriminator } from "@intentic/extension-manifest";
+import { type CapabilityContribution, contributionDiscriminator, fieldApplies } from "@intentic/extension-manifest";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../extensions/installed-extensions.js";
 import type { CapabilityCtx } from "./capability.js";
@@ -197,7 +197,7 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
         return `unknown ${spec.id} field(s): ${unknown.join(", ")}`;
     }
     for (const field of spec.fields) {
-        if (field.when !== undefined && config[field.when.key] !== field.when.value) {
+        if (!fieldApplies(field, config)) {
             continue;
         }
         const value = config[field.key];

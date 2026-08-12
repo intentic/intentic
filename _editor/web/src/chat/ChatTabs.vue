@@ -13,8 +13,7 @@ import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/cat
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { inTabSurface } from "../composables/commands/tabSurface";
-import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
+import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../composables/commands/useCommands";
 import { toAppPx, uiLength } from "../composables/uiScale";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
@@ -300,13 +299,13 @@ const splitBeside = (): void => {
     }
 };
 onMounted(() => {
-    const entries: Omit<RegisteredCommand, `owner`>[] = [
+    const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `chat.rename`,
             title: `Rename Chat…`,
             icon: `pencil`,
             keybinding: `F2`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (edit.editing) {
                     return; // already renaming — a second F2 would wipe the draft
@@ -325,7 +324,7 @@ onMounted(() => {
             title: `Close Chat`,
             icon: `times`,
             keybinding: `Ctrl+Shift+X`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: () => emit(`close`, new Set([activeId.value])),
         },
         {
@@ -333,7 +332,7 @@ onMounted(() => {
             title: `Close Other Chats`,
             icon: `times`,
             keybinding: `Ctrl+Shift+,`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: (): void => {
                 const others = othersOf(activeId.value);
                 if (others.size > 0) {
@@ -346,7 +345,7 @@ onMounted(() => {
             title: `Close Chats to the Right`,
             icon: `times`,
             keybinding: `Ctrl+Shift+.`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: (): void => {
                 const toRight = toRightOf(activeId.value);
                 if (toRight.size > 0) {
@@ -362,7 +361,7 @@ onMounted(() => {
             command: `chat.closeFinishedTabs`,
             title: `Close Finished Chats`,
             icon: `times`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: (): void => {
                 const finished = finishedTabs();
                 if (finished.size > 0) {
@@ -375,11 +374,11 @@ onMounted(() => {
             title: `Close All Chats`,
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: () => emit(`close`, allTabs()),
         },
-        { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: inTabSurface(`chat`), handler: () => cycleTab(1) },
-        { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: inTabSurface(`chat`), handler: () => cycleTab(-1) },
+        { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
+        { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: `tabSurface == 'chat'`, handler: () => cycleTab(-1) },
         {
             /* VSCode's split-editor chord doing the chat's version of it: give the next chat a column of its
              * own beside this one. NOT a second view of the same conversation, which is what VSCode splits to
@@ -388,7 +387,7 @@ onMounted(() => {
             command: `chat.splitView`,
             title: `Open Next Chat Beside`,
             keybinding: `Mod+\\`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: () => splitBeside(),
         },
         {
@@ -396,7 +395,7 @@ onMounted(() => {
             // worth spending here is already spent. Takes the focused chat's column back — the chat stays open.
             command: `chat.closePane`,
             title: `Close Pane`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: () => closePane(activeId.value),
         },
         {
@@ -406,7 +405,7 @@ onMounted(() => {
             command: `chat.switchTab`,
             title: `Switch Chat…`,
             icon: `comments`,
-            when: inTabSurface(`chat`),
+            when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (vertical.value) {
                     return; // the rail is already the list — there is nothing to open

@@ -5,8 +5,7 @@ import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { inTabSurface } from "../../composables/commands/tabSurface";
-import { commandShortcut, registerCommand, type RegisteredCommand } from "../../composables/commands/useCommands";
+import { commandShortcut, type CommandRegistration, registerCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { detectActivations } from "../../core-views/registry";
@@ -472,7 +471,7 @@ const cycleTab = (delta: number): void => {
         selectTab(next.id);
     }
 };
-const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
+const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     { command: `workspace.search`, title: `Search Workspace…`, icon: `search`, handler: () => focusSearch() },
     {
         command: `workspace.searchContent`,
@@ -495,12 +494,12 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
     // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
     // exactly as it did before the family was shared.
-    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, when: inTabSurface(`workspace`), handler: () => cycleTab(1) },
+    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, when: `tabSurface == 'workspace'`, handler: () => cycleTab(1) },
     {
         command: `workspace.previousTab`,
         title: `Previous Tab`,
         keybinding: `Alt+PageUp`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: () => cycleTab(-1),
     },
     {
@@ -508,7 +507,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Close Tab`,
         icon: `times`,
         keybinding: `Ctrl+Shift+X`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: closeActiveTab,
     },
     {
@@ -516,7 +515,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Close Other Tabs`,
         icon: `times`,
         keybinding: `Ctrl+Shift+,`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: closeOtherTabs,
     },
     {
@@ -524,7 +523,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Close Tabs to the Right`,
         icon: `times`,
         keybinding: `Ctrl+Shift+.`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: closeTabsToRight,
     },
     {
@@ -532,7 +531,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Close All Tabs`,
         icon: `times`,
         keybinding: `Ctrl+Shift+Backspace`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: closeAllTabs,
     },
     // The close family's undo. VSCode puts it on Ctrl+Shift+T, which is the one chord a browser will never hand
@@ -547,7 +546,7 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         title: `Reopen Closed Tab`,
         icon: `undo`,
         keybinding: `Ctrl+Shift+O`,
-        when: inTabSurface(`workspace`),
+        when: `tabSurface == 'workspace'`,
         handler: reopenClosedTab,
     },
     { command: `workspace.refresh`, title: `Refresh Workspace Files`, icon: `refresh`, handler: () => refetch() },

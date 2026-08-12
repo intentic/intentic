@@ -5,7 +5,7 @@
 // itself, driven through the real registry — three commands on ONE chord, and boundCommand picking the one
 // whose surface owns the focus.
 import { afterEach, expect, it } from "vitest";
-import { inTabSurface, type TabSurface, tabSurfaceOf } from "./tabSurface";
+import { type TabSurface, tabSurfaceOf } from "./tabSurface";
 import { boundCommand, registerCommand } from "./useCommands";
 import type { Disposable } from "@intentic/extension-api";
 
@@ -50,9 +50,6 @@ it(`routes a keystroke to the strip it came from, and to the workspace when it c
     expect(tabSurfaceOf(new KeyboardEvent(`keydown`))).toBe(`workspace`);
     // A prompt hosted inside another surface still belongs to the terminal — the innermost panel wins.
     expect(tabSurfaceOf(keydownFrom(`nested-pill`))).toBe(`terminal`);
-
-    expect(inTabSurface(`workspace`)(keydownFrom(`line`))).toBe(true);
-    expect(inTabSurface(`workspace`)(keydownFrom(`composer`))).toBe(false);
 });
 
 it(`lets the three strips share one chord — the focused surface's command is the one that binds`, () => {
@@ -63,7 +60,7 @@ it(`lets the three strips share one chord — the focused surface's command is t
             command: `test.closeTab.${surface}`,
             title: `Close ${surface} tab`,
             keybinding: `Ctrl+Shift+X`,
-            when: inTabSurface(surface),
+            when: `tabSurface == '${surface}'`,
             handler: () => undefined,
         }),
     );

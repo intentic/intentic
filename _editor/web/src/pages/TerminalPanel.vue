@@ -8,8 +8,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import WorkTerminals from "../components/WorkTerminals.vue";
-import { inTabSurface } from "../composables/commands/tabSurface";
-import { commandShortcut, registerCommand, type RegisteredCommand, withShortcut } from "../composables/commands/useCommands";
+import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../composables/commands/useCommands";
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
@@ -532,7 +531,7 @@ const cycleTab = (delta: number): void => {
 // routed through useTerminalPanel's spawn hook.
 let commandDisposables: readonly Disposable[] = [];
 const registerPanelCommands = (): void => {
-    const entries: Omit<RegisteredCommand, `owner`>[] = [
+    const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `terminal.rename`,
             title: `Rename Terminal`,
@@ -543,7 +542,7 @@ const registerPanelCommands = (): void => {
             // xterm's key hook forward the press to the dispatcher instead of the PTY: a terminal app that wants
             // its own F2 needs the binding remapped in Settings → Keybindings.
             keybinding: `F2`,
-            when: inTabSurface(`terminal`),
+            when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 if (renamingName.value !== undefined) {
                     return; // already editing (F2 lands in the field) — restarting would wipe the draft
@@ -610,14 +609,14 @@ const registerPanelCommands = (): void => {
             command: `terminal.nextTab`,
             title: `Next Terminal`,
             keybinding: `Alt+PageDown`,
-            when: inTabSurface(`terminal`),
+            when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(1),
         },
         {
             command: `terminal.previousTab`,
             title: `Previous Terminal`,
             keybinding: `Alt+PageUp`,
-            when: inTabSurface(`terminal`),
+            when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(-1),
         },
     ];
@@ -640,7 +639,7 @@ const registerPanelCommands = (): void => {
             title: `Kill Terminal`,
             icon: `trash`,
             keybinding: `Ctrl+Shift+X`,
-            when: inTabSurface(`terminal`),
+            when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 // A selection is what the chord aims at when there is one (the menu's mass row does the same);
                 // requestKill is what turns two or more live sessions into a confirm.
@@ -660,7 +659,7 @@ const registerPanelCommands = (): void => {
             title: `Kill All Terminals`,
             icon: `trash`,
             keybinding: `Ctrl+Shift+Backspace`,
-            when: inTabSurface(`terminal`),
+            when: `tabSurface == 'terminal'`,
             handler: () => requestKill(killable.value),
         });
     }

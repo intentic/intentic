@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -391,11 +392,11 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
     };
 };
 
-// In-flight refreshes by account id, so the N callers a turn burst produces queue on one promise instead of N
+// In-flight refreshes by account id, so the N callers a turn burst produces share one promise instead of N
 // file locks. The cross-process lock still stands behind this — it is the only thing that covers a SECOND
 // daemon on a shared AGENT_AUTH_DIR — but in the common single-daemon case this is what actually collapses the
 // stampede.
-const inFlight = new Map<string, Promise<string | undefined>>();
+const refreshes = new SingleFlight<string, string | undefined>();
 
 const usable = (account: StoredAccount): boolean => account.expiresAt === undefined || account.expiresAt - Date.now() > REFRESH_AHEAD_MS;
 
@@ -404,13 +405,9 @@ const usable = (account: StoredAccount): boolean => account.expiresAt === undefi
  * stored access token has moved on, another holder rotated while we queued and their token is the one to use.
  * Refreshing again from here would present a refresh token that has already been redeemed, which is the replay
  * Anthropic answers by revoking every token in the family. */
-const rotate = async (store: ClaudeStore, id: string, spent: string | undefined, refresh: RefreshFn): Promise<string | undefined> => {
-    const running = inFlight.get(id);
-    if (running !== undefined) {
-        return running;
-    }
-    const attempt = store
-        .withRefreshLock(id, async () => {
+const rotate = async (store: ClaudeStore, id: string, spent: string | undefined, refresh: RefreshFn): Promise<string | undefined> =>
+    refreshes.run(id, () =>
+        store.withRefreshLock(id, async () => {
             const current = await store.read(id);
             if (current === undefined || current.revokedAt !== undefined) {
                 return undefined;
@@ -442,11 +439,8 @@ const rotate = async (store: ClaudeStore, id: string, spent: string | undefined,
                 store.logger.warn({ account: id }, "claude refresh token rejected (invalid_grant) — marked revoked");
                 return undefined;
             }
-        })
-        .finally(() => inFlight.delete(id));
-    inFlight.set(id, attempt);
-    return attempt;
-};
+        }),
+    );
 
 // Return a usable access token for the account, refreshing + persisting first if it has expired (or is about
 // to) and a refresh token is available. undefined when the account isn't connected, or when its credential is
@@ -461,7 +455,7 @@ export const ensureFreshToken = async (store: ClaudeStore, id: string, refresh: 
      * So wait for the mint and then read what it wrote, rather than take its result directly: a rotation that
      * fails leaves the store's current token in place and still valid for hours, which is what the path below
      * then returns. */
-    await inFlight.get(id)?.catch(() => undefined);
+    await refreshes.joined(id)?.catch(() => undefined);
     const account = await store.read(id);
     if (account === undefined || account.revokedAt !== undefined) {
         return undefined;

@@ -37,6 +37,7 @@
         "schema": "tsgo && node scripts/write-schema.mjs"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "tslib": "catalog:",
         "zod": "catalog:"
     },

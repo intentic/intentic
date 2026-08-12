@@ -1,11 +1,21 @@
+// @vitest-environment jsdom
+// Resolving a keystroke now reads the focused surface off the event's target (contextKeys.ts), so the registry
+// cannot be exercised without a DOM — the dispatch it backs never runs outside one either.
 import { afterEach, describe, expect, it } from "vitest";
-import { boundCommand, commands, executeCommand, registerCommand, type RegisteredCommand } from "./useCommands";
+import { ref } from "vue";
+import { publishContextKey } from "./contextKeys";
+import { boundCommand, type CommandRegistration, commands, executeCommand, registerCommand } from "./useCommands";
 
 /* The command registry backs the palette's `>` command mode: the shell's built-in commands and every extension's
  * contributed ones register here, and Quick Open filters + runs them by id. These pin the invariants the palette
  * relies on — unique ids, dispose really removes, and execute reaches the live handler. */
 
-const entry = (command: string, handler: RegisteredCommand[`handler`]): RegisteredCommand => ({ owner: `builtin`, command, title: command, handler });
+const entry = (command: string, handler: CommandRegistration[`handler`]): CommandRegistration => ({
+    owner: `builtin`,
+    command,
+    title: command,
+    handler,
+});
 
 afterEach(() => {
     commands.value = [];
@@ -58,10 +68,25 @@ describe(`boundCommand`, () => {
     });
 
     it(`skips a command whose when gate is closed, leaving the keystroke to the focused surface`, () => {
-        let open = false;
-        registerCommand({ ...entry(`gated`, () => undefined), keybinding: `Mod+K`, when: () => open });
+        const open = ref(false);
+        const key = publishContextKey(`testGateOpen`, open);
+        registerCommand({ ...entry(`gated`, () => undefined), keybinding: `Mod+K`, when: `testGateOpen` });
         expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)).toBeUndefined();
-        open = true;
+        open.value = true;
         expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)?.command).toBe(`gated`);
+        key.dispose();
+    });
+
+    /* A condition naming a key nothing publishes is FALSE, not a throw. That is what lets an extension built
+     * against a newer shell install into this one: its gated command simply never binds. */
+    it(`closes a gate over a context key nobody publishes`, () => {
+        registerCommand({ ...entry(`unknown`, () => undefined), keybinding: `Mod+K`, when: `neverPublished` });
+        expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)).toBeUndefined();
+    });
+
+    // An unparseable condition is a bug in whoever registered it, and registration is the last moment anyone
+    // can be told. An extension's has already been refused by the manifest schema before it reaches here.
+    it(`refuses a command whose condition does not parse`, () => {
+        expect(() => registerCommand({ ...entry(`broken`, () => undefined), when: `&& nonsense` })).toThrow();
     });
 });

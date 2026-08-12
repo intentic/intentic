@@ -227,6 +227,10 @@
                                 "description": "A global keyboard shortcut, e.g. \"Mod+Shift+K\" — `Mod` is ⌘ on Apple and Ctrl elsewhere. Declared here because a global shortcut is consequential: the owner approves it at install, and the host binds only what was approved.",
                                 "type": "string",
                                 "pattern": "^\\S+$"
+                            },
+                            "when": {
+                                "description": "When the shortcut applies, as a condition over the shell's context keys — `tabSurface == 'chat'`, `!editableTarget`. Without one the chord is claimed everywhere, including inside a terminal where a bare key belongs to the program running in it. The command palette ignores this: a command is always runnable by name.",
+                                "type": "string"
                             }
                         },
                         "required": [
@@ -506,21 +510,8 @@
                                                     }
                                                 },
                                                 "when": {
-                                                    "description": "Only show this field when another field currently holds that value.",
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "key": {
-                                                            "type": "string"
-                                                        },
-                                                        "value": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "required": [
-                                                        "key",
-                                                        "value"
-                                                    ],
-                                                    "additionalProperties": false
+                                                    "description": "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+                                                    "type": "string"
                                                 },
                                                 "value": {
                                                     "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
@@ -707,21 +698,8 @@
                                                     }
                                                 },
                                                 "when": {
-                                                    "description": "Only show this field when another field currently holds that value.",
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "key": {
-                                                            "type": "string"
-                                                        },
-                                                        "value": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "required": [
-                                                        "key",
-                                                        "value"
-                                                    ],
-                                                    "additionalProperties": false
+                                                    "description": "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+                                                    "type": "string"
                                                 },
                                                 "value": {
                                                     "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
@@ -901,21 +879,8 @@
                                                     }
                                                 },
                                                 "when": {
-                                                    "description": "Only show this field when another field currently holds that value.",
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "key": {
-                                                            "type": "string"
-                                                        },
-                                                        "value": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "required": [
-                                                        "key",
-                                                        "value"
-                                                    ],
-                                                    "additionalProperties": false
+                                                    "description": "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+                                                    "type": "string"
                                                 },
                                                 "value": {
                                                     "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
@@ -1085,21 +1050,8 @@
                                                     }
                                                 },
                                                 "when": {
-                                                    "description": "Only show this field when another field currently holds that value.",
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "key": {
-                                                            "type": "string"
-                                                        },
-                                                        "value": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "required": [
-                                                        "key",
-                                                        "value"
-                                                    ],
-                                                    "additionalProperties": false
+                                                    "description": "Only show this field while a condition over the answers already given holds — `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+                                                    "type": "string"
                                                 },
                                                 "value": {
                                                     "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",

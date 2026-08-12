@@ -26,6 +26,7 @@ import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
 import AgentCard from "./AgentCard.vue";
@@ -500,8 +501,6 @@ watch(
 // fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z — nothing
 // archived to put back, or a caret sitting in a field that owns its own undo (the docked chat's composer is
 // one column away from this board).
-const editable = (target: EventTarget | null): boolean =>
-    target instanceof HTMLElement && (target.isContentEditable || target.tagName === `INPUT` || target.tagName === `TEXTAREA`);
 const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
 let boardCommands: readonly Disposable[] = [];
 // A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
@@ -543,13 +542,19 @@ onMounted(() => {
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
     boardCommands = [
+        // Published for as long as the board is mounted, and taken away with it — a condition naming a key no
+        // surface publishes is false, which is what hands Mod+Z back the moment the fleet leaves the screen.
+        publishContextKey(
+            `agentsUndoable`,
+            computed(() => undoable.value.length > 0),
+        ),
         registerCommand({
             owner: `builtin`,
             command: `agents.undoArchive`,
             title: `Undo Archive`,
             icon: `history`,
             keybinding: `Mod+Z`,
-            when: (event) => undoable.value.length > 0 && !editable(event.target),
+            when: `agentsUndoable && !editableTarget`,
             handler: undoArchive,
         }),
         // The field is on the header already, so this is an accelerator rather than the way in. Focus AND

@@ -22,7 +22,7 @@ vi.hoisted(() => {
     })) as unknown as typeof globalThis.matchMedia;
 });
 import { useChatPopout } from "../chat/useChatPopout";
-import { commands, commandShortcut } from "./useCommands";
+import { boundCommand, commands, commandShortcut } from "./useCommands";
 import { useShellCommands } from "./useShellCommands";
 
 /* MOVING THE CHAT INTO ITS OWN WINDOW — the one command in this set that a user reaches for many times a day,
@@ -65,7 +65,6 @@ it(`binds the chat pop-out to F9 and names it for the direction the press will t
 
 it(`leaves F9 to whatever is running in a terminal`, () => {
     const app = mountShell();
-    const entry = commands.value.find((candidate) => candidate.command === `chat.togglePopout`);
 
     // A bare function key is the cheapest chord there is, which is why it can't be taken globally: inside the
     // terminal panel F9 belongs to the program on the other end (mc's menu, an editor's key). The gate returns
@@ -77,8 +76,15 @@ it(`leaves F9 to whatever is running in a terminal`, () => {
     chatPanel.className = `chat-panel`;
     const inChat = chatPanel.appendChild(document.createElement(`textarea`));
 
-    expect(entry!.when?.({ target: inTerminal } as unknown as KeyboardEvent)).toBe(false);
-    expect(entry!.when?.({ target: inChat } as unknown as KeyboardEvent)).toBe(true);
+    // Asserted through the dispatcher rather than against the gate directly: what matters is which command a
+    // real F9 resolves to, and the condition only means anything against the context one keydown builds.
+    const from = (target: Element): KeyboardEvent => {
+        const event = new KeyboardEvent(`keydown`, { key: `F9`, code: `F9` });
+        Object.defineProperty(event, `target`, { value: target });
+        return event;
+    };
+    expect(boundCommand(from(inTerminal), false)).toBeUndefined();
+    expect(boundCommand(from(inChat), false)?.command).toBe(`chat.togglePopout`);
 
     app.unmount();
 });

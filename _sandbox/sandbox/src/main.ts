@@ -1,6 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { createSecureServer } from "node:http2";
 import { join } from "node:path";
+import { DisposableStore } from "@intentic/base/lifecycle";
 import { STATE_DIR } from "@intentic/constants";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -186,13 +187,35 @@ const main = async (): Promise<void> => {
         const bootMarker = claimBootMarker(logsRoot(config.historyRoot), logger);
         process.on("exit", (code) => bootMarker.markExited(code));
     }
+    /* EVERYTHING THIS DAEMON HAS TO PUT DOWN, collected where it is picked up.
+     *
+     * This was twenty-five `.stop()` calls in a row at the bottom of this file, and nothing connected that list
+     * to the subsystems it covered: adding a watcher, a poller or an interval meant remembering to add a line,
+     * and forgetting cost nothing visible — the process was exiting anyway. A missed stop only ever showed up
+     * where it actually hurts, in the tests and the long-lived dev sandbox, as a handle keeping the event loop
+     * alive or a timer firing against a service that is already gone.
+     *
+     * Registering next to the creation is the whole fix: the line that starts a thing and the line that stops
+     * it are one line apart, so the two cannot drift, and shutdown below has nothing left to enumerate. */
+    const shutdown = new DisposableStore();
     // The stall detector: any future freeze — a synchronous path in here, or the whole VM thrashing under a
     // fleet of builds — leaves a log line with the lag and the machine's pressure numbers attributing it.
     const loopWatchdog = startLoopWatchdog(logger);
+    shutdown.push(() => loopWatchdog.stop());
     // Provider SDKs spawn their CLIs internally, outside the polite Bash/git wrappers. Keep every direct child
     // below the control plane so a newly introduced workload cannot compete equally with /events heartbeats.
     const workloadPriority = startWorkloadPriorityGovernor();
+    shutdown.push(() => workloadPriority.stop());
     const services = createServices(config, logger);
+    shutdown.push(() => services.perf.stop());
+    shutdown.push(() => services.ciHooks.stop());
+    shutdown.push(() => services.announcer.stop());
+    shutdown.push(() => services.history.stop());
+    // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own in-flight
+    // voice transcript on the way down.
+    shutdown.push(() => services.processes.stopAll());
+    // The backend host is a direct child, not a tmux session — stopped here or it outlives the daemon.
+    shutdown.push(() => services.extensionBackend.stop());
     /* AM I THIS SANDBOX'S DAEMON, OR A RUN OF ITS CODE — asked before anything is claimed, swept or announced,
      * because every one of those is container-wide and a container can hold more than one of us. This repository
      * IS the daemon: agents working in it start one from source to watch a change work, and twice on 2026-08-11
@@ -213,6 +236,7 @@ const main = async (): Promise<void> => {
         logger,
         owners: () => ({ ...services.resourceOwners(), turnRuns: turnRunMetrics(), browserSessions: browserSessionMetrics() }),
     });
+    shutdown.push(() => resourceMetrics.stop());
     /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs — the Changes scan's
      * hundreds of reads, a land's checkout, the history snapshots — is attributable. Git is where the reported
      * slowness lives and it was the one subsystem with no measurement at all.
@@ -307,6 +331,7 @@ const main = async (): Promise<void> => {
     // wants a plain boolean under exactOptionalPropertyTypes. The shapes match at runtime — assert the interface.
     const terminalSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
     const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: host, websocket: { server: terminalSockets } });
+    shutdown.push(() => server.close());
     logger.info(
         { host, port: config.sandbox.port, workspace: config.workspaceRoot, profile: config.sandbox.profile },
         "intentic sandbox daemon listening",
@@ -366,6 +391,7 @@ const main = async (): Promise<void> => {
                         },
                     }),
           });
+    shutdown.push(() => localServer?.close());
     if (localServer !== undefined) {
         logger.info(
             { port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname },
@@ -374,6 +400,7 @@ const main = async (): Promise<void> => {
     }
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
     const localCertRenewal = role.container && traits.extraListeners ? startLocalCertificateRenewal(config, logger) : undefined;
+    shutdown.push(() => localCertRenewal?.stop());
 
     // The preview proxy: preview-<panel>-<id>.<zone>, port-<slot>-<id>.<zone> and public-<slot>-<id>.<zone>
     // land here (the tunnel's fixed origin) and the Host header's first label routes to the panel's running
@@ -396,6 +423,7 @@ const main = async (): Promise<void> => {
                       : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
           });
     previewProxy?.listen(config.preview.port, host);
+    shutdown.push(() => previewProxy?.close());
 
     // Phone home: announce this sandbox's URL to the platform registry (once per boot, retried until acked —
     // see platform/announce.ts), so the setup wizard sees it come online without any browser→sandbox probing.
@@ -834,6 +862,7 @@ const main = async (): Promise<void> => {
         void pruneLogFiles(logsRoot(config.historyRoot));
     }
     const logsSweep = role.roots ? setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000) : undefined;
+    shutdown.push(() => clearInterval(logsSweep));
 
     // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
     // because they're the user's own, plus the agent-*/job-* sessions of work that finished hours ago and that
@@ -846,6 +875,7 @@ const main = async (): Promise<void> => {
         void reapFinishedSessions(stillWorking);
     }
     const sessionSweep = role.container ? setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000) : undefined;
+    shutdown.push(() => clearInterval(sessionSweep));
 
     /* Process retention (platform/leftovers.ts): the provider CLIs, MCP servers and headless browsers a turn
      * started, reclaimed once the turn that owns them has finished. Sessions above are the tmux half of the same
@@ -862,11 +892,13 @@ const main = async (): Promise<void> => {
               panePids,
               logger,
           });
+    shutdown.push(() => leftovers?.stop());
     void leftovers?.sweep();
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due. The stock automations
     // it fires were seeded up in the `seeds` boot step, ahead of the baseline commit.
     const scheduler = createAutomationsScheduler(services, streamAgent);
+    shutdown.push(() => scheduler.stop());
     if (role.container) {
         scheduler.start();
     }
@@ -876,6 +908,12 @@ const main = async (): Promise<void> => {
      * post approved a minute before the daemon went down is due the moment it is back, and this is the read
      * that notices. Nothing approved means no timer at all. */
     const draftsPublisher = draftsPublisherFor(services);
+    // Nothing is lost by dropping the armed timer: the deadline it was holding is the draft's own
+    // scheduledAt on disk, and the next boot arms from that.
+    shutdown.push(() => draftsPublisher.stop());
+    // A pre-push check is a suite running on the main tree — a daemon that exits without killing it
+    // leaves it burning CPU with nothing left to report the result to.
+    shutdown.push(() => prepushCheck(services).cancel());
     if (role.container) {
         void draftsPublisher.arm().catch((error: unknown) => logger.warn({ err: error }, "drafts publisher not armed"));
     }
@@ -890,6 +928,7 @@ const main = async (): Promise<void> => {
     // without hook scope) so their `ci` automations still fire. Its first pass is a silent seed, so starting it
     // before the reconciler's first warnings have landed costs nothing. See ci/poller.ts.
     const ciPoller = createCiPoller(services, streamAgent);
+    shutdown.push(() => ciPoller.stop());
     if (role.container) {
         ciPoller.start();
     }
@@ -905,6 +944,7 @@ const main = async (): Promise<void> => {
     // Resume scheduler: credential refusals and provider outages re-run the turn they killed — see
     // turn-resume.ts. A spent usage limit is deliberately not among them; that allowance is the user's own.
     const turnResume = createTurnResumeScheduler(services, streamAgent);
+    shutdown.push(() => turnResume.stop());
     if (role.roots) {
         turnResume.start();
     }
@@ -937,15 +977,18 @@ const main = async (): Promise<void> => {
     // promoted release, a beta one the newest (version-check.ts explains the two pointers).
     // Container-image update offers: meaningless for a local daemon, whose host application owns updates.
     const versionCheck = traits.containerUpdates ? startVersionCheck(config.sandbox.channel) : undefined;
+    shutdown.push(() => versionCheck?.stop());
 
     // …and what that update would actually give them, on the same cadence: the offer and the reason to take it
     // come from two different reads (the Release's "latest" pointer for the version, the Release bodies for
     // the notes) and neither may hold up the /info that shows them.
     const releaseNotesCheck = traits.containerUpdates ? startReleaseNotesCheck() : undefined;
+    shutdown.push(() => releaseNotesCheck?.stop());
 
     // The same courtesy for installed EXTENSIONS: compare each pinned sha against its registry (updates,
     // advisories) shortly after boot and daily after — the Extensions tab's own reads keep it fresher.
     const extensionUpdateWatch = traits.extensionHost ? startExtensionUpdateWatch(services) : undefined;
+    shutdown.push(() => extensionUpdateWatch?.stop());
 
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
@@ -1027,45 +1070,27 @@ const main = async (): Promise<void> => {
         await services.openCode.client();
     })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
 
-    const shutdown = (): void => {
+    /* Nothing to enumerate: every subsystem registered itself where it was created. The store keeps going past
+     * a member that throws and reports the failures together, so one misbehaving stop cannot strand the ports
+     * and child processes behind it in the list.
+     *
+     * `finally`, because the exit must happen whatever the teardown did. The old list had the same exposure and
+     * worse odds — a throwing stop skipped every stop after it AND the exit, leaving a daemon that answered
+     * SIGTERM by hanging with its marker unstamped, which the next boot reads as a crash. */
+    const stop = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
-        resourceMetrics.stop();
-        loopWatchdog.stop();
-        services.perf.stop();
-        clearInterval(logsSweep);
-        clearInterval(sessionSweep);
-        leftovers?.stop();
-        scheduler.stop();
-        // Nothing is lost by dropping the armed timer: the deadline it was holding is the draft's own
-        // scheduledAt on disk, and the next boot arms from that.
-        draftsPublisher.stop();
-        // A pre-push check is a suite running on the main tree — a daemon that exits without killing it leaves
-        // it burning CPU with nothing left to report the result to.
-        prepushCheck(services).cancel();
-        workloadPriority.stop();
-        services.ciHooks.stop();
-        ciPoller.stop();
-        turnResume.stop();
-        versionCheck?.stop();
-        extensionUpdateWatch?.stop();
-        releaseNotesCheck?.stop();
-        services.announcer.stop();
-        localCertRenewal?.stop();
-        services.history.stop();
-        // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own
-        // in-flight voice transcript on the way down.
-        services.processes.stopAll();
-        // The backend host is a direct child, not a tmux session — stopped here or it outlives the daemon.
-        services.extensionBackend.stop();
-        previewProxy?.close();
-        localServer?.close();
-        server.close();
-        // process.exit fires the "exit" hook above, which stamps the marker "exited" — the next boot's death
-        // check reads a deliberate shutdown, not a crash.
-        process.exit(0);
+        try {
+            shutdown.dispose();
+        } catch (error) {
+            logger.error({ err: error }, "shutdown: one or more subsystems failed to stop");
+        } finally {
+            // process.exit fires the "exit" hook above, which stamps the marker "exited" — the next boot's death
+            // check reads a deliberate shutdown, not a crash.
+            process.exit(0);
+        }
     };
-    process.on("SIGTERM", shutdown);
-    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", stop);
+    process.on("SIGINT", stop);
 };
 
 void main();
