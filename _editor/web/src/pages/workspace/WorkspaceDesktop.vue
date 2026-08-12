@@ -8,6 +8,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
+import { personaStartDirs } from "../../composables/sandbox/personaCard";
+import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
@@ -33,6 +35,7 @@ import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffSkeleton from "./viewers/DiffSkeleton.vue";
 import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
+import DirectoryPersonas from "./DirectoryPersonas.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
 import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileTabs from "./FileTabs.vue";
@@ -191,16 +194,29 @@ const manageableDirs = computed(
             ),
         ),
 );
-/* What each directory row offers beside its name — its documents, its health, its history, its management panel.
- * Composed here because this is where the openers live; the tree just draws them (see rowActions.ts). Passed as a
- * function so only the rows actually on screen are asked, and read inside the tree's render, so an extension
- * registering a document provider lights up the rows it serves without anything having to invalidate. */
+/* WHO WORKS IN EACH FOLDER — the personas whose sessions start there, counted once per render rather than
+ * re-filtered on every visible row. The folder a card starts in is set from the row itself (see
+ * <DirectoryPersonas>), so this is also what makes that icon light up the moment one is saved. */
+const { personas } = usePersonas();
+const personaDirs = computed(() => personaStartDirs(personas.value));
+// The folder whose personas are open in the quick panel; undefined = closed.
+const personaDir = ref<string | undefined>(undefined);
+
+/* What each directory row offers beside its name — its documents, its health, its history, its personas, its
+ * management panel. Composed here because this is where the openers live; the tree just draws them (see
+ * rowActions.ts). Passed as a function so only the rows actually on screen are asked, and read inside the tree's
+ * render, so an extension registering a document provider lights up the rows it serves without anything having to
+ * invalidate. */
 const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
         repoDirs: repoDirs.value,
         manageableDirs: manageableDirs.value,
+        personaDirs: personaDirs.value,
         openHealth,
         openDirectory,
+        openPersonas: (target: string): void => {
+            personaDir.value = target;
+        },
         openDocument,
     });
 
@@ -1090,6 +1106,10 @@ const endResize = (event: PointerEvent): void => {
             </template>
             <p class="mt-3 text-xs text-muted">Closing these tabs discards their unsaved edits. This can't be undone.</p>
         </ConfirmDialog>
+        <!-- Opened by a directory row's person icon: who works in that folder, and the one field it takes to add
+             somebody. Mounted here rather than in the tree because the tree draws icons and knows nothing about
+             what they mean. -->
+        <DirectoryPersonas v-model="personaDir" />
     </div>
 </template>
 

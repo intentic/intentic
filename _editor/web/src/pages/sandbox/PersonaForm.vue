@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Avatar, BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
 import Button from "primevue/button";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
+import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import { identityHue } from "../../composables/identityHue";
+import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
 /* The card editor, used in both places a card is written: opened inside an existing row, and standing alone at
  * the tail of the group for a new one. One component because the two are the same four questions — the only
@@ -27,36 +28,17 @@ import { identityHue } from "../../composables/identityHue";
  * the draft back to validate the name against the other personas, so copying it down and emitting it up would
  * buy encapsulation at the price of the one check that keeps two personas from sharing an id. */
 
-export interface PersonaDraft {
+// The whole card as a form. The shelves and the per-id grants come from PersonaPowersDraft, because the quick
+// panel in the Workspace tree writes those same nine fields and <PersonaPowersFields> renders them for both.
+export interface PersonaDraft extends PersonaPowersDraft {
     original: string | undefined;
     label: string;
     capabilities: string[];
     voice: string;
     posture: `publish` | `draft`;
-    /* The shelves, held flat and always fully populated — the draft is a FORM, and a form with tri-state fields
-     * is a form with three ways to render every row. The parent folds "everything" back into an absent list on
-     * save, which is the shape the card stores (PersonaPowersSchema). */
-    files: `none` | `read` | `write`;
-    shell: boolean;
-    web: boolean;
-    browser: boolean;
-    delegate: boolean;
-    sandbox: boolean;
-    /* Per-id grants. `undefined` means every one of them, including any connected tomorrow — which is a real
-     * answer and the default, and the reason these are not just arrays. */
-    connectors: string[] | undefined;
-    computers: string[] | undefined;
-    mcp: string[] | undefined;
     startIn: string;
     copy: `` | `own` | `shared`;
     folders: string;
-}
-
-/** One connected thing a persona can be granted or denied, in the words the Capabilities page uses. */
-export interface PersonaGrantable {
-    id: string;
-    kind: `cli` | `host` | `mcp`;
-    label: string;
 }
 
 const { draft, accounts, connected, grantables, valid, saving, submitLabel, error, nameHint } = defineProps<{
@@ -112,55 +94,15 @@ const POSTURES = [
     { label: `Drafts only`, value: `draft` as const },
 ];
 
-const FILE_ACCESS = [
-    { label: `None`, value: `none` as const },
-    { label: `Read`, value: `read` as const },
-    { label: `Read & change`, value: `write` as const },
-];
-
 const PLACEMENT = [
     { label: `Whatever started it`, value: `` as const },
     { label: `Its own copy`, value: `own` as const },
     { label: `The shared workspace`, value: `shared` as const },
 ];
 
-/* THE SWITCHES, WITH THE CONSEQUENCE OF TURNING EACH OFF WRITTEN NEXT TO IT. A row that says only "Run
- * commands" makes the reader guess whether tests still run; saying what goes away is the difference between a
- * setting somebody sets and one they leave alone because they cannot predict it. */
-const SHELVES = [
-    { key: `shell` as const, label: `Run commands`, hint: `Shell, tests, builds, and every CLI on the image.` },
-    { key: `web` as const, label: `Read the web`, hint: `Fetch a page, run a search.` },
-    { key: `browser` as const, label: `Drive a browser`, hint: `The anonymous browser. Signed-in accounts are the list above.` },
-    { key: `delegate` as const, label: `Delegate`, hint: `Spawn sub-agents and run workflows.` },
-    { key: `sandbox` as const, label: `Change the sandbox`, hint: `Its own settings and manifests, and the folder that publishes files publicly.` },
-];
-
-const GRANT_GROUPS = [
-    { key: `connectors` as const, kind: `cli` as const, label: `Connectors`, empty: `No connectors added yet.` },
-    { key: `computers` as const, kind: `host` as const, label: `Your computers`, empty: `No computers connected yet.` },
-    { key: `mcp` as const, kind: `mcp` as const, label: `MCP connections`, empty: `No MCP connections added yet.` },
-];
-
-const groupItems = (kind: PersonaGrantable[`kind`]): PersonaGrantable[] => grantables.filter((entry) => entry.kind === kind);
-
-// `undefined` is "every one of them", so an unset group reads as all-picked — including anything connected
-// later, which is what the tri-state buys and what a materialised list of today's ids would silently lose.
-const grantsAll = (key: `connectors` | `computers` | `mcp`): boolean => draft[key] === undefined;
-const granted = (key: `connectors` | `computers` | `mcp`, id: string): boolean => draft[key]?.includes(id) ?? true;
-const toggleGrant = (key: `connectors` | `computers` | `mcp`, id: string, kind: PersonaGrantable[`kind`]): void => {
-    // The first click off "all" has to materialise the list before it can remove one from it.
-    const current = draft[key] ?? groupItems(kind).map((entry) => entry.id);
-    draft[key] = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
-};
-const setGrantsAll = (key: `connectors` | `computers` | `mcp`, all: boolean): void => {
-    draft[key] = all ? undefined : [];
-};
-
-/* WHY THE SHELL SWITCH GETS A SENTENCE NOBODY ELSE GETS. A session with a shell can read a credential this card
- * never granted it, so every limit below it is a strong default rather than a wall. Saying that AT the switch is
- * the whole point — a limit that is weaker than it looks is worse than no limit, and the person setting it is
- * the only one who can decide whether that trade is fine for this persona. */
-const shellCaveat = computed(() => draft.shell && (draft.connectors !== undefined || draft.computers !== undefined || draft.folders.trim() !== ``));
+// The folder fence is this form's field, and one of the bounds a shell can walk around — so the caveat inside
+// <PersonaPowersFields> has to know about it.
+const folderBound = computed(() => draft.folders.trim() !== ``);
 </script>
 
 <template>
@@ -249,64 +191,12 @@ const shellCaveat = computed(() => draft.shell && (draft.connectors !== undefine
         <div class="flex flex-col gap-3 border-t border-line pt-4">
             <div class="flex flex-col gap-0.5">
                 <span class="ui-field-label">What it may do</span>
-                <span class="text-xs text-subtle">Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</span>
+                <span class="text-xs text-subtle"
+                    >Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</span
+                >
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
-                <span class="w-36 shrink-0 text-sm text-content">Workspace files</span>
-                <Segmented v-model="draft.files" :options="FILE_ACCESS" />
-            </div>
-
-            <label v-for="shelf in SHELVES" :key="shelf.key" class="flex items-center gap-2.5">
-                <span class="w-36 shrink-0 text-sm text-content">{{ shelf.label }}</span>
-                <ToggleSwitch v-model="draft[shelf.key]" />
-                <span class="min-w-0 text-xs text-subtle">{{ shelf.hint }}</span>
-            </label>
-
-            <!-- The one caveat this form owes the reader, and only when it is actually load-bearing: a card
-                 that has bounded something WHILE leaving the shell on. Silent otherwise, because a full-powers
-                 card has nothing to be misled about. -->
-            <p v-if="shellCaveat" :class="cmp.alertWarning('flex items-start gap-2 text-xs')">
-                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
-                <span>
-                    With <strong>Run commands</strong> on, the limits below it are a strong default rather than a wall — a session with a shell can
-                    reach a credential this card didn't grant. Turn it off for a persona that has to be fenced in.
-                </span>
-            </p>
-
-            <!-- The per-id grants. Collapsed to one line while a group is set to everything, which is the
-                 default and the answer most cards keep: a wall of checkboxes for a question nobody asked would
-                 bury the switches above that people do come here to set. -->
-            <div v-for="group in GRANT_GROUPS" :key="group.key" class="flex flex-col gap-1.5">
-                <label class="flex items-center gap-2.5">
-                    <span class="w-36 shrink-0 text-sm text-content">{{ group.label }}</span>
-                    <ToggleSwitch
-                        :model-value="grantsAll(group.key)"
-                        :disabled="groupItems(group.kind).length === 0"
-                        @update:model-value="setGrantsAll(group.key, $event as boolean)"
-                    />
-                    <span class="min-w-0 text-xs text-subtle">
-                        {{ groupItems(group.kind).length === 0 ? group.empty : grantsAll(group.key) ? `All of them, including new ones.` : `Pick which:` }}
-                    </span>
-                </label>
-                <div v-if="!grantsAll(group.key) && groupItems(group.kind).length > 0" class="flex flex-wrap gap-2 pl-[9.5rem]">
-                    <button
-                        v-for="item in groupItems(group.kind)"
-                        :key="item.id"
-                        type="button"
-                        :aria-pressed="granted(group.key, item.id)"
-                        :class="[
-                            `cursor-pointer rounded-lg border px-2.5 py-1 text-xs transition-colors`,
-                            granted(group.key, item.id)
-                                ? `border-link bg-link/10 font-medium text-content`
-                                : `border-line text-muted hover:border-line-strong hover:bg-overlay`,
-                        ]"
-                        @click="toggleGrant(group.key, item.id, group.kind)"
-                    >
-                        {{ item.label }}
-                    </button>
-                </div>
-            </div>
+            <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound" />
         </div>
 
         <!-- WHERE IT WORKS. Last, because it is the section most cards leave alone. -->
@@ -326,7 +216,12 @@ const shellCaveat = computed(() => draft.shell && (draft.connectors !== undefine
             <label class="flex items-start gap-2.5">
                 <span class="mt-1.5 w-36 shrink-0 text-sm text-content">Only these folders</span>
                 <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <input v-model="draft.folders" :class="cmp.input('w-full')" placeholder="Anywhere in the workspace" aria-label="Only these folders" />
+                    <input
+                        v-model="draft.folders"
+                        :class="cmp.input('w-full')"
+                        placeholder="Anywhere in the workspace"
+                        aria-label="Only these folders"
+                    />
                     <!-- Said HERE rather than in documentation, because this is the field whose promise is
                          easiest to over-read: it refuses file tools, and a shell computes its own paths. -->
                     <span class="text-xs text-subtle">

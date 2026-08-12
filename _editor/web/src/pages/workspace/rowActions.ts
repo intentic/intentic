@@ -32,14 +32,19 @@ export interface RowActionSources {
     readonly repoDirs: ReadonlySet<string>;
     // Directory paths a directory-surface extension serves (Apps, the repo's own UI, the dev-server preview).
     readonly manageableDirs: ReadonlySet<string>;
+    /* How many personas START in each directory — a count rather than a set, because the icon says whether there
+     * is one card here or three, and a folder holding several is the ordinary case. */
+    readonly personaDirs: ReadonlyMap<string, number>;
     readonly openHealth: (repo: string) => void;
     readonly openDirectory: (dir: string) => void;
+    readonly openPersonas: (dir: string) => void;
     readonly openDocument: (extension: string, provider: string, path: string, title: string, icon: string) => void;
 }
 
 /* One directory's actions, in reading order: what this thing IS first (its documents), then what it has been
- * (health, history), then what you can do to it (manage). Same narrowing as the rail's own order, and it puts the
- * newcomer where a reader looks first rather than at the end of a queue it happens to have joined last.
+ * (health, history), then what you can do to it (who works here, manage). Same narrowing as the rail's own order,
+ * and it puts the newcomer where a reader looks first rather than at the end of a queue it happens to have joined
+ * last.
  *
  * Called per visible row on every render of the tree, so everything here is a set membership or a provider's own
  * lookup — see DocumentProviderRegistration.detect. Reading the document registry here (rather than being handed
@@ -66,6 +71,28 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openHealth(dir),
         });
     }
+    /* WHO WORKS HERE. On every directory, because "give me a persona that starts in this folder" is a thing you
+     * decide about a folder the moment you are looking at it — and the alternative is the Personas page plus
+     * typing the path back in by hand.
+     *
+     * STANDING once the folder HAS one, which puts it in the evidence tier alongside a document: "which of these
+     * packages has its own persona" is a question about the tree that only a permanent glyph can answer, and a
+     * card with limited powers is worth being able to see from the row rather than remember. Empty folders keep it
+     * on hover with everything else you can DO. */
+    const personaCount = sources.personaDirs.get(dir) ?? 0;
+    actions.push({
+        id: `personas`,
+        icon: `user`,
+        // Names what clicking does, and how many cards are behind it — a "2" is the reason to expect a list.
+        tooltip:
+            personaCount === 0
+                ? `Add a persona starting here`
+                : personaCount === 1
+                  ? `Edit the persona starting here`
+                  : `Edit the ${personaCount} personas starting here`,
+        standing: personaCount > 0,
+        run: (): void => sources.openPersonas(dir),
+    });
     if (sources.manageableDirs.has(dir)) {
         actions.push({
             id: `directory`,

@@ -159,5 +159,6 @@ there) and mildly confusing to read.
 | Adding / removing a site login | [handlers/browser.ts](../_sandbox/sandbox/src/capabilities/handlers/browser.ts) |
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
-| The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
+| The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is — the whole card) · [DirectoryPersonas.vue](../_editor/web/src/pages/workspace/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
+| What both of those must agree about | [personaCard.ts](../_editor/web/src/composables/sandbox/personaCard.ts) — the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
 | Picking one for a chat | [ChatPersonaMenu.vue](../_editor/web/src/chat/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../_editor/web/src/chat/ChatPane.vue) (the pill and what it warns about) |
