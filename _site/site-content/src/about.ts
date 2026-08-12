@@ -163,8 +163,8 @@ export const openSource: OpenSourceProject[] = [
 ];
 
 export const whyIntentic = [
-    "Agents got good enough for real work; their tools did not. All you can change is the prompt.",
-    "That works until it needs your database password. With intentic the machine is yours, and the vendor can't reach it.",
+    "Agents got good enough for real work; their environment did not.",
+    "We give agents tools to execute in space under your control.",
 ];
 
 export const aboutMeta = {
