@@ -87,10 +87,25 @@ export const commitMessage = computed<string>({
     },
 });
 
+/* WHEN THE BOX IS FREE TO BE FILLED — and the answer is about what the user WROTE, not about what the string
+ * happens to contain.
+ *
+ * A box holding nothing but spaces and newlines is an empty box. It looks empty, the Commit button already
+ * calls it empty ("Write a commit message first"), and nobody has ever meant a lone space as a commit message.
+ * Reading it as writing was a silent, permanent lockout and the worst bug in this file: one stray character —
+ * typed and not quite deleted — made the box refuse EVERY From chip from then on, with nothing on screen to
+ * say why, because a box that looks empty and a box that is empty were indistinguishable to the eye and
+ * opposites to this rule. Worse, it was PERSISTED (see the record below), so the one instinct that should have
+ * cleared it — reload the page — restored it instead, and the feature stayed dead for that sandbox forever.
+ *
+ * `trim` rather than a normalisation of the draft itself, deliberately: rewriting what is in the box while
+ * someone is typing in it would eat the space they just pressed before the first word of their own message. */
+const isBlank = (message: string): boolean => message.trim() === ``;
+
 // The message for a session's work, filed by the From legend's click. Declines while the box holds anything the
-// fill did not put there — an empty box, or the fill's own last line, is all it may write over.
+// fill did not put there — a blank box, or the fill's own last line, is all it may write over.
 export const fillCommitMessage = (message: string): void => {
-    if (draft.value !== `` && draft.value !== filled.value) {
+    if (!isBlank(draft.value) && draft.value !== filled.value) {
         return;
     }
     filled.value = message;
@@ -99,9 +114,10 @@ export const fillCommitMessage = (message: string): void => {
 
 // The legend no longer points at the session whose title is in the box (the chip was toggled off, the filter
 // moved, or that agent's work left the tree), so the line it filed in goes with it. A message the user has
-// since made their own stays — `filled` no longer matches it.
+// since made their own stays — `filled` no longer matches it. Leftover whitespace goes too: it is not a message
+// anyone would come back to, and leaving it would hide the placeholder that says one is on its way.
 export const clearFilledMessage = (): void => {
-    if (filled.value !== undefined && draft.value === filled.value) {
+    if (isBlank(draft.value) || (filled.value !== undefined && draft.value === filled.value)) {
         draft.value = ``;
     }
     filled.value = undefined;
@@ -175,7 +191,10 @@ watch([draft, filled], ([message, claim]) => {
         return;
     }
     try {
-        if (message === ``) {
+        // A blank box is stored as no box at all — the same reading `isBlank` makes above, applied at the one
+        // place it decides what a RELOAD comes back to. There is nothing in whitespace worth carrying across a
+        // reload, and carrying it is what turned a stray keystroke into a lockout that outlived the page.
+        if (isBlank(message)) {
             localStorage.removeItem(storageKey(sandboxId));
             return;
         }

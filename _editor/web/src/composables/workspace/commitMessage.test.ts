@@ -66,6 +66,21 @@ describe(`the commit box`, () => {
         expect(commitMessage.value).toBe(`chore: my own subject`);
     });
 
+    /* WHITESPACE IS NOT WRITING, and reading it as writing was a silent permanent lockout: a box left holding
+     * one stray character looks exactly like an empty one, so every From chip was refused from then on with
+     * nothing on screen to explain it — and no amount of waiting, re-clicking or reloading could clear it. */
+    test.each([[` `], [`\n`], [`   \n  `]])(`a box holding only %j is still fillable`, (blank) => {
+        commitMessage.value = blank;
+        fillCommitMessage(`fix: cascading markers`);
+        expect(commitMessage.value).toBe(`fix: cascading markers`);
+    });
+
+    test(`a clear sweeps leftover whitespace out, so the placeholder can be seen again`, () => {
+        commitMessage.value = ` `;
+        clearFilledMessage();
+        expect(commitMessage.value).toBe(``);
+    });
+
     test(`editing a filled line makes it the user's — a later click leaves it alone`, () => {
         fillCommitMessage(`fix: cascading markers`);
         commitMessage.value = `fix: cascading markers in the tree`;
@@ -251,5 +266,34 @@ describe(`the commit box after a reload`, () => {
         const after = await load();
         after.fillCommitMessage(`feat: add chat tab icons`);
         expect(after.commitMessage.value).toBe(`fix: cascading markers in the tree`);
+    });
+
+    /* A BLANK BOX IS NOT A DRAFT, so a reload has nothing to bring back. This is the half that made the
+     * lockout permanent: the stray character was written to storage like a real message, so reloading — the
+     * one thing a user does when a control looks stuck — put it straight back, and the box refused every chip
+     * again on a fresh page. */
+    test(`whitespace is never carried across a reload`, async () => {
+        const before = await load();
+        before.commitMessage.value = ` `;
+        await nextTick();
+        expect([...stored.keys()]).toEqual([]);
+
+        const after = await load();
+        expect(after.commitMessage.value).toBe(``);
+        after.fillCommitMessage(`fix: cascading markers`);
+        expect(after.commitMessage.value).toBe(`fix: cascading markers`);
+    });
+
+    // And it takes a real message away with it: emptying the box is how a user discards a draft, and a trailing
+    // newline left behind must not resurrect the line they just deleted.
+    test(`clearing a real message down to whitespace discards it`, async () => {
+        const before = await load();
+        before.commitMessage.value = `chore: my own subject`;
+        await nextTick();
+        before.commitMessage.value = `\n`;
+        await nextTick();
+
+        const after = await load();
+        expect(after.commitMessage.value).toBe(``);
     });
 });
