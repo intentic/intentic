@@ -157,7 +157,7 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
             label: `Docs bot`,
             capabilities: [`reddit-work`, `x-company`],
             repos: [`intentic`],
-            workspace: { startIn: `docs`, copy: `own`, folders: [`docs`] },
+            workspace: { startIn: `docs`, folders: [`docs`] },
         },
     ];
     mount(`docs`);
@@ -173,7 +173,7 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
         label: `Docs crew`,
         capabilities: [`reddit-work`, `x-company`],
         repos: [`intentic`],
-        workspace: { startIn: `docs`, copy: `own`, folders: [`docs`] },
+        workspace: { startIn: `docs`, folders: [`docs`] },
     });
 });
 

@@ -140,6 +140,14 @@ route outward things through the approvals queue and could not stop it posting. 
 control that promises more than it delivers is the one an owner trusts. So a card answers three questions — who
 it speaks as, what it may do, where it works — and every field of it changes what a session can reach.
 
+**And it does not choose a tree.** A card used to carry a third workspace field — its own copy, the shared one,
+or whatever the surface that started the session preferred. Every surface already opens in a private worktree, so
+the setting existed only to opt *out* of the isolation that lets several sessions run at once, and it asked the
+question in three phrases a reader had no way to choose between. A persona now says where it *starts* and which
+folders its file tools may touch; the copy it works in is not up for discussion. Both folder answers are picked
+from the workspace's own tree rather than typed, because a fence naming a folder that does not exist refuses
+everything, and it does so silently.
+
 The one exception is the desk a Doorbell answers through, whose manner is the product's rather than any
 workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
 
@@ -162,5 +170,6 @@ there) and mildly confusing to read.
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
 | The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is — the whole card) · [DirectoryPersonas.vue](../_editor/web/src/pages/workspace/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
+| The card's own fields | [PersonaForm.vue](../_editor/web/src/pages/sandbox/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../_editor/web/src/pages/sandbox/PersonaPowersFields.vue) (what it may do, grouped by blast radius — shared with the tree's quick panel) · [FolderPicker.vue](../_editor/web/src/pages/sandbox/FolderPicker.vue) (both location answers, picked from the workspace tree) |
 | What both of those must agree about | [personaCard.ts](../_editor/web/src/composables/sandbox/personaCard.ts) — the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
 | Picking one for a chat | [ChatPersonaMenu.vue](../_editor/web/src/chat/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../_editor/web/src/chat/ChatPane.vue) (the pill and what it warns about) |

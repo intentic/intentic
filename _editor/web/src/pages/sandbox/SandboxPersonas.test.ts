@@ -5,6 +5,7 @@
 // cloned workspace, and painting it as working is how someone schedules a wake that silently cannot post. A
 // persona is also not per-site — one card holds a Reddit account AND an X account — and a form that quietly sent
 // one of them would look identical in the list and behave differently at 3am.
+import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import type { Persona } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -19,6 +20,14 @@ vi.hoisted(() => {
         removeEventListener: () => {},
         dispatchEvent: () => false,
     })) as unknown as typeof globalThis.matchMedia;
+    // The folder picker's panel is an <AnchoredOverlay>, which watches its own box to stay put. jsdom ships no
+    // ResizeObserver, and without one the overlay throws on open — off the assertion path, as an unhandled
+    // rejection, which fails the run without failing a test.
+    globalThis.ResizeObserver ??= class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    } as unknown as typeof globalThis.ResizeObserver;
 });
 
 const personas = ref<Persona[]>([]);
@@ -47,6 +56,25 @@ vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
 // the composable behind it reaches the sandbox client at import time, which has no environment under jsdom.
 const capabilities = ref<{ id: string; kind: string }[]>([]);
 vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+
+/* The workspace the folder pickers offer. Both of them read the tree straight off the daemon, and both modules
+ * on that road (the client, and the query wrapper that gates on the daemon being reachable) touch
+ * environment.ts's `window.env` at module-eval — the same edge useAgents.test.ts cuts, for the same reason.
+ *
+ * Stubbed to a REAL little tree rather than to nothing, because "the picker lists your folders" is the whole of
+ * what this control claims and an empty stub would assert only that it renders. The file is here to be filtered
+ * out: this is a question about where, and a picker offering README.md is offering an answer that cannot work. */
+const tree = ref<WorkspaceTreeEntry[]>([]);
+vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxJson: vi.fn().mockResolvedValue({ entries: [], hidden: 0 }) }));
+vi.mock(`../../composables/sandbox/useSandboxQuery`, async () => {
+    const { computed, ref: shallow } = await import(`vue`);
+    return {
+        useSandboxQuery: () => ({
+            query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0 })), isPending: shallow(false) },
+            error: shallow(undefined),
+        }),
+    };
+});
 
 const { default: SandboxPersonas } = await import("./SandboxPersonas.vue");
 
@@ -84,6 +112,23 @@ const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLIn
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 
+/* One folder's row in an open picker. Searched from the DOCUMENT, not from the mounted element: the panel is an
+ * <AnchoredOverlay>, which teleports into the anchor's own document body so it can escape the form's overflow —
+ * so a query rooted at the mount finds nothing, whether or not the picker is open. Matched on the exact name so
+ * `app` cannot be answered by `app/src`. */
+const folderRow = (name: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).trim() === name);
+
+/* Open one of the two folder pickers, by the field it belongs to. Reached through the field's own group rather
+ * than by counting "Choose" buttons on the form — the account chooser is labelled "Choose accounts", so the
+ * count starts one to the left of where anyone writing the test would expect. Its opener is the last button in
+ * the group; the chips for what is already picked come first. */
+const openFolderPicker = async (el: HTMLElement, field: string): Promise<void> => {
+    const group = el.querySelector<HTMLElement>(`[role="group"][aria-label="${field}"]`)!;
+    [...group.querySelectorAll(`button`)].at(-1)!.click();
+    await nextTick();
+};
+
 // Typing into a v-model field is a value assignment plus the event Vue listens for.
 const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     field.value = value;
@@ -104,6 +149,14 @@ beforeEach(() => {
     personas.value = [];
     connected.value = [];
     accounts.value = [account(`reddit-work`, `reddit`), account(`x-company`, `x`), account(`reddit-personal`, `reddit`)];
+    tree.value = [
+        { name: `app`, path: `app`, type: `dir`, children: [{ name: `src`, path: `app/src`, type: `dir`, children: [] }] },
+        { name: `docs`, path: `docs`, type: `dir`, children: [] },
+        // Ignored, so it must not be offered: nobody fences a persona to a dependency tree, and on a real
+        // workspace these are most of what a walk returns.
+        { name: `node_modules`, path: `node_modules`, type: `dir`, ignored: true },
+        { name: `README.md`, path: `README.md`, type: `file` },
+    ];
 });
 
 afterEach(() => {
@@ -155,6 +208,73 @@ it(`offers the powers and where-it-works sections when a card is open`, async ()
     expect(rendered).toContain(`Only these folders`);
     // The honest caveat about what a folder limit is worth — rendered where it is set, not in documentation.
     expect(rendered).toContain(`not a shell`);
+});
+
+/* NINE EQUAL SWITCHES IS A LIST NOBODY READS. They are split by blast radius — what this persona can do to your
+ * workspace, then what it can reach beyond it — and the headings are the whole of that idea: without them the
+ * grouping is invisible and the section is the flat column it used to be. */
+it(`sorts what a persona may do into workspace and outward groups`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    const rendered = text(el);
+    expect(rendered).toContain(`In your workspace`);
+    expect(rendered).toContain(`Reaching out`);
+});
+
+/* WHERE IT WORKS STATES THE ISOLATION RATHER THAN ASKING ABOUT IT. The three-way placement choice is gone, and
+ * with it the only control that could put a session on the shared tree — so a card can no longer opt out of the
+ * worktree that lets two of them run at once. */
+it(`states that every session works in its own copy, and offers no choice about it`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    const rendered = text(el);
+    expect(rendered).toContain(`its own copy of the workspace`);
+    expect(rendered).not.toContain(`Whatever started it`);
+    expect(rendered).not.toContain(`The shared workspace`);
+});
+
+/* THE FOLDERS ARE PICKED FROM THE FOLDERS. Both location fields were a text box with a greyed sentence in it,
+ * which asks the reader to know what the workspace contains and how the field wants a path spelled — and a typo
+ * produced a persona fenced to a folder that does not exist, which refuses everything, silently. */
+it(`fences a card to a folder chosen from the workspace tree`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await type(nameField(el), `Docs`);
+
+    // Neither picker shows the tree until it is asked for — the form is a form, not a file browser.
+    expect(folderRow(`docs`)).toBeUndefined();
+    await openFolderPicker(el, `Only these folders`);
+
+    // The workspace's folders, and only those: the file is not an answer to "where", and the ignored dir is noise.
+    expect(folderRow(`docs`)).toBeDefined();
+    expect(folderRow(`app`)).toBeDefined();
+    expect(folderRow(`README.md`)).toBeUndefined();
+    expect(folderRow(`node_modules`)).toBeUndefined();
+
+    folderRow(`docs`)!.click();
+    await nextTick();
+    buttonLabelled(el, `Add persona`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0].workspace).toEqual({ folders: [`docs`] });
+});
+
+/* EDIT IN PLACE. Opening a persona for editing used to put its name on screen twice — the row's title above,
+ * read-only, and the form's first field below, editable — which reads as two subjects rather than one thing
+ * being changed. The row lends its title to the input, so there is exactly one name on screen. */
+it(`edits the name in the row's own title rather than repeating it below`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    byAriaLabel(el, `Edit this persona`)!.click();
+    await nextTick();
+    expect(el.querySelectorAll(`input[aria-label="Name"]`)).toHaveLength(1);
+    // And it is the row's field: typing into it renames the card that is open.
+    await type(el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!, `Work crew`);
+    buttonLabelled(el, `Save`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew` });
 });
 
 /* THE COMMITTED FILE IS A RECORD OF DECISIONS, not a dump of defaults. A card nobody has bounded must save no

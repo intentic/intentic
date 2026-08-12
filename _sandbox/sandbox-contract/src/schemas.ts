@@ -3616,12 +3616,16 @@ export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
  * `folders` is the one field here that promises less than it looks like it promises, and the card says so where
  * it is set: it is enforced by refusing file tool calls that point outside, which stops a misread instruction
  * and an honest mistake, and does not stop a shell. The workspace-wide fence is the container. */
+/* WHERE A SESSION WEARING THIS CARD WORKS — the folder it opens in, and the folders its file tools may touch.
+ *
+ * There is no placement field, and that is a decision rather than an omission. A card used to be able to ask
+ * for the SHARED tree instead of its own copy; every surface already defaults to a private worktree
+ * (conversation.ts), so the setting existed only to opt out of the isolation that makes parallel work safe —
+ * expressed in three words ("whatever started it", "its own copy", "the shared workspace") that a reader had no
+ * way to choose between. A persona starts where it is told and works in its own copy. */
 export const PersonaWorkspaceSchema = z.object({
     // The repo (or folder) under the workspace a session starts in. Absent ⇒ the workspace root, as today.
     startIn: z.string().max(200).optional(),
-    // Its own copy of the workspace, or the shared one. Absent ⇒ the surface's own choice, which is what every
-    // session already gets: an outside message works in its own copy, a schedule works in the shared tree.
-    copy: z.enum(["own", "shared"]).optional(),
     // Workspace-relative folders the file tools may touch. Absent ⇒ anywhere under the workspace.
     folders: z.array(z.string().min(1)).max(50).optional(),
 });

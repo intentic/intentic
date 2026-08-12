@@ -944,19 +944,13 @@ const personaNotice = computed<string | undefined>(() => {
         : `${personaName.value} isn't signed in yet, so this chat can't act as it. Finish its login under Capabilities.`;
 });
 
+/* Picking a persona no longer moves the chat between trees. A card used to be able to say "work in the SHARED
+ * workspace" and this mirrored that onto `isolated` before the first turn; both halves are gone, because every
+ * conversation already starts in its own copy and a card's job is to say where it starts and what it may touch,
+ * not to undo the isolation that lets two of them run at once. */
 const pickPersona = (id: string | undefined): void => {
     personaOpen.value = false;
     props.conversation.actsAs.value = id;
-    /* A CARD THAT SAYS WHERE IT WORKS MOVES THE CHAT THERE — but only before the chat has started, which is
-     * exactly the moment the daemon reads the same field (it decides placement on a conversation's FIRST turn
-     * and follows its own registry entry after that). Mirrored here so the two agree from the pick onwards:
-     * `isolated` is not display-only on this side — the tab's name, a fork's "files as they were", and every
-     * diff link in the transcript are drawn from it, so a chat working in its own copy while this said
-     * otherwise would point them all at the wrong tree. */
-    const copy = personaCards.value.find((persona) => persona.id === id)?.workspace?.copy;
-    if (copy !== undefined && !props.conversation.registered.value) {
-        props.conversation.isolated.value = copy === `own`;
-    }
 };
 
 /* Send the draft as a run's request. The draft is cleared on success for the reason an ordinary send clears it

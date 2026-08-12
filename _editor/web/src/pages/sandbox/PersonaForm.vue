@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Avatar, BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
+import { Avatar, BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
+import FolderPicker from "./FolderPicker.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import { identityHue } from "../../composables/identityHue";
@@ -12,22 +13,28 @@ import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/san
  * difference is the verb on the button — and a second copy is how the edit form and the add form drift into
  * disagreeing about what a persona has.
  *
- * THREE QUESTIONS, AND IT USED TO ASK FIVE. A paragraph on how the persona writes and a publish-or-draft switch
- * sat between the accounts and the switches; both are gone (see PersonaSchema for why the card no longer carries
- * them). What is left is a name, who it speaks as, what it may do and where — which is short enough that someone
- * finishes it, and every field of which changes what a session can actually reach.
+ * THREE QUESTIONS, AND IT USED TO ASK SIX. A paragraph on how the persona writes, a publish-or-draft switch and
+ * a three-way choice of which workspace tree to work in are all gone (see PersonaSchema for why the card no
+ * longer carries them). What is left is a name, who it speaks as, what it may do and where — which is short
+ * enough that someone finishes it, and every field of which changes what a session can actually reach.
  *
  * IT SHOWS YOU WHO YOU ARE MAKING. The avatar at the head is not decoration: it takes the name as it is typed
  * and wears the colour that persona will wear in every list it appears in afterwards, so the form reads as
  * building a person rather than filling in four settings about one. Before this the surface was a stack of
  * uppercase labels with nothing at the top to say what the stack was for.
  *
+ * THAT HEADER IS THE ROW'S JOB WHEN THERE IS A ROW — `showName`. Opened inside an existing persona, this form
+ * used to restate the name it was opened from: the row's title said "test" and the first field of the form said
+ * "test" again, one read-only and one editable, which reads as two subjects rather than one thing being edited.
+ * So the row lends its own title to the input and this form starts at the accounts. A NEW card has no row to
+ * borrow from and keeps the header — same component, same fields, one of them hosted a line higher up.
+ *
  * ONE TYPE SCALE, and only two steps of it that this file chooses. Labels and the things you type into are
- * `text-sm`; everything that comments on them — a hint, an account chip, the posture's consequence — is
- * `text-xs`, and where a chip needs a second tier inside one line it takes it from TONE rather than from a
- * third size. The form used to run from `text-base` on the name down to `text-2xs` under an account, which
- * stacked four sizes in 300 pixels and read as four different forms. (<Segmented> keeps its own toolbar-pill
- * size, which is the shared control's decision and the same on every surface that uses one.)
+ * `text-sm`; everything that comments on them — a hint, an account chip, a fence's caveat — is `text-xs`, and
+ * where a chip needs a second tier inside one line it takes it from TONE rather than from a third size. The
+ * form used to run from `text-base` on the name down to `text-2xs` under an account, which stacked four sizes
+ * in 300 pixels and read as four different forms. (<Segmented> keeps its own toolbar-pill size, which is the
+ * shared control's decision and the same on every surface that uses one.)
  *
  * The draft is the parent's, mutated in place. Deliberate: the parent owns "which card is open" and has to read
  * the draft back to validate the name against the other personas, so copying it down and emitting it up would
@@ -39,12 +46,24 @@ export interface PersonaDraft extends PersonaPowersDraft {
     original: string | undefined;
     label: string;
     capabilities: string[];
-    startIn: string;
-    copy: `` | `own` | `shared`;
-    folders: string;
+    // Both are lists of workspace-relative folders, and `startIn` holds at most one — the shape <FolderPicker>
+    // models either way, so a single-folder question needs no second control and no parsing on the way back.
+    startIn: string[];
+    folders: string[];
 }
 
-const { draft, accounts, connected, grantables, valid, saving, submitLabel, error, nameHint } = defineProps<{
+const {
+    draft,
+    accounts,
+    connected,
+    grantables,
+    valid,
+    saving,
+    submitLabel,
+    error,
+    nameHint,
+    showName = true,
+} = defineProps<{
     draft: PersonaDraft;
     /** The logged-in browser profiles — one per account, so a twice-connected site appears twice. */
     accounts: readonly BrowserAccount[];
@@ -58,6 +77,8 @@ const { draft, accounts, connected, grantables, valid, saving, submitLabel, erro
     error?: NoticeModel;
     /** Why the name is not usable yet, when it isn't. */
     nameHint?: string;
+    /** False when a row above is already hosting the name input — see the header. */
+    showName?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: []; cancel: [] }>();
@@ -117,15 +138,9 @@ const shown = computed(() =>
         : accounts.filter((account) => account.id.toLowerCase().includes(query.value) || account.site.toLowerCase().includes(query.value)),
 );
 
-const PLACEMENT = [
-    { label: `Whatever started it`, value: `` as const },
-    { label: `Its own copy`, value: `own` as const },
-    { label: `The shared workspace`, value: `shared` as const },
-];
-
 // The folder fence is this form's field, and one of the bounds a shell can walk around — so the caveat inside
 // <PersonaPowersFields> has to know about it.
-const folderBound = computed(() => draft.folders.trim() !== ``);
+const folderBound = computed(() => draft.folders.length > 0);
 </script>
 
 <template>
@@ -133,8 +148,9 @@ const folderBound = computed(() => draft.folders.trim() !== ``);
          as two forms stacked rather than one. -->
     <div class="flex max-w-xl flex-col gap-5">
         <!-- Who you are making: the live persona, then its name, on one line. The avatar is the size it will be
-             in the list below, so the preview is the row rather than a bigger cousin of it. -->
-        <div class="flex items-center gap-3">
+             in the list below, so the preview is the row rather than a bigger cousin of it. Absent when a row
+             above is already showing both — see `showName`. -->
+        <div v-if="showName" class="flex items-center gap-3">
             <Avatar :size="32" :name="previewName" :hue="previewName === undefined ? undefined : identityHue(draft.original ?? previewName)" />
             <div class="ui-field min-w-0 flex-1">
                 <input
@@ -261,34 +277,32 @@ const folderBound = computed(() => draft.folders.trim() !== ``);
 
         <!-- WHERE IT WORKS. Last, because it is the section most cards leave alone. -->
         <div class="flex flex-col gap-3 border-t border-line pt-4">
-            <span class="ui-field-label">Where it works</span>
-
-            <label class="flex items-center gap-2.5">
-                <span class="w-36 shrink-0 text-sm text-content">Starts in</span>
-                <input v-model="draft.startIn" :class="cmp.input('min-w-0 flex-1')" placeholder="The whole workspace" aria-label="Starts in" />
-            </label>
-
-            <div class="flex flex-wrap items-center gap-2.5">
-                <span class="w-36 shrink-0 text-sm text-content">Works in</span>
-                <Segmented v-model="draft.copy" :options="PLACEMENT" />
+            <div class="flex flex-col gap-0.5">
+                <span class="ui-field-label">Where it works</span>
+                <!-- STATED, NOT ASKED. This used to be a three-way choice between "whatever started it", "its
+                     own copy" and "the shared workspace" — a question whose options a reader had no way to
+                     choose between, on top of a default every surface already applies. -->
+                <span class="text-xs text-subtle">
+                    Every session works in its own copy of the workspace, so several can run at once without touching each other's files.
+                </span>
             </div>
 
-            <label class="flex items-start gap-2.5">
-                <span class="mt-1.5 w-36 shrink-0 text-sm text-content">Only these folders</span>
+            <div class="flex items-start gap-2.5">
+                <span class="mt-2 w-36 shrink-0 text-sm text-content">Starts in</span>
+                <FolderPicker v-model="draft.startIn" label="Starts in" placeholder="The whole workspace" />
+            </div>
+
+            <div class="flex items-start gap-2.5">
+                <span class="mt-2 w-36 shrink-0 text-sm text-content">Only these folders</span>
                 <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <input
-                        v-model="draft.folders"
-                        :class="cmp.input('w-full')"
-                        placeholder="Anywhere in the workspace"
-                        aria-label="Only these folders"
-                    />
+                    <FolderPicker v-model="draft.folders" multiple label="Only these folders" placeholder="Anywhere in the workspace" />
                     <!-- Said HERE rather than in documentation, because this is the field whose promise is
                          easiest to over-read: it refuses file tools, and a shell computes its own paths. -->
                     <span class="text-xs text-subtle">
-                        Comma-separated. File tools pointed outside are refused — this stops mistakes and misread instructions, not a shell.
+                        File tools pointed outside are refused — this stops mistakes and misread instructions, not a shell.
                     </span>
                 </span>
-            </label>
+            </div>
         </div>
 
         <Notice v-if="error !== undefined" :of="error" />

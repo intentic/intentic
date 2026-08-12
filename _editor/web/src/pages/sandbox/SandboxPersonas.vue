@@ -60,7 +60,7 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
 
-const NO_SCOPE = { startIn: ``, copy: `` as const, folders: `` };
+const NO_SCOPE = { startIn: [], folders: [] };
 
 const startAdd = (): void => {
     saveError.value = undefined;
@@ -73,15 +73,18 @@ const startEdit = (persona: Persona): void => {
         label: persona.label ?? persona.id,
         capabilities: [...persona.capabilities],
         ...powersDraftOf(persona),
-        startIn: persona.workspace?.startIn ?? ``,
-        copy: persona.workspace?.copy ?? ``,
-        folders: (persona.workspace?.folders ?? []).join(`, `),
+        // One folder or none, carried as a list because that is what the picker models either way.
+        startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
+        folders: [...(persona.workspace?.folders ?? [])],
     };
 };
 const cancelEdit = (): void => {
     draft.value = undefined;
     saveError.value = undefined;
 };
+
+// Whether THIS row is the one being edited — which decides whether its title is a label or the name input.
+const editingHere = (persona: Persona): boolean => draft.value?.original === persona.id;
 
 const draftId = computed(() => draft.value?.original ?? personaSlug(draft.value?.label ?? ``));
 // A new card may not land on a name already taken — saving would silently edit the other one instead.
@@ -98,24 +101,19 @@ const submit = async (): Promise<void> => {
     if (draft.value === undefined || !draftValid.value) {
         return;
     }
-    const { label, capabilities: picked, startIn, copy, folders } = draft.value;
+    const { label, capabilities: picked, startIn, folders } = draft.value;
     saveError.value = undefined;
     /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits
      * nothing stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made
      * rather than a dump of every default, and a diff on it reads as the change it was.
      *
-     * That is the same rule the label and the posture already follow one block up, applied to two objects
-     * instead of two fields. The powers half lives in personaCard.ts, because the tree's quick panel writes
-     * cards too and two copies of this rule is two answers to "was anything actually decided here". */
+     * That is the same rule the label already follows one block up, applied to two objects instead of a field.
+     * The powers half lives in personaCard.ts, because the tree's quick panel writes cards too and two copies
+     * of this rule is two answers to "was anything actually decided here". */
     const powers = storedPowers(draft.value);
-    const folderList = folders
-        .split(`,`)
-        .map((entry) => entry.trim())
-        .filter((entry) => entry !== ``);
     const workspace = {
-        ...(startIn.trim() !== `` ? { startIn: startIn.trim() } : {}),
-        ...(copy !== `` ? { copy } : {}),
-        ...(folderList.length > 0 ? { folders: folderList } : {}),
+        ...(startIn[0] !== undefined ? { startIn: startIn[0] } : {}),
+        ...(folders.length > 0 ? { folders: [...folders] } : {}),
     };
     try {
         await save.mutateAsync({
@@ -200,9 +198,26 @@ const confirmRemove = async (): Promise<void> => {
                 <Row v-for="persona in personas" :key="persona.id" :title="persona.label ?? persona.id" density="comfortable">
                     <!-- A persona is a person, so it gets a person's mark and keeps the same colour on every
                          surface it appears on. Keyed by the id, not the label, so renaming does not recolour
-                         somebody you have learned to recognise. -->
+                         somebody you have learned to recognise — and while the name is being typed it follows
+                         the draft, so the mark beside the input is the one that persona will keep. -->
                     <template #lead>
-                        <Avatar :size="32" :name="persona.label ?? persona.id" :hue="identityHue(persona.id)" :idle="!ready(persona)" />
+                        <Avatar
+                            :size="32"
+                            :name="editingHere(persona) ? draft?.label : (persona.label ?? persona.id)"
+                            :hue="identityHue(persona.id)"
+                            :idle="!ready(persona)"
+                        />
+                    </template>
+
+                    <!-- EDIT IN PLACE: the row's own title IS the name field. Rendering the form's header as
+                         well would put the same name on screen twice, one read-only and one editable. -->
+                    <template v-if="editingHere(persona)" #title>
+                        <input
+                            v-model="draft!.label"
+                            :class="cmp.input('w-full max-w-xs py-1 font-medium')"
+                            placeholder="Name this persona — Work, Personal, Acme…"
+                            aria-label="Name"
+                        />
                     </template>
 
                     <!-- THE ACCOUNTS BY NAME, under the persona's own. The marks on the right say which
@@ -210,7 +225,11 @@ const confirmRemove = async (): Promise<void> => {
                          two being different is the entire problem this feature exists to solve, so the names
                          are not something the row can leave to a tooltip. -->
                     <template #description>
-                        <span v-if="persona.capabilities.length === 0" class="text-warning">No accounts — this persona can't post anywhere</span>
+                        <!-- While the name is being edited this line belongs to the input above it: why the
+                             name can't be used is the only thing a reader needs here, and the account list is
+                             still on screen as chips in the form below. -->
+                        <span v-if="editingHere(persona) && nameHint !== undefined" class="text-warning">{{ nameHint }}</span>
+                        <span v-else-if="persona.capabilities.length === 0" class="text-warning">No accounts — this persona can't post anywhere</span>
                         <!-- Separated, because two account names running together read as one. A signed-out
                              account is dimmed rather than struck through: a line through it says REMOVED, and
                              what is true is that it is listed and cannot act yet — which the badge names. -->
@@ -263,7 +282,8 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <!-- The editor opens INSIDE the row it belongs to, so there is never a form on screen whose
-                         subject you have to remember. -->
+                         subject you have to remember — and the name it would have asked for first is the row's
+                         own title, three lines up. -->
                     <template v-if="draft !== undefined && draft.original === persona.id" #below>
                         <PersonaForm
                             class="pt-4"
@@ -275,6 +295,7 @@ const confirmRemove = async (): Promise<void> => {
                             :saving="save.isPending.value"
                             :error="saveError"
                             :name-hint="nameHint"
+                            :show-name="false"
                             submit-label="Save"
                             @submit="submit"
                             @cancel="cancelEdit"
