@@ -64,7 +64,7 @@ const fetchOptions = async (): Promise<void> => {
         size.value = listed.defaultSize;
     } catch (err) {
         if (asked === credentials.value) {
-            optionsError.value = noticeFrom(err, `Couldn't reach ${meta.value.label} with that credential — try again.`);
+            optionsError.value = noticeFrom(err, `Couldn't reach ${meta.value.label} with that credential. Try again.`);
         }
     } finally {
         if (asked === credentials.value) {
@@ -110,7 +110,7 @@ const create = async (): Promise<void> => {
         emit(`provisioned`, summary);
     } catch (err) {
         track(`sandbox_cloud_provision_failed`, { provider: provider.value });
-        provisionError.value = noticeFrom(err, `Couldn't create the machine — try again.`);
+        provisionError.value = noticeFrom(err, `Couldn't create the machine. Try again.`);
     } finally {
         provisioning.value = false;
     }
@@ -138,7 +138,7 @@ const create = async (): Promise<void> => {
                 />
                 <span class="text-xs text-muted">
                     <a :href="meta.credentialUrl" target="_blank" rel="noopener" class="text-link hover:underline">{{ meta.credentialLabel }}</a>
-                    — used to create this one machine, never stored by intentic.
+                    is used to create this one machine, and never stored by intentic.
                 </span>
             </label>
         </template>
@@ -168,7 +168,7 @@ const create = async (): Promise<void> => {
                 />
                 <span class="text-xs text-muted">
                     <a :href="meta.credentialUrl" target="_blank" rel="noopener" class="text-link hover:underline">{{ meta.credentialLabel }}</a>
-                    — used to create this one machine, never stored by intentic.
+                    is used to create this one machine, and never stored by intentic.
                 </span>
             </label>
         </template>

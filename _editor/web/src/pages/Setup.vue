@@ -212,7 +212,7 @@ const runTabOptions = computed(() => [
     {
         label: mobile.value ? `Compose` : `Docker Compose`,
         value: `compose` as const,
-        title: `No script runs — read the whole file, then start it yourself`,
+        title: `No script runs: read the whole file, then start it yourself`,
     },
 ]);
 
@@ -308,6 +308,14 @@ const optionLabel = `shrink-0 text-content md:min-w-[11.5rem]`;
  * the name used to sit in the step's own heading, in the heading's weight and the heading's colour, where the
  * one word on the card worth changing read as the label in front of it. */
 const factLabel = `w-16 shrink-0 text-xs text-muted`;
+
+/* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
+ * turn into a text field without moving, which means the idle name already wears the field's height, padding
+ * and (transparent) border. The address wears the same slot for one reason — otherwise the field's padding
+ * would start the name a few pixels right of an address that has none, and the two facts on this card would
+ * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
+ * first attempt and it hard-codes a spacing token the theme is free to change. */
+const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 font-mono text-sm text-content`;
 
 // The chosen target once its inputs are complete — what the setup code is minted for; undefined keeps it locked.
 const target = computed<SetupCodeTarget | undefined>(() => {
@@ -611,7 +619,7 @@ const check = async (): Promise<void> => {
             await router.push(`/`);
         }
     } catch {
-        status.value = `Can't reach the platform to check — retrying…`;
+        status.value = `Can't reach the platform to check. Retrying…`;
     } finally {
         checking.value = false;
     }
@@ -786,7 +794,7 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
             intenticAvailable.value = false;
             mode.value = `own`;
         } else if (key === targetKey.value) {
-            setupError.value = noticeFrom(err, `Couldn't prepare your install command — try again.`);
+            setupError.value = noticeFrom(err, `Couldn't prepare your install command. Try again.`);
         }
     }
 };
@@ -1106,7 +1114,7 @@ watch(commandReady, (ready) => {
                             >Point intentic at the sandbox you're already running. One address, and you're in.</template
                         >
                         <template v-else
-                            >A few minutes to a live sandbox — no Cloudflare account required. Use intentic's domain, or bring your own.</template
+                            >A few minutes to a live sandbox, no Cloudflare account required. Use intentic's domain, or bring your own.</template
                         >
                     </p>
                 </div>
@@ -1124,8 +1132,8 @@ watch(commandReady, (ready) => {
                          coming. -->
                     <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox">
                         <p class="text-xs text-muted">
-                            Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it,
-                            then open your workspace. Nothing to install, nothing to provision.
+                            Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
+                            open your workspace. Nothing to install, nothing to provision.
                         </p>
                         <label class="ui-field">
                             <span class="ui-field-label">Domain</span>
@@ -1159,7 +1167,7 @@ watch(commandReady, (ready) => {
                                 >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
                                 >.</span
                             >
-                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on — https:// is optional.</span>
+                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
                         </label>
 
                         <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
@@ -1183,15 +1191,15 @@ watch(commandReady, (ready) => {
                             <span>Nothing answered at that address.</span>
                             <span class="text-2xs opacity-80">
                                 Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
-                                <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span> — otherwise your browser blocks the call
-                                before it's sent.
+                                <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
+                                >. Otherwise your browser blocks the call before it's sent.
                             </span>
                         </div>
                         <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
                             <span>That address accepted the connection but never answered.</span>
                             <span class="text-2xs opacity-80">
-                                Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port.
-                                Give it a moment and try again.
+                                Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give
+                                it a moment and try again.
                             </span>
                         </div>
                         <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
@@ -1226,7 +1234,7 @@ watch(commandReady, (ready) => {
                                     @keydown.enter="connectDomain"
                                 />
                                 <span class="text-xs text-muted">
-                                    Used once to claim the sandbox — the daemon stops asking once you're bound, so intentic never stores it.
+                                    Used once to claim the sandbox. The daemon stops asking once you're bound, so intentic never stores it.
                                 </span>
                             </label>
                         </template>
@@ -1261,7 +1269,7 @@ watch(commandReady, (ready) => {
                         <template v-if="created === null">
                             <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
-                                Setting one up for you — nothing to fill in.
+                                Setting one up for you. Nothing to fill in.
                             </p>
                             <template v-else>
                                 <Notice v-if="error" :of="error" />
@@ -1283,11 +1291,11 @@ watch(commandReady, (ready) => {
                                      be describing a machine that never existed. -->
                                 <p class="text-xs text-muted">
                                     <template v-if="neverStarted">
-                                        This one was made last time you were here but never started — pick up where you left off, or create a new
+                                        This one was made last time you were here but never started. Pick up where you left off, or create a new
                                         sandbox instead.
                                     </template>
                                     <template v-else>
-                                        This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it
+                                        This sandbox still exists on the platform; the CLI cleanup only cleared its local container. Reconnect it
                                         below to start a fresh daemon, or create a new sandbox instead.
                                     </template>
                                 </p>
@@ -1302,47 +1310,85 @@ watch(commandReady, (ready) => {
                                  overwrite. The label is muted and the name is mono, so the value is the thing the
                                  eye lands on. Never a gate: the command below is ready whether or not this is
                                  ever touched. -->
-                            <div v-if="renaming" class="flex flex-col gap-2 md:flex-row md:items-center">
-                                <input
-                                    ref="nameInput"
-                                    v-model="name"
-                                    autocomplete="off"
-                                    spellcheck="false"
-                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
-                                    @keydown.enter="saveName"
-                                    @keydown.esc="cancelRename"
-                                />
-                                <Button
-                                    label="Save"
-                                    class="w-full justify-center md:w-auto"
-                                    :loading="savingName"
-                                    :disabled="savingName || name.trim().length === 0"
-                                    @click="saveName"
-                                >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
-                                <Button
-                                    label="Cancel"
-                                    severity="secondary"
-                                    :text="true"
-                                    class="w-full justify-center md:w-auto"
-                                    @click="cancelRename"
-                                />
-                            </div>
-                            <div v-else class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <!-- STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
+                                 used to replace this row with a stacked field and two labelled buttons, which moved
+                                 every glyph on the card and shoved the run step down the page — a jump, on a card
+                                 whose whole job is to sit still while you read it. -->
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <span :class="factLabel">Name</span>
-                                <span class="min-w-0 font-mono text-sm break-words text-content">{{ created.name }}</span>
-                                <!-- 32px rather than the recipe's 24: this one is not in a toolbar of its peers,
-                                     it is alone beside a line of text on a card people reach on a phone. -->
-                                <button
-                                    type="button"
-                                    :class="cmp.iconButton(`h-8 w-8`)"
-                                    aria-label="Rename sandbox"
-                                    v-tooltip.bottom="`Rename sandbox`"
-                                    @click="startRename"
-                                >
-                                    <Icon name="pencil" />
-                                </button>
+                                <!-- The name and the field it becomes share ONE grid cell at one type scale, one
+                                     height and one padding, so switching modes paints a border and nothing else.
+                                     The hidden sizer gives the field the width of the text it holds instead of the
+                                     whole row — with `size="1"` on the input, which is what lets it: an input
+                                     carries an intrinsic width of about twenty characters, and in a `w-fit` cell
+                                     THAT is what decided the column, so the field opened ~100px wider than the
+                                     name and shoved the two buttons beside it sideways. Same jump, last axis.
+                                     THE ADDRESS BELOW WEARS THE SAME EMPTY SLOT (`factSlot`), which is what makes
+                                     the two values start on one column: the padding a field needs to be typed in
+                                     would otherwise push the name a few pixels right of an address that has none,
+                                     and paying it back with a negative margin means hard-coding a spacing token
+                                     this theme is free to change. -->
+                                <div class="grid w-fit max-w-full min-w-0 grid-cols-1 grid-rows-1">
+                                    <template v-if="renaming">
+                                        <span aria-hidden="true" :class="`${factSlot} invisible col-start-1 row-start-1 whitespace-pre`">{{
+                                            name === `` ? ` ` : name
+                                        }}</span>
+                                        <input
+                                            ref="nameInput"
+                                            v-model="name"
+                                            aria-label="Sandbox name"
+                                            autocomplete="off"
+                                            size="1"
+                                            spellcheck="false"
+                                            :class="`${factSlot} col-start-1 row-start-1 w-full border-line-strong bg-canvas outline-none`"
+                                            @keydown.enter="saveName"
+                                            @keydown.esc="cancelRename"
+                                        />
+                                    </template>
+                                    <span v-else :class="`${factSlot} col-start-1 row-start-1`"
+                                        ><span class="truncate">{{ created.name }}</span></span
+                                    >
+                                </div>
+                                <!-- Pencil and the commit pair stack in one cell too, so the cell is as wide as the
+                                     wider of them and revealing Save cannot push anything sideways. The idle layer
+                                     is `invisible`, which keeps its size while leaving the tab order.
+                                     32px rather than the recipe's 24: these are not in a toolbar of their peers,
+                                     they are alone beside a line of text on a card people reach on a phone. And a
+                                     step dimmer than the recipe's muted — the name is the thing being read here,
+                                     and an affordance beside one word should not compete with it. -->
+                                <div class="grid grid-cols-1 grid-rows-1 items-center">
+                                    <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
+                                        <button
+                                            type="button"
+                                            :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                            aria-label="Rename sandbox"
+                                            v-tooltip.bottom="`Rename sandbox`"
+                                            @click="startRename"
+                                        >
+                                            <Icon name="pencil" />
+                                        </button>
+                                    </div>
+                                    <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
+                                        <button
+                                            type="button"
+                                            :class="cmp.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
+                                            aria-label="Save name"
+                                            v-tooltip.bottom="`Save · Enter`"
+                                            @click="saveName"
+                                        >
+                                            <Icon :name="savingName ? `spinner` : `check`" :spin="savingName" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                            aria-label="Cancel rename"
+                                            v-tooltip.bottom="`Cancel · Esc`"
+                                            @click="cancelRename"
+                                        >
+                                            <Icon name="times" />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- THE ADDRESS, on the same grid as the name — the two facts this card reports, aligned.
@@ -1350,17 +1396,22 @@ watch(commandReady, (ready) => {
                                  this page can ever show and therefore distinguished none of them — it was decoration
                                  sitting where a reader looks for the value. -->
                             <template v-if="mode === `intentic`">
-                                <!-- ONE ROW IN EVERY STATE — provisioned, still minting, or failed — so the escape
+                                <!-- ONE ROW IN EVERY STATE (provisioned, still minting, or failed) so the escape
                                      hatch beside it is reachable in all three. It used to hang off the success
                                      branch alone, which left a reader whose mint had just errored with no way to
-                                     choose a different address at all. -->
+                                     choose a different address at all.
+                                     THE SAME `gap-x-3` AND THE SAME `factSlot` AS THE NAME ROW, which together are
+                                     the whole of what kept these two values from lining up: this row had a wider
+                                     gap than that one, and its value sat flush while the name's sat inside the
+                                     padding its field needs. Both facts start on one column now by construction
+                                     rather than by arithmetic. -->
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span :class="factLabel">Address</span>
                                     <!-- `.title` — this is a NoticeModel, and interpolating the object itself put
                                          its JSON on the card. -->
-                                    <span v-if="setupError" class="min-w-0 text-xs text-danger">{{ setupError.title }}</span>
-                                    <span v-else-if="setup" class="min-w-0 font-mono text-sm break-words text-content">{{ setup.hostname }}</span>
-                                    <span v-else class="flex items-center gap-2 text-xs text-muted">
+                                    <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
+                                    <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
+                                    <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
                                         <Icon name="spinner" spin /> Preparing your intentic domain…
                                     </span>
                                     <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and "Already
@@ -1382,7 +1433,7 @@ watch(commandReady, (ready) => {
                                         @click="chooseOwnZone"
                                     >
                                         <span class="text-xs text-content">I have a Cloudflare domain</span>
-                                        <span class="text-2xs text-muted">Your zone, your subdomain — the install command builds the tunnel.</span>
+                                        <span class="text-2xs text-muted">Your zone, your subdomain. The install command builds the tunnel.</span>
                                     </button>
                                     <button
                                         type="button"
@@ -1390,7 +1441,7 @@ watch(commandReady, (ready) => {
                                         @click="setLane(`attach`)"
                                     >
                                         <span class="text-xs text-content">It already answers on a domain</span>
-                                        <span class="text-2xs text-muted">Point us at it — nothing to install, nothing to provision.</span>
+                                        <span class="text-2xs text-muted">Point us at it. Nothing to install, nothing to provision.</span>
                                     </button>
                                 </div>
                             </template>
@@ -1406,7 +1457,7 @@ watch(commandReady, (ready) => {
                                     <InfoHint label="Why the Cloudflare API token is required">
                                         <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
                                         <p class="mb-3 text-2xs leading-relaxed text-muted">
-                                            intentic reaches your sandbox over a private Cloudflare tunnel — no open inbound ports.
+                                            intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.
                                         </p>
                                         <ul class="flex flex-col gap-2 text-2xs text-muted">
                                             <li class="flex items-start gap-2">
@@ -1416,7 +1467,7 @@ watch(commandReady, (ready) => {
                                             <li class="flex items-start gap-2">
                                                 <Icon name="lock" class="mt-0.5 text-success" />
                                                 <span
-                                                    ><span class="text-content">Never stored by intentic</span> — used once to list zones, then rides
+                                                    ><span class="text-content">Never stored by intentic</span>: used once to list zones, then rides
                                                     the command</span
                                                 >
                                             </li>
@@ -1425,7 +1476,7 @@ watch(commandReady, (ready) => {
                                 </div>
                                 <CloudflareTokenField
                                     :cf="cf"
-                                    storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox — intentic never stores it."
+                                    storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox, never stored by intentic."
                                 />
 
                                 <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps
@@ -1501,7 +1552,7 @@ watch(commandReady, (ready) => {
                          a phone had to read past it to reach the button. The icon is the universal "more
                          about this" and it costs the card nothing. -->
                             <InfoHint class="xl:hidden" label="What running your sandbox does">
-                                <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
+                                <SetupRunDetails :cleanup="cleanupCommand" />
                             </InfoHint>
                         </template>
 
@@ -1535,7 +1586,7 @@ watch(commandReady, (ready) => {
                                      to be walked back before the form is any use. -->
                                 <p v-if="mode !== `intentic`" class="flex items-start gap-2 text-xs text-muted">
                                     <Icon name="info-circle" class="mt-0.5 shrink-0" />
-                                    <span>Cloud machines use intentic's domain — switch step 1 back to “Use intentic's domain” to create one.</span>
+                                    <span>Cloud machines use intentic's domain. Switch the address above back to intentic's to create one.</span>
                                 </p>
                                 <!-- Provisioned: the form's work is done, and the one fact worth keeping on screen
                                      is where the machine lives — the wait below narrates the rest. -->
@@ -1543,7 +1594,7 @@ watch(commandReady, (ready) => {
                                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                                     <span class="min-w-0">
                                         <span class="font-mono text-content">{{ cloudMachine.serverName }}</span> was created in your
-                                        {{ cloudProviderLabel }} account ({{ cloudMachine.location }}) — it sets itself up from first boot.
+                                        {{ cloudProviderLabel }} account ({{ cloudMachine.location }}). It sets itself up from first boot.
                                     </span>
                                 </p>
                                 <SetupCloud v-else-if="created" :sandbox-id="created.id" @provisioned="onProvisioned" />
@@ -1562,7 +1613,7 @@ watch(commandReady, (ready) => {
                                 <template v-if="desktop">
                                     <p class="text-xs text-muted">
                                         Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
-                                        answers — no terminal.
+                                        answers. No terminal.
                                     </p>
                                     <Button label="Set it up now" class="self-start" @click="runHere">
                                         <template #icon><Icon name="bolt" /></template>
@@ -1611,7 +1662,7 @@ watch(commandReady, (ready) => {
                                             <template v-if="desktop"
                                                 >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
                                             >
-                                            <template v-else>Paste it into a terminal — this computer, or any server you have a shell on.</template>
+                                            <template v-else>Paste it into a terminal: this computer, or any server you have a shell on.</template>
                                         </span>
                                     </p>
                                     <!-- On a phone the picker takes a full row of its own: three pill tabs sharing a
@@ -1666,7 +1717,7 @@ watch(commandReady, (ready) => {
                                                 <Icon name="chevron-down" class="shrink-0 text-subtle" />
                                             </summary>
                                             <p class="mt-1 pl-6 text-2xs">
-                                                This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that — every run
+                                                This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that. Every run
                                                 rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
                                                 minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
                                             </p>
@@ -1742,7 +1793,7 @@ watch(commandReady, (ready) => {
                                     <span>
                                         Rather not use a terminal? The
                                         <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
-                                        does this in one click — and updates your sandbox with a button afterwards.
+                                        does this in one click, and updates your sandbox with a button afterwards.
                                     </span>
                                     <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                         Get it:
@@ -1806,18 +1857,18 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium text-success">Your machine picked it up.</span> Right now: {{ buildStage }}.
                                     </template>
                                     <template v-else-if="handoff === `claimed`">
-                                        <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker — the first run takes
+                                        <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker. The first run takes
                                         a few minutes.
                                     </template>
                                     <!-- Handed off three ways, and the next move differs: a copied command still has to
                                          be pasted, the app already has everything and is opening its own window, and a
                                          cloud machine is booting with nothing left for anyone to do. -->
                                     <template v-else-if="handoff === `handed` && cloudMachine">
-                                        <span class="font-medium text-content">Machine created.</span> Its first boot installs Docker and your sandbox
-                                        — usually a few minutes. This page opens your workspace the moment it answers.
+                                        <span class="font-medium text-content">Machine created.</span> Its first boot installs Docker and your
+                                        sandbox, usually a few minutes. This page opens your workspace the moment it answers.
                                     </template>
                                     <template v-else-if="handoff === `handed` && launched">
-                                        <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window — this page
+                                        <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window. This page
                                         opens your workspace the moment it answers.
                                     </template>
                                     <template v-else-if="handoff === `handed`">
@@ -1829,7 +1880,7 @@ watch(commandReady, (ready) => {
                                          button has a label, so it names the button. -->
                                     <template v-else-if="machine === `cloud` && cloudOffered">
                                         <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above
-                                        and press "Create the machine" — nothing runs (or costs anything) until you do.
+                                        and press "Create the machine". Nothing runs (or costs anything) until you do.
                                     </template>
                                     <template v-else-if="desktop && !commandVisible">
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
@@ -1848,7 +1899,7 @@ watch(commandReady, (ready) => {
                             <div v-if="reportFailures !== null" :class="cmp.alertDanger(`flex flex-col gap-2`)">
                                 <p class="flex items-start gap-2">
                                     <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
-                                    <span class="min-w-0 font-medium">Setup failed on your machine — here is what it found:</span>
+                                    <span class="min-w-0 font-medium">Setup failed on your machine. Here is what it found:</span>
                                 </p>
                                 <ul class="flex flex-col gap-1.5 pl-6">
                                     <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0">
@@ -1856,7 +1907,7 @@ watch(commandReady, (ready) => {
                                         <span v-if="failure.remedy !== ``" class="opacity-90"> Fix: {{ failure.remedy }}</span>
                                     </li>
                                 </ul>
-                                <p class="pl-6 text-2xs opacity-90">Fix the above, then run the same command again — it stays valid.</p>
+                                <p class="pl-6 text-2xs opacity-90">Fix the above, then run the same command again. It stays valid.</p>
                             </div>
 
                             <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
@@ -1877,13 +1928,13 @@ watch(commandReady, (ready) => {
                                          there says what the first boot actually did. -->
                                     <span v-if="cloudMachine" class="min-w-0">
                                         <span class="font-medium">Still building.</span> Check
-                                        <span class="font-mono">{{ cloudMachine.serverName }}</span> in your {{ cloudProviderLabel }} console — its
+                                        <span class="font-mono">{{ cloudMachine.serverName }}</span> in your {{ cloudProviderLabel }} console. Its
                                         boot log is <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh
                                         sandbox here is always safe.
                                     </span>
                                     <span v-else-if="mobile && emailed" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host
-                                        your sandbox — the command is waiting there.
+                                        your sandbox. The command is waiting there.
                                     </span>
                                     <span v-else-if="commandVisible" class="min-w-0">
                                         <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
@@ -1896,7 +1947,7 @@ watch(commandReady, (ready) => {
                                         will host your sandbox.
                                     </span>
                                     <span v-else-if="launched" class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> Check the Intentic window — it shows what the setup is doing,
+                                        <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing,
                                         and any error it hit.
                                     </span>
                                     <span v-else class="min-w-0">
@@ -1906,7 +1957,7 @@ watch(commandReady, (ready) => {
                                 <!-- After three minutes, stop assuming it was never run and start helping the person
                              whose terminal answered back. Both readings get an action they can take. -->
                                 <p v-if="stalled && commandVisible && !cloudMachine" class="pl-6 text-2xs opacity-90">
-                                    Already ran it? Check that terminal — an error there stops the sandbox before it can report in. Safe to run again.
+                                    Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
                                 </p>
                                 <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
                                      that suits a copy-beside-content read as the dimmest thing in the loudest
@@ -1941,7 +1992,7 @@ watch(commandReady, (ready) => {
                                               ? `the machine's boot log in your ${cloudProviderLabel} console`
                                               : `that terminal`
                                     }}
-                                    for an error — it's safe to re-run.</span
+                                    for an error. It's safe to re-run.</span
                                 >
                             </p>
                         </div>
@@ -1959,7 +2010,7 @@ watch(commandReady, (ready) => {
                      padding. At 18rem it wrapped into three lines — the undo read as a paragraph. -->
                 <aside v-if="created && lane === `provision`" class="hidden xl:sticky xl:top-8 xl:block xl:w-88 xl:shrink-0">
                     <div class="rounded-2xl border border-line bg-card p-4">
-                        <SetupRunDetails :sync-enabled="syncEnabled" :cleanup="cleanupCommand" />
+                        <SetupRunDetails :cleanup="cleanupCommand" />
                     </div>
                 </aside>
             </div>

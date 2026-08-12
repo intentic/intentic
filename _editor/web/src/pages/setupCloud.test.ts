@@ -41,6 +41,6 @@ describe(`labels`, () => {
     });
 
     it(`describes a size as one picker row`, () => {
-        expect(sizeLabel(size)).toBe(`CX22 — 2 vCPU · 4 GB RAM · 40 GB disk · €3.85/mo`);
+        expect(sizeLabel(size)).toBe(`CX22 · 2 vCPU · 4 GB RAM · 40 GB disk · €3.85/mo`);
     });
 });

@@ -9,7 +9,7 @@ import type { SetupReport } from "@intentic-app/api-contract";
 // carries its own expectation-setting because it is the one honest multi-minute stage.
 const STAGE_LABELS: Record<SetupReport[`stage`], string> = {
     preflight: `checking the machine`,
-    "pulling-image": `pulling the sandbox image — the first time takes a few minutes`,
+    "pulling-image": `pulling the sandbox image (the first time takes a few minutes)`,
     "creating-tunnel": `creating its tunnel`,
     "starting-sandbox": `starting the sandbox`,
     "starting-connector": `starting the tunnel connector`,

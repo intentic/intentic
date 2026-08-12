@@ -48,7 +48,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
 
     <p v-if="cf.cfToken.value.length === 0" class="text-xs text-muted">{{ storageNote }}</p>
     <p v-else-if="!cf.cfTokenValid.value" class="text-xs text-warning">
-        That doesn't look like a Cloudflare API token — double-check for copy/paste slips.
+        That doesn't look like a Cloudflare API token. Double-check for copy/paste slips.
     </p>
     <p v-else-if="cf.zonesLoading.value" class="text-xs text-muted">
         <Icon name="spinner" spin /> Checking which Cloudflare zones this token can use…
@@ -63,7 +63,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
             class="w-full"
             aria-label="Cloudflare zone"
         />
-        <span class="text-xs text-muted">This token can reach several domains — choose which one to use.</span>
+        <span class="text-xs text-muted">This token can reach several domains. Choose which one to use.</span>
     </label>
     <!-- The one-zone case still confirms WHICH, because a token that sees a different domain than the user
          expected is the failure this flow cannot otherwise surface until the tunnel is already built. -->

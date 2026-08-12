@@ -22,7 +22,7 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `hetzner`,
         label: `Hetzner`,
-        blurb: `The budget pick — a machine for a few €/month, billed by Hetzner to you. Prices below are live, excl. VAT.`,
+        blurb: `The budget pick: a machine for a few €/month, billed by Hetzner to you. Prices below are live, excl. VAT.`,
         credentialUrl: `https://docs.hetzner.com/cloud/api/getting-started/generating-api-token/`,
         credentialLabel: `Create a Read & Write API token in your Hetzner Cloud project`,
         kind: `token`,
@@ -30,7 +30,7 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `digitalocean`,
         label: `DigitalOcean`,
-        blurb: `Familiar and everywhere — a droplet billed by DigitalOcean to you. Prices below are live.`,
+        blurb: `Familiar and everywhere: a droplet billed by DigitalOcean to you. Prices below are live.`,
         credentialUrl: `https://docs.digitalocean.com/reference/api/create-personal-access-token/`,
         credentialLabel: `Create a personal access token with write scope`,
         kind: `token`,
@@ -38,7 +38,7 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `oracle`,
         label: `Oracle (free)`,
-        blurb: `An ARM machine inside Oracle's Always-Free tier — genuinely $0 while you stay within it. Signup asks for a card; free-tier capacity can run short (pick another availability domain and retry).`,
+        blurb: `An ARM machine inside Oracle's Always-Free tier, genuinely $0 while you stay within it. Signup asks for a card; free-tier capacity can run short (pick another availability domain and retry).`,
         credentialUrl: `https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm`,
         credentialLabel: `Add an API key under Profile → API keys, then paste the config it shows plus the downloaded key`,
         kind: `oracle`,
@@ -76,4 +76,4 @@ export const priceLabel = (size: CloudSize): string => {
 
 // One line a picker row can carry: what the machine is, then what it costs.
 export const sizeLabel = (size: CloudSize): string =>
-    `${size.label} — ${size.cpus} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${priceLabel(size)}`;
+    `${size.label} · ${size.cpus} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${priceLabel(size)}`;

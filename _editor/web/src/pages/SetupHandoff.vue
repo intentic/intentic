@@ -41,7 +41,7 @@ const send = async (): Promise<void> => {
         sent.value = true;
         emit(`sent`);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't send that email — try again.`);
+        error.value = noticeFrom(err, `Couldn't send that email. Try again.`);
     } finally {
         sending.value = false;
     }
@@ -62,7 +62,7 @@ const send = async (): Promise<void> => {
              it would be the third line in a row to say "computer". -->
         <p v-if="!sent" class="flex items-start gap-2.5 text-xs text-muted">
             <Icon name="desktop" class="mt-0.5 shrink-0 text-link" />
-            <span class="min-w-0">Not on your phone — this needs a terminal and Docker.</span>
+            <span class="min-w-0">Not on your phone: this needs a terminal and Docker.</span>
         </p>
 
         <template v-if="sent">
@@ -76,7 +76,7 @@ const send = async (): Promise<void> => {
                         >Sent to <span class="break-words">{{ email }}</span
                         >.</span
                     >
-                    Open it on the computer that will host your sandbox — your workspace opens the moment it connects.
+                    Open it on the computer that will host your sandbox. Your workspace opens the moment it connects.
                 </span>
             </p>
             <!-- Quiet, because the common reason to press it twice is impatience with a mail that is already on

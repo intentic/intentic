@@ -1,5 +1,5 @@
-<!-- Everything about the install command that is worth KNOWING rather than doing: what it creates, what it
-     writes outside Docker, and the one line that removes all of it again. Step 3's reference material.
+<!-- Everything about the install command that is worth KNOWING rather than doing: what it creates, and the
+     one line that removes all of it again. The run step's reference material.
 
      It is a component because it renders in two places and must not be written twice. Above `xl` the setup page
      docks it in a column of its own beside the steps, where it is simply always visible; below `xl` there is no
@@ -15,18 +15,19 @@
 <script setup lang="ts">
 import { CopyButton } from "@intentic/ui";
 
-// `syncEnabled` only changes what the command writes outside Docker, which is the one fact here that isn't
-// fixed. `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself.
-const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: string }>();
+// `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself. Nothing else
+// here varies: this panel used to take the sync opt-in too, to name the folder the command writes outside
+// Docker, and that line is gone — where a log file lands is not a thing anybody is deciding at this moment.
+const { cleanup } = defineProps<{ cleanup: string }>();
 </script>
 
 <template>
     <div class="flex flex-col gap-3">
         <p class="text-sm font-medium text-content">What this does</p>
-        <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote — the container names, "nothing
-             deployed", "runs as you, no root" — and a reference panel nobody finishes reading answers nothing.
-             What a reader is actually asking here is where this lands and how to undo it, so each line names
-             one place and stops. -->
+        <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote (the container names, "nothing
+             deployed", "runs as you, no root") and a reference panel nobody finishes reading answers nothing.
+             The line naming the dotfiles it writes is gone outright: where a log lands is not a fact anybody
+             is weighing while deciding whether to paste a command. -->
         <ul class="flex flex-col gap-2 text-2xs text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
@@ -34,19 +35,12 @@ const { syncEnabled, cleanup } = defineProps<{ syncEnabled: boolean; cleanup: st
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span> — no inbound ports</span>
-            </li>
-            <li class="flex items-start gap-2">
-                <Icon name="file" class="mt-0.5 shrink-0 text-link" />
-                <span class="min-w-0"
-                    >Writes <code>~/.intentic/logs</code><template v-if="syncEnabled"> and <code>~/.intentic/sync</code></template> — as you, no
-                    root</span
-                >
+                <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span>, no inbound ports</span>
             </li>
         </ul>
 
         <div class="border-t border-line pt-3 text-2xs text-subtle">
-            <p>Installs Docker if you haven't got it — it asks first.</p>
+            <p>Installs Docker if you haven't got it, asking first.</p>
             <a
                 href="https://docs.docker.com/get-docker/"
                 target="_blank"

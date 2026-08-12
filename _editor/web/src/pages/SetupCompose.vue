@@ -25,7 +25,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
              label "Docker Compose" conveys to the person looking for exactly it. -->
         <p class="flex items-start gap-2 text-2xs text-muted">
             <Icon name="eye" class="mt-0.5 shrink-0 text-subtle" />
-            <span class="min-w-0">No script runs on your machine — you read the file below in full, then start it yourself.</span>
+            <span class="min-w-0">No script runs on your machine: you read the file below in full, then start it yourself.</span>
         </p>
         <Code :code="yaml" lang="yaml" label="1. Add these services to your docker-compose.yml" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
         <Code
@@ -39,20 +39,20 @@ const bootstrap = computed(() => composeBootstrap(props.args));
             :wrap="true"
         />
         <p class="text-xs text-muted">
-            The first command redeems your setup code into a <code>.env</code> compose reads — run it once; after that the sandbox is yours to manage
+            The first command redeems your setup code into a <code>.env</code> compose reads. Run it once; after that the sandbox is yours to manage
             with <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>). Your workspace lives in the named volumes, so
             <code>down</code>/<code>up</code> keeps it.
         </p>
         <p class="text-xs text-muted">
-            Desktop sync isn't part of the compose path — once your workspace opens, enable it from its <b>Desktop sync</b> card.
+            Desktop sync isn't part of the compose path. Once your workspace opens, enable it from its <b>Desktop sync</b> card.
         </p>
         <p v-if="args.platformUrl" class="flex items-start gap-2 text-xs text-warning">
             <Icon name="box" class="mt-0.5 shrink-0" />
             <!-- min-w-0 + break-words: the image reference is one unbreakable token wider than a phone, and a
                  flex child defaults to min-content width, so without both it pushes the card's text off-screen. -->
             <span class="min-w-0 break-words"
-                >Local dev: compose pulls the <b>published</b> <code>{{ args.image }}</code> (not your local checkout — compose can't rebuild), and
-                its <code>PLATFORM_URL</code> points at your machine, so run it here on the same machine as your dev platform. To deploy to a real
+                >Local dev: compose pulls the <b>published</b> <code>{{ args.image }}</code> (not your local checkout, which compose can't rebuild),
+                and its <code>PLATFORM_URL</code> points at your machine, so run it here on the same machine as your dev platform. To deploy to a real
                 environment, generate this from that environment's platform instead.</span
             >
         </p>

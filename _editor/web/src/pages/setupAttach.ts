@@ -131,7 +131,7 @@ export const daemonUrlProblem = (raw: string): string | undefined => {
         return undefined; // nothing typed yet is not yet a mistake
     }
     if (/^http:\/\//i.test(trimmed)) {
-        return `Needs to be https — this app is served over HTTPS, so your browser would block calls to an http:// sandbox.`;
+        return `Needs to be https. This app is served over HTTPS, so your browser would block calls to an http:// sandbox.`;
     }
-    return normalizeDaemonUrl(trimmed) === undefined ? `That doesn't look like a domain — for example sandbox.example.com.` : undefined;
+    return normalizeDaemonUrl(trimmed) === undefined ? `That doesn't look like a domain. For example sandbox.example.com.` : undefined;
 };

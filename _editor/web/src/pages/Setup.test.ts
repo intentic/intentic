@@ -119,11 +119,21 @@ const mount = async (): Promise<HTMLElement> => {
 const buttonSaying = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
 
-// The rename affordance is an icon now, so it is found the way a screen reader finds it. Its row is the one
-// that reports the name — asserting on the row rather than the page keeps "workspace" from matching the
-// page's own title ("Set up your workspace").
+// The rename affordances are icons now, so they are found the way a screen reader finds them.
 const renamePencil = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Rename sandbox"]`)!;
-const nameRow = (): string => renamePencil().parentElement?.textContent ?? ``;
+const saveName = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Save name"]`)!;
+
+// The row that reports the name: climbed to from the pencil rather than read off a class, since the pencil and
+// the value sit in separate cells of it (the in-place edit stacks each control over the one it replaces).
+// Asserting on the row rather than the page keeps "workspace" from matching the page's own title, "Set up your
+// workspace".
+const nameRow = (): string => {
+    let node: HTMLElement | null = renamePencil();
+    while (node !== null && node.textContent?.includes(`Name`) !== true) {
+        node = node.parentElement;
+    }
+    return node?.textContent ?? ``;
+};
 
 beforeEach(() => {
     sandboxes.value = [];
@@ -181,7 +191,7 @@ it(`renames the sandbox it created, from the step itself`, async () => {
     field.value = `shop`;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
-    buttonSaying(`Save`)!.click();
+    saveName().click();
     await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
     await nextTick();
     expect(nameRow()).toContain(`shop`);
