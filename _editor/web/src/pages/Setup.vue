@@ -7,6 +7,7 @@ import {
     Code,
     commandLang,
     CopyButton,
+    type IconName,
     InfoHint,
     Notice,
     type NoticeModel,
@@ -273,17 +274,34 @@ const cloudOffered = computed(() => intenticAvailable.value && !desktop.value);
 
 /* --- the hosted lane (machine === `hosted`) ---
  *
- * The lane with no command, no code and no machine of the user's: the platform creates the sandbox AND its
- * machine in one call (sandbox.hostedCreate), and the ordinary announce watch below carries the rest — the
- * page redirects the moment the daemon reports in, exactly as it does for a pasted run. On a platform that
- * hosts, a fresh account's FIRST run takes this lane automatically (see onMounted): sign in, watch it come
- * up, land in the workspace — zero commands, zero choices, with the other rungs one click away. */
+ * The lane with no command, no code and no machine of the user's: the platform gives THIS sandbox a machine
+ * it runs (sandbox.hostedProvision), and the ordinary announce watch below carries the rest — the page
+ * redirects the moment the daemon reports in, exactly as it does for a pasted run. On a platform that hosts,
+ * a fresh account's FIRST run takes this lane automatically (see onMounted): sign in, watch it come up, land
+ * in the workspace — zero commands, zero choices, with the other rungs one click away.
+ *
+ * A LANE MOVES A MACHINE, NOT THE SANDBOX. Every lane works on the row created on arrival, so choosing this
+ * one attaches a machine and choosing another hands it back (sandbox.hostedRelease) — the name, the address
+ * and the row itself survive the switch. The first version deleted and re-created the sandbox on every
+ * crossing, which is how a mis-click cost a person their typed name and their place in the flow. */
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
 const hostedOffered = computed(() => hostedOffer.value?.enabled === true && !desktop.value);
+// Provisioning/releasing a machine is a round-trip with a provider at the end of it, so the card it was
+// clicked on says so rather than freezing.
+const hostedBusy = ref(false);
+// Why the hosted lane could not be taken, rendered ON the run step where the click happened. Separate from
+// the page-level `error` (which belongs to the sandbox card above and is cleared by any create) precisely
+// because the first version let a failed hosted attempt bounce the user to the command lane with the reason
+// wiped — a silent lane switch that read as the page breaking.
+const hostedError = ref<NoticeModel | undefined>(undefined);
 // The created row IS a hosted one — the wait card renders off this rather than off the picker, so a resumed
 // hosted sandbox narrates correctly however the page was entered.
 const hostedRow = computed(() => created.value?.hosted ?? null);
+// The allowance is SPENT — this account already has the hosted sandbox it is entitled to, and it isn't this
+// one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
+// says why it cannot be taken instead.
+const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
 // The daemon's announced host, once it exists — step 1's address line for a lane that never mints a code.
 const hostedHost = computed(() => {
     const url = created.value?.daemonUrl;
@@ -337,21 +355,55 @@ const runTitle = computed(() => {
  * The rungs are the lanes that already exist; this picker is just the honest map: instant-and-small (hosted)
  * → a free 12 GB cloud machine or a paid one (SetupCloud's providers, Oracle's Always-Free first) → the
  * reader's own hardware (the most power, and the only GPU story anyone can offer). */
+/* CARDS, NOT CHIPS. This is the decision the whole rest of onboarding hangs off — whether the reader ever
+ * opens a terminal, what the box can do, and who pays for it — and it spent one release as three small pills
+ * with a caption underneath, which is the control this design system uses for Preview/Source. A pill row
+ * shows only the labels, so the two things that actually decide the answer (what you get, what it asks of
+ * you) were invisible until after you had already picked; and the pill for the lane you were on looked
+ * exactly like the pill for the lane that would delete it.
+ *
+ * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge — a
+ * layout that can be READ before it is clicked. `meta` is the badge, `note` the one-liner under the title.
+ * The order is the ladder's: instant and small, then your own hardware, then a machine you rent. */
 const ladderShown = computed(() => !desktop.value && (hostedOffered.value || cloudOffered.value));
-const ladderOptions = computed(() => [
-    ...(hostedOffered.value ? [{ label: mobile.value ? `Instant` : `Instant, we host it`, value: `hosted` as const }] : []),
-    { label: `A computer I have`, value: `mine` as const },
-    ...(cloudOffered.value ? [{ label: `A new cloud machine`, value: `cloud` as const }] : []),
+interface MachineOption {
+    readonly value: "hosted" | "mine" | "cloud";
+    readonly icon: IconName;
+    readonly title: string;
+    readonly meta: string;
+    readonly note: string;
+}
+const ladderOptions = computed<readonly MachineOption[]>(() => [
+    ...(hostedOffered.value
+        ? [
+              {
+                  value: `hosted` as const,
+                  icon: `bolt` as const,
+                  title: `We host it`,
+                  meta: `Free · ready in seconds`,
+                  note: `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back.`,
+              },
+          ]
+        : []),
+    {
+        value: `mine` as const,
+        icon: `desktop`,
+        title: `A computer I have`,
+        meta: `Most power · needs Docker`,
+        note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command.`,
+    },
+    ...(cloudOffered.value
+        ? [
+              {
+                  value: `cloud` as const,
+                  icon: `cloud` as const,
+                  title: `A new cloud machine`,
+                  meta: `From free · 12 GB`,
+                  note: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere.`,
+              },
+          ]
+        : []),
 ]);
-const machineCaption = computed(() => {
-    if (machine.value === `hosted`) {
-        return `Free and instant: a small private machine we run for you. It sleeps while you're away and wakes when you come back.`;
-    }
-    if (machine.value === `mine`) {
-        return `The most power: your CPUs, your RAM, your GPU. One pasted command; needs Docker.`;
-    }
-    return `A fresh machine in your own cloud account, including Oracle's Always-Free tier (12 GB RAM, $0/month).`;
-});
 
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
  * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
@@ -724,71 +776,76 @@ const autoCreate = async (): Promise<void> => {
 // is worth saying so — while the platform keeps trying either way (the machine retries, the poll keeps polling).
 const hostedSlow = computed(() => hostedSince.value !== undefined && now.value - hostedSince.value > 2 * 60_000);
 
-/* The hosted lane's create: row + machine in one platform call, then the ordinary announce watch takes over.
- * A refusal here (capacity weather, the allowance already spent) must not strand a first run staring at an
- * error — the page falls back to the classic command lane with the reason on the card, which is exactly what
- * every account saw before this lane existed. */
-const hostedAutoCreate = async (): Promise<void> => {
-    if (creating.value) {
-        return;
+/* Give THIS sandbox a machine the platform runs, then let the ordinary announce watch take over. The row is
+ * already there (created on arrival like every lane's), so a refusal — capacity weather, the allowance
+ * already spent, a platform whose provider credential is wrong — costs nothing but the attempt: the reason
+ * lands on this step, the lane falls back to where it was, and the sandbox the reader already has is
+ * untouched. `false` when the machine did not happen, so callers can decide what to do next. */
+const provisionHosted = async (): Promise<boolean> => {
+    const row = created.value;
+    if (row === null || hostedBusy.value) {
+        return false;
     }
-    creating.value = true;
-    error.value = null;
-    machine.value = `hosted`;
+    hostedBusy.value = true;
+    hostedError.value = undefined;
     try {
-        const typed = name.value.trim();
-        const row = await sandbox.hostedCreate(typed === `` ? autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)) : typed);
-        created.value = row;
-        name.value = row.name;
+        const updated = await sandbox.hostedProvision(row.id);
+        created.value = updated;
         hostedSince.value = Date.now();
         // The zero-command milestone `sandbox_connected` will complete: a hosted machine now exists for this account.
         track(`sandbox_hosted_created`, {});
+        return true;
     } catch (err) {
-        machine.value = mobile.value ? `cloud` : `mine`;
-        error.value = noticeFrom(err, `Couldn't create a hosted sandbox. Set one up on a machine instead.`);
-        creating.value = false;
-        await autoCreate();
-        return;
+        hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
+        return false;
+    } finally {
+        hostedBusy.value = false;
     }
-    creating.value = false;
 };
 
-/* The ladder's switch. Crossing INTO or OUT OF the hosted rung swaps the sandbox itself, not just a card:
- * hosted rows are born with their machine (hostedCreate creates both), so the never-connected row the switch
- * leaves behind is deleted — seconds old, empty, and for the hosted one a machine that would otherwise sit
- * billing for a box the user just declined — and the right kind is created in its place. Only the picker
- * calls this; programmatic `machine` writes (mount, fallback) never swap. */
-const setMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> => {
+/* The ladder's switch — it moves a MACHINE, never the sandbox. Choosing the hosted rung provisions one for
+ * the row already on screen; choosing another rung hands the machine back (it has never been connected to,
+ * so there is nothing on it to lose) and the row carries on into that lane with its name and address intact.
+ * A failure in either direction leaves the reader where they were, with a reason on the card — the previous
+ * design deleted and recreated the sandbox around every crossing, so one mis-click threw away a typed name
+ * and, when the provision then failed, silently landed them in a different lane with no explanation. */
+const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> => {
     const prev = machine.value;
-    if (next === prev || creating.value) {
+    if (creating.value || hostedBusy.value) {
         return;
     }
-    machine.value = next;
+    // Re-pressing the rung you are already on is a no-op EXCEPT on the hosted one with no machine behind it:
+    // there the card is the retry, which is where a reader whose first attempt hit capacity weather will press.
+    if (next === prev && !(next === `hosted` && (created.value?.hosted ?? null) === null)) {
+        return;
+    }
+    hostedError.value = undefined;
     const row = created.value;
     const rowHosted = (row?.hosted ?? null) !== null;
-    const crossesHosted = next === `hosted` ? !rowHosted : prev === `hosted` && rowHosted;
-    if (!crossesHosted) {
+    if (next === `hosted`) {
+        if (rowHosted) {
+            machine.value = next;
+            return;
+        }
+        machine.value = next;
+        if (!(await provisionHosted())) {
+            machine.value = prev; // the reason is on the card; the reader stays where they chose from
+        }
         return;
     }
-    created.value = null;
-    hostedSince.value = undefined;
-    resuming.value = false;
-    name.value = ``;
-    setup.value = null;
-    mintedFor.value = undefined;
-    setupError.value = undefined;
-    copied.value = false;
-    launched.value = false;
-    claimedAt.value = null;
-    report.value = null;
-    if (row !== null && row.lastSeenAt === null && row.role === `owner`) {
+    if (rowHosted && row !== null) {
+        hostedBusy.value = true;
         try {
-            await sandbox.remove(row.id);
-        } catch {
-            // A stray never-started row resumes on the next visit; nothing here is worth blocking the switch on.
+            created.value = await sandbox.hostedRelease(row.id);
+            hostedSince.value = undefined;
+        } catch (err) {
+            hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
+            return;
+        } finally {
+            hostedBusy.value = false;
         }
     }
-    await (next === `hosted` ? hostedAutoCreate() : autoCreate());
+    machine.value = next;
 };
 
 // Open the rename box on the row's own name, selected — the name was chosen for the user, so the likeliest
@@ -1069,12 +1126,17 @@ onMounted(async () => {
         : loaded.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
-        // THE ZERO-CLICK FIRST RUN: on a platform that hosts, the first sandbox is created and started with
-        // no command and no choice — the wait card below narrates it, and the ladder stays one click away.
+        await autoCreate();
+        /* THE ZERO-CLICK FIRST RUN: on a platform that hosts, that fresh sandbox is also STARTED with no
+         * command and no choice — the wait card below narrates it, and the ladder stays one click away. The
+         * create above is the one every lane makes, so a provision that refuses leaves an ordinary sandbox on
+         * an ordinary command lane with the reason on the card, which is exactly what this page did before
+         * the hosted lane existed. */
         if (offer.enabled && offer.remaining > 0 && !desktop.value) {
-            await hostedAutoCreate();
-        } else {
-            await autoCreate();
+            machine.value = `hosted`;
+            if (!(await provisionHosted())) {
+                machine.value = mobile.value ? `cloud` : `mine`;
+            }
         }
         return;
     }
@@ -1722,25 +1784,69 @@ watch(commandReady, (ready) => {
                         </template>
 
                         <!-- THE LADDER — first on the card because everything under it is the answer to it: how
-                             much machine, whose, at what cost. The instant rung is where a first run lands by
-                             itself; the caption under the picker is each rung's one honest line. A phone opens
-                             on `cloud` when there is no hosted rung: it is the one classic path a phone finishes
-                             without a second computer. Hidden in the desktop app, where "this computer" is the
+                             much machine, whose, at what cost. One CARD per rung, not a row of pills: this is
+                             the decision the rest of onboarding hangs off, and a pill shows only its label, so
+                             what each rung gives you and asks of you stayed invisible until after you picked.
+                             Each card states its own trade and carries its cost as a badge, so the choice can
+                             be read before it is made. Hidden in the desktop app, where "this computer" is the
                              whole point of being in the app. -->
-                        <template v-if="ladderShown">
-                            <Segmented :model-value="machine" :options="ladderOptions" :stretch="mobile" @update:model-value="setMachine" />
-                            <p class="text-2xs text-muted">{{ machineCaption }}</p>
-                        </template>
+                        <div v-if="ladderShown" class="flex flex-col gap-2">
+                            <button
+                                v-for="option in ladderOptions"
+                                :key="option.value"
+                                type="button"
+                                role="radio"
+                                :aria-checked="machine === option.value"
+                                :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
+                                class="flex w-full cursor-pointer items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                :class="
+                                    machine === option.value
+                                        ? `border-link bg-overlay`
+                                        : `border-line bg-canvas hover:border-line-strong hover:bg-overlay/40`
+                                "
+                                @click="chooseMachine(option.value)"
+                            >
+                                <Icon
+                                    :name="option.icon"
+                                    class="mt-0.5 shrink-0"
+                                    :class="machine === option.value ? `text-link` : `text-muted`"
+                                />
+                                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span class="text-sm font-medium text-content">{{ option.title }}</span>
+                                        <span class="text-2xs text-subtle">{{ option.meta }}</span>
+                                    </span>
+                                    <span class="text-xs leading-relaxed text-muted">{{ option.note }}</span>
+                                    <!-- The allowance is spent, and saying so beats hiding a rung the reader was
+                                         offered on their first sandbox. -->
+                                    <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">
+                                        You're already using the sandbox we host. Remove it to have this one hosted instead.
+                                    </span>
+                                </span>
+                                <Icon
+                                    v-if="hostedBusy && option.value === `hosted`"
+                                    name="spinner"
+                                    spin
+                                    class="mt-0.5 shrink-0 text-info"
+                                />
+                                <Icon
+                                    v-else-if="machine === option.value"
+                                    name="check"
+                                    class="mt-0.5 shrink-0 text-link"
+                                />
+                            </button>
+                        </div>
+
+                        <!-- Whatever went wrong on THIS step, said on this step. The page-level notice belongs to
+                             the sandbox card above and is cleared by every create, which is how a failed hosted
+                             attempt used to bounce the reader into another lane with the reason already erased. -->
+                        <Notice v-if="hostedError" :of="hostedError" />
 
                         <!-- The hosted wait: nothing to run and nothing to copy — the platform is doing the work,
                              so for once a spinner is honest. The redirect fires from the same announce watch every
                              other lane uses. -->
                         <template v-if="machine === `hosted`">
-                            <p v-if="creating" class="flex items-center gap-2 text-sm text-content">
-                                <Icon name="spinner" spin class="text-info" />
-                                Creating your sandbox…
-                            </p>
-                            <template v-else-if="hostedRow !== null">
+                            <template v-if="hostedRow !== null">
                                 <p class="flex items-center gap-2 text-sm text-content">
                                     <Icon name="spinner" spin class="text-info" />
                                     Starting your machine. You'll be taken in as soon as it answers.
@@ -1752,7 +1858,11 @@ watch(commandReady, (ready) => {
                                     <template v-else>Usually under a minute. Nothing to install, nothing to paste.</template>
                                 </p>
                             </template>
-                            <Button v-else-if="!creating" label="Try again" class="w-full justify-center md:w-auto" @click="hostedAutoCreate">
+                            <p v-else-if="hostedBusy" class="flex items-center gap-2 text-sm text-content">
+                                <Icon name="spinner" spin class="text-info" />
+                                Starting a machine for you…
+                            </p>
+                            <Button v-else label="Try again" class="w-full justify-center md:w-auto" @click="provisionHosted">
                                 <template #icon><Icon name="refresh" /></template>
                             </Button>
                         </template>

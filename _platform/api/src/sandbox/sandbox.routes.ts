@@ -283,82 +283,91 @@ export const sandboxRoutes = {
         const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
         return { enabled: true, remaining: Math.max(0, context.config.hosted.perUser - used) };
     }),
-    /* Create a sandbox AND its machine on intentic's own provider, in one call — the lane with no command, no
-     * code, no paste. The tunnel comes first (claimed from the pool, else provisioned inline) because the
-     * machine env must carry the connector token and public URL; then the machine is created and the daemon's
-     * ordinary announce narrates the rest to the waiting browser, exactly as it does for a pasted run.
+    /* Give an existing sandbox a machine on intentic's own provider — the lane with no command, no code, no
+     * paste. Shaped after cloudProvision on purpose: the ROW is created the ordinary way on arrival, and
+     * choosing this lane moves a MACHINE, never the sandbox, so the wizard can switch lanes without losing
+     * the name and address the user already has.
      *
-     * OWNER_EMAIL seeds the daemon's first-bind exactly like setupCode's payload does: only this Google
-     * identity may become owner. A provision failure rolls the whole thing back — row, tunnel, app — so a
-     * retry starts clean instead of stranding a dead sandbox in the switcher. */
-    hostedCreate: os.sandbox.hostedCreate.handler(async ({ context, input }) => {
+     * The tunnel comes first (already claimed from the pool by `create`, else provisioned here) because the
+     * machine env must carry the connector token and public URL; then the machine is created and the daemon's
+     * ordinary announce narrates the rest to the waiting browser, exactly as a pasted run's does. OWNER_EMAIL
+     * seeds the daemon's first-bind exactly like setupCode's payload: only this Google identity may bind.
+     *
+     * Idempotent — a sandbox that already has a machine answers with itself rather than growing a second one,
+     * so a double-click or a retry after a slow response costs nothing. A FAILURE leaves the sandbox exactly
+     * as it found it (provisionHosted cleans up its own half-made app), which is what lets the wizard say
+     * what went wrong and stay on a working row instead of starting the user over. */
+    hostedProvision: os.sandbox.hostedProvision.handler(async ({ context, input }) => {
         const user = requireUser(context);
         if (!hostedEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `hosted sandboxes are not enabled on this platform` });
         }
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const existing = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
+        if (existing !== null) {
+            const already = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
+            return toSummary(already, `owner`, context);
+        }
         const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
         if (used >= context.config.hosted.perUser) {
             throw new ORPCError(`BAD_REQUEST`, {
-                message: `you already run ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`} — delete one to create another`,
+                message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`} — remove one to have this sandbox hosted instead`,
             });
         }
-        const { apiToken, zone, poolSize } = context.config.intenticCloudflare;
-        const reserved = poolSize > 0 ? await claimReserved(context.prisma) : undefined;
-        let row;
-        if (reserved !== undefined) {
-            row = await context.prisma.sandbox.create({
-                data: {
-                    name: input.name,
-                    ownerId: user.id,
-                    token: reserved.token,
-                    tokenDigest: reserved.tokenDigest,
-                    tunnelToken: reserved.tunnelToken,
-                    tunnelHostname: reserved.tunnelHostname,
-                },
-            });
-            void topUp(context.prisma, context.config, context.logger).catch((error) =>
-                context.logger.error({ err: error }, `sandbox pool refill after claim failed`),
-            );
-        } else {
-            const token = randomBytes(16).toString(`base64url`);
-            let tunnel;
+        const { apiToken, zone } = context.config.intenticCloudflare;
+        let tunnelToken = sandbox.tunnelToken;
+        let tunnelHostname = sandbox.tunnelHostname;
+        if (tunnelToken === null || tunnelHostname === null) {
+            // The pool was empty when this row was created (or it predates the pool) — buy the tunnel now, and
+            // cache it on the row exactly as setupCode does, so nothing pays for it twice.
             try {
-                tunnel = await provisionSandboxTunnel({ apiToken, zone, connectToken: token });
+                const tunnel = await provisionSandboxTunnel({ apiToken, zone, connectToken: decryptSecret(context.config, sandbox.token) });
+                tunnelToken = encryptSecret(context.config, tunnel.tunnelToken);
+                tunnelHostname = tunnel.hostname;
+                await context.prisma.sandbox.update({ where: { id: sandbox.id }, data: { tunnelToken, tunnelHostname } });
             } catch (error) {
+                if (error instanceof CloudflareTokenError) {
+                    throw new ORPCError(`BAD_REQUEST`, { message: error.message });
+                }
                 throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `tunnel provisioning failed` });
             }
-            row = await context.prisma.sandbox.create({
-                data: {
-                    name: input.name,
-                    ownerId: user.id,
-                    token: encryptSecret(context.config, token),
-                    tokenDigest: sha256Hex(token),
-                    tunnelToken: encryptSecret(context.config, tunnel.tunnelToken),
-                    tunnelHostname: tunnel.hostname,
-                },
-            });
         }
-        const connectToken = decryptSecret(context.config, row.token);
         try {
             await provisionHosted(context.prisma, context.config, context.logger, {
-                sandboxId: row.id,
-                connectToken,
-                tunnelToken: decryptSecret(context.config, row.tunnelToken ?? ``),
-                tunnelHostname: row.tunnelHostname ?? ``,
+                sandboxId: sandbox.id,
+                connectToken: decryptSecret(context.config, sandbox.token),
+                tunnelToken: decryptSecret(context.config, tunnelToken),
+                tunnelHostname,
                 ownerEmail: user.email.toLowerCase(),
             });
         } catch (error) {
-            // Roll back so a retry starts clean: row first (what the browser reads), then the tunnel —
-            // failures there orphan to the reapers, same as delete's stance.
-            await context.prisma.sandbox.delete({ where: { id: row.id } }).catch((rollbackError: unknown) =>
-                context.logger.error({ err: rollbackError, sandboxId: row.id }, `hosted create rollback: sandbox row delete failed`),
-            );
-            await deleteSandboxTunnel({ apiToken, zone, connectToken }).catch((rollbackError: unknown) =>
-                context.logger.warn({ err: rollbackError, sandboxId: row.id }, `hosted create rollback: tunnel teardown failed; orphaned for the reaper`),
-            );
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
         }
-        const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: row.id }, include: { hosted: true } });
+        const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
+        return toSummary(fresh, `owner`, context);
+    }),
+    /* The way back out of the hosted lane: destroy the machine, keep the sandbox. This is the wizard's
+     * lane-switch (someone tries "we host it", then decides to run it on their own machine after all), which
+     * is why it is deliberately narrow — a sandbox that has EVER connected is a workspace with a person's
+     * files on it, and destroying its machine belongs to the delete dialog and the confirmation it shows,
+     * never to a card being clicked. Idempotent: no machine is a no-op, not an error. */
+    hostedRelease: os.sandbox.hostedRelease.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
+        if (hosted !== null) {
+            if (sandbox.lastSeenAt !== null) {
+                throw new ORPCError(`BAD_REQUEST`, {
+                    message: `this sandbox has already started — remove it from your account to destroy the machine we run for it`,
+                });
+            }
+            try {
+                await destroyHosted(context.config, hosted.appName);
+            } catch (error) {
+                throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `destroying the machine failed` });
+            }
+            await context.prisma.hostedMachine.delete({ where: { sandboxId: sandbox.id } });
+        }
+        const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
     }),
     // Power a hosted sandbox's machine back on — the idle-stop's other half, called by any browser (owner or

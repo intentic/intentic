@@ -168,14 +168,22 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
-// The hosted lane's create: the platform mints the row AND its machine in one call — the returned summary
-// carries `hosted`, and the daemon's ordinary announce is what /setup watches next. Same cache dance as create.
-const hostedCreate = async (name: string): Promise<SandboxSummary> => {
-    const sandbox = await apiClient.sandbox.hostedCreate({ name });
+/* The hosted lane, as the two moves that attach a machine to a sandbox and take it back off — the ROW is
+ * made by `create` above like every other lane's, so switching lanes in the wizard moves a machine and never
+ * the sandbox. Both write the returned row into the list cache the way `update` does, which is what repaints
+ * the badge and the delete dialog's warning in the same tick. */
+const hostedProvision = async (sandboxId: string): Promise<SandboxSummary> => {
+    const updated = await apiClient.sandbox.hostedProvision({ sandboxId });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => [...live, sandbox]);
-    persistActive(sandbox.id);
-    return sandbox;
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)));
+    return updated;
+};
+
+const hostedRelease = async (sandboxId: string): Promise<SandboxSummary> => {
+    const updated = await apiClient.sandbox.hostedRelease({ sandboxId });
+    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)));
+    return updated;
 };
 
 /* THE WAKE REFLEX. A hosted sandbox's machine stops itself when nobody was around (the daemon's idle-stop),
@@ -266,5 +274,21 @@ const remove = async (id: string): Promise<void> => {
 };
 
 export function useSandbox() {
-    return { sandboxes, activeSandboxId, active, daemonUrl, connection, reachable, list, refresh, select, create, hostedCreate, update, attach, remove };
+    return {
+        sandboxes,
+        activeSandboxId,
+        active,
+        daemonUrl,
+        connection,
+        reachable,
+        list,
+        refresh,
+        select,
+        create,
+        hostedProvision,
+        hostedRelease,
+        update,
+        attach,
+        remove,
+    };
 }

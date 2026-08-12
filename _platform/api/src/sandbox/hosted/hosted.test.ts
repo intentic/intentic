@@ -164,22 +164,78 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(on).toEqual({ enabled: true, remaining: 1 });
     });
 
-    it(`hostedCreate refuses over-quota before touching any provider`, async () => {
+    // The row every provision test starts from: created the ordinary way, tunnel already claimed from the pool.
+    const ownedRow = {
+        id: `s1`,
+        name: `mine`,
+        image: null,
+        ownerId: `u1`,
+        token: `tok`,
+        tunnelToken: `tt`,
+        tunnelHostname: `sandbox-a.sbx.test`,
+        daemonUrl: null,
+        lastSeenAt: null,
+        setupCodeClaimedAt: null,
+        setupReport: null,
+        cloud: null,
+    };
+
+    it(`hostedProvision refuses over-quota before touching any provider`, async () => {
         const fetchSpy = stubFetch([]);
-        await expect(
-            call(
-                sandboxRoutes.hostedCreate,
-                { name: `mine` },
-                { context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: vi.fn().mockResolvedValue(1) } }) }) },
-            ),
-        ).rejects.toMatchObject({ code: `BAD_REQUEST` });
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
+        });
+        await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `BAD_REQUEST`,
+        });
         expect(fetchSpy).toHaveLength(0);
     });
 
-    it(`hostedCreate 404s when the lane is off — a platform without the config simply has no such route`, async () => {
+    it(`hostedProvision 404s when the lane is off — a platform without the config simply has no such route`, async () => {
         await expect(
-            call(sandboxRoutes.hostedCreate, { name: `mine` }, { context: routeContext({ config: config({ hosted: { ...config().hosted, flyOrg: `` } }) }) }),
+            call(
+                sandboxRoutes.hostedProvision,
+                { sandboxId: `s1` },
+                { context: routeContext({ config: config({ hosted: { ...config().hosted, flyOrg: `` } }) }) },
+            ),
         ).rejects.toMatchObject({ code: `NOT_FOUND` });
+    });
+
+    // Idempotence is what makes a double-click (or a retry after a slow response) free rather than a second
+    // machine nobody asked for and everybody pays for.
+    it(`hostedProvision answers with the sandbox it already hosts, without creating anything`, async () => {
+        const fetchSpy = stubFetch([]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad` } }) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }), count: vi.fn() },
+        });
+        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
+        expect(summary.hosted).toEqual({ region: `iad` });
+        expect(fetchSpy).toHaveLength(0);
+    });
+
+    // The lane switch: a sandbox nobody ever connected to can hand its machine back. One that HAS connected
+    // cannot — that is a workspace with files on it, and destroying its machine belongs to the delete dialog.
+    it(`hostedRelease destroys the machine of a never-started sandbox and refuses on a live one`, async () => {
+        const calls = stubFetch([{ match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) }]);
+        const machineDelete = vi.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: null }) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: machineDelete },
+        });
+        const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
+        expect(summary.hosted).toBeNull();
+        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
+        expect(machineDelete).toHaveBeenCalled();
+
+        const live = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...ownedRow, lastSeenAt: new Date() }) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: vi.fn() },
+        });
+        await expect(call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma: live }) })).rejects.toMatchObject({
+            code: `BAD_REQUEST`,
+        });
     });
 
     it(`wake 404s for a sandbox that is not hosted (or not the caller's)`, async () => {

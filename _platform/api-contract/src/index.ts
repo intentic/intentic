@@ -78,15 +78,27 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/cloud-provision" })
         .input(z.object({ sandboxId: z.string(), credentials: CloudCredentialsSchema, location: z.string(), size: z.string() }))
         .output(SandboxSummarySchema),
-    /* The HOSTED lane: `hostedOffer` says whether this platform runs sandboxes at all and how many more the
-     * caller may create (the editor's zero-click first run gates on it); `hostedCreate` mints the sandbox row
-     * AND its machine on intentic's own provider in one call — no setup code, no command, the daemon's
-     * ordinary announce is the "it's up" signal; `wake` starts a stopped hosted machine (the idle-stop's
-     * other half) and answers immediately — the browser keeps probing the daemon like it always does. */
+    /* The HOSTED lane, shaped exactly like the cloud one above: the sandbox ROW is created the ordinary way
+     * (`create`, on arrival, whatever lane the user ends up taking), and this pair only decides whether a
+     * machine the PLATFORM runs is attached to it. That symmetry is the point — choosing a lane in the wizard
+     * moves a machine, never the sandbox, so a switch keeps the name, the row and the address it already has.
+     *
+     * `hostedOffer` says whether this platform runs sandboxes at all and how many more the caller may have
+     * (the editor's zero-click first run and the lane's card both gate on it). `hostedProvision` creates the
+     * machine for an existing sandbox — no setup code, no command, the daemon's ordinary announce is the
+     * "it's up" signal — and is idempotent, so a retry never doubles a machine. `hostedRelease` is the way
+     * back out: it destroys the machine of a sandbox that has NEVER connected (choosing a different lane
+     * before anything was set up), and refuses on a live one, where destroying a machine belongs to the
+     * delete dialog and its confirmation. `wake` starts a stopped machine (the idle-stop's other half) and
+     * answers immediately — the browser keeps probing the daemon like it always does. */
     hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
-    hostedCreate: oc
-        .route({ method: "POST", path: "/sandbox/hosted-create" })
-        .input(z.object({ name: z.string().min(1).max(60) }))
+    hostedProvision: oc
+        .route({ method: "POST", path: "/sandbox/hosted-provision" })
+        .input(sandboxIdInput)
+        .output(SandboxSummarySchema),
+    hostedRelease: oc
+        .route({ method: "POST", path: "/sandbox/hosted-release" })
+        .input(sandboxIdInput)
         .output(SandboxSummarySchema),
     wake: oc
         .route({ method: "POST", path: "/sandbox/wake" })

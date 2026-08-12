@@ -40,14 +40,16 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 const sandboxes = ref<SandboxSummary[]>([]);
 const list = vi.fn<() => Promise<SandboxSummary[]>>();
 const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
-const hostedCreate = vi.fn<(name: string) => Promise<SandboxSummary>>();
+const hostedProvision = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
+const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSummary>>();
 vi.mock(`../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
         list,
         create,
-        hostedCreate,
+        hostedProvision,
+        hostedRelease,
         update,
         refresh: vi.fn().mockResolvedValue([]),
         select: vi.fn(),
@@ -134,8 +136,12 @@ const mount = async (): Promise<HTMLElement> => {
     return el;
 };
 
-const buttonSaying = (text: string): HTMLButtonElement | undefined =>
-    [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
+// A button whose whole label is this word — the "is there a Create button gating step 1" question, asked
+// precisely. Substring matching answers it wrongly now that the ladder's cloud card says "Created in your own
+// cloud account", which is prose about a machine rather than a control standing between the reader and their
+// sandbox.
+const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
+    [...document.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
 
 // The rename affordances are icons now, so they are found the way a screen reader finds them.
 const renamePencil = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Rename sandbox"]`)!;
@@ -156,7 +162,8 @@ const nameRow = (): string => {
 beforeEach(() => {
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
-    hostedCreate.mockReset();
+    hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad` } }));
+    hostedRelease.mockReset().mockImplementation(async (id: string) => sandboxRow({ id }));
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     create.mockReset().mockImplementation(async (name: string) => {
         const row = sandboxRow({ id: `new`, name });
@@ -178,7 +185,7 @@ it(`creates the sandbox on arrival, with no name asked for`, async () => {
     await mount();
     expect(create).toHaveBeenCalledWith(`workspace`);
     expect(nameRow()).toContain(`workspace`);
-    expect(buttonSaying(`Create`)).toBeUndefined();
+    expect(buttonLabelled(`Create`)).toBeUndefined();
 });
 
 // "Add sandbox" from a shell that already has one: the default counts past the names the account holds rather
@@ -218,28 +225,31 @@ it(`renames the sandbox it created, from the step itself`, async () => {
 });
 
 /* THE ZERO-CLICK FIRST RUN. On a platform that hosts, a fresh account's first sandbox is created AND started
- * without a single choice: the page asks the offer, calls the hosted create, and shows the wait — no command,
- * no copy button, nothing to paste. The classic tests above run with the offer answering "disabled", which is
- * every self-hosted platform and every platform from before the lane existed. */
-it(`auto-creates a hosted sandbox on arrival when the platform offers one`, async () => {
+ * without a single choice: the page creates the row the ordinary way, provisions a machine for it, and shows
+ * the wait — no command, no copy button, nothing to paste. The classic tests above run with the offer
+ * answering "disabled", which is every self-hosted platform and every platform from before the lane existed. */
+it(`auto-starts a hosted machine on arrival when the platform offers one`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
-    hostedCreate.mockResolvedValue(sandboxRow({ id: `h1`, name: `workspace`, hosted: { region: `iad` } }));
     const el = await mount();
-    expect(hostedCreate).toHaveBeenCalledWith(`workspace`);
-    expect(create).not.toHaveBeenCalled();
+    // The row is created the ordinary way — the lane only decides what machine is attached to it.
+    expect(create).toHaveBeenCalledWith(`workspace`);
+    expect(hostedProvision).toHaveBeenCalledWith(`new`);
     expect(el.textContent).toContain(`Starting your machine`);
     // Nothing pasteable on the zero-click path: the wait is the whole step.
     expect(el.textContent).not.toContain(`Copy`);
 });
 
-// A hosted create refused (allowance spent, capacity weather) must not strand the first run: the page falls
-// back to the classic command lane with the reason on the card.
-it(`falls back to the classic lane when the hosted create is refused`, async () => {
+/* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first
+ * run, AND must not hide why: the sandbox that was already created carries on into the command lane with the
+ * reason on the step. The silent version of this — bounce lanes, wipe the message — is what made the page
+ * read as broken. */
+it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
-    hostedCreate.mockRejectedValue(new Error(`no capacity`));
-    await mount();
-    expect(hostedCreate).toHaveBeenCalled();
-    await vi.waitFor(() => expect(create).toHaveBeenCalledWith(`workspace`));
+    hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
+    const el = await mount();
+    expect(create).toHaveBeenCalledWith(`workspace`);
+    expect(el.textContent).toContain(`no capacity right now`);
+    expect(nameRow()).toContain(`workspace`);
 });
 
 // A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is —
@@ -250,6 +260,30 @@ it(`resumes a hosted sandbox onto the wait card, not the command lane`, async ()
     list.mockResolvedValue([hosted]);
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
-    expect(hostedCreate).not.toHaveBeenCalled();
+    expect(hostedProvision).not.toHaveBeenCalled();
     expect(el.textContent).toContain(`Starting your machine`);
+});
+
+/* THE LADDER IS CARDS, AND A SWITCH MOVES A MACHINE — NOT THE SANDBOX. Picking another rung on a hosted
+ * sandbox hands its machine back and keeps the row: same id, same name, no delete-and-recreate. */
+it(`offers the rungs as readable cards, each stating its trade`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const cards = [...el.querySelectorAll(`[role="radio"]`)];
+    expect(cards).toHaveLength(3);
+    // Not a bare label each: the cost and what it asks of you are on the card, before it is clicked.
+    expect(cards[0]?.textContent).toContain(`We host it`);
+    expect(cards[0]?.textContent).toContain(`Free`);
+    expect(cards[1]?.textContent).toContain(`needs Docker`);
+});
+
+it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const mine = [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I have`)) as HTMLButtonElement;
+    mine.click();
+    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
+    expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
+    await nextTick();
+    expect(nameRow()).toContain(`workspace`);
 });
