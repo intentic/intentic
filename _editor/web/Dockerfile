@@ -13,7 +13,9 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # Staged as a template, not dropped straight into conf.d — the entrypoint renders it. Also NOT into the base
 # image's /etc/nginx/templates/, whose auto-envsubst runs with no variable filter and would blank every $uri.
 COPY nginx.conf /etc/nginx/default.conf.template
-COPY entrypoint.sh /entrypoint.sh
+# --chmod because CMD execs this directly: the source file's mode is whatever the checkout gave it, and the
+# monorepo restructure landed it 0644 — which the image only reveals at container start, as a crash loop.
+COPY --chmod=0755 entrypoint.sh /entrypoint.sh
 COPY dist /usr/share/nginx/html
 EXPOSE 80
 # Naming the script (rather than nginx) as the command also makes the base entrypoint skip its
