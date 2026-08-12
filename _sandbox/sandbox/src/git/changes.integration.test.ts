@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import {
     changedFiles,
@@ -158,6 +159,38 @@ test("staging an unmerged path resolves it — it moves out of `conflicted` and 
     expect(staged).toEqual([{ path: "a.txt", status: "modified", additions: 1, deletions: 1 }]);
     // …and only now will git commit it.
     expect(await commitIndex(dir, "resolve the merge", author)).toBe(true);
+});
+
+test("a staged rename that was then edited lands on both sides — renamed on one, modified on the other", async () => {
+    const dir = await tempRepo(); // a.txt = "one"
+    await sh(dir, "mv", "a.txt", "b.txt");
+    await writeFile(join(dir, "b.txt"), "one\nmore\n"); // the rename is staged; this edit is not
+
+    const { staged, unstaged } = await changedFiles(dir);
+    // The origin path rides its own field in the status record, and it belongs to the side the rename is on:
+    // the index renamed a.txt→b.txt, the worktree merely modified b.txt.
+    expect(staged).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
+    expect(unstaged).toEqual([{ path: "b.txt", status: "modified", additions: 1, deletions: 0 }]);
+});
+
+// The scan runs for every repo several times a second while an agent writes, so its spawn count is a property
+// worth pinning: one status read, plus one numstat per side that HAS rows. Assembling the same answer from
+// branch + rev-parse + two name-status passes + ls-files cost seven, and that was the daemon's hottest path.
+test("changedFiles costs one status read plus a numstat per non-empty side", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "two\n"); // unstaged only — the staged side stays empty
+    const spawns: string[][] = [];
+    const counting: GitRunner = async (cwd, args) => {
+        spawns.push([...args]);
+        return defaultGit(cwd, args);
+    };
+
+    await changedFiles(dir, counting);
+    expect(spawns).toHaveLength(2);
+    expect(spawns[0]).toContain("--porcelain=v2");
+    // A poller must not take index.lock for a refresh it only wants to read — agents race it for that lock.
+    expect(spawns[0]).toContain("--no-optional-locks");
+    expect(spawns[1]).toContain("--numstat");
 });
 
 test("conflictedFileDiff shows HEAD vs the worktree, because an unmerged path has no stage 0", async () => {

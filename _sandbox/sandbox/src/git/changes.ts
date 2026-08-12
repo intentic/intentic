@@ -104,6 +104,115 @@ export const parseNumstatZ = (stdout: string): Map<string, { additions?: number;
     return stats;
 };
 
+/* THE ONE READ THE WHOLE REVIEW IS BUILT FROM — `git status --porcelain=v2 -z --branch`, parsed into the three
+ * lists the panel renders plus the two header facts (the checked-out branch, and HEAD's sha).
+ *
+ * v2 is what lets ONE spawn answer what five used to (the branch, HEAD, both `--name-status` passes and the
+ * untracked walk): every record carries BOTH staging columns, so `XY` splits into an index-vs-HEAD change and a
+ * worktree-vs-index change independently. That is not the collapse changedFiles' note warns about — collapsing
+ * is picking ONE status per path, which loses the `MM` case; reading two columns as two changes is what the two
+ * diffs did, said once. Line counts still come from the real per-side diffs, so a row's stat still describes the
+ * diff it is displayed under.
+ *
+ * Records are NUL-terminated: `1` an ordinary change, `2` a rename/copy (whose ORIGIN PATH is the next NUL field,
+ * not part of the record), `u` an unmerged path, `?` untracked, `!` ignored. Their leading fields are fixed in
+ * COUNT but not in width, and a path may contain spaces — so the path is taken as the whole remainder after
+ * skipping that many spaces, never by splitting the record. */
+const LEADING_FIELDS: Record<string, number> = { "1": 8, "2": 9, u: 10 };
+
+const recordPath = (record: string, fields: number): string => {
+    let cursor = 0;
+    for (let field = 0; field < fields; field += 1) {
+        const next = record.indexOf(" ", cursor);
+        if (next === -1) {
+            return "";
+        }
+        cursor = next + 1;
+    }
+    return record.slice(cursor);
+};
+
+// One side's letter, in the vocabulary parseNameStatusZ already established: `R` carries its origin, `C` (a copy)
+// reads as a plain addition, and anything unrecognised degrades to "modified" rather than dropping the row.
+const changeAt = (letter: string, path: string, from: string | undefined): GitChange =>
+    letter === "R" && from !== undefined
+        ? { path, status: "renamed", from }
+        : { path, status: letter === "C" ? "added" : (STATUS_OF[letter] ?? "modified") };
+
+export interface StatusV2 {
+    branch?: string;
+    head?: string;
+    conflicted: GitChange[];
+    staged: GitChange[];
+    unstaged: GitChange[];
+    untracked: string[];
+}
+
+export const parseStatusV2 = (stdout: string): StatusV2 => {
+    const records = stdout.split("\0");
+    const conflicted: GitChange[] = [];
+    const staged: GitChange[] = [];
+    const unstaged: GitChange[] = [];
+    const untracked: string[] = [];
+    let branch: string | undefined;
+    let head: string | undefined;
+    let cursor = 0;
+    while (cursor < records.length) {
+        const record = records[cursor] ?? "";
+        cursor += 1;
+        const kind = record[0] ?? "";
+        if (kind === "#") {
+            const [, key, value] = record.split(" ");
+            // `(initial)` on an unborn HEAD and `(detached)` off a branch both mean "no answer" — the same thing
+            // the empty output of the two commands this replaces meant.
+            if (key === "branch.oid" && value !== undefined && value !== "(initial)") {
+                head = value;
+            }
+            if (key === "branch.head" && value !== undefined && value !== "(detached)") {
+                branch = value;
+            }
+            continue;
+        }
+        if (kind === "?") {
+            const path = record.slice(2);
+            if (path !== "") {
+                untracked.push(path);
+            }
+            continue;
+        }
+        const fields = LEADING_FIELDS[kind];
+        if (fields === undefined) {
+            // `!` (ignored, never requested here) and the empty trailing record after the final NUL.
+            continue;
+        }
+        const path = recordPath(record, fields);
+        // A rename's origin is its own NUL field, so it must be consumed whether or not the record parsed —
+        // leaving it would be read as the next record.
+        const from = kind === "2" ? (records[cursor] ?? "") : undefined;
+        if (kind === "2") {
+            cursor += 1;
+        }
+        if (path === "") {
+            continue;
+        }
+        if (kind === "u") {
+            // An unmerged path has no stage 0, so it is neither side's — see changedFiles' note. v2 gives it its
+            // own record kind, so it never has to be filtered back out of the two lists.
+            conflicted.push({ path, status: "conflicted" });
+            continue;
+        }
+        const index = record[2] ?? ".";
+        const worktree = record[3] ?? ".";
+        if (index !== ".") {
+            staged.push(changeAt(index, path, from));
+        }
+        if (worktree !== ".") {
+            unstaged.push(changeAt(worktree, path, from));
+        }
+    }
+    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, untracked };
+};
+
 // HEAD's sha; undefined on an unborn HEAD (a repo initialized but never committed) — everything is "added"
 // there and the index-reset verbs need a different spelling. Exported for land/origins, which record and then
 // re-check it to decide whether an agent's landed work is still the uncommitted content of the main tree.
@@ -197,58 +306,41 @@ const withUntrackedLineStats = async (dir: string, untracked: readonly string[],
 //   staged     = index vs HEAD         (`git diff --cached`) — what `git commit` would record right now
 //   unstaged   = worktree vs index     (`git diff`) + untracked files
 //
-// The two clean sides are read as two real diffs rather than by collapsing `git status`'s two porcelain columns,
-// because a path can legitimately appear on BOTH with DIFFERENT statuses (a staged rename whose new file was
-// then edited, the classic `MM`). Collapsing them, as this used to, made a partially-staged file report one
-// status and one pair of line counts that matched neither side. Each side gets its own name-status pass and its
-// own numstat pass, so every count describes the diff it is displayed under.
+// The two clean sides stay two lists, because a path can legitimately appear on BOTH with DIFFERENT statuses (a
+// staged rename whose new file was then edited, the classic `MM`). Reporting one status per path, as this once
+// did, made a partially-staged file carry a stat that matched neither side. What produces the two lists is one
+// `--porcelain=v2` read — its `XY` is exactly those two sides (see parseStatusV2) — and each side then gets its
+// OWN numstat pass, so every count still describes the diff it is displayed under.
 //
-// Conflicts come OUT of both sides and into their own list. They are not a third opinion about staging: an
-// unmerged path has no stage 0 at all, so "what would a commit record" has no answer for it — git refuses to
-// commit while one exists. Listing it as staged (which the `U` letter, read as a fallback "modified", used to
-// do) claimed it was ready to commit and offered an index-vs-HEAD diff that cannot be computed.
+// Conflicts are their own list, not a third opinion about staging: an unmerged path has no stage 0 at all, so
+// "what would a commit record" has no answer for it — git refuses to commit while one exists. Listing it as
+// staged (which the `U` letter, read as a fallback "modified", used to do) claimed it was ready to commit and
+// offered an index-vs-HEAD diff that cannot be computed. v2 gives it its own record kind, so it is never in
+// either side to begin with.
 //
-// -z gives exact NUL-delimited paths; untracked come from `ls-files --others --exclude-standard -z`, which
-// expands directories into real file paths (per-path actions need them). info/exclude + .gitignore keep the scan
-// off the nested repo dirs, .intentic/ and junk in the root repo.
+// THREE SPAWNS, NOT SEVEN, and that is the point of reading status rather than assembling the same answer from
+// `branch` + `rev-parse` + two `diff --name-status` + `ls-files`: this runs for every repo on every scan, several
+// times a second while an agent writes, and it was the daemon's most contended path.
+//
+// `--no-optional-locks` because a poller must never take `index.lock` for a refresh it only wants to read —
+// agents are running their own git in these same repos continuously, and the loser of that race fails outright.
+// `-uall` expands untracked directories into real file paths (per-path actions need them), and info/exclude +
+// .gitignore keep the walk off the nested repo dirs, .intentic/ and junk in the root repo. `--find-renames`
+// states what git already defaults to, so a repo carrying `status.renames=false` cannot quietly disagree with
+// the numstat passes, which ask for it explicitly.
 export const changedFiles = async (
     dir: string,
     git: GitRunner = defaultGit,
 ): Promise<{ branch?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }> => {
-    const [branchOut, head] = await Promise.all([git(dir, ["branch", "--show-current"]), headSha(dir, git)]);
-    const branch = branchOut.stdout.trim();
+    const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"]);
+    const { branch, head, conflicted, staged: stagedNames, unstaged: unstagedNames, untracked } = parseStatusV2(stdout);
     // On an unborn HEAD there is no commit to diff the index against — the empty tree stands in, so a repo
     // whose first commit is still being composed reports its staged files instead of nothing.
     const base = head ?? EMPTY_TREE;
-    // Three independent read-only spawns — the two name-status passes and the untracked walk don't touch the
-    // index, so they run concurrently.
-    const [stagedOut, unstagedOut, untrackedOut] = await Promise.all([
-        git(dir, ["diff", "--cached", "--name-status", "-z", "--find-renames", base]),
-        git(dir, ["diff", "--name-status", "-z", "--find-renames"]),
-        git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]),
-    ]);
-    // An unmerged path shows up as `U` on whichever pass sees it (usually both) — one entry per path, and it
-    // wins over any clean status the same path also reported.
-    const conflicted = new Map<string, GitChange>();
-    const clean = (changes: readonly GitChange[]): GitChange[] =>
-        changes.filter((change) => {
-            if (change.status !== "conflicted") {
-                return true;
-            }
-            conflicted.set(change.path, change);
-            return false;
-        });
-    const stagedNames = clean(parseNameStatusZ(stagedOut.stdout));
-    const unstagedNames = clean(parseNameStatusZ(unstagedOut.stdout));
-    // Untracked files are unstaged by definition (nothing about them is in the index yet). Guarded against a
-    // path either tracked list already reported, which can't normally happen but would double a row if it did.
-    const seen = new Set([...unstagedNames.map((change) => change.path), ...conflicted.keys()]);
-    const untracked: string[] = [];
-    for (const path of untrackedOut.stdout.split("\0")) {
-        if (path !== "" && !seen.has(path)) {
-            unstagedNames.push({ path, status: "added" });
-            untracked.push(path);
-        }
+    // Untracked files are unstaged by definition (nothing about them is in the index yet), and they go on the end
+    // so the tracked rows keep git's own ordering.
+    for (const path of untracked) {
+        unstagedNames.push({ path, status: "added" });
     }
     // No numstat for a conflict: "how many lines changed" has no answer across three stages, and the row shows
     // no diffstat rather than an invented one.
@@ -256,7 +348,7 @@ export const changedFiles = async (
         withLineStats(dir, ["--cached", base], stagedNames, git),
         withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes)),
     ]);
-    return { ...(branch !== "" ? { branch } : {}), conflicted: [...conflicted.values()], staged, unstaged };
+    return { ...(branch !== undefined ? { branch } : {}), conflicted, staged, unstaged };
 };
 
 // A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged

@@ -13,6 +13,7 @@ import { computed, ref, watch } from "vue";
 import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { useChat } from "../chat/useChat";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
+import { throttleTrailing } from "../throttleTrailing";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -45,10 +46,23 @@ import { GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../quer
 // have landed in another sandbox's tree, and only the family-wide prefix reaches it (see queryKeys).
 const { conversations } = useChat();
 const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.streaming.value).length);
+/* THROTTLED, because "a turn ended" is a per-AGENT event and the read it triggers is workspace-wide. One agent
+ * finishing is one refresh either way — throttleTrailing runs the first call on the spot, so the common case
+ * stays instant. Four or five agents working at once is where it mattered: their turns end continuously and
+ * independently, and each ending fired its own full review scan (every repo, several git spawns each) on the
+ * daemon's most contended path. They collapse into one refresh per window now, which is also all the daemon
+ * would have served — it coalesces overlapping scans anyway, so the extra rounds bought staleness of zero.
+ *
+ * Same window as the file-watcher's own refresh (systemEvents), for the same reason: a second of staleness on a
+ * review the user is not yet looking at is imperceptible, and it bounds the cost of a busy fleet. */
+const TURN_END_REFRESH_MS = 1000;
+const refreshReviewable = throttleTrailing(() => {
+    void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+    void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
+}, TURN_END_REFRESH_MS);
 watch(turnsRunning, (now, was) => {
     if (now < was) {
-        void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
-        void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
+        refreshReviewable();
     }
 });
 
