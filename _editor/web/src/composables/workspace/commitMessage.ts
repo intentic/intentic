@@ -102,10 +102,22 @@ export const commitMessage = computed<string>({
  * someone is typing in it would eat the space they just pressed before the first word of their own message. */
 const isBlank = (message: string): boolean => message.trim() === ``;
 
+/* IS THE BOX THE USER'S RIGHT NOW — the one rule that decides whether a From chip may write into it, exported
+ * because the panel has to be able to SAY it.
+ *
+ * A refusal here is correct and it is also invisible: the user clicks a chip, the filter narrows, and the box
+ * simply does not change, because what is in it is theirs. That is indistinguishable from the feature being
+ * broken — which is what it was reported as. The panel reads this to explain itself in the box's own readout
+ * ("keeping your message"), so the one state where nothing arrives ON PURPOSE says so.
+ *
+ * Defined once and used by the guard below rather than restated there: a notice that disagrees with the rule it
+ * describes is worse than no notice at all. */
+export const boxIsYours = computed(() => !isBlank(draft.value) && draft.value !== filled.value);
+
 // The message for a session's work, filed by the From legend's click. Declines while the box holds anything the
 // fill did not put there — a blank box, or the fill's own last line, is all it may write over.
 export const fillCommitMessage = (message: string): void => {
-    if (!isBlank(draft.value) && draft.value !== filled.value) {
+    if (boxIsYours.value) {
         return;
     }
     filled.value = message;

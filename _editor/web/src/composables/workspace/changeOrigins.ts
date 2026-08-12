@@ -131,3 +131,54 @@ export const commitMessageOf = (landed: LandedMessage | undefined): string | und
         .join(`\n`);
     return [landed.subject, trailers].filter((part) => part !== ``).join(`\n\n`);
 };
+
+// What the commit box knows about the lit chip when it is deciding what to say: who is lit, what that chip has
+// to file, and whether the box is free to take it.
+export interface ChipMessageState {
+    // The lit chip's name, or undefined when no chip is lit — nothing is being asked of the box, nothing to say.
+    readonly label: string | undefined;
+    // The lit chip is the "you" row, whose files no agent landed and which therefore has no sentence to file.
+    readonly yours: boolean;
+    // What that chip would file, if anything exists yet.
+    readonly message: string | undefined;
+    // A model is writing that sentence right now (the roster's `draftingSubject`).
+    readonly drafting: boolean;
+    // The box holds something the user wrote, so a fill would be declined (commitMessage's `boxIsYours`).
+    readonly boxIsYours: boolean;
+}
+
+/* WHY THE BOX DID NOT JUST FILL ITSELF — said in the box, at the moment of the click that expected it.
+ *
+ * Every one of these states was already correct and every one of them looked identical: the user clicks a From
+ * chip, the list narrows, and the commit box does not change. Nothing was wrong, and nothing said so. The
+ * receipts report the drafting's two edges wherever the user is standing (draftingReceipts.ts) — but a receipt
+ * is a moment, and the click routinely comes minutes after it, or before the drafting ever started, or over a
+ * box the user has since typed in. The question "why didn't it fill?" is asked HERE and has to be answered here.
+ *
+ * Ordered by what the user can DO about it. A box they own comes first because it is the only refusal that is
+ * about them rather than about the sentence — and the only one with a remedy in their hands, which is why it
+ * names it. Then the wait, then the absence, both of which are the daemon's news and neither of which is
+ * actionable beyond writing the line yourself.
+ *
+ * Undefined ⇒ nothing to explain: no chip is lit, or the chip's message is already in the box, where it speaks
+ * for itself. */
+export const chipMessageNotice = (state: ChipMessageState): string | undefined => {
+    if (state.label === undefined) {
+        return undefined;
+    }
+    if (state.yours) {
+        return `Your own changes — name this commit yourself`;
+    }
+    // Said whether the sentence exists yet or is still being written: either way this box is not taking it, and
+    // the same clearing lets the one that arrives land.
+    if (state.boxIsYours && (state.message !== undefined || state.drafting)) {
+        return `Keeping your message — clear the box to use ${state.label}'s`;
+    }
+    if (state.drafting) {
+        return `Writing a message for ${state.label}…`;
+    }
+    // Nothing was written and nothing is coming: no quick model answered, the draft failed, or the work landed
+    // before anything was writing these. The honest answer is that there is nothing to file, not a guess at
+    // which of the three it was — and the same words the receipt used when the draft ended empty.
+    return state.message === undefined ? `No message was written for ${state.label} — name the commit yourself` : undefined;
+};

@@ -15,8 +15,10 @@ const { active, stored } = vi.hoisted(() => {
 });
 
 vi.mock("../sandbox/useSandbox", async () => {
-    const { ref } = await import("vue");
-    return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(active.sandboxId) }) };
+    // Imported inside the factory (a mock is hoisted above this file's own imports) and named apart from the
+    // `ref` above it, which is the same import under a name the linter can tell from this one.
+    const { ref: vueRef } = await import("vue");
+    return { useSandbox: () => ({ activeSandboxId: vueRef<string | undefined>(active.sandboxId) }) };
 });
 
 vi.stubGlobal(`localStorage`, {
@@ -25,7 +27,7 @@ vi.stubGlobal(`localStorage`, {
     removeItem: (key: string): void => void stored.delete(key),
 });
 
-import { clearFilledMessage, commitMessage, fillCommitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
+import { boxIsYours, clearFilledMessage, commitMessage, fillCommitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
 
 describe(`the commit box`, () => {
     beforeEach(() => {
@@ -88,6 +90,22 @@ describe(`the commit box`, () => {
         expect(commitMessage.value).toBe(`fix: cascading markers in the tree`);
         clearFilledMessage();
         expect(commitMessage.value).toBe(`fix: cascading markers in the tree`);
+    });
+
+    /* THE PANEL'S VIEW OF THAT SAME RULE — what it reads to say "keeping your message" instead of refusing a
+     * click in silence. It has to answer exactly when the fill declines, so these walk the same four states the
+     * tests above walk and check the two never disagree. */
+    test(`the box says whose it is`, () => {
+        expect(boxIsYours.value).toBe(false); // empty: free to fill
+
+        fillCommitMessage(`fix: cascading markers`);
+        expect(boxIsYours.value).toBe(false); // the fill's own line, which it may replace
+
+        commitMessage.value = `fix: cascading markers in the tree`;
+        expect(boxIsYours.value).toBe(true); // edited by hand: theirs
+
+        commitMessage.value = `   `;
+        expect(boxIsYours.value).toBe(false); // whitespace is not writing
     });
 
     // What a successful commit does. The box is empty again, so the legend is free to name the next one.

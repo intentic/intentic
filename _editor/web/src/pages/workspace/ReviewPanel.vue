@@ -13,8 +13,17 @@ import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
-import { commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "../../composables/workspace/commitMessage";
-import { ALL_SIDES, commitMessageOf, landedMessage, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "../../composables/workspace/commitMessage";
+import {
+    ALL_SIDES,
+    chipMessageNotice,
+    commitMessageOf,
+    landedMessage,
+    originHue,
+    originsOf,
+    summarizeOrigins,
+    YOURS,
+} from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
@@ -281,7 +290,7 @@ followFilledMessage(filterMessage);
  * agent finish walks over to Changes and clicks its chip. Being told costs one line and turns a control that
  * looks broken into one that is obviously working. */
 const originDrafting = (id: string): boolean => agentOf(id)?.draftingSubject === true;
-// The lit chip's own answer, for the box's placeholder below.
+// The lit chip's own answer, for the box's readout below.
 const filterDrafting = computed(
     () => originFilter.value !== undefined && originFilter.value !== YOURS && filterMessage.value === undefined && originDrafting(originFilter.value),
 );
@@ -320,6 +329,27 @@ const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
 // button's tooltip, the section verbs, the discard prompt). Undefined is "no filter", not "nobody".
 const filterLabel = computed<string | undefined>(() =>
     originFilter.value === undefined ? undefined : originFilter.value === YOURS ? `you` : originLabel(originFilter.value),
+);
+
+/* WHAT THE BOX SAYS ABOUT THE LIT CHIP — the click's answer, in the place the answer was expected.
+ *
+ * Filing a session's message is a gesture that USUALLY changes the box and sometimes cannot, and every "cannot"
+ * looked the same: the list narrowed and nothing else happened. So the box states its own case whenever it has
+ * one — the sentence is still being written, none was ever written, the "you" row has none by definition, or
+ * the box is holding something the user typed that a fill may not overwrite. The rule is in changeOrigins.ts,
+ * where the wording of each case can be pinned by a test.
+ *
+ * It rides the PLACEHOLDER while the box is empty, so it sits exactly where the message would have appeared,
+ * and moves to the readout line under the box when there is text covering the placeholder — which is precisely
+ * the "keeping your message" case, the one refusal a placeholder could never be seen for. */
+const chipNotice = computed<string | undefined>(() =>
+    chipMessageNotice({
+        label: filterLabel.value,
+        yours: originFilter.value === YOURS,
+        message: filterMessage.value,
+        drafting: filterDrafting.value,
+        boxIsYours: boxIsYours.value,
+    }),
 );
 
 const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
@@ -1017,16 +1047,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  growCommitBox takes it from there, on the real height of what is in it, and it scrolls past the
                  ceiling.
 
-                 The placeholder does the waiting: a lit chip whose sentence is still being written says so
-                 HERE, in the box the sentence is going to land in, rather than leaving an empty box that looks
-                 identical to one nothing is coming for. It is a placeholder rather than filled text on purpose —
-                 the box must stay the user's to type in, and typing over it is how they say they'd rather not
-                 wait. -->
+                 The placeholder ANSWERS THE CLICK: a lit chip whose sentence is still being written says so
+                 HERE, in the box the sentence is going to land in, and so does one that has no sentence coming
+                 at all — rather than leaving an empty box that looks identical either way, and identical to a
+                 feature that has been removed. It is a placeholder rather than filled text on purpose — the box
+                 must stay the user's to type in, and typing over it is how they say they'd rather not wait. -->
             <textarea
                 ref="commitBox"
                 v-model="commitMessage"
                 rows="1"
-                :placeholder="filterDrafting ? `Writing a message for ${filterLabel}…` : `Message (Ctrl+Enter to commit)`"
+                :placeholder="chipNotice ?? `Message (Ctrl+Enter to commit)`"
                 class="scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto rounded-md border border-line bg-canvas px-2 py-1 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
@@ -1052,6 +1082,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     v-tooltip.right.overflow="blockerNotice"
                 >
                     {{ blockerNotice }}
+                </span>
+                <!-- The lit chip's answer, for the one case the placeholder above cannot be seen for: the box
+                     holds something the user wrote, so the chip's message is deliberately not taking it over.
+                     Ahead of the staged readout because it explains a click that just appeared to do nothing,
+                     which is the more urgent of the two questions this line can answer. -->
+                <span
+                    v-else-if="boxIsYours && chipNotice"
+                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted"
+                    v-tooltip.right.overflow="chipNotice"
+                >
+                    {{ chipNotice }}
                 </span>
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
