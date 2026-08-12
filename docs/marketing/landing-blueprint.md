@@ -30,10 +30,18 @@ different from a custom GPT", on `/product/supervise/` (the `prompt-vs-environme
 `/product/empower/` (the sandbox and its installed tools), and across `/compare/`. What it no longer
 gets is four bands of the landing page.
 
-**Re-centered 2026-08-07 (recorded decision).** The headline claim now leads with what the
-infrastructure buys — persistence and reach — instead of the IDE frame: the brand line is
-`Workstation for your agents. / A window for you.` (messaging.md's retired-framing list has
-the old first line and the reason). This was a re-center, not a re-cut.
+**Re-centered 2026-08-07 (recorded decision).** The headline claim moved off the IDE frame and onto
+what the infrastructure buys — persistence and reach — as the brand line
+`Workstation for your agents. / A window for you.` (messaging.md's retired-framing list has the
+line it replaced and the reason). This was a re-center, not a re-cut.
+
+**Plain-worded 2026-08-12 (recorded decision, supersedes the 2026-08-07 brand line).** The brand
+line is now `You delegate. They work. / You approve.` Both of the old nouns charged the reader a
+translation — "workstation" reads as a desktop PC, and "a window for you" made the buyer a spectator
+of a product whose whole stance is that the human approves the plan and reads every diff. The
+claim itself did not move: the hero subhead now carries the ownership and persistence the old
+headline gestured at, and the headline carries the stance. Nothing else on the page changed, and the
+retired-framing list in messaging.md holds the full reason.
 
 **Re-cut around the verbs 2026-08-09 (recorded decision, supersedes the loop/extend split).** The
 middle of the page — the four-beat `#loop` and the six-row `#extend` bento — is now one band: a
@@ -103,11 +111,12 @@ One page, one continuous scroll — **the claim, a five-verb tour, two objection
 down from fourteen. Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy
 is in `about.ts` because `/about/` shares it.
 
-1. **Hero (`#hero`)** — the brand line, kept verbatim ("Workstation for your agents. A window
-   for you.") + a subhead that carries the whole claim: agents that live on hardware you own
-   and keep running when you look away, every browser a window onto the same fleet — steer,
-   approve, interrupt, land. CTAs, chips, the real fleet board cropped to two lanes, and the play
-   button into the live demo. (P1, P2, P6)
+1. **Hero (`#hero`)** — the brand line, kept verbatim ("You delegate. They work. You approve.")
+   + a subhead that carries what the line leaves out: ten agents on hardware you own, running on
+   subscriptions you already pay for, still working after you close the browser. Between them the
+   two hold the whole claim — control in the headline, ownership and persistence under it. CTAs,
+   chips, the real fleet board cropped to two lanes, and the play button into the live demo.
+   (P1, P2, P6)
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,

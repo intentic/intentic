@@ -8,10 +8,9 @@ reached from any browser. The sandbox and CLI that run on your machine are MIT o
 GitHub — the trust layer you can read and run yourself.
 
 > **One word for the thing.** The object is always a **sandbox** — that is what the app's own tab,
-> the API, the packages and the docs call it, without exception. "Workstation" appears in exactly one
-> place, the brand tagline, where it is a *metaphor for the claim* and not the name of anything. Do
-> not use it as a synonym for the sandbox, and do not use it for the host machine either — a host is
-> a "laptop, desktop or VPS". See the glossary below.
+> the API, the packages and the docs call it, without exception. No synonym is licensed anywhere, not
+> even in the brand line, which names nothing in the system on purpose. The host machine is a
+> "laptop, desktop or VPS", never a second word for the sandbox. See the glossary below.
 
 ## Rules of voice
 
@@ -81,15 +80,22 @@ intent." as the definition, "An AI-native workspace for infra, data, apps, and c
 agents that own their workspace", **"A specialized agent is more than a prompt."** as the
 headline — it argued against a strawman nobody's pain matches, restated the contrast band 1500px
 early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin, **"The IDE you
-share with your agents."** / "A shared IDE for you and your agents" as the tagline, and
+share with your agents."** / "A shared IDE for you and your agents" as the tagline,
 **"An IDE for your agents."** as the tagline's first line (retired 2026-08-07) — "IDE" named the
 surfaces instead of the capability: it filed us with editors, and nothing in it said the run
-survives you leaving, which is the one thing the infrastructure buys that a reader can picture. Its
-second line, "A window for you.", survives in the current tagline.
+survives you leaving, which is the one thing the infrastructure buys that a reader can picture — and
+**"Workstation for your agents. A window for you."** as the tagline (retired 2026-08-12): both nouns
+charged the reader a translation. "Workstation" reads as a desktop PC, so the claim landed one hop
+late, and it needed a standing glossary rule to stop the word leaking into copy that means the
+sandbox; "a window for you" cast the buyer as a spectator, which is the opposite of a co-piloted
+product where the human approves the plan and reads every diff. "window" survives as glossary
+vocabulary for any signed-in browser, but it is no longer a brand noun.
 "specialized agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the
-headline claim. The brand tagline is now "Workstation for your agents. A window for you."
+headline claim. The brand tagline is now "You delegate. They work. You approve."
 (org metadata, `_site/site-content/src/site.ts`), rendered as the hero
-`Workstation for your agents. / A window for you.`
+`You delegate. They work. / You approve.` — three beats split 2 + 1, so the line that stands alone is
+the one the reader has to believe. It states the working stance in words nobody has to translate and
+names nothing in the system, so no word in it can collide with the product's own vocabulary.
 
 ## Section order
 
@@ -115,20 +121,15 @@ section.
   copy that disagrees with it teaches the reader a word the product will not answer to. Never
   "server", never "cloud", never "instance", never "workstation" — the word has to keep saying *a real
   machine of yours*. One host can run several; a user switches between them by name.
-- **workstation** — **the brand tagline only.** "Workstation for your agents. A window for you." is a
-  metaphor for the claim — a machine of your own, doing real work — deliberately naming nothing in the
-  system. Outside the tagline the word is banned in both directions: not a synonym for the sandbox
-  (that is what the collision was), and not a word for the host machine either, which is a "laptop,
-  desktop or VPS". If prose needs the *idea*, write "a machine of their own".
 - **window** — any signed-in browser on any device: a view onto the same running sandbox, holding
-  nothing a run depends on. Close it, open another anywhere, nothing is lost. The tagline's
-  second noun; "the window" in copy always means this, never a desktop app window.
+  nothing a run depends on. Close it, open another anywhere, nothing is lost. Body vocabulary, not a
+  brand noun; "the window" in copy always means this, never a desktop app window.
 - **specialized agent** (a.k.a. **autonomous employee**) — a coding agent given its own sandbox for
   one job: dev-tools really installed, wired to your systems, context curated for that role. A
   *mechanism* word — what a sandbox is *for* — never the headline claim. Careful with the level: a
   specialized agent is one sandbox, while the parallel conversations inside it each get a **git
   worktree**, not a sandbox of their own. "Each agent gets its own sandbox and worktree" conflates
-  the two and is the second-most common slip after "workstation".
+  the two and is the most common slip in this glossary.
 - **the environment** — the sum of the layers a prompt can't reach: the image the tools are installed
   in, the capabilities the agent may use, the context it loads each turn. The deep differentiator
   under the ownership claim: all of it is **visible and editable**, not merely existent.
@@ -216,14 +217,15 @@ section.
 
 - The landing is a single page — its title/description are **not** per-variant; they live in
   `_site/site-content/src/landing.ts` (`meta`). Title:
-  `intentic · Workstation for your agents. A window for you.`
+  `intentic · You delegate. They work. You approve.`
 - Org description (`_site/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `Workstation for your agents. A window for you.
-  Every agent works in a sandbox on hardware you own, in a git worktree of its own — and keeps
+  the site and these docs in sync with it verbatim: `You delegate. They work. You approve.
+  Every agent works in a sandbox on hardware you own, in its own git worktree. It keeps
   running when you close the browser. Reopen from any device, steer the same fleet, and read every
   diff before it lands. Free.`
-- Keywords to carry naturally — "agent workstation" is earned by the tagline in the title and needs
-  no help from body copy, which says "sandbox": agent workstation, persistent coding agent, self-hosted AI agent,
+- Keywords to carry naturally — the tagline carries none of them now, by design: it sells the stance,
+  and the words a searcher types are earned by body copy, which says "sandbox": persistent coding
+  agent, self-hosted AI agent,
   run agents on your own hardware, control agents from anywhere, remote agent control, coding
   agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude
   Code, Codex, Grok, AI IDE, Devin alternative, own your code.

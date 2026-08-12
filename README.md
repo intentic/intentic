@@ -2,7 +2,7 @@
 
 <img src="_site/site/src/assets/intentic-full.png" alt="intentic" width="340">
 
-### Workstation for your agents. A window for you.
+### You delegate. They work. You approve.
 
 Every agent works in a sandbox on hardware **you** own, in a git worktree of its own — and keeps running when you look away.<br>
 Run ten in parallel, reopen from any device, read every diff before it lands. Free.

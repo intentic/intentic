@@ -2,7 +2,7 @@
 
 As someone who followed a link and has about forty seconds to spare, I want the page to tell me what the product actually is and show me that it exists, so that deciding to try it is a decision rather than a leap.
 
-The page makes one claim — "Workstation for your agents. A window for you." — and then spends the rest of the scroll proving it with the real thing. The screenshots are the product's own screens, not drawings of them, because the fastest way to earn a minute of someone's attention is to show them the workspace before making any claim about it. By the time I reach the bottom I know what runs where, what it costs me, and what I own.
+The page makes one claim — "You delegate. They work. You approve." — and then spends the rest of the scroll proving it with the real thing. The screenshots are the product's own screens, not drawings of them, because the fastest way to earn a minute of someone's attention is to show them the workspace before making any claim about it. By the time I reach the bottom I know what runs where, what it costs me, and what I own.
 
 Nothing on the page asks me for anything except a decision. There is no form, no gate, no email box in the way of the argument, and wherever I stop reading there is a way to start within reach — because the page's only job is to hand me to the sign-in with my question already answered.
 

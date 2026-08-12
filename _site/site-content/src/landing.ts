@@ -113,16 +113,20 @@ export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
-        title: "intentic · Workstation for your agents. A window for you.",
+        title: "intentic · You delegate. They work. You approve.",
         description:
             "Agents on hardware you own that keep running when you close the browser. Reopen from any device, steer the fleet, read every diff before it lands. Free.",
     },
     hero: {
-        headlineLines: ["Workstation for your agents.", "A window for you."],
-        // Plain, high-signal words: the three differentiators are ownership (your hardware), persistence
-        // (survives the browser closing) and control (nothing lands unread): name exactly those and stop.
-        // "Close the browser", not "log off": nothing is ended for the runs to continue.
-        subhead: "Agents that run on your hardware, keep going when you close the browser, and land nothing until you review.",
+        // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
+        // headline owns the working stance — you hand over the work, the agent does it, nothing lands
+        // without you — and says it in words nobody has to translate.
+        headlineLines: ["You delegate. They work.", "You approve."],
+        // The headline spends itself on control, so the subhead carries the other two differentiators —
+        // ownership (your hardware) and persistence (survives the browser closing) — plus the price of
+        // scale, which is what makes "ten" credible. "Close the browser", not "log off": nothing is
+        // ended for the runs to continue.
+        subhead: "Ten agents on hardware you own, running on the subscriptions you already pay for — and still working after you close the browser.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
