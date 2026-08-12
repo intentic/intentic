@@ -320,8 +320,8 @@ export const recordedRows = (messages: readonly ChatMessage[]): number =>
  * them saying it. (The machine-voiced resume notes on the wire are for turns the daemon re-ran with nobody
  * asking, where a user bubble would be a lie about who spoke. This is not one of those.) */
 export const CONTINUATIONS = {
-    plain: `Continue from where you left off.`,
-    afterDenial: `Continue from where you left off, without the step I declined.`,
+    plain: `Continue`,
+    afterDenial: `Continue, without the step I declined.`,
 } as const;
 
 // A message reduced to what the lexicon below is written in: lower case, one space between words, and trailing
