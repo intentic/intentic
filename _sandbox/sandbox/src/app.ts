@@ -359,6 +359,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // It checks its own path-scoped ticket (auth/media-tickets.ts) — a strictly narrower grant than
                 // the bearer, and the route refuses outright without one.
                 c.req.path === "/workspace/media" ||
+                // /bundles/download is NAVIGATED to, so the browser's own download manager streams the bytes to
+                // disk — and a navigation carries no Authorization header either. Same containment as the media
+                // route: its own ticket, minted by an owner-gated POST and scoped to the one bundle it names.
+                c.req.path === "/bundles/download" ||
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
                 // Account deletion must be repeatable after a partial attempt already disabled this daemon.

@@ -32,11 +32,28 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
         services({
             workspace: workspacePaths(join(dir, "work")),
             config: { ...testConfig, workspaceRoot: join(dir, "work"), historyRoot: join(dir, "history") },
-            // Most tests run in loopback shape (no auth at all); the ticket test needs a daemon that actually
-            // checks one, because the download route skips the check when there is no auth — same as
-            // /workspace/media, and for the same reason.
+            /* Most tests run in loopback shape (no auth at all); the ticket test needs a daemon that actually
+             * checks one, because the download route skips the check when there is no auth — same as
+             * /workspace/media, and for the same reason.
+             *
+             * The bearer is checked the way the real one is: no header, no caller. A stub that authorized the
+             * headerless request too made the download test pass while the browser's own navigation — which
+             * cannot send a header — was being refused by the bearer middleware before the route ever ran.
+             */
             ...(options.authed === true
-                ? { auth: { authorize: async () => ({ email: "owner@example.com", role: "owner" as const }), authorizeOwner: async () => {} } }
+                ? {
+                      auth: {
+                          authorize: async (presented: string) => {
+                              // "" is what a request with no Authorization header presents (auth/auth.ts
+                              // bearerFrom), and the real authorize refuses it in exactly these words.
+                              if (presented === "") {
+                                  throw new Error("missing bearer token");
+                              }
+                              return { email: "owner@example.com", role: "owner" as const };
+                          },
+                          authorizeOwner: async () => {},
+                      },
+                  }
                 : {}),
         } as Parameters<typeof services>[0]),
     );
@@ -93,19 +110,28 @@ test("a second start while one is packing is a 409, not a race", async () => {
     expect((await app.request("/bundles", { method: "POST" })).status).toBe(409);
 });
 
+/* The download is the one bundle route a BROWSER reaches by navigating to it, so every request below is made
+ * the way that navigation makes it: no Authorization header, ticket only. The owner-gated calls that set it up
+ * carry the bearer, as the web app's own fetches do.
+ */
+const owner = { authorization: "Bearer owner-token" } as const;
+
 test("download needs a ticket for THAT bundle, and serves it with a real length", async () => {
     const { app } = await appOn({ authed: true });
-    const { name } = await jsonOf<{ name: string }>(await app.request("/bundles", { method: "POST" }));
+    const { name } = await jsonOf<{ name: string }>(await app.request("/bundles", { method: "POST", headers: owner }));
     await vi.waitFor(async () => {
-        const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
+        const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles", { headers: owner }));
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
     });
 
     // No ticket, or one minted for a different bundle, buys nothing — the credential is scoped to one file.
     expect((await app.request(`/bundles/download?name=${encodeURIComponent(name)}`)).status).toBe(401);
-    const { ticket } = await jsonOf<{ ticket: string }>(await app.request(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: "POST" }));
+    const { ticket } = await jsonOf<{ ticket: string }>(
+        await app.request(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: "POST", headers: owner }),
+    );
     expect((await app.request(`/bundles/download?name=other.tar.gz&ticket=${ticket}`)).status).toBe(401);
 
+    // The ticket ALONE opens it: the bearer middleware exempts this path, exactly as it does /workspace/media.
     const response = await app.request(`/bundles/download?name=${encodeURIComponent(name)}&ticket=${ticket}`);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/gzip");
