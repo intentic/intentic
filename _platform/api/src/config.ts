@@ -154,6 +154,12 @@ const configSchema = z.object({
             // than the 396-day ledger retention, so a window never outlives the rows behind it.
             // POOL_CLAIM_WINDOW_MONTHS.
             claimWindowMonths: z.coerce.number().int().positive().default(12),
+            // The smallest payment worth making. Below it a creator's balance carries to the next run rather
+            // than generating a transfer whose fee is a meaningful fraction of itself; nothing is lost, and the
+            // creator screen says what is carrying. POOL_MIN_PAYOUT_CENTS.
+            minPayoutCents: z.coerce.number().int().nonnegative().default(2500),
+            // The currency transfers are made in — the platform's own Stripe currency. POOL_PAYOUT_CURRENCY.
+            payoutCurrency: z.string().default(`usd`),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`

@@ -749,12 +749,28 @@ export const CreatorStatementSchema = z.object({
 });
 export type CreatorStatement = z.infer<typeof CreatorStatementSchema>;
 
+/* A PAYMENT THAT WAS MADE, or is still trying to be. `pending` is shown rather than hidden because a payment
+ * that has not landed is the single thing a creator most needs to be able to see — and the run never abandons
+ * one, it retries the same payment until it goes through. */
+export const CreatorPaymentSchema = z.object({
+    amountCents: z.number(),
+    status: z.string(),
+    createdAt: z.iso.datetime(),
+    paidAt: z.iso.datetime().optional(),
+    // Stripe's own id for the transfer — what a creator quotes when asking anyone about it.
+    reference: z.string().optional(),
+});
+export type CreatorPayment = z.infer<typeof CreatorPaymentSchema>;
+
 export const CreatorStateSchema = z.object({
     enabled: z.boolean(),
     claims: z.array(PublisherClaimSchema),
     payouts: PayoutStateSchema.optional(),
-    // Newest month first — every closed month for every name the caller holds.
+    // What is still OWED: closed months not yet settled, newest first. A month drops off this list the moment
+    // it is paid and appears in `payments` instead, so the two never double-count the same money.
     statements: z.array(CreatorStatementSchema),
+    // Receipts, newest first.
+    payments: z.array(CreatorPaymentSchema),
 });
 export type CreatorState = z.infer<typeof CreatorStateSchema>;
 

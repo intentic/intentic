@@ -54,6 +54,10 @@ const day = (stamp: string): string => new Date(stamp).toLocaleDateString(undefi
 const statements = computed(() => state.value?.statements ?? []);
 const owedTotal = computed(() => statements.value.reduce((sum, statement) => sum + statement.amountCents, 0));
 
+// Receipts. A payment still in flight is shown rather than hidden: the run never abandons one, it keeps
+// retrying the same payment, and a creator watching for money deserves to see that it is on its way.
+const payments = computed(() => state.value?.payments ?? []);
+
 // One sentence for where the payout setup stands, because "connected" alone is the one word that could mislead:
 // an account can be finished and still not payable, and a creator needs to know which of those they are in.
 const payoutLine = computed(() => {
@@ -173,6 +177,22 @@ const connect = async (): Promise<void> => {
                     </p>
                     <p v-if="!payouts?.payoutsEnabled" class="text-2xs text-muted">
                         Nothing can be sent until payouts are connected below. Earnings stay yours for twelve months from the month they were earned.
+                    </p>
+                </div>
+
+                <!-- Receipts. -->
+                <div v-if="payments.length > 0" class="flex flex-col gap-1.5">
+                    <h3 class="text-xs font-semibold">Payments</h3>
+                    <p v-for="payment in payments" :key="`${payment.createdAt}-${payment.amountCents}`" class="text-xs text-muted">
+                        <template v-if="payment.status === `paid`">
+                            <span class="font-medium text-content">{{ money(payment.amountCents) }}</span> paid
+                            <template v-if="payment.paidAt">{{ day(payment.paidAt) }}</template>
+                            <span v-if="payment.reference" class="font-mono text-2xs"> · {{ payment.reference }}</span>
+                        </template>
+                        <template v-else>
+                            <span class="font-medium text-content">{{ money(payment.amountCents) }}</span> on its way — started
+                            {{ day(payment.createdAt) }}. If it doesn't land, it's retried until it does.
+                        </template>
                     </p>
                 </div>
 

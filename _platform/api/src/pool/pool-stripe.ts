@@ -12,10 +12,23 @@ const API_BASE = `https://api.stripe.com/v1`;
 
 // Stripe's request encoding is application/x-www-form-urlencoded with bracketed nesting; the pool only ever
 // needs one level of it, spelled literally at the call sites below.
-const post = async (fetchFn: typeof fetch, secretKey: string, path: string, params: Record<string, string>): Promise<unknown> => {
+/* `idempotencyKey` is the difference between a retry and a second payment. Stripe remembers a key for 24 hours
+ * and replays the original response rather than performing the request again, which is what lets the payout run
+ * finish an attempt whose answer was lost without any way to tell whether the money had already moved. */
+const post = async (
+    fetchFn: typeof fetch,
+    secretKey: string,
+    path: string,
+    params: Record<string, string>,
+    idempotencyKey?: string,
+): Promise<unknown> => {
     const response = await fetchFn(`${API_BASE}${path}`, {
         method: `POST`,
-        headers: { authorization: `Bearer ${secretKey}`, "content-type": `application/x-www-form-urlencoded` },
+        headers: {
+            authorization: `Bearer ${secretKey}`,
+            "content-type": `application/x-www-form-urlencoded`,
+            ...(idempotencyKey !== undefined ? { "idempotency-key": idempotencyKey } : {}),
+        },
         body: new URLSearchParams(params).toString(),
         signal: AbortSignal.timeout(30_000),
     });
@@ -129,6 +142,10 @@ const BalancePageSchema = z.object({
     data: z.array(z.object({ id: z.string(), type: z.string(), amount: z.number(), fee: z.number() })),
 });
 
+// A transfer's id is all the platform keeps of it — the receipt line a creator can quote back at support, and
+// what a reconciliation against Stripe's own records joins on.
+const TransferSchema = z.object({ id: z.string() });
+
 export interface SettledRevenue {
     // Gross movement in the window, refunds and disputes already netted out.
     readonly grossCents: number;
@@ -165,6 +182,15 @@ export interface StripeGateway {
     readonly account: (id: string) => Promise<ConnectAccount>;
     // What settled between two instants, paged to the end — the revenue figure a closed month publishes.
     readonly settledRevenue: (opts: { readonly from: Date; readonly to: Date }) => Promise<SettledRevenue>;
+    /* Move money from the platform's balance to a creator's connected account. `idempotencyKey` is the payout
+     * row's id, so retrying an attempt whose answer was lost returns the original transfer instead of making a
+     * second one — the single guarantee the whole run is built around. */
+    readonly transfer: (opts: {
+        readonly amountCents: number;
+        readonly currency: string;
+        readonly destination: string;
+        readonly idempotencyKey: string;
+    }) => Promise<{ id: string }>;
 }
 
 export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
@@ -229,6 +255,16 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
         } while (startingAfter !== undefined);
         return { grossCents, feeCents };
     },
+    transfer: async ({ amountCents, currency, destination, idempotencyKey }) =>
+        TransferSchema.parse(
+            await post(
+                fetchFn,
+                secretKey,
+                `/transfers`,
+                { amount: String(amountCents), currency, destination },
+                idempotencyKey,
+            ),
+        ),
 });
 
 // How far a webhook's timestamp may sit from now — Stripe's own recommended replay window.

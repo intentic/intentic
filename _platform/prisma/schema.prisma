@@ -35,6 +35,7 @@ model User {
     serviceRuns      ServiceRun[]
     publisherClaims  PublisherClaim[]
     payoutAccount    PayoutAccount?
+    payouts          CreatorPayout[]
 
     @@map("user")
 }
@@ -435,20 +436,60 @@ model PoolMonth {
  * swept back into a later month's distribution, so the two together answer "is this still claimable" and "where
  * did it go" without a status string that could disagree with either. */
 model CreatorStatement {
-    id          String    @id @default(cuid())
+    id          String         @id @default(cuid())
     month       String
-    poolMonth   PoolMonth @relation(fields: [month], references: [month], onDelete: Cascade)
+    poolMonth   PoolMonth      @relation(fields: [month], references: [month], onDelete: Cascade)
     publisher   String
     amountCents Int
     credits     Int
     expiresAt   DateTime
     expiredAt   DateTime?
-    createdAt   DateTime  @default(now())
+    createdAt   DateTime       @default(now())
+    // The payment this line was settled by. Null means still owed — and it is the ONLY thing that means that,
+    // so claiming a statement into a payout is what makes paying it twice impossible.
+    payoutId    String?
+    payout      CreatorPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
 
     @@unique([month, publisher])
     // A creator's own statements are read by publisher; the unique above leads with month.
     @@index([publisher])
+    // The payout run scans for unclaimed lines.
+    @@index([payoutId])
     @@map("creator_statement")
+}
+
+/* ONE PAYMENT TO ONE CREATOR — the receipt, and the thing that makes the run safe to retry.
+ *
+ * A payout is RESERVED before any money moves: the row is created and the statements it covers are claimed by
+ * it in the same transaction, while nothing has been sent. Only then is the transfer attempted, under an
+ * idempotency key that is this row's own id. That ordering is the whole guarantee. A crash after the reserve
+ * and before the transfer leaves a `pending` row that the next run finishes — with the same key, so if the
+ * transfer had in fact reached Stripe, Stripe returns the original instead of making a second one.
+ *
+ * A failing transfer therefore NEVER releases its statements. Releasing them would mean the next run builds a
+ * different payout with a different key, which is precisely how a payment that silently succeeded gets sent
+ * twice. It stays pending and visible instead, with the last error on the row, because money stuck in the open
+ * is a problem someone can fix and money sent twice is one they cannot. */
+model CreatorPayout {
+    id               String             @id @default(cuid())
+    userId           String
+    user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+    amountCents      Int
+    currency         String
+    // "pending" until the transfer is confirmed, then "paid". No "failed": a failure is a pending payment that
+    // has not succeeded yet, and calling it finished would strand the money it still holds.
+    status           String             @default("pending")
+    stripeTransferId String?
+    attempts         Int                @default(0)
+    lastError        String?
+    createdAt        DateTime           @default(now())
+    paidAt           DateTime?
+    statements       CreatorStatement[]
+
+    @@index([userId])
+    // The run resumes every unfinished payment before it builds any new ones.
+    @@index([status])
+    @@map("creator_payout")
 }
 
 model SandboxMember {

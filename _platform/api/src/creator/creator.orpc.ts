@@ -49,7 +49,7 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
          * something to render the offer against. */
         status: os.creator.status.handler(async ({ context }): Promise<CreatorState> => {
             if (!poolEnabled(context.config)) {
-                return { enabled: false, claims: [], statements: [] };
+                return { enabled: false, claims: [], statements: [], payments: [] };
             }
             const user = requireUser(context);
             const [claims, payouts] = await Promise.all([claimsOf(context, user.id), payoutState(context.prisma, stripeOf(context), user.id)]);
@@ -57,14 +57,22 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
              * claims in October is owed for July, and the frozen rows are never rewritten to say so. Money
              * already swept back into the pool is excluded — it is no longer theirs, and listing it as an
              * earning with no payment behind it would be the most misleading row on the screen. */
-            const statements =
+            const [statements, payments] = await Promise.all([
                 claims.length === 0
                     ? []
-                    : await context.prisma.creatorStatement.findMany({
-                          where: { publisher: { in: claims.map((claim) => claim.publisher) }, expiredAt: null },
+                    : context.prisma.creatorStatement.findMany({
+                          // `payoutId: null` is what makes this list "still owed": a settled month leaves it
+                          // and appears among the receipts, so the two can never double-count the same money.
+                          where: { publisher: { in: claims.map((claim) => claim.publisher) }, expiredAt: null, payoutId: null },
                           select: { month: true, publisher: true, amountCents: true, expiresAt: true, poolMonth: { select: { payableAt: true } } },
                           orderBy: [{ month: `desc` }, { publisher: `asc` }],
-                      });
+                      }),
+                context.prisma.creatorPayout.findMany({
+                    where: { userId: user.id },
+                    select: { amountCents: true, status: true, createdAt: true, paidAt: true, stripeTransferId: true },
+                    orderBy: { createdAt: `desc` },
+                }),
+            ]);
             return {
                 enabled: true,
                 claims,
@@ -75,6 +83,13 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
                     amountCents: statement.amountCents,
                     payableAt: statement.poolMonth.payableAt.toISOString(),
                     expiresAt: statement.expiresAt.toISOString(),
+                })),
+                payments: payments.map((payment) => ({
+                    amountCents: payment.amountCents,
+                    status: payment.status,
+                    createdAt: payment.createdAt.toISOString(),
+                    ...(payment.paidAt !== null ? { paidAt: payment.paidAt.toISOString() } : {}),
+                    ...(payment.stripeTransferId !== null ? { reference: payment.stripeTransferId } : {}),
                 })),
             };
         }),

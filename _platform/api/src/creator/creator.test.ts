@@ -27,7 +27,14 @@ const baseConfig = {
 // A pool that is off: no key, no price — the self-hosted default.
 const poolOffConfig = { ...baseConfig, pool: { ...baseConfig.pool, stripeSecretKey: ``, stripePriceId: `` } } as Config;
 
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
+// Each test overrides just the calls its route makes; the two the status read always performs default to empty
+// so a test about payout readiness does not have to describe a ledger it is not exercising.
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
+    ({
+        creatorStatement: { findMany: vi.fn().mockResolvedValue([]) },
+        creatorPayout: { findMany: vi.fn().mockResolvedValue([]) },
+        ...overrides,
+    }) as unknown as OrpcContext[`prisma`];
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
     ({
@@ -207,7 +214,7 @@ describe(`creator routes`, () => {
         const routes = creatorRoutes({ reader: reader([]) });
         const off = context({ config: poolOffConfig });
 
-        expect(await call(routes.status, {}, { context: off })).toEqual({ enabled: false, claims: [], statements: [] });
+        expect(await call(routes.status, {}, { context: off })).toEqual({ enabled: false, claims: [], statements: [], payments: [] });
         await expectOrpcCode(call(routes.challenge, { publisher: `acme` }, { context: off }), `NOT_FOUND`);
         await expectOrpcCode(call(routes.claim, { publisher: `acme` }, { context: off }), `NOT_FOUND`);
         await expectOrpcCode(call(routes.connectPayouts, {}, { context: off }), `NOT_FOUND`);
@@ -290,6 +297,7 @@ describe(`payout connection`, () => {
             enabled: true,
             claims: [],
             statements: [],
+            payments: [],
             payouts: { connected: false, payoutsEnabled: false, detailsSubmitted: false },
         });
         // Nothing to refresh, so Stripe is not called at all.
@@ -337,8 +345,11 @@ describe(`payout connection`, () => {
         expect(result.statements).toEqual([
             { month: `2026-07`, publisher: `acme`, amountCents: 12_840, payableAt: `2026-08-15T00:00:00.000Z`, expiresAt: `2027-08-01T00:00:00.000Z` },
         ]);
-        // Swept money is no longer theirs — listing it as an earning with no payment behind it would be the
-        // most misleading row on the screen.
-        expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { publisher: { in: [`acme`] }, expiredAt: null } }));
+        /* This list is what is still OWED, so it excludes both kinds of money that is no longer owed: swept
+         * (expired back into the pool) and already settled. Listing either as an earning would double-count
+         * against the receipts below it. */
+        expect(findMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { publisher: { in: [`acme`] }, expiredAt: null, payoutId: null } }),
+        );
     });
 });
