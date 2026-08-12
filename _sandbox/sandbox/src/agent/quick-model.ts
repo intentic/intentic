@@ -3,6 +3,7 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     type QuickModelChoice,
+    quickModelKey,
     type QuickModelSource,
     resolveQuickModels,
 } from "@intentic/sandbox-contract";
@@ -84,6 +85,37 @@ export interface QuickModelAnswer {
 // Object]" in the panel's readout.
 const refusalText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/* WHAT A RUNG THAT JUST REFUSED COSTS THE NEXT CALLER — nothing, for a few minutes.
+ *
+ * A refusal is not a property of one call. An allowance that is spent is spent for hours, an outage lasts
+ * minutes, a revoked token lasts until somebody reconnects it — and the walk below re-discovered every one of
+ * them from scratch, on every helper call, paying the full wait each time. Measured on this workspace: the
+ * first pinned model answered nothing for 58 seconds before the chain stepped down to one that answered in 7,
+ * per landing, all afternoon. The daemon knew that after the first landing and spent it again on every one
+ * after — which is most of what "the commit message takes a minute" was.
+ *
+ * So a refusal is REMEMBERED, briefly, and the next walk starts below it. Briefly because this is a memo and
+ * not a verdict: nothing tells this process when an allowance resets or a provider recovers, so the window
+ * simply ends and the next call spends one re-test to find out. Long enough that a burst of landings costs one
+ * discovery between them; short enough that a model which came back is back in minutes.
+ *
+ * KEPT WITH ITS REASON, so a rung skipped without being asked reports the same sentence it gave when it did
+ * refuse — `skipped` stays the honest account of what happened to the chain, rather than going quiet about the
+ * accounts this walk never touched.
+ *
+ * IN MEMORY, never persisted: a daemon that restarted did not inherit the outage it was in, and a memo restored
+ * from disk would skip a working account on the strength of something that happened before the reboot. */
+const REFUSED_FOR_MS = 5 * 60 * 1000;
+
+const refusals = new Map<string, { readonly until: number; readonly reason: string }>();
+
+// What this rung last refused with, while that memo still stands. Undefined once the window has run out, and
+// for a rung that has never refused — both of which mean "ask it".
+const cooling = (choice: QuickModelChoice, now: number): string | undefined => {
+    const held = refusals.get(quickModelKey(choice));
+    return held !== undefined && held.until > now ? held.reason : undefined;
+};
+
 /* RUN ONE PROMPT ON THE SANDBOX'S QUICK MODEL, WALKING DOWN THE CHAIN UNTIL ONE ANSWERS. The single seam every
  * one-click helper goes through, so they all spend the same rungs, in the same order, and all name what they
  * spent the same way.
@@ -107,8 +139,29 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
     if (chain.length === 0) {
         throw new Error(`No AI account is connected to this sandbox — connect one in Sandbox ▸ Agent first.`);
     }
+    const now = Date.now();
+    /* THE MEMO MAY NEVER EMPTY THE CHAIN. When every rung is cooling down at once this walk ignores it and asks
+     * them all: a memo exists to save time, and one that could stand between the user and every account they
+     * have would turn a slow feature into a dead one for the length of its own window — the same failure it was
+     * added to prevent, arriving from the other side. */
+    const honourMemo = chain.some((choice) => cooling(choice, now) === undefined);
     const skipped: QuickModelRefusal[] = [];
     for (const choice of chain) {
+        // Stepped over without being asked, and reported in the words it used when it did refuse — so `skipped`
+        // stays the honest account of what stood between the caller and the model that answered.
+        const remembered = honourMemo ? cooling(choice, now) : undefined;
+        if (remembered !== undefined) {
+            skipped.push({ choice, reason: remembered });
+            continue;
+        }
+        /* EVERY RUNG IS TIMED, answered or refused, and named as it is spent. The call as a whole was already
+         * measured by its caller (landing.subject and its siblings), and that number cannot say the one thing
+         * worth knowing when a helper turns slow: WHICH model took the time. Finding that out meant watching
+         * the CLI processes by hand. One record per attempt makes the next occurrence self-evident, and the
+         * memo's effect legible too — a rung that stops appearing is one the walk has stopped paying for. */
+        const from = Date.now();
+        const spent = (): number => Date.now() - from;
+        const key = quickModelKey(choice);
         try {
             // Inside the try with the call itself: a credential that fails on the way in (a token that no longer
             // refreshes passes the cheap readiness check but fails resolution) is the same kind of dead end as
@@ -118,11 +171,19 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
                 throw new Error(resolved.message);
             }
             const text = await runOneShot({ prompt, cwd: services.workspace.root, model: choice.model, credentials: resolved.credentials, signal });
+            // It answered, so whatever it last refused for is over — a memo outliving the condition it
+            // describes would keep steering work off an account that is plainly working again.
+            refusals.delete(key);
+            services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model });
             return { text, choice, skipped };
         } catch (error) {
             if (signal.aborted) {
+                // The user's own cancel is not the model's failure, so it earns no memo: the next call must ask
+                // this rung as if nothing had happened, because nothing about it did.
                 throw error;
             }
+            services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model }, true);
+            refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
             services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
             skipped.push({ choice, reason: refusalText(error) });
         }
