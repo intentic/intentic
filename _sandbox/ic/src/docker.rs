@@ -276,6 +276,9 @@ pub fn ps_names(all: bool, name_filter: &str) -> Vec<String> {
         .collect()
 }
 
+/// Run a command IN the container, true when it exited 0. A container that is not running — where exec is
+/// refused — answers false, which is what every caller wants: they ask this to confirm something is there,
+/// and a stopped sandbox has nothing to confirm.
 pub fn exec_ok(container: &str, cmd: &[&str]) -> bool {
     let mut args = vec!["exec", container];
     args.extend_from_slice(cmd);
@@ -327,15 +330,6 @@ pub fn cp_out(container: &str, path: &str, dest: &std::path::Path) -> Option<Str
         Ok(out) => Some(String::from_utf8_lossy(&out.stderr).trim().to_string()),
         Err(err) => Some(format!("could not run docker: {err}")),
     }
-}
-
-/// Run a command IN the container, true when it exited 0. Only a second opinion is asked of this (does the
-/// file `cp_out` could not read exist at all?), so a container that is not running — where exec is refused —
-/// answering false costs the caller nothing but the extra evidence.
-pub fn exec_ok(container: &str, argv: &[&str]) -> bool {
-    let mut args = vec!["exec", container];
-    args.extend_from_slice(argv);
-    ok(&args)
 }
 
 /// The container's log tail into OUR log — captured before an rm destroys it.
