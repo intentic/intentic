@@ -1,16 +1,16 @@
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
 import { browserToolsNote } from "../../browser/browser-skill.js";
 import { clearMarker, clearSession, hasSession, moveMarker, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
 // A browser-automation connector: give the AGENT a real, logged-in browser for one platform whose API can't
 // cover "all the actions". The PLATFORM is data in an installed extension's `contributes.capabilities` (its card,
 // its login URL, its cheatsheet); this handler is the generic plumbing over it. `apply` renders the platform's
-// SKILL.md into .claude/skills/<id> (auto-loaded by the agent's settingSources) and its `fragment` is the
+// SKILL.md into .agents/skills/<id> (loaded-skills.ts projects it to every runtime) and its `fragment` is the
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
 // The login lands in a Chromium profile under .intentic/browser/<id> by either of two hands: the owner's own,
@@ -24,7 +24,6 @@ import { browserUrls, contributedSkill, contributionKey, contributionRegistry, h
 // reddit-personal), and everything that carries identity — the profile, the login, the passkey — is keyed by the
 // entry's ID (session-store.ts), as this handler's skill file and the agent's tool prefix already are. So the
 // status below asks whether THIS account signed in, and the removal takes only this account's session with it.
-const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
 
 // Is the browser pack actually present — Chromium at playwright's cache path AND Xvfb on PATH? The probe for
 // the "rebuild pending" state between "add" and "rebuild" (on a core image the pack rides the overlay). Both
@@ -76,7 +75,7 @@ export const browserHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to, config) => {
             await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
-            await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from));
+            await removeLoadedSkill(ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -112,7 +111,7 @@ export const browserHandler: CapabilityHandler = {
         if (skill === undefined) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
         }
-        await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
+        await writeLoadedSkill(ctx.workspace.root, id, skill);
         yield {
             kind: "log",
             message:
@@ -125,7 +124,7 @@ export const browserHandler: CapabilityHandler = {
     // and the login one to the guided-login window — it distinguishes them by the word "rebuild" in the detail,
     // so keep that word in the rebuild detail (and out of the login detail).
     status: async (ctx, id) => {
-        if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
+        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
@@ -140,7 +139,7 @@ export const browserHandler: CapabilityHandler = {
     // own marker and skill — the shared browser (and every sibling signed in beside it) belongs to the identity
     // and outlives any one account.
     remove: async (ctx, id, config) => {
-        await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", id));
+        await removeLoadedSkill(ctx.workspace.root, id);
         if ((config as BrowserConfig).identity === undefined) {
             await clearSession(ctx.workspace.root, id);
         } else {

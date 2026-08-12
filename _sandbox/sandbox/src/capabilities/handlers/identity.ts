@@ -1,8 +1,8 @@
-import { join } from "node:path";
 import type { IdentityConfig } from "@intentic/sandbox-contract";
 import { identitySkill } from "../../browser/browser-skill.js";
 import { clearSession, hasSession, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.js";
 
@@ -20,8 +20,6 @@ import { browserPackInstalled } from "./browser.js";
  * The connected marker means "the identity's browser is signed into its provider" — the one login that stays
  * the OWNER's own hands (automated Google sign-ins are what Google blocks), done in the guided window. Its
  * accounts mark themselves connected one by one, exactly like standalone accounts do. */
-
-const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
 
 // Where the guided login starts for this identity — the provider's own sign-in. Known mail hosts get their real
 // login pages; anything else falls back to the address's own domain, which for hosted mail commonly serves (or
@@ -66,7 +64,7 @@ export const identityHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to) => {
             await moveSession(ctx.workspace.root, from, to);
-            await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from));
+            await removeLoadedSkill(ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -79,14 +77,14 @@ export const identityHandler: CapabilityHandler = {
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
             throw new Error(`no capability "${mailbox}" to read mail from — connect the mailbox (IMAP) first, or leave the field empty`);
         }
-        await ctx.files.write(skillPath(ctx.workspace.root, id), identitySkill(id, email, openAccounts === "on"));
+        await writeLoadedSkill(ctx.workspace.root, id, identitySkill(id, email, openAccounts === "on"));
         yield {
             kind: "log",
             message: `Identity "${id}" (${email}) is set up. Rebuild the sandbox if prompted, then open "Log in" and sign into the email provider yourself — that one login stays human. Accounts the agent opens through it will share this browser.`,
         };
     },
     status: async (ctx, id) => {
-        if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
+        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
@@ -107,7 +105,7 @@ export const identityHandler: CapabilityHandler = {
         if (born.length > 0) {
             throw new Error(`"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`);
         }
-        await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", id));
+        await removeLoadedSkill(ctx.workspace.root, id);
         await clearSession(ctx.workspace.root, id);
     },
 };

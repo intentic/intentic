@@ -59,9 +59,12 @@ reports the profile.
   sitting in the loaded folder — and nothing joined them, so "what is my agent carrying" had no answer. The
   inventory reads all six off disk and reports where each came from, which is what decides whether a row may be
   switched, rewritten or deleted at all: a control the source would undo on the next reconcile is not offered.
-  The owner's own skills are stored APART from the folder the agent reads (`.intentic/skills/`, reconciled into
-  `.claude/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote — in the loaded
-  folder, "off" and "deleted" would be the same operation.
+  The owner's own skills are stored APART from the folder the agents read (`.intentic/skills/`, reconciled into
+  `.agents/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote — in the loaded
+  folder, "off" and "deleted" would be the same operation. The loaded folder is the vendor-neutral one on
+  purpose (src/settings/loaded-skills.ts): Codex and Gemini read `.agents/skills/` natively, Claude Code reads
+  it through per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get a managed index
+  block in AGENTS.md naming each skill, its description, and its file.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.

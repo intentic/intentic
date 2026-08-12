@@ -1577,7 +1577,7 @@ export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 // toggles in the UI (so each can be A/B benchmarked):
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
 //                        message instead of the preset `append`) so the provider prompt cache survives.
-//   skills            — names of baked-tool skills to load into .claude/skills so the agent reaches for them
+//   skills            — names of baked-tool skills to load into .agents/skills so the agent reaches for them
 //                        (e.g. "lsp" — TS rename + diagnostics over the language service); a name absent ⇒ its
 //                        skill file isn't written, so the agent doesn't reach for it. Data-driven: a new baked
 //                        tool is one daemon-side registry entry, not a new settings field.
@@ -3026,7 +3026,7 @@ export const ServiceConfigSchema = z.object({
 export const IntegrationConfigSchema = z.object({ provider: z.literal("stripe") });
 // A `cli` capability gives the AGENT an authenticated command-line tool (not a deployed-app credential like
 // `integration`): the credential + any non-secret URL are stored here and injected into the agent's env each
-// turn (see cliEnvOf), and a .claude/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
+// turn (see cliEnvOf), and an .agents/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
 // data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.capabilities`, not
 // a per-provider schema arm — so the config is `provider` + arbitrary string fields, validated against the
 // card's declared fields at add-time (see the sandbox's capabilities/contributions.ts) rather than by this schema.

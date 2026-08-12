@@ -145,7 +145,7 @@ test("an extension's skills are attributed by its manifest name", async () => {
  * file the reader is invited to delete, and a loose file must not read as something with an owner to go to. */
 test("a connection's skill, a core feature's and a loose file are told apart", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
-    const loaded = join(root, ".claude", "skills");
+    const loaded = join(root, ".agents", "skills");
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github" } };
     // Shared across every instance of its kind, so its directory is named for the KIND, not for any one entry.
     const vpn: Capability = { id: "office", kind: "vpn", config: { provider: "wireguard", config: "[Interface]", autoConnect: "off" } };

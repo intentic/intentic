@@ -1,7 +1,7 @@
-import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { DraftSchema, type DraftSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { writeLoadedSkill } from "../settings/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
 
 // The post-drafts queue (<workspace>/.intentic/drafts/<id>.json, one file per draft): the AGENT creates drafts
@@ -36,9 +36,9 @@ export const fileDraftsStore = (dir: string): DraftsStore => {
     };
 };
 
-// How the drafting agent learns the file format — the same auto-loaded .claude/skills mechanism every
-// capability connector uses. Triggered by description, so a user prompt like "prepare social media post
-// drafts" routes here without any automation change.
+// How the drafting agent learns the file format — the same loaded-skills mechanism every capability connector
+// uses. Triggered by description, so a user prompt like "prepare social media post drafts" routes here without
+// any automation change.
 const DRAFTS_SKILL = `---
 name: drafts
 description: Create post drafts for owner approval by writing JSON files into ${STATE_DIR}/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
@@ -81,5 +81,4 @@ Only "platform" and "content" are required; everything else is optional.
 
 // Drafts are native to every sandbox (like automations), so no capability owns this skill — the daemon
 // converges it at boot (the composeEnvironment pattern), keeping the prose current across daemon updates.
-export const ensureDraftsSkill = (services: Services): Promise<void> =>
-    services.files.write(join(services.workspace.root, ".claude", "skills", "drafts", "SKILL.md"), DRAFTS_SKILL);
+export const ensureDraftsSkill = (services: Services): Promise<void> => writeLoadedSkill(services.workspace.root, "drafts", DRAFTS_SKILL);

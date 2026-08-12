@@ -21,12 +21,12 @@ const stubServices = (root: string): Services =>
         }),
     });
 
-const loadedPath = (root: string, name: string): string => join(root, ".claude", "skills", name, "SKILL.md");
+const loadedPath = (root: string, name: string): string => join(root, ".agents", "skills", name, "SKILL.md");
 
 test("reconcile writes a skill when named and removes it when absent from the list", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
-    const skillPath = join(root, ".claude", "skills", "lsp", "SKILL.md");
+    const skillPath = join(root, ".agents", "skills", "lsp", "SKILL.md");
 
     await reconcileSkills(services, ["lsp"]);
     expect(await readFile(skillPath, "utf8")).toBe(LSP_SKILL);

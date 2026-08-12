@@ -46,7 +46,7 @@ const withStore = (capabilities: Capability[] = []) => {
         // What the agent's loader would find — the only account of "is this skill on" that matters.
         loaded: (name: string): string | undefined => {
             try {
-                return readFileSync(join(workspace.root, ".claude", "skills", name, "SKILL.md"), "utf8");
+                return readFileSync(join(workspace.root, ".agents", "skills", name, "SKILL.md"), "utf8");
             } catch {
                 return undefined;
             }
@@ -116,8 +116,8 @@ test("a baked tool's name is refused, and a skill something else provides cannot
     expect(await errorCode(client.skills.remove({ name: "lsp" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.skills.remove({ name: "ghost" }))).toBe("BAD_REQUEST");
 
-    mkdirSync(join(root, ".claude", "skills", "github"), { recursive: true });
-    writeFileSync(join(root, ".claude", "skills", "github", "SKILL.md"), "---\nname: github\ndescription: Use for repos.\n---\n\nBody.\n");
+    mkdirSync(join(root, ".agents", "skills", "github"), { recursive: true });
+    writeFileSync(join(root, ".agents", "skills", "github", "SKILL.md"), "---\nname: github\ndescription: Use for repos.\n---\n\nBody.\n");
     expect((await client.skills.list()).find((skill) => skill.id === "github")).toMatchObject({ origin: "capability", owner: "github" });
     expect(await errorCode(client.skills.remove({ name: "github" }))).toBe("BAD_REQUEST");
 });
@@ -126,8 +126,8 @@ test("a baked tool's name is refused, and a skill something else provides cannot
 // it — written by the agent itself, most often — which nothing else would ever clear up.
 test("a loose file in the skills folder can be cleared away", async () => {
     const { client, root, loaded } = withStore();
-    mkdirSync(join(root, ".claude", "skills", "scratch"), { recursive: true });
-    writeFileSync(join(root, ".claude", "skills", "scratch", "SKILL.md"), "---\nname: scratch\ndescription: Agent wrote this.\n---\n\nBody.\n");
+    mkdirSync(join(root, ".agents", "skills", "scratch"), { recursive: true });
+    writeFileSync(join(root, ".agents", "skills", "scratch", "SKILL.md"), "---\nname: scratch\ndescription: Agent wrote this.\n---\n\nBody.\n");
 
     expect((await client.skills.list()).find((skill) => skill.id === "scratch")).toMatchObject({ origin: "dropped", removable: true });
     await client.skills.remove({ name: "scratch" });

@@ -91,7 +91,7 @@ tools carry the identity's id. The owner may have connected the same site more t
 separate skill — so act with the one they meant, ask when it is ambiguous, and never carry a task from one
 account's tools into another's.`;
 
-/* THE IDENTITY'S OWN SKILL — rendered by the identity handler into .claude/skills/<id>, the way a platform
+/* THE IDENTITY'S OWN SKILL — rendered by the identity handler into .agents/skills/<id>, the way a platform
  * card's skill is for an account. A platform skill teaches a SITE; this teaches a SOMEONE: which email the
  * sandbox is when it wears this identity, whose browser that is, and what it may do about accounts that do not
  * exist yet. It exists even when the identity has no accounts at all — that is precisely the moment it matters,

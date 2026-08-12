@@ -33,7 +33,7 @@ const wireguard = (id: string, autoConnect: "on" | "off" = "off"): Capability =>
 });
 const office = wireguard("office");
 const confPath = (home: string, id: string): string => join(home, ".intentic-vpn", `${interfaceName(id)}.conf`);
-const skillPath = (root: string): string => join(root, ".claude", "skills", "vpn", "SKILL.md");
+const skillPath = (root: string): string => join(root, ".agents", "skills", "vpn", "SKILL.md");
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {

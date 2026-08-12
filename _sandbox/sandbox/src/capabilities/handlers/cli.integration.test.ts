@@ -50,7 +50,7 @@ const hostFor = (capabilities: Capability[]): ExtensionHost =>
     }) as unknown as ExtensionHost;
 
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "tok-123" } };
-const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
+const skillPath = (root: string, id: string): string => join(root, ".agents", "skills", id, "SKILL.md");
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {

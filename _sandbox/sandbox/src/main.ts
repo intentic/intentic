@@ -577,7 +577,7 @@ const main = async (): Promise<void> => {
     //   always on PATH; the skill file is what surfaces one to the agent).
     await boot.step("skills", async () => {
         // ownsWorkspaceConfig beside role.roots: a folder the daemon doesn't own gets no unasked-for writes
-        // (or deletes) under .claude/skills — and the baked-tool skills teach container-only CLIs anyway.
+        // (or deletes) under .agents/skills — and the baked-tool skills teach container-only CLIs anyway.
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }

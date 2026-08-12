@@ -688,7 +688,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 
 | Effect | Mechanics |
 | --- | --- |
-| `skill` | Writes `.claude/skills/<name>/SKILL.md`, auto-loaded by the agent next turn — per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
+| `skill` | Writes `.agents/skills/<name>/SKILL.md` — the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through a managed AGENTS.md index) — per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file, or a field in the off-workspace secret vault the manifest points at with a marker (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
@@ -731,7 +731,7 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 | `mcp` | Pure registration — no side effect beyond the manifest entry; `status` probes the URL. |
 | `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
 | `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
-| `cli` | Card-driven (data from `contributes.capabilities`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
+| `cli` | Card-driven (data from `contributes.capabilities`): templates the connector's SKILL.md into `.agents/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
 | `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
 | `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |

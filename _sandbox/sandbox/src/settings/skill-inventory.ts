@@ -4,6 +4,7 @@ import type { Capability, SkillSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { enabledExtensions, type InstalledExtension } from "../extensions/installed-extensions.js";
 import { pluginDir } from "../capabilities/plugin-dirs.js";
+import { loadedSkillsRoot } from "./loaded-skills.js";
 import { parseSkillFile } from "./skill-file.js";
 import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir } from "./skills.js";
 
@@ -23,11 +24,9 @@ import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir } from "./s
  * A row that offered a control its origin cannot honour would be worse than one that offers none: the change
  * would appear to take and then come back on the next reconcile. */
 
-// A skill directory that is not a directory of skills. `.claude/skills/<name>/SKILL.md` is the shape; anything
-// without that file is a half-written skill the loader also ignores.
+// A skill directory that is not a directory of skills. `.agents/skills/<name>/SKILL.md` is the shape; anything
+// without that file is a half-written skill the loaders also ignore.
 const SKILL_FILE = "SKILL.md";
-
-const loadedSkillsRoot = (root: string): string => join(root, ".claude", "skills");
 
 interface FoundSkill {
     readonly name: string;

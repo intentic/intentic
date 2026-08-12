@@ -107,12 +107,12 @@ test("daemon-owned skill files converged before the baseline read clean", async 
     const { work, historyRoot } = await tempBase();
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
-    // The boot sequence converges .claude skills (e.g. the drafts skill) BEFORE committing the baseline.
-    await mkdir(join(work, ".claude", "skills", "drafts"), { recursive: true });
-    await writeFile(join(work, ".claude", "skills", "drafts", "SKILL.md"), "converged\n");
+    // The boot sequence converges .agents skills (e.g. the drafts skill) BEFORE committing the baseline.
+    await mkdir(join(work, ".agents", "skills", "drafts"), { recursive: true });
+    await writeFile(join(work, ".agents", "skills", "drafts", "SKILL.md"), "converged\n");
     await commitRootBaseline(workspacePaths(work));
 
-    expect(await sh(work, "ls-files")).toBe(".claude/skills/drafts/SKILL.md");
+    expect(await sh(work, "ls-files")).toBe(".agents/skills/drafts/SKILL.md");
     expect(await bothSides(work)).toEqual([]);
 });
 

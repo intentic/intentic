@@ -379,9 +379,9 @@ const STATE_FILES = [
     },
     { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
     /* THE SKILLS THE OWNER WROTE THEMSELVES, one directory per skill — the source of truth the reconciler copies
-     * into `.claude/skills` for the ones currently switched on (settings.json's `skills` list). It is here rather
-     * than in `.claude/` for the reason the plugin dirs are: that tree is Claude Code's to manage, and a skill
-     * switched off has to keep its text somewhere the loader will not read it from.
+     * into `.agents/skills` for the ones currently switched on (settings.json's `skills` list). It is here rather
+     * than in the loaded folder for the reason the plugin dirs are: that tree holds only what is currently ON,
+     * and a skill switched off has to keep its text somewhere the loaders will not read it from.
      *
      * `versioned`, like the rest of the config slice: a skill changes how the agent behaves, so it earns a diff
      * in the Changes review and a line in `git log` the same way a rule or a persona does. `carry` for the same

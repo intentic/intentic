@@ -1,6 +1,6 @@
 import type { SshConfig } from "@intentic/sandbox-contract";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { hostConfPath, hostKeyPath, hostPassPath, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 
@@ -8,9 +8,6 @@ import { hostConfPath, hostKeyPath, hostPassPath, removeSshHost, writeSshHost } 
 // ssh-config Host alias, so the agent just runs `ssh <id> "…"`. `apply` writes a per-machine config block (via the
 // shared ssh-hosts writer) plus a 0600 key/password file under ~/.ssh/intentic-hosts. Unlike `cli`, nothing rides
 // the agent's env, so many machines never collide. One shared skill (below) covers them all.
-
-const skillDir = (root: string): string => join(root, ".claude", "skills", "ssh");
-const skillPath = (root: string): string => join(skillDir(root), "SKILL.md");
 
 const SSH_SKILL = `---
 name: ssh
@@ -52,7 +49,7 @@ export const sshHandler: CapabilityHandler = {
         } else {
             await writeFile(hostPassPath(id), ssh.password, { mode: 0o600 });
         }
-        await ctx.files.write(skillPath(ctx.workspace.root), SSH_SKILL);
+        await writeLoadedSkill(ctx.workspace.root, "ssh", SSH_SKILL);
         yield { kind: "log", message: `Connected ${id}. The agent can reach it next turn via \`ssh ${id}\`.` };
     },
     status: async (_ctx, id) =>
@@ -63,7 +60,7 @@ export const sshHandler: CapabilityHandler = {
         // the manifest entry AFTER this handler, so `id` is still counted here.
         const sshCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "ssh").length;
         if (sshCount <= 1) {
-            await ctx.files.remove(skillDir(ctx.workspace.root));
+            await removeLoadedSkill(ctx.workspace.root, "ssh");
         }
     },
 };

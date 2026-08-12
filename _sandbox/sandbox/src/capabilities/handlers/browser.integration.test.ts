@@ -39,7 +39,7 @@ const host: ExtensionHost = {
 } as unknown as ExtensionHost;
 
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
-const skillPath = (root: string): string => join(root, ".claude", "skills", "reddit", "SKILL.md");
+const skillPath = (root: string): string => join(root, ".agents", "skills", "reddit", "SKILL.md");
 
 // A generic session: the `website` card, with the answers a user would type on its form.
 const session = (id: string, homeUrl: string): Capability => ({
@@ -169,7 +169,7 @@ test("a browser platform contributed by another extension applies the same way",
     const { ctx, root } = tempCtx();
     const npmjs: Capability = { id: "npmjs", kind: "browser", config: { platform: "npmjs" } };
     await drain(browserHandler.apply(ctx, "npmjs", npmjs.config));
-    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "npmjs", "SKILL.md"));
+    const skill = await readWorkspaceFile(join(root, ".agents", "skills", "npmjs", "SKILL.md"));
     expect(skill).toContain("name: npmjs");
     expect(skill).toContain("https://www.npmjs.com");
     // The passkey is the reason this card exists: the skill has to tell the agent the 2FA prompt self-answers,
@@ -209,7 +209,7 @@ test("a generic browser session connects a site that has no card of its own", as
 
     await drain(browserHandler.apply(ctx, "acme", acme.config));
 
-    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "acme", "SKILL.md"));
+    const skill = await readWorkspaceFile(join(root, ".agents", "skills", "acme", "SKILL.md"));
     expect(skill).toContain("name: acme");
     // The routing line: the site and the user's own words for what the account is for.
     expect(skill).toMatch(/^description: .*admin\.acme\.com.*supplier tickets/m);
@@ -266,7 +266,7 @@ test("a session with no page to open, or a page that is not a web address, fails
 test("a second account of the same site is its own connection", async () => {
     const { ctx, root } = tempCtx();
     const config = { platform: "reddit" };
-    const skillOf = (id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
+    const skillOf = (id: string): string => join(root, ".agents", "skills", id, "SKILL.md");
 
     await drain(browserHandler.apply(ctx, "reddit-work", config));
     await drain(browserHandler.apply(ctx, "reddit-personal", config));
@@ -305,11 +305,11 @@ test("two generic sessions on one site stay separate accounts", async () => {
     await drain(browserHandler.apply(ctx, billing.id, billing.config));
     await markConnected(root, support.id);
 
-    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-support", "SKILL.md"))).toContain("/tickets");
-    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-billing", "SKILL.md"))).toContain("/invoices");
+    expect(await readWorkspaceFile(join(root, ".agents", "skills", "acme-support", "SKILL.md"))).toContain("/tickets");
+    expect(await readWorkspaceFile(join(root, ".agents", "skills", "acme-billing", "SKILL.md"))).toContain("/invoices");
     expect(hasSession(root, "acme-billing")).toBe(false);
 
     await browserHandler.remove!(ctx, support.id, support.config);
     expect(hasSession(root, "acme-support")).toBe(false);
-    expect(await readWorkspaceFile(join(root, ".claude", "skills", "acme-billing", "SKILL.md"))).toContain("name: acme-billing");
+    expect(await readWorkspaceFile(join(root, ".agents", "skills", "acme-billing", "SKILL.md"))).toContain("name: acme-billing");
 });

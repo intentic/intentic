@@ -2,10 +2,11 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { statePath } from "../workspace/state-paths.js";
 import type { Services } from "../composition.js";
+import { removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
 /* THE SKILLS THIS DAEMON OWNS — the baked tools it ships and the ones the owner wrote — and the one pass that
- * converges both into the directory the agent reads.
+ * converges both into the directory the agents read.
  *
  * Baked-tool skills exist because the tool binaries are always on PATH (baked by the Dockerfile) while the
  * SKILL.md is what actually surfaces one to the agent: writing it gates the feature and keeps it out of the
@@ -13,9 +14,10 @@ import { parseSkillFile, skillDocument } from "./skill-file.js";
  * baked tool is one registry entry here plus its name in that array, with no settings-contract change.
  *
  * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/skills/<name>/`
- * and are copied into `.claude/skills/` by the same pass, for one reason: switching a skill off must not delete
- * what you wrote. `.claude/` is Claude Code's tree and holds only what is currently loaded, so the durable copy
- * has to sit beside the daemon's other state — and then "off" is simply "not copied", with the text intact.
+ * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder and its per-runtime
+ * projections), for one reason: switching a skill off must not delete what you wrote. The loaded folder holds
+ * only what is currently on, so the durable copy has to sit beside the daemon's other state — and then "off" is
+ * simply "not copied", with the text intact.
  *
  * The two share the `skills` array as their enabled set rather than having one each: from the owner's side there
  * is one question ("which skills are on"), and one list is what makes the Skills surface's switch mean the same
@@ -61,9 +63,6 @@ export const isBakedSkill = (name: string): boolean => name in SKILLS;
 // switched-off tool's description out of the same string rather than out of a second copy of it.
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
-// Where the loaded copy lives: Claude Code's own tree, which this pass is the sole writer of.
-const skillDir = (root: string, name: string): string => join(root, ".claude", "skills", name);
-
 // Where the owner's own skills are kept, switched on or off.
 export const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/skills/");
 export const ownSkillDir = (root: string, name: string): string => join(ownSkillsRoot(root), name);
@@ -107,10 +106,10 @@ export const writeOwnSkill = async (services: Services, skill: OwnSkill): Promis
 };
 
 // Delete the durable copy AND the loaded one. Only the durable half is this function's own state, but leaving the
-// copy behind would keep a deleted skill in the agent's context until the next reconcile happened to notice.
+// copy behind would keep a deleted skill in the agents' context until the next reconcile happened to notice.
 export const removeOwnSkill = async (services: Services, name: string): Promise<void> => {
     await rm(ownSkillDir(services.workspace.root, name), { recursive: true, force: true });
-    await rm(skillDir(services.workspace.root, name), { recursive: true, force: true });
+    await removeLoadedSkill(services.workspace.root, name);
 };
 
 /* Converge every skill this daemon owns against the enabled list: written when its name is present (so the agent
@@ -128,11 +127,10 @@ export const reconcileSkills = async (services: Services, enabled: readonly stri
         ...own.map((skill) => [skill.name, skillDocument(skill.name, skill.description, skill.body)] as const),
     ];
     for (const [name, body] of sources) {
-        const dir = skillDir(services.workspace.root, name);
         if (enabled.includes(name)) {
-            await services.files.write(join(dir, "SKILL.md"), body);
+            await writeLoadedSkill(services.workspace.root, name, body);
             continue;
         }
-        await rm(dir, { recursive: true, force: true });
+        await removeLoadedSkill(services.workspace.root, name);
     }
 };

@@ -19,7 +19,7 @@ import type { CapabilityKind } from "@intentic/sandbox-contract";
  * new kind one entry rather than an arm spliced into a hundred-line function. */
 
 export type CapabilityEffect =
-    // Writes .claude/skills/<name>/SKILL.md, auto-loaded by the agent next turn. `name` is the instance id for
+    // Writes .agents/skills/<name>/SKILL.md, auto-loaded by every runtime next turn. `name` is the instance id for
     // cli/browser (per-instance skills), the fixed shared skill for ssh/vpn; absent while the instance is unnamed.
     | { readonly kind: "skill"; readonly name?: string | undefined }
     // Stores a credential in the sandbox. "agent-env": injected into the agent's environment each turn, never

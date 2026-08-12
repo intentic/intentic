@@ -1,6 +1,6 @@
-import { join } from "node:path";
 import type { HostConfig } from "@intentic/sandbox-contract";
 import { HOST_TOOLS_NOTE } from "../../hosts/host-skills.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
@@ -11,8 +11,6 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 //
 // The OS pack is data in an installed extension's `contributes.capabilities`; the tool surface it wraps, the
 // enrollment and the scope enforcement are core (host-skills.ts, hosts/).
-const skillDir = (root: string, id: string): string => join(root, ".claude", "skills", id);
-const skillPath = (root: string, id: string): string => join(skillDir(root, id), "SKILL.md");
 
 export const hostHandler: CapabilityHandler = {
     // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and is
@@ -38,7 +36,7 @@ export const hostHandler: CapabilityHandler = {
         carry: async (ctx, from, to) => {
             await ctx.hosts.rename(from, to);
             ctx.hostHub.disconnect(from, "this computer was renamed — reconnecting under its new name");
-            await ctx.files.remove(skillDir(ctx.workspace.root, from));
+            await removeLoadedSkill(ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -51,7 +49,7 @@ export const hostHandler: CapabilityHandler = {
         if (skill === undefined) {
             throw new Error(`the extension declaring "${host.platform}" has no readable skill pack — reinstall it`);
         }
-        await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
+        await writeLoadedSkill(ctx.workspace.root, id, skill);
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",
@@ -73,7 +71,7 @@ export const hostHandler: CapabilityHandler = {
     // Four distinct states, because the user's next action differs in each: nothing applied yet, applied but the
     // computer was never connected (run the one-liner), connected but asleep (open the lid), working.
     status: async (ctx, id) => {
-        if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
+        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         if (!(await ctx.hosts.enrolled(id))) {
@@ -87,6 +85,6 @@ export const hostHandler: CapabilityHandler = {
     remove: async (ctx, id) => {
         ctx.hostHub.disconnect(id, "this computer was disconnected from the sandbox");
         await ctx.hosts.revoke(id);
-        await ctx.files.remove(skillDir(ctx.workspace.root, id));
+        await removeLoadedSkill(ctx.workspace.root, id);
     },
 };

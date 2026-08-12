@@ -24,7 +24,7 @@ const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: stri
 const box: Capability = { id: "box", kind: "ssh", config: { auth: "key", host: "1.2.3.4", port: 22, user: "root", privateKey: "PRIV" } };
 const confPath = (home: string, id: string): string => join(home, ".ssh", "intentic-hosts", `${id}.conf`);
 const keyPath = (home: string, id: string): string => join(home, ".ssh", "intentic-hosts", `${id}.key`);
-const skillPath = (root: string): string => join(root, ".claude", "skills", "ssh", "SKILL.md");
+const skillPath = (root: string): string => join(root, ".agents", "skills", "ssh", "SKILL.md");
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {

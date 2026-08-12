@@ -42,7 +42,7 @@ const laptop: Capability = {
     kind: "host",
     config: { platform: "windows", shell: "on", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" },
 };
-const skillPath = (root: string): string => join(root, ".claude", "skills", "my-laptop", "SKILL.md");
+const skillPath = (root: string): string => join(root, ".agents", "skills", "my-laptop", "SKILL.md");
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {

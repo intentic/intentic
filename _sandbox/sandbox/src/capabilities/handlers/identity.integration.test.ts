@@ -33,7 +33,7 @@ test("apply writes the identity's own skill; status is pending until the provide
     expect(await identityHandler.status(ctx, "main", config())).toEqual({ state: "inactive" });
 
     await drain(identityHandler.apply(ctx, "main", config()));
-    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "main", "SKILL.md"));
+    const skill = await readWorkspaceFile(join(root, ".agents", "skills", "main", "SKILL.md"));
     expect(skill).toContain("name: main");
     expect(skill).toContain("studio@gmail.com");
     // The identity's browser tools carry ITS id — the prefix every account born from it will share.
@@ -48,7 +48,7 @@ test("apply writes the identity's own skill; status is pending until the provide
 test("the open-accounts switch flips the skill's guidance to the open_account playbook", async () => {
     const { ctx, root } = tempCtx();
     await drain(identityHandler.apply(ctx, "main", config({ openAccounts: "on" })));
-    const skill = await readWorkspaceFile(join(root, ".claude", "skills", "main", "SKILL.md"));
+    const skill = await readWorkspaceFile(join(root, ".agents", "skills", "main", "SKILL.md"));
     expect(skill).toContain("open_account");
     expect(skill).not.toContain("has NOT allowed");
 });
@@ -77,7 +77,7 @@ test("remove refuses while accounts still name this identity, then tears the who
     await markConnected(empty.root, "main");
     await identityHandler.remove?.(empty.ctx, "main", config());
     expect(hasSession(empty.root, "main")).toBe(false);
-    expect(await readWorkspaceFile(join(empty.root, ".claude", "skills", "main", "SKILL.md"))).toBeUndefined();
+    expect(await readWorkspaceFile(join(empty.root, ".agents", "skills", "main", "SKILL.md"))).toBeUndefined();
 });
 
 test("the guided login starts at the provider's own sign-in, guessed from the address", () => {

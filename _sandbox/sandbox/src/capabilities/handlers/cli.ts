@@ -1,7 +1,7 @@
-import { join } from "node:path";
 import { type CliConfig, envSuffix } from "@intentic/sandbox-contract";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../../extensions/extension-readiness.js";
 import { listenerStatus } from "../../extensions/listener-status.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
@@ -21,10 +21,10 @@ import { npmAuthWired } from "../cli/npm-access.js";
 // A CLI-tool integration: give the AGENT an authenticated command-line tool. The provider's card/fields/env/
 // skill/fragment are DATA in an installed extension's `contributes.capabilities` (see contributions.ts) — this
 // handler is the generic plumbing over that data. `apply` reads the connector's SKILL.md, templates it for this
-// instance ($VAR → $VAR_<ID>), drops it into .claude/skills/<id> (auto-loaded by the agent), and runs the
-// connector's optional core hook (git-over-ssh for github/gitlab). The credential is injected into the agent's
-// env each turn (cliEnvOf), never written to a file; the image fragment (psql/whisper) rides fragment-sources.
-const skillPath = (root: string, id: string): string => join(root, ".claude", "skills", id, "SKILL.md");
+// instance ($VAR → $VAR_<ID>), drops it into .agents/skills/<id> (loaded-skills.ts projects it to every
+// runtime), and runs the connector's optional core hook (git-over-ssh for github/gitlab). The credential is
+// injected into the agent's env each turn (cliEnvOf), never written to a file; the image fragment (psql/whisper)
+// rides fragment-sources.
 
 export const cliHandler: CapabilityHandler = {
     secret: (config, connectors) => {
@@ -63,7 +63,7 @@ export const cliHandler: CapabilityHandler = {
      * suffixes inside it, the env the agent gets each turn — so the re-apply writes the lot. All that is left
      * is the old skill directory, which nothing would otherwise delete and which would go on offering the agent
      * a cheatsheet for credentials that no longer exist under those names. */
-    rename: { carry: async (ctx, from) => ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", from)) },
+    rename: { carry: async (ctx, from) => removeLoadedSkill(ctx.workspace.root, from) },
     apply: async function* (ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;
@@ -95,7 +95,7 @@ export const cliHandler: CapabilityHandler = {
         for (const key of keys) {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);
         }
-        await ctx.files.write(skillPath(ctx.workspace.root, id), skill);
+        await writeLoadedSkill(ctx.workspace.root, id, skill);
         // The connector's optional privileged hook (github/gitlab git-over-ssh), run visibly in the capability's
         // job session — surfaced only when it actually shells out. A returned message is a non-fatal warning.
         const hook = CORE_CONNECTOR_HOOKS[provider];
@@ -110,7 +110,7 @@ export const cliHandler: CapabilityHandler = {
         }
     },
     status: async (ctx, id, config) => {
-        if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
+        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
         // The skill and the manifest are on /work; git access is in the container's HOME, which a recreate
@@ -155,6 +155,6 @@ export const cliHandler: CapabilityHandler = {
             config as CliConfig,
             terminalExec(ctx.terminalRun, capabilityJobSession(id), ctx.workspace.root),
         );
-        await ctx.files.remove(join(ctx.workspace.root, ".claude", "skills", id));
+        await removeLoadedSkill(ctx.workspace.root, id);
     },
 };

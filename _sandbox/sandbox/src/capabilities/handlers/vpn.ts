@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import type { CapabilityStatus, VpnConfig } from "@intentic/sandbox-contract";
+import { removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
 import { vpnDrivers } from "../../vpn/vpn-drivers.js";
 import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
 import type { CapabilityHandler } from "../capability.js";
@@ -31,9 +31,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     && rm -rf /var/lib/apt/lists/*
 # intentic:runtime --device=/dev/net/tun
 # intentic:runtime --cap-add=NET_ADMIN`;
-
-const skillDir = (root: string): string => join(root, ".claude", "skills", "vpn");
-const skillPath = (root: string): string => join(skillDir(root), "SKILL.md");
 
 // The agent drives VPNs through the `vpn` CLI, never the underlying clients: the CLI calls the daemon, so a
 // tunnel the agent dials shows up in the operator's UI (and vice versa) instead of the two drifting apart.
@@ -161,7 +158,7 @@ export const vpnHandler: CapabilityHandler = {
         // Persist the connection first: the manifest entry is what puts the fragment into the overlay, so an
         // add must land even when the tooling isn't installed yet.
         await driver.write(id, vpn);
-        await ctx.files.write(skillPath(ctx.workspace.root), VPN_SKILL);
+        await writeLoadedSkill(ctx.workspace.root, "vpn", VPN_SKILL);
         // Re-applying (an edited credential, an auto-connect flip) must never leave a tunnel running the old
         // config — drop it, then re-dial below if it should be up.
         await disconnectVpn(entry).catch(() => undefined);
@@ -193,7 +190,7 @@ export const vpnHandler: CapabilityHandler = {
         // manifest entry AFTER this handler, so `id` is still counted here.
         const vpnCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "vpn").length;
         if (vpnCount <= 1) {
-            await ctx.files.remove(skillDir(ctx.workspace.root));
+            await removeLoadedSkill(ctx.workspace.root, "vpn");
         }
     },
 };
