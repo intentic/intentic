@@ -325,12 +325,21 @@ const runTitle = computed(() => {
 });
 
 /* THE LADDER — the machine choice as a range of power rather than a binary, each rung captioned by what it
- * costs and what it buys. The rungs are the lanes that already exist; this picker is just the honest map:
- * instant-and-small (hosted) → a free 12 GB cloud machine or a paid one (SetupCloud's providers, Oracle's
- * Always-Free first) → the reader's own hardware (the most power, and the only GPU story anyone can offer). */
+ * costs and what it buys.
+ *
+ * IT IS A PICKER AND ONE CAPTION, and it has to stay that. The shape this replaced tried to say the same
+ * thing with surfaces: a tinted panel for the hosted offer, a bordered list of the other two under it, the
+ * chosen one ringed inside that list, and the command's own tab track and code frame under THAT — six framed
+ * surfaces deep before a single instruction. Nesting is what a reader pays for structure, and a
+ * three-item structure does not need paying for. Weight belongs in the words (the rung order, the caption)
+ * and in what is on screen at all, never in another box around it.
+ *
+ * The rungs are the lanes that already exist; this picker is just the honest map: instant-and-small (hosted)
+ * → a free 12 GB cloud machine or a paid one (SetupCloud's providers, Oracle's Always-Free first) → the
+ * reader's own hardware (the most power, and the only GPU story anyone can offer). */
 const ladderShown = computed(() => !desktop.value && (hostedOffered.value || cloudOffered.value));
 const ladderOptions = computed(() => [
-    ...(hostedOffered.value ? [{ label: mobile.value ? `Instant` : `Instant — we host it`, value: `hosted` as const }] : []),
+    ...(hostedOffered.value ? [{ label: mobile.value ? `Instant` : `Instant, we host it`, value: `hosted` as const }] : []),
     { label: `A computer I have`, value: `mine` as const },
     ...(cloudOffered.value ? [{ label: `A new cloud machine`, value: `cloud` as const }] : []),
 ]);
@@ -339,9 +348,9 @@ const machineCaption = computed(() => {
         return `Free and instant: a small private machine we run for you. It sleeps while you're away and wakes when you come back.`;
     }
     if (machine.value === `mine`) {
-        return `The most power — your CPUs, your RAM, your GPU. One pasted command; needs Docker.`;
+        return `The most power: your CPUs, your RAM, your GPU. One pasted command; needs Docker.`;
     }
-    return `A fresh machine in your own cloud account — including Oracle's Always-Free tier (12 GB RAM, $0/month).`;
+    return `A fresh machine in your own cloud account, including Oracle's Always-Free tier (12 GB RAM, $0/month).`;
 });
 
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
@@ -736,7 +745,7 @@ const hostedAutoCreate = async (): Promise<void> => {
         track(`sandbox_hosted_created`, {});
     } catch (err) {
         machine.value = mobile.value ? `cloud` : `mine`;
-        error.value = noticeFrom(err, `Couldn't create a hosted sandbox — set one up on a machine instead.`);
+        error.value = noticeFrom(err, `Couldn't create a hosted sandbox. Set one up on a machine instead.`);
         creating.value = false;
         await autoCreate();
         return;
@@ -1585,26 +1594,19 @@ watch(commandReady, (ready) => {
                                         {{ reaching ? `Keep this address` : `Use a different address` }}
                                     </button>
                                 </div>
-                                <!-- The two ways off the default address, told apart by what the reader already
-                                     knows about their own setup rather than by product vocabulary. -->
-                                <div v-if="reaching" class="flex flex-col gap-1 rounded-lg border border-line bg-canvas p-1">
-                                    <button
-                                        type="button"
-                                        class="flex cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
-                                        @click="chooseOwnZone"
-                                    >
-                                        <span class="text-xs text-content">I have a Cloudflare domain</span>
-                                        <span class="text-2xs text-muted">Your zone, your subdomain. The install command builds the tunnel.</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="flex cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
-                                        @click="setLane(`attach`)"
-                                    >
-                                        <span class="text-xs text-content">It already answers on a domain</span>
-                                        <span class="text-2xs text-muted">Point us at it. Nothing to install, nothing to provision.</span>
-                                    </button>
-                                </div>
+                                <!-- The two ways off the default address, as one sentence. They were rows in a
+                                     bordered inset with a caption each: a second frame, inside a card, to hold two
+                                     choices that fit on one line. The labels carry the distinction, which is the
+                                     only thing the captions were for. -->
+                                <p v-if="reaching" class="text-xs text-muted">
+                                    Use
+                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
+                                        your own Cloudflare zone</button
+                                    >, or connect
+                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                        a domain it already answers on</button
+                                    >.
+                                </p>
                             </template>
 
                             <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
@@ -1741,21 +1743,16 @@ watch(commandReady, (ready) => {
                             <template v-else-if="hostedRow !== null">
                                 <p class="flex items-center gap-2 text-sm text-content">
                                     <Icon name="spinner" spin class="text-info" />
-                                    Starting your machine — you'll be taken in as soon as it answers.
+                                    Starting your machine. You'll be taken in as soon as it answers.
                                 </p>
                                 <p class="text-xs text-muted">
                                     <template v-if="hostedSlow">
-                                        Taking longer than usual. It keeps trying on its own — you can leave this page open, or come back later.
+                                        Taking longer than usual. It keeps trying on its own, so you can leave this page open or come back later.
                                     </template>
                                     <template v-else>Usually under a minute. Nothing to install, nothing to paste.</template>
                                 </p>
                             </template>
-                            <Button
-                                v-else-if="!creating"
-                                label="Try again"
-                                class="w-full justify-center md:w-auto"
-                                @click="hostedAutoCreate"
-                            >
+                            <Button v-else-if="!creating" label="Try again" class="w-full justify-center md:w-auto" @click="hostedAutoCreate">
                                 <template #icon><Icon name="refresh" /></template>
                             </Button>
                         </template>
@@ -1976,36 +1973,19 @@ watch(commandReady, (ready) => {
                                  that follows one downloads a .msi it cannot open. The app is worth offering to
                                  this person — just on the machine they are about to open the emailed link on,
                                  where this same block is waiting and the download actually runs. -->
-                                <div
-                                    v-if="!desktop && !mobile && runTab !== `compose`"
-                                    class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-subtle"
-                                >
-                                    <span>
-                                        Rather not use a terminal? The
-                                        <button type="button" class="text-link hover:underline" @click="runHere">Intentic desktop app</button>
-                                        does this in one click, and updates your sandbox with a button afterwards.
-                                    </span>
-                                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                        Get it:
-                                        <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
-                                            Windows <Icon name="external-link" />
-                                        </a>
-                                        <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
-                                            Linux AppImage <Icon name="external-link" />
-                                        </a>
-                                        <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
-                                        <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
-                                    </span>
+                                <p v-if="!desktop && !mobile && runTab !== `compose`" class="border-t border-line pt-3 text-2xs text-subtle">
+                                    Rather not use a terminal?
+                                    <button type="button" class="text-link hover:underline" @click="runHere">Open the Intentic app</button>, or
+                                    download it for <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Windows</a>,
+                                    <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux AppImage</a>,
+                                    <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a> or
+                                    <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>.
                                     <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
-                                     YOUR build once staged — the same story as the dev sandbox image above. -->
-                                    <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
-                                        <Icon name="box" class="shrink-0" />
-                                        <span
-                                            >Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code>, then
-                                            run the site.</span
-                                        >
-                                    </p>
-                                </div>
+                                         YOUR build once staged — the same story as the dev sandbox image above. -->
+                                    <span v-if="platformUrlOverride" class="text-warning">
+                                        Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code> first.
+                                    </span>
+                                </p>
                             </template>
                         </template>
 
