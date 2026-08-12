@@ -32,13 +32,25 @@ test("a native Claude turn keeps the real alias table — sonnet and opus are di
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });
 
-test("every harness process is told to ride out a provider outage rather than give up on it", () => {
+test("every harness TURN is told to ride out a provider outage rather than give up on it", () => {
     // Whichever credential shape serves the turn: the retry budget is about the provider being down, which has
     // nothing to do with whose token is in play. A turn that gives up here is one turn-resume.ts has to rebuild
     // from scratch, at full context cost.
     for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
         expect(harnessEnv(credentials)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
     }
+});
+
+test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {
+    // The regression this pins: a one-shot inherited the turn's watchdog and therefore its three hundred
+    // attempts, so the commit-message draft ground through a refusing rung for the better part of a minute
+    // instead of failing over to the next model in the chain — the one thing the chain exists to do.
+    for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
+        expect(harnessEnv({ ...credentials, helper: true })["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
+    }
+    // Everything else about a helper's environment is a turn's — only the patience differs.
+    expect(harnessEnv({ oauthToken: "sk-oauth", helper: true })["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
+    expect(harnessEnv({ helper: true })["IS_SANDBOX"]).toBe("1");
 });
 
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {

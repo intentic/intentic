@@ -119,6 +119,16 @@ export const harnessEnv = (credentials: {
     readonly authToken?: string;
     readonly oauthToken?: string;
     readonly model?: string;
+    /* WHO IS WAITING FOR THIS — the one thing about a harness spawn that changes what a retry is worth, and
+     * therefore the only setting below that is not the same for both callers.
+     *
+     * A TURN is watched, holds work, and can be resumed only by re-reading everything: waiting is cheaper than
+     * dying, so it rides out almost any outage (the watchdog below). A HELPER is none of those — nobody is
+     * watching, nothing is lost by failing, and there is a whole chain of other models behind it that would
+     * have answered in two seconds. For a helper, waiting IS the failure.
+     *
+     * Defaults to the turn's policy, so a caller that has not thought about it gets the safe-for-work answer. */
+    readonly helper?: boolean;
 }): Record<string, string> => ({
     IS_SANDBOX: "1",
     /* RIDE OUT A PROVIDER BLIP INSIDE THE TURN, rather than dying and being resumed from outside it.
@@ -137,8 +147,14 @@ export const harnessEnv = (credentials: {
      * long silence legible instead of looking like a hang.
      *
      * Cost: the harness stops falling back to a cheaper model on server errors. We never set a fallback model,
-     * so there is nothing to lose here. */
-    CLAUDE_CODE_RETRY_WATCHDOG: "1",
+     * so there is nothing to lose here.
+     *
+     * WITHHELD FROM HELPERS, and that withholding is a fix rather than a tidy-up. A one-shot inherited this and
+     * therefore inherited three hundred attempts at a rung that was refusing — so instead of failing over to the
+     * next model in the chain, the commit-message draft ground through the harness's own backoff for the better
+     * part of a minute (measured at 35–73s per landing, against ~2s for the same prompt answered directly). The
+     * chain behind it exists precisely so a bad rung costs nothing; the watchdog is what stopped it working. */
+    ...(credentials.helper === true ? {} : { CLAUDE_CODE_RETRY_WATCHDOG: "1" }),
     ...(credentials.baseUrl !== undefined
         ? {
               ANTHROPIC_BASE_URL: credentials.baseUrl,

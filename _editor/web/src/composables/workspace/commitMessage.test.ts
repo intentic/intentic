@@ -25,7 +25,7 @@ vi.stubGlobal(`localStorage`, {
     removeItem: (key: string): void => void stored.delete(key),
 });
 
-import { clearFilledMessage, commitMessage, fillCommitMessage, followFilledMessage } from "./commitMessage";
+import { clearFilledMessage, commitMessage, fillCommitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commitMessage";
 
 describe(`the commit box`, () => {
     beforeEach(() => {
@@ -131,6 +131,60 @@ describe(`the box following a lit From chip`, () => {
         commitMessage.value = `chore: my own subject`;
         message.value = `fix: cascading markers`;
         await nextTick();
+        expect(commitMessage.value).toBe(`chore: my own subject`);
+    });
+});
+
+/* WHO THE COMMIT IS BEING NAMED AFTER, once the panel that asked is gone. The Changes panel is destroyed by the
+ * Files|Changes|History switch, so everything above dies with it — and the sentence it is waiting for was
+ * measured arriving up to seventy seconds after the land, which is far longer than anyone stares at a file list.
+ * These pin the ask itself, which is what has to survive that trip for the box ever to be filled. */
+describe(`the ask to name a commit after a session`, () => {
+    beforeEach(() => {
+        commitMessage.value = ``;
+        nameCommitAfter(undefined);
+    });
+
+    test(`is remembered independently of the panel that made it`, () => {
+        nameCommitAfter(`agent-1`);
+        expect(namedAfter.value).toBe(`agent-1`);
+    });
+
+    // The delivery the panel cannot make: by the time the sentence exists, the component that took the click has
+    // been destroyed and rebuilt — possibly several times — and the box must still end up holding it.
+    test(`is still answerable after the panel is gone`, () => {
+        nameCommitAfter(`agent-1`);
+        fillCommitMessage(`fix: cascading markers`);
+        expect(commitMessage.value).toBe(`fix: cascading markers`);
+    });
+
+    test(`putting the chip out withdraws the ask and takes its line back`, () => {
+        nameCommitAfter(`agent-1`);
+        fillCommitMessage(`fix: cascading markers`);
+
+        nameCommitAfter(undefined);
+        expect(namedAfter.value).toBeUndefined();
+        expect(commitMessage.value).toBe(``);
+    });
+
+    // Moving to another session is one gesture, not a withdrawal followed by an ask: the line the last chip
+    // filed is still the fill's own, so the next sentence may replace it.
+    test(`moving the ask to another session leaves the box fillable`, () => {
+        nameCommitAfter(`agent-1`);
+        fillCommitMessage(`fix: cascading markers`);
+
+        nameCommitAfter(`agent-2`);
+        expect(namedAfter.value).toBe(`agent-2`);
+        fillCommitMessage(`feat: second session`);
+        expect(commitMessage.value).toBe(`feat: second session`);
+    });
+
+    // Withdrawing may never touch a keystroke, the same rule every other road into the box answers to.
+    test(`withdrawing leaves a message the user typed alone`, () => {
+        nameCommitAfter(`agent-1`);
+        commitMessage.value = `chore: my own subject`;
+
+        nameCommitAfter(undefined);
         expect(commitMessage.value).toBe(`chore: my own subject`);
     });
 });

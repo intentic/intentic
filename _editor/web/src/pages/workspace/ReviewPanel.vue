@@ -13,7 +13,7 @@ import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
-import { commitMessage, followFilledMessage } from "../../composables/workspace/commitMessage";
+import { commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "../../composables/workspace/commitMessage";
 import { ALL_SIDES, commitMessageOf, landedMessage, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
@@ -22,7 +22,6 @@ import { ahead, behind, syncable, unpublished } from "../../composables/workspac
 import { COMMIT_SCOPE, useChanges, workingStatKey } from "../../composables/workspace/useChanges";
 import { usePushFlow } from "../../composables/workspace/usePushFlow";
 import { useRepos } from "../../composables/workspace/useRepos";
-import { useReceipts } from "../../composables/receipts";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../composables/workspace/changeModules";
 import type { OpenMode } from "./workspaceTabs";
@@ -113,22 +112,38 @@ const { fleet } = useAgents();
 const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
-// The app's quiet channel, used here for the one thing about a landing that arrives late enough to be waited on.
-const { say } = useReceipts();
 
 const legend = computed(() => summarizeOrigins(scannable.value));
-const originFilter = ref<string | undefined>(undefined);
-// The filter outlives neither the agent's work nor a commit that swept it away. Dropping it takes the subject
-// that agent's chip filed into the commit box with it — the box follows the LIT chip, and there is no longer one.
-watch(legend, ({ agents, yours }) => {
-    if (originFilter.value === undefined) {
-        return;
-    }
-    const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
-    if (!stillHasWork) {
-        originFilter.value = undefined;
-    }
-});
+/* Seeded from the standing ask rather than from nothing, so coming back to this panel finds it as it was left.
+ * The lit chip is how the user asked for the commit to be named after a session, and that ask outlives this
+ * component now (composables/workspace/commitMessage.ts) — a panel that reopened with every chip dark was
+ * telling them the ask had been forgotten, at the exact moment the sentence they were waiting for was still on
+ * its way. "you" is not an ask about naming and never travels. */
+const originFilter = ref<string | undefined>(namedAfter.value);
+/* The filter outlives neither the agent's work nor a commit that swept it away. Dropping it withdraws the ask
+ * with it — the box follows the LIT chip, and there is no longer one.
+ *
+ * `immediate`, because the filter no longer starts empty: a restored ask has to be checked against the tree the
+ * moment this panel opens, or a session whose work was committed while the panel was closed comes back as a lit
+ * chip filtering the list down to nothing.
+ *
+ * An EMPTY review is not an answer to that question, though — it is what the first frames after mounting look
+ * like, before anything has been scanned — so it retires nothing. Waiting costs a moment of a stale chip;
+ * retiring on it would throw the ask away at the exact instant it was restored. */
+watch(
+    legend,
+    ({ agents, yours }) => {
+        if (originFilter.value === undefined || (agents.length === 0 && yours === 0)) {
+            return;
+        }
+        const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
+        if (!stillHasWork) {
+            originFilter.value = undefined;
+            nameCommitAfter(undefined);
+        }
+    },
+    { immediate: true },
+);
 
 /* Resolving an origin id to a name and a provider logo, from two sources in this order:
  *   - THE OPEN FLEET CARD, when there is one, because it is the LIVE copy: a rename repaints the chip on the
@@ -222,7 +237,6 @@ const originNote = (id: string): string | undefined => {
  * It was the bulk of what the model wrote and therefore the bulk of the wait, and what it bought was the subject
  * restated at greater length over a diff git already records. */
 const landedOf = (id: string): LandedMessage | undefined => landedMessage(agentOf(id), originOf(id));
-const originSubject = (id: string): string | undefined => landedOf(id)?.subject;
 const originMessage = (id: string): string | undefined => commitMessageOf(landedOf(id));
 
 /* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
@@ -239,9 +253,11 @@ const originMessage = (id: string): string | undefined => commitMessageOf(landed
  * session nothing can name.
  *
  * The click itself only lights the chip. Naming is the standing rule below, NOT an act of this handler, because
- * the sentence is routinely a few seconds younger than the click that asks for it. */
+ * the sentence is routinely a WHOLE MINUTE younger than the click that asks for it — so the ask is recorded
+ * outside this component (nameCommitAfter), where it can still be answered after the panel is gone. */
 const toggleOrigin = (id: string): void => {
     originFilter.value = originFilter.value === id ? undefined : id;
+    nameCommitAfter(originFilter.value === YOURS ? undefined : originFilter.value);
 };
 
 /* WHAT THE LIT CHIP IS SAYING, AS IT STANDS THIS TICK. Undefined for no filter; for "you", whose edits have no
@@ -270,19 +286,12 @@ const filterDrafting = computed(
     () => originFilter.value !== undefined && originFilter.value !== YOURS && filterMessage.value === undefined && originDrafting(originFilter.value),
 );
 
-/* AND SAY WHEN IT ARRIVES. The other edge — a draft STARTING — is reported above this panel and outlives it
- * (composables/workspace/draftingReceipts.ts): the wait begins on the /agents board, where this component does
- * not exist. What belongs here is the answer, because this is the only place that holds the review and can
- * therefore tell the two ways a draft ends apart: a sentence was written, or the model chain ran dry and
- * nothing was. Announcing the second as "ready" would walk the user over to an empty box on purpose. */
-const draftingIds = computed(() => fleet.value.filter((agent) => agent.draftingSubject === true).map((agent) => agent.id));
-watch(draftingIds, (drafting, before) => {
-    for (const id of before.filter((candidate) => !drafting.includes(candidate))) {
-        if (originSubject(id) !== undefined) {
-            say(`Commit message ready for ${originLabel(id)}`);
-        }
-    }
-});
+/* BOTH EDGES OF THE WAIT — it started, and what became of it — are reported above this panel and outlive it
+ * (composables/workspace/draftingReceipts.ts). Neither is this component's to make: the wait begins on the
+ * /agents board, where this does not exist, and it now routinely OUTLASTS a trip to the Files tab and back, so
+ * a report made from here would reach only the users who happened not to look away. The roster carries the
+ * sentence itself, which is what lets that file tell a written message from an unwritten one without the
+ * review this panel holds. */
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -660,6 +669,9 @@ const runCommit = async (target: readonly RepoPaths[]): Promise<void> => {
     // Keep the message on failure — it is the one thing here the user typed by hand.
     if (!changes.failures.value.has(COMMIT_SCOPE)) {
         commitMessage.value = ``;
+        // The commit that records the work is the end of naming it, so the ask goes with it. Without this a
+        // sentence still in flight for that session would arrive and fill the box over the NEXT commit.
+        nameCommitAfter(undefined);
     }
 };
 // Ctrl+Enter reaches this too, and a keyboard path that silently does nothing is the worst way to say no —

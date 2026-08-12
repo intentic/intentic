@@ -127,6 +127,35 @@ export const followFilledMessage = (source: Ref<string | undefined>): void => {
     watch(source, (message) => (message === undefined ? clearFilledMessage() : fillCommitMessage(message)));
 };
 
+/* WHICH SESSION THE COMMIT IS BEING NAMED AFTER — the ask itself, kept apart from the panel that takes it.
+ *
+ * The rule above is only as long-lived as the component holding `source`, and the Changes panel is behind a
+ * v-if: the Files|Changes|History switch destroys it, and with it the lit chip the box was following. That was
+ * survivable while the sentence took a few seconds. It is not survivable now that we know what the wait can
+ * really be — a landing's message was measured arriving up to seventy seconds after the land, which is far
+ * longer than anyone stares at a file list waiting for it. So the user clicked, saw an empty box, went to look
+ * at something else, and the sentence arrived into a panel that no longer existed. Every road back — toggling
+ * the chip, switching views, reloading — put them in front of the same empty box, because the ask had died
+ * with the component and nothing was asking any more.
+ *
+ * So the ASK lives here, at module scope, next to the box it is about: set when a chip is lit, cleared when it
+ * is put out, and answered by whoever can answer it (workspace/draftingReceipts.ts watches the roster for it).
+ * Naming a commit stays a gesture the user makes — this only makes the gesture outlive the view it was made
+ * in, which is what the user meant by it.
+ *
+ * Undefined ⇒ nobody has asked, or the ask was withdrawn. It is deliberately NOT persisted: it describes a
+ * sentence being written right now by a process that does not survive a reload either. */
+export const namedAfter = ref<string | undefined>(undefined);
+
+// The chip was lit (or moved to another session): name the commit after this one, and drop whatever the last
+// one filed. Undefined puts the chip out — "you", or a second click on the lit one.
+export const nameCommitAfter = (id: string | undefined): void => {
+    namedAfter.value = id;
+    if (id === undefined) {
+        clearFilledMessage();
+    }
+};
+
 // Switching sandboxes swaps the draft for that sandbox's own — which is also what re-persists it below, under
 // the id it was just loaded from. The claim travels WITH it, because it is that tree's own record of its box;
 // what does not travel is one sandbox's claim onto another's message, and reading replaces both together.

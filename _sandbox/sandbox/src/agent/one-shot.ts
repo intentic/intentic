@@ -46,6 +46,19 @@ import { isFailureSentence } from "./failure-sentences.js";
  * whose value is that it appeared while the user was still looking at the thing it names. */
 const MAX_RETRY_WAIT_MS = 15_000;
 
+/* THE WHOLE CALL'S DEADLINE — the ceiling the per-retry limit above cannot express.
+ *
+ * That limit refuses one long wait; it says nothing about MANY short ones, and short ones are what a struggling
+ * provider actually produces. The harness's backoff climbs from ~600ms, so a rung can refuse a dozen times over
+ * without any single delay coming near fifteen seconds, and the caller waits out every one of them — which is
+ * how a draft advertised as "a few seconds" was measured at 35–73 seconds per landing, long after the user who
+ * was promised it had given up and looked away.
+ *
+ * So the budget is stated once, for the call rather than the attempt. Deliberately generous against a model
+ * that answers in ~2s: this is the point where waiting longer cannot help, not a latency target. Crossing it is
+ * an ordinary refusal — askQuickModel steps to the next rung, which is the whole reason there is a chain. */
+const DEADLINE_MS = 20_000;
+
 export const runOneShot = async (params: {
     readonly prompt: string;
     // The tree the model runs in. Nothing is read from it (no tools), but the SDK spawns the CLI there and a
@@ -60,6 +73,14 @@ export const runOneShot = async (params: {
     // straight through because the session must also be torn down on the success path.
     const forward = (): void => abort.abort();
     params.signal.addEventListener(`abort`, forward, { once: true });
+    /* The deadline tears the CLI down the same way a cancel does, then the loop below reads `expired` to say
+     * which of the two happened — an abort surfaces as a stream that simply ends, and "the model did not
+     * answer" would send the reader looking at the model rather than at the clock. */
+    let expired = false;
+    const deadline = setTimeout(() => {
+        expired = true;
+        abort.abort();
+    }, DEADLINE_MS);
     const { endpoint, oauthToken } = params.credentials;
     const options: Options = {
         cwd: params.cwd,
@@ -79,6 +100,10 @@ export const runOneShot = async (params: {
         env: {
             ...process.env,
             ...harnessEnv({
+                // A HELPER'S retry policy, not a turn's — see harness-credentials.ts. Nobody is watching this
+                // one, and a rung that will not answer is meant to cost the chain a couple of seconds and be
+                // stepped over, never to be waited out.
+                helper: true,
                 ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model } : {}),
                 ...(oauthToken !== undefined ? { oauthToken } : {}),
             }),
@@ -91,11 +116,15 @@ export const runOneShot = async (params: {
     const session = query({ prompt: params.prompt, options });
     try {
         for await (const message of session) {
-            /* A RETRY THIS CALLER WILL NEVER OUTLIVE. The CLI's retry budget is deliberately enormous
-             * (CLAUDE_CODE_RETRY_WATCHDOG, 300 attempts) because a TURN should ride out a rate limit: the user
-             * asked for it, is watching it, and would rather wait than lose the work. A helper is the opposite
-             * on every count — nobody is watching, nothing is lost by failing, and the answer is worthless by
-             * the time it arrives.
+            /* A RETRY THIS CALLER WILL NEVER OUTLIVE. A TURN should ride out a rate limit: the user asked for
+             * it, is watching it, and would rather wait than lose the work — which is what the harness's own
+             * watchdog buys it, and why this call is spawned WITHOUT that watchdog (harness-credentials.ts). A
+             * helper is the opposite on every count — nobody is watching, nothing is lost by failing, and the
+             * answer is worthless by the time it arrives.
+             *
+             * The watchdog being off shortens the harness's own budget; it does not put a floor under it, so
+             * these two guards stay. They are the fast exits — a refusal recognised on the spot beats one the
+             * deadline has to time out.
              *
              * Left unhandled, the loop below simply skips these frames and waits. Measured against a spent
              * allowance, the CLI answers 429 and schedules the next attempt for the window's remaining
@@ -143,9 +172,17 @@ export const runOneShot = async (params: {
             }
             return message.result;
         }
-        // The stream ended without a result: the CLI died, or the turn was aborted mid-flight.
-        throw new Error(`the model did not answer`);
+        // The stream ended without a result: the deadline tore it down, the CLI died, or the turn was aborted
+        // mid-flight. The first of those is the one worth naming — it is a statement about how long this rung
+        // took, and every other sentence here would blame the model for it.
+        throw new Error(expired ? `the model did not answer within ${DEADLINE_MS / 1_000}s` : `the model did not answer`);
+    } catch (error) {
+        // Tearing the CLI down mid-stream can surface as a throw rather than as a stream that ends, so the
+        // deadline has to claim its own failures on both roads out — otherwise the chain records this rung as
+        // having refused for whatever reason the abort happened to wear.
+        throw expired ? new Error(`the model did not answer within ${DEADLINE_MS / 1_000}s`) : error;
     } finally {
+        clearTimeout(deadline);
         params.signal.removeEventListener(`abort`, forward);
         abort.abort();
         await session.return(undefined).catch(() => {});
