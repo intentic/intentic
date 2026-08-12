@@ -11,6 +11,9 @@
 # nothing pushed. Missing halves fail loudly — a silently amd64-only `stable` would strand every arm sandbox
 # on its next update.
 set -euo pipefail
+# The merge runs seconds behind the pushes it stitches, so it sits in the same GHCR rate-limit window they do
+# — and it is pure manifest writes, which is exactly what gets refused. registry-retry.sh says the rest.
+. "$(dirname "$0")/registry-retry.sh"
 
 IMAGE_NAME="${1:?usage: merge-image-manifests.sh <image> <tag>...}"
 shift
@@ -21,7 +24,7 @@ REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 
 for registry in $REGISTRIES; do
     for tag in "$@"; do
-        docker buildx imagetools create \
+        registry_retry docker buildx imagetools create \
             -t "$registry/$IMAGE_NAME:$tag" \
             "$registry/$IMAGE_NAME:$tag-amd64" \
             "$registry/$IMAGE_NAME:${ARM64_REF:-$tag-arm64}"
