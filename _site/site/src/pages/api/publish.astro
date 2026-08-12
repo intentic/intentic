@@ -52,11 +52,15 @@ const sources = `// A repo of its own
     heading="Publish & registries"
     lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
 >
-    {/* THE WRONG-ARTIFACT CATCH, and it is first because the mis-route happens before the page starts. "List
-        your work" and "Get listed" are the most-used creator CTAs on this site (the Earn hero, the Earn pool
-        band, the gallery hero) and every one of them is worded artifact-neutrally, but all of them land here,
-        where the entire page is git repos and extension bundles. A provider with an endpoint to sell had to
-        read four screens of registry mechanics to discover none of it was addressed to them. */}
+    {/* THE WRONG-ARTIFACT CATCH, and it is first because the mis-route happens before the page starts. Every
+        creator CTA on this site lands here, and the artifact-neutral ones ("List your work", "Get listed")
+        caught the provider along with everybody else, on a page that is entirely git repos and extension
+        bundles: four screens of registry mechanics before discovering none of it was addressed to them.
+
+        The Earn page has since renamed its buttons after their artifact, which is the better fix because it
+        works before the click. This line stays for the routes that cannot: the gallery's "Get listed", where
+        the surrounding page makes the artifact obvious enough to keep the shorter label, and every inbound
+        link written by somebody else. */}
     <p>
         <strong>Selling metered runs rather than shipping code?</strong> That is a service rather than an extension: no repo, no bundle
         and no pointer, just one endpoint the platform forwards paid calls to. Take{" "}
