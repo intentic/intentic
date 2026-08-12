@@ -8,6 +8,7 @@ const {
     options,
     size = `sm`,
     stretch = false,
+    wrap = false,
 } = defineProps<{
     // badge: a small count chip after the label (e.g. unreviewed changes on a tab); hidden at 0/undefined.
     // mark: an icon in that same chip INSTEAD of a number, for a pending action whose size is not what the user
@@ -29,13 +30,19 @@ const {
      * The compact default is deliberate everywhere else: at ~20px tall it is a mouse control, and on a phone
      * its labels wrap to two lines each and the row stops reading as one control at all. */
     stretch?: boolean;
+    /* Lets the ROW break between pills when the options outrun the container — the pill itself stays one line
+     * either way. Off by default because the compact control mostly rides fixed-height toolbar rows, where a
+     * second line would stand taller than the bar holding it; on for pickers sitting in a form column, where
+     * the option list is data-driven (a sandbox's identities) and an unwrapping row would run off the edge
+     * with its later options unreachable. */
+    wrap?: boolean;
 }>();
 
 const model = defineModel<T>({ required: true });
 </script>
 
 <template>
-    <div role="tablist" class="flex items-center" :class="stretch ? `w-full gap-1 rounded-lg border border-line bg-canvas p-1` : `gap-0.5`">
+    <div role="tablist" class="flex items-center" :class="[stretch ? `w-full gap-1 rounded-lg border border-line bg-canvas p-1` : `gap-0.5`, wrap ? `flex-wrap gap-y-1` : ``]">
         <button
             v-for="option in options"
             :key="option.value"

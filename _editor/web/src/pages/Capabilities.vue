@@ -1168,6 +1168,7 @@ const submitLabel = computed(() => {
                                     </span>
                                     <Segmented
                                         v-if="field.options"
+                                        wrap
                                         :model-value="values[field.key] ?? ''"
                                         :options="[...field.options]"
                                         @update:model-value="values[field.key] = $event"
