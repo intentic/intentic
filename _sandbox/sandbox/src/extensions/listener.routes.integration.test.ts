@@ -99,7 +99,7 @@ test("dispatch?stream=1 holds an ndjson turn-stream, framing deltas + end per ma
     expect(frames).toContainEqual({ automationId: "s-live", delta: "lo" });
     expect(frames).toContainEqual({ automationId: "s-live", end: true });
     expect(prompts[0]).toContain("wake:s-live");
-}, 10_000);
+});
 
 test("dispatch (no stream) wakes the matching automation and returns ok", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));

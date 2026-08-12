@@ -81,7 +81,7 @@ const harness = (root: string): { svc: Services; backend: ExtensionBackend } => 
     return { svc, backend };
 };
 
-test("a workspace extension's backend serves its /x namespace through the daemon proxy", { timeout: 30_000 }, async () => {
+test("a workspace extension's backend serves its /x namespace through the daemon proxy", async () => {
     const root = mkdtempSync(join(tmpdir(), "ext-backend-"));
     await writeExtension(root, "echo", echoServer);
     const { svc, backend } = harness(root);
@@ -130,7 +130,7 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     expect(((await stopped.json()) as { error: string }).error).toContain("stopped");
 });
 
-test("one extension's failing activation is its own row, never the host's death", { timeout: 30_000 }, async () => {
+test("one extension's failing activation is its own row, never the host's death", async () => {
     const root = mkdtempSync(join(tmpdir(), "ext-backend-fail-"));
     await writeExtension(root, "echo", echoServer);
     await writeExtension(root, "broken", `export const activateServer = () => { throw new Error("no config"); };\n`);

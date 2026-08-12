@@ -69,4 +69,4 @@ test("a socket that accepts and never answers times out instead of hanging the p
     const port = await serve(silent);
     expect(await detectScheme(port)).toBeUndefined();
     silent.close();
-}, 10_000);
+});

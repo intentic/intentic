@@ -49,7 +49,7 @@ test("prints the canonical run command: replayed env filtered here, multi-line k
     // Image identity is never replayed from the container being replaced, and empty vars are dropped.
     expect(stdout).not.toContain("old:tag");
     expect(stdout).not.toContain("CONNECT_TOKEN");
-}, 30_000);
+});
 
 test("--format json prints the argv for PowerShell to splat", async () => {
     const { stdout } = await runVerb(["--slug", "s2", "--image", "i", "--base-image", "i", "--format", "json"], "");
@@ -57,7 +57,7 @@ test("--format json prints the argv for PowerShell to splat", async () => {
     expect(argv[0]).toBe("run");
     expect(argv).toContain("--cap-add=SYS_ADMIN");
     expect(argv.at(-1)).toBe("i");
-}, 30_000);
+});
 
 /* The loopback shortcut is derived, never passed: the verb already receives CONNECT_TOKEN on the env channel,
  * so the port a browser will probe falls out of the same digest that names the tunnel. Proving it end-to-end
@@ -70,7 +70,7 @@ test("the loopback publish is derived from the connect token the env channel alr
     expect(stdout).toContain(`-p 127.0.0.1:${port}:8788`);
     // Bound to the id, not the slug: two sandboxes sharing a slug shape still get their own port.
     expect(port).not.toBe(localDaemonPort(sandboxIdFromToken("other")!));
-}, 30_000);
+});
 
 test("--no-local-publish drops only the shortcut, so a port docker refused can't fail the launch twice", async () => {
     const { stdout } = await runVerb(["--slug", "s5", "--image", "i", "--base-image", "i", "--no-local-publish"], "CONNECT_TOKEN=s3cret\0");
@@ -78,7 +78,7 @@ test("--no-local-publish drops only the shortcut, so a port docker refused can't
     // Everything else about the run is untouched — the retry is the same sandbox, minus one optimization.
     expect(stdout).toContain("--cap-add=SYS_ADMIN");
     expect(stdout).toContain("-v intentic-workspace-s5:/work");
-}, 30_000);
+});
 
 /* The two halves of the preflight protocol, end to end through the real bin — this is how a creation flow
  * negotiates an optional directive without knowing any token's name:
@@ -88,9 +88,9 @@ test("--no-local-publish drops only the shortcut, so a port docker refused can't
  * "this machine cannot", which are opposite instructions to give a person. */
 test("host-probes names what to ask the host, and only for what the overlay asked", async () => {
     // Two independent invocations, so they go out together — the same reason the test below takes its three that
-    // way. A tsx start is the only real cost this file has, so a test that spends two in sequence is asking for
-    // twice the budget its one-spawn siblings pass inside, against the same 30s. That is exactly what happened:
-    // every single-spawn test in this file survived a loaded runner at 13-17s and this one hit the wall at 30.1s.
+    // way. A tsx start is the only real cost this file has, and on a loaded runner one has been measured at 20s
+    // against a local 0.4s; a test that spends two in sequence pays that twice for nothing, because neither call
+    // reads what the other returned.
     const [asked, allOrNothing] = await Promise.all([
         runProbes(["--runtime", "# intentic:runtime --privileged --gpus=all"]),
         // --privileged is all-or-nothing: there is nothing to ask, because a host that refuses it has broken the
@@ -100,14 +100,14 @@ test("host-probes names what to ask the host, and only for what the overlay aske
 
     expect(asked.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);
     expect(allOrNothing.stdout).toBe("");
-}, 30_000);
+});
 
 test("--unsupported drops those directives and records why, leaving the rest of the run intact", async () => {
     const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
     // Three independent invocations, so they go out together. Nothing here depends on the one before it, and a
-    // tsx start is the only real cost this file has: taken in sequence, this test paid it three times against
-    // the same 30s its one-spawn siblings get, which is why it timed out on a loaded runner. Every multi-spawn
-    // test here now goes out this way — the one above serialized two and hit the same wall five days later.
+    // tsx start is the only real cost this file has: taken in sequence this test pays it three times over, which
+    // is how it used to exhaust a budget its one-spawn siblings passed inside. Every multi-spawn test here goes
+    // out this way.
     const [honoured, unsupported, detached] = await Promise.all([
         runVerb(args, ""),
         // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
@@ -127,7 +127,7 @@ test("--unsupported drops those directives and records why, leaving the rest of 
     expect(unsupported.stdout).toContain("--privileged");
 
     expect(detached.stdout).toBe("");
-}, 30_000);
+});
 
 test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {
     const { code, stdout, stderr } = await runVerb(
@@ -138,4 +138,4 @@ test("an unallowlisted runtime directive fails the whole verb — never a comman
     expect(stdout).toBe("");
     // Named, so the refusal is the allowlist speaking — not any other crash that happens to exit non-zero.
     expect(stderr).toContain("--cap-add=SYS_PTRACE");
-}, 30_000);
+});

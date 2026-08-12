@@ -177,7 +177,7 @@ test("defects plants every anchor it grades against, and padding the answer is p
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
-}, 20_000);
+});
 
 test("an unknown task spec fails loudly rather than silently benchmarking nothing", () => {
     expect(() => taskFor(`nope`)).toThrow(/unknown task/);

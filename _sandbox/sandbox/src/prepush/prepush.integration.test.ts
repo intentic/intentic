@@ -223,7 +223,7 @@ test("the output a failure carries is capped to its tail", async () => {
     expect(output.length).toBe(24_000);
     // The TAIL, so the last thing the command printed is the last thing the prompt shows.
     expect(output.endsWith("0123456789\n")).toBe(true);
-}, 20_000);
+});
 
 // Two suites at once would fight over the same tree, the same ports and the same CPU — and the second would
 // answer about a tree the first is still changing.
@@ -237,7 +237,7 @@ test("a second run while one is going starts nothing", async () => {
     await check.run();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), { timeout: 8_000 });
     expect(runs()).toBe(1);
-}, 20_000);
+});
 
 /* The guard this module exists for: a check that outruns its ceiling must be LOUD, never a pass and never a
  * silent skip — and never filed as the user cancelling, which is the confusion the two flags exist to prevent.
@@ -250,7 +250,7 @@ test("a check that outruns the timeout is failed and timedOut, never cancelled",
     await check.run();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
     expect((await check.state()).timedOut).toBe(true);
-}, 20_000);
+});
 
 // A cancel must not read as a failure: nothing was learned about the code, and a "tests failed" notice over a
 // run the user stopped themselves would be the check lying about its own evidence.
@@ -261,7 +261,7 @@ test("a cancelled run is cancelled, not failed", async () => {
     await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), { timeout: 5_000 });
     check.cancel();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), { timeout: 8_000 });
-}, 20_000);
+});
 
 /* WHO GETS INTERRUPTED. The user is expected to start a push and go and do something else, so a red verdict has
  * to travel to them; the two outcomes that leave a push standing unsent are the only ones that qualify. A pass
@@ -286,7 +286,7 @@ test("a red verdict notifies devices; a pass and a cancel say nothing", async ()
     stoppedCheck.cancel();
     await vi.waitFor(async () => expect((await stoppedCheck.state()).status).toBe("cancelled"), { timeout: 8_000 });
     expect(stopped.notified()).toEqual([]);
-}, 30_000);
+});
 
 // A suite killed by its own ceiling is the loudest case there is — the push is held on a check that never
 // finished, and the wording has to say that rather than "failed", which would send the user hunting a test.
@@ -296,7 +296,7 @@ test("a timed-out check notifies as a timeout", async () => {
     await check.run();
     await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), { timeout: 5_000 });
     expect(notified()).toEqual(["Checks timed out"]);
-}, 20_000);
+});
 
 // A command the shell cannot find is the shell's own 127 — a FAILED run whose output names the problem, which is
 // what keeps it distinguishable from the `error` below.
