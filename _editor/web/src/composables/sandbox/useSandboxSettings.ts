@@ -1,8 +1,9 @@
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic-app/api-contract";
-import { useMutation, useQueryClient } from "@tanstack/vue-query";
+import { useMutation } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxJson } from "./sandboxClient";
 import { jsonBody } from "./jsonBody";
+import { queryClient } from "../queryPersistence";
 import { SANDBOX_SETTINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
@@ -42,46 +43,48 @@ const droppedFieldsReason = (sent: SandboxSettings, stored: SandboxSettings): st
 };
 
 export function useSandboxSettings() {
-    const queryClient = useQueryClient();
-
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async (): Promise<SandboxSettings> => SandboxSettingsSchema.parse(await sandboxJson(`/settings`)),
     });
 
-    const save = useMutation({
-        mutationFn: (settings: SandboxSettings) => sandboxJson(`/settings`, jsonBody(`POST`, settings)),
-        // Write the new settings into the cache the controls render from, BEFORE the request. Every control on
-        // the page reads its value — and its disabled state — from this one object, so without this a click
-        // leaves the switch showing the OLD value for a daemon round-trip and then jumping; a control mid-flight
-        // is the stalest thing on screen precisely while the user is looking at it.
-        onMutate: async (settings) => {
-            dropped.value = undefined;
-            // A refetch in flight would otherwise land after this write and overwrite it with pre-click state.
-            await queryClient.cancelQueries({ queryKey: QUERY_KEY });
-            const previous = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
-            queryClient.setQueryData<SandboxSettings>(QUERY_KEY, settings);
-            return { previous };
+    const save = useMutation(
+        {
+            mutationFn: (settings: SandboxSettings) => sandboxJson(`/settings`, jsonBody(`POST`, settings)),
+            // Write the new settings into the cache the controls render from, BEFORE the request. Every control on
+            // the page reads its value — and its disabled state — from this one object, so without this a click
+            // leaves the switch showing the OLD value for a daemon round-trip and then jumping; a control mid-flight
+            // is the stalest thing on screen precisely while the user is looking at it.
+            onMutate: async (settings) => {
+                dropped.value = undefined;
+                // A refetch in flight would otherwise land after this write and overwrite it with pre-click state.
+                await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+                const previous = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
+                queryClient.setQueryData<SandboxSettings>(QUERY_KEY, settings);
+                return { previous };
+            },
+            // The daemon refused it or was unreachable: put back exactly what was on screen before the click, so the
+            // switch never claims a setting the sandbox doesn't have.
+            onError: (_error, _settings, context) => {
+                if (context?.previous !== undefined) {
+                    queryClient.setQueryData<SandboxSettings>(QUERY_KEY, context.previous);
+                }
+            },
+            // Either way, reconcile with what the daemon actually stored — a field it doesn't understand (an older
+            // daemon dropping a newly-added toggle) then visibly snaps back instead of lying. Snapping back is
+            // honest but mute, so name the dropped field once the reconciling read has landed (droppedFieldsReason).
+            onSettled: async (_data, saveError, settings) => {
+                await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+                const stored = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
+                if (saveError !== null || stored === undefined) {
+                    return;
+                }
+                dropped.value = droppedFieldsReason(settings, stored);
+            },
         },
-        // The daemon refused it or was unreachable: put back exactly what was on screen before the click, so the
-        // switch never claims a setting the sandbox doesn't have.
-        onError: (_error, _settings, context) => {
-            if (context?.previous !== undefined) {
-                queryClient.setQueryData<SandboxSettings>(QUERY_KEY, context.previous);
-            }
-        },
-        // Either way, reconcile with what the daemon actually stored — a field it doesn't understand (an older
-        // daemon dropping a newly-added toggle) then visibly snaps back instead of lying. Snapping back is
-        // honest but mute, so name the dropped field once the reconciling read has landed (droppedFieldsReason).
-        onSettled: async (_data, saveError, settings) => {
-            await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-            const stored = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
-            if (saveError !== null || stored === undefined) {
-                return;
-            }
-            dropped.value = droppedFieldsReason(settings, stored);
-        },
-    });
+        // Same client the reads above use, named rather than injected — see useSandboxQuery for why.
+        queryClient,
+    );
 
     const settings = computed<SandboxSettings | undefined>(() => query.data.value);
 

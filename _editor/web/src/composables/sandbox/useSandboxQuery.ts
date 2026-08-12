@@ -1,5 +1,6 @@
 import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
+import { queryClient } from "../queryPersistence";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../perf";
 
@@ -25,15 +26,25 @@ export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
     // Only a real function is wrapped: vue-query also accepts `skipToken` here, which is a sentinel meaning
     // "don't run", and timing that would both break the sentinel and measure nothing.
     const fetcher = resolved.queryFn;
-    const query = useQuery<T>({
-        ...resolved,
-        ...(typeof fetcher === `function`
-            ? { queryFn: ((context) => trackPerf(`query.fetch`, { key }, async () => fetcher(context))) satisfies QueryFunction<T> }
-            : {}),
-        // Reachability is an ADDITIONAL gate, not a replacement: a caller may have its own reason not to run
-        // yet (an id it doesn't have, a subject that isn't in scope on this screen), and overwriting that with
-        // `reachable` alone turned every such caller into a request for a resource it knew wasn't there.
-        enabled: computed(() => toValue(reachable) && (resolved.enabled === undefined || toValue(resolved.enabled) !== false)),
-    });
+    const query = useQuery<T>(
+        {
+            ...resolved,
+            ...(typeof fetcher === `function`
+                ? { queryFn: ((context) => trackPerf(`query.fetch`, { key }, async () => fetcher(context))) satisfies QueryFunction<T> }
+                : {}),
+            // Reachability is an ADDITIONAL gate, not a replacement: a caller may have its own reason not to run
+            // yet (an id it doesn't have, a subject that isn't in scope on this screen), and overwriting that with
+            // `reachable` alone turned every such caller into a request for a resource it knew wasn't there.
+            enabled: computed(() => toValue(reachable) && (resolved.enabled === undefined || toValue(resolved.enabled) !== false)),
+        },
+        /* THE APP'S ONE CLIENT, HANDED OVER RATHER THAN INJECTED. Left to itself vue-query resolves it with
+         * `inject()`, which needs Vue's injection context — and a daemon read is not always reached from a
+         * setup: a run button names its model from a computed, and an extension may ask for the same fact from
+         * a click handler. Neither has a context, so the injected lookup THREW there (`vue-query hooks can only
+         * be used inside setup()`), taking the whole surface down with it. There is exactly one QueryClient in
+         * this app (main.ts installs this same object), so naming it here is the same client with none of the
+         * ceremony — and no way for the ceremony to fail. */
+        queryClient,
+    );
     return { query, error: computed(() => query.error.value?.message) };
 }

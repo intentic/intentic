@@ -29,8 +29,15 @@ export interface AgentRunChoice {
     readonly harness?: string | undefined;
 }
 
-// The two questions this asks of whichever world it is running in: what would run if nobody chose, and let them
-// choose. `agentRun()` is read inside a computed, so it must be reactive when its host is.
+/* The two questions this asks of whichever world it is running in: what would run if nobody chose, and let them
+ * choose.
+ *
+ * `agentRun()` is A READ, and the two halves of that word are both load-bearing for the implementer. Reactive:
+ * it is called inside the computed below, so it has to answer freshly when its host's own state moves. And a
+ * read only — it must not ENTER a composable, because a computed getter and a click handler are where this is
+ * called from and neither of those is a setup. A host that reaches for vue-query on each call fails twice over:
+ * the lookup throws where there is no injection context, and the calls that do land leave a query observer
+ * apiece that nothing will dispose. Resolve that state once, where the host is set up, and read it here. */
 export interface ModelPicking {
     agentRun(): AgentRunChoice;
     pick(options: {

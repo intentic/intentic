@@ -1,6 +1,7 @@
 import { type AgentHarness, type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
 import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
-import { useAgentRunModel } from "./agentRunModel";
+import { effectScope } from "vue";
+import { type AgentRunModel, useAgentRunModel } from "./agentRunModel";
 import { requestModelPick } from "./hostModelPicker";
 import { modelLabelFor } from "./modelPicker";
 import { useChat } from "./useChat";
@@ -28,6 +29,25 @@ export const namedChoice = (provider: AgentProvider, model: string, account?: st
     };
 };
 
+/* THE AGENT-RUN LIST, ENTERED ONCE FOR THE WHOLE APP.
+ *
+ * `agentRunChoice` below is a READ, and it is read from places Vue gives nothing back: a run button names its
+ * model from inside a computed, and the caret beside it re-reads the same fact from a click handler. Neither is
+ * a setup — but `useAgentRunModel` is a vue-query composable underneath, and calling one per read did two bad
+ * things at once. It needed an injection context that a computed getter and an event handler both lack, so the
+ * read THREW ("vue-query hooks can only be used inside setup()") and took the surface down with it — which is
+ * how a board of red pipeline rows came to render as a crashed extension. And every call that did land built
+ * another query observer nothing ever disposed, so each settings change left one more copy of the same poll
+ * running: twenty rows became twenty accumulating pollers, which is the other half of what that board did.
+ *
+ * A DETACHED SCOPE, not the scope of whoever reads first. This is app-lifetime state; owned by the first
+ * component to render a run button, it would be torn down when that row unmounted and leave every later reader
+ * holding a dead observer. Nothing stops it, by design — the list is as long-lived as the session. */
+const appScope = effectScope(true);
+let runModel: AgentRunModel | undefined;
+// `run()` only answers undefined for a STOPPED scope, and this one is never stopped.
+const agentRunModel = (): AgentRunModel => (runModel ??= appScope.run(useAgentRunModel)!);
+
 /* THE STANDING ANSWER, and the floor underneath it. The head of the sandbox's agent-run list is what the daemon
  * would fill in; when that list is empty — or nothing in it is connected any more — the honest fallback is the
  * owner's own composer, because it is the model they already chose to work with rather than one this file
@@ -36,7 +56,7 @@ export const namedChoice = (provider: AgentProvider, model: string, account?: st
  * The pin carries its provider WITH the model, and has to: a model id is only meaningful to the provider that
  * vends it, so honouring one without the other would send a Codex id to Claude. */
 export const agentRunChoice = (): AgentRunChoice => {
-    const head = useAgentRunModel().choice.value;
+    const head = agentRunModel().choice.value;
     const chat = useChat();
     return namedChoice((head?.provider ?? chat.provider.value) as AgentProvider, head?.model ?? chat.model.value);
 };

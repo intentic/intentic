@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 //
-// jsdom because the composable under test is only reachable through a component: useQueryClient/useQuery
-// inject, so there has to be an app to mount. The rest of the suite stays on `node`.
+// jsdom because these tests exercise the composable the way the settings PAGE does — from a mounted component,
+// where its query is owned by that component's effect scope. (It no longer needs one to run: the client is
+// named rather than injected, so an agent-run button can read the same settings from a computed.) The rest of
+// the suite stays on `node`.
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic-app/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, test, vi } from "vitest";
