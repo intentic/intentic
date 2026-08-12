@@ -235,6 +235,11 @@ jobs:
           # is a cold install charged to whichever job lands on this workspace next.
           clean: false
       - run: node _tools/scripts/prepass.mjs --checks-only
+      # The publish set is the same shape of invariant — package.json files and nothing else — and it was
+      # checked nowhere but release-prepare, which runs on main AFTER the release has already been decided.
+      # That is where the extension-manifest → base dependency surfaced: the release failed on a list that a
+      # pull request could have failed in milliseconds, and there was nothing to revert but the merge.
+      - run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
 
   # The CI job image itself. Runs only when _tools/ci-base changes — every other pipeline skips it. It cannot
   # run inside ci-base (building that is the point), so it runs on the host runner directly.
