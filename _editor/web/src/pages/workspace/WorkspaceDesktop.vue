@@ -10,6 +10,7 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { personaStartDirs } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
+import { lensPersonaId } from "../../composables/workspace/personaReach";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
@@ -277,6 +278,32 @@ const clearFilter = (): void => {
  * that is the tree (both filters apply), under Text/Smart it is the daemon's match list, which the tree's own
  * switches don't reach — the search widens over ignored paths or it doesn't, and tests come back either way.
  * A row that changed nothing visible would be worse than no row. */
+/* VIEWING AS A PERSONA — the fence on a card, checked against the real tree instead of read back as the words
+ * somebody typed. Under the funnel with the other two because it is the same kind of thing: it changes what the
+ * list on screen is SAYING without changing what the workspace holds. Absent entirely on a box with no personas
+ * — a submenu offering nothing is a worse answer than no submenu.
+ *
+ * A radio group, not checkboxes: two personas at once would need two dimmings, and "what would BOTH of them be
+ * refused" is not a question anybody has. "Nobody" is listed rather than left to a second gesture, so turning the
+ * lens off is where turning it on was. */
+const personaLensItems = computed<MenuItem[]>(() =>
+    personas.value.length === 0
+        ? []
+        : [
+              {
+                  label: `Viewing as`,
+                  items: [
+                      { label: `Nobody`, checked: lensPersonaId.value === undefined, command: () => (lensPersonaId.value = undefined) },
+                      ...personas.value.map((persona) => ({
+                          label: persona.label ?? persona.id,
+                          checked: lensPersonaId.value === persona.id,
+                          command: () => (lensPersonaId.value = persona.id),
+                      })),
+                  ],
+              },
+          ],
+);
+
 const filterMenu = ref<{ show: (event: Event) => void }>();
 const filterMenuItems = computed<MenuItem[]>(() =>
     contentMode.value
@@ -290,11 +317,14 @@ const filterMenuItems = computed<MenuItem[]>(() =>
         : [
               { label: `Show ignored files`, checked: layout.showIgnored.value, command: () => layout.toggleShowIgnored() },
               { label: `Hide tests`, checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
+              ...personaLensItems.value,
           ],
 );
 // Lit whenever the list on screen is NOT the default one, so a tree missing its specs — or a search that walked
 // node_modules — never reads as the workspace itself having changed.
-const filtersActive = computed(() => (contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value));
+const filtersActive = computed(() =>
+    contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value || lensPersonaId.value !== undefined,
+);
 
 // Right-click tab menu (VSCode-style). It acts on the right-clicked tab (`menuTabId`), which "Close Others"/"Close to
 // the Right" keep. `pendingClose` holds the set awaiting the unsaved-changes confirm; its dirty paths feed the dialog.

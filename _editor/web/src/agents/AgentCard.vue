@@ -30,7 +30,7 @@ import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import MatchLine from "../components/MatchLine.vue";
 import SessionChip from "./SessionChip.vue";
-import { createTitleEdit } from "../composables/agents/titleEdit";
+import { createInlineRename } from "../composables/inlineRename";
 import { markSegments } from "../composables/agents/markSegments";
 import { canArchive, useAgents, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
@@ -172,7 +172,7 @@ const landing = computed(() => props.pending === `land`);
  * card's hosts, and an ask that three parents each had to wire would be an ask two of them forgot. A viewer
  * gets neither — watching is the whole grant. */
 const { canDrive, canShip } = useRole();
-const { refresh: refreshAgents, notice: agentsNotice } = useAgents();
+const { refresh: refreshAgents, notice: agentsNotice, rename } = useAgents();
 const requesting = ref(false);
 const requestLand = async (): Promise<void> => {
     if (requesting.value) {
@@ -252,9 +252,10 @@ const unread = computed(() => {
     return { label: badge.label, hint: badge.seenAt === undefined ? undefined : `Worked since you last opened it — ${relativeTime(badge.seenAt)}` };
 });
 
-const edit = createTitleEdit(
-    () => props.agent.id,
+const edit = createInlineRename(
     () => props.agent.title,
+    (name) => rename(props.agent.id, name),
+    `Couldn't rename the agent.`,
 );
 // A blur-commit's click on the card body must commit the rename, not also focus the agent. The EVENT rides
 // along because a modified click means something else on this board — a column of its own for this agent, or a

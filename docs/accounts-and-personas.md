@@ -155,6 +155,17 @@ workspace's: that wording lives in the daemon beside the card the daemon writes,
 what lets it be committed and reviewed like any other project config. What it prevents is the wrong-account
 *mistake*. The place it genuinely bites is the unattended job, because there its default is nothing.
 
+**Its fence can be read off the workspace, not just off the card.** The folder limit is the one setting whose
+effect you cannot check by reading it back — the words tell you what somebody typed, not whether they still match
+a folder that exists. So the explorer can be read *as* a persona: pick one under the filter funnel and the folders
+its file tools would refuse go dim, with a line naming who you are looking as. It is a lens and never a lock —
+nothing stops the person at the keyboard opening anything, because they are not the persona, and a folder that
+merely leads to a reachable one stays lit so the road in is never greyed out.
+
+**An open card writes as you change it.** A persona is settings, not a document, so the list is an accordion and
+a flipped switch is flipped — there is no Save button to leave a card half-decided behind. Creating one is the
+exception and keeps an explicit action, because there is nothing to write to until it has a name.
+
 **The account's skill file stays loaded either way.** The tools for a disallowed account are gone, but the
 skill that describes them is a project file and loads every turn. The failure is safe (the tool is simply not
 there) and mildly confusing to read.
@@ -171,5 +182,6 @@ there) and mildly confusing to read.
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
 | The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is — the whole card) · [DirectoryPersonas.vue](../_editor/web/src/pages/workspace/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
 | The card's own fields | [PersonaForm.vue](../_editor/web/src/pages/sandbox/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../_editor/web/src/pages/sandbox/PersonaPowersFields.vue) (what it may do, grouped by blast radius — shared with the tree's quick panel) · [FolderPicker.vue](../_editor/web/src/pages/sandbox/FolderPicker.vue) (both location answers, picked from the workspace tree) |
+| Seeing the workspace as one | [personaReach.ts](../_editor/web/src/composables/workspace/personaReach.ts) (the lens, and why it never blocks) · [WorkspaceScopeBanner.vue](../_editor/web/src/pages/workspace/WorkspaceScopeBanner.vue) (who you are reading as) |
 | What both of those must agree about | [personaCard.ts](../_editor/web/src/composables/sandbox/personaCard.ts) — the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
 | Picking one for a chat | [ChatPersonaMenu.vue](../_editor/web/src/chat/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../_editor/web/src/chat/ChatPane.vue) (the pill and what it warns about) |

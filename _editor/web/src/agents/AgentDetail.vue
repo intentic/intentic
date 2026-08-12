@@ -7,7 +7,7 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../composables/agents/agentStatus";
-import { createTitleEdit } from "../composables/agents/titleEdit";
+import { createInlineRename } from "../composables/inlineRename";
 import { requestLandAgent } from "../composables/agents/agentActions";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
@@ -34,7 +34,7 @@ import SessionIdentity from "./SessionIdentity.vue";
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { fleet, refresh, open, agentById, archived, loadArchived } = useAgents();
+const { fleet, refresh, open, agentById, archived, loadArchived, rename } = useAgents();
 const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
@@ -116,9 +116,10 @@ const viewOptions: { label: string; value: `chat` | `changes` }[] = [
 
 const title = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value ?? `Agent`);
 
-const edit = createTitleEdit(
-    () => agentId.value,
+const edit = createInlineRename(
     () => fleetAgent.value?.title ?? conversation.value?.title.value ?? undefined,
+    (name) => rename(agentId.value, name),
+    `Couldn't rename the agent.`,
 );
 
 // The card's own status glyph, carried into the header — the one piece of fleet state the review below can't

@@ -11,7 +11,9 @@ import { noteUserCreatedDir, useEmptyDirs } from "../../composables/workspace/us
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
+import { lensPersonaId, reachOf } from "../../composables/workspace/personaReach";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import { usePersonas } from "../../composables/sandbox/usePersonas";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { useReceipts } from "../../composables/receipts";
 import { explorerTreatment, iconForEntry } from "@intentic/ui";
@@ -172,6 +174,16 @@ const canMoveInto = (source: string, dir: string): boolean => !(dir === source |
  * Drawn from the PATH rather than a flag on the entry, so a row and its restored tab agree without waiting on
  * the tree, and a folder's children inherit it for free. */
 const locked = (path: string): boolean => isLockedWorkspacePath(path);
+
+/* Would the persona being read as be refused this path? Only ever a DIMMING — see personaReach.ts for why a
+ * lens must not take the explorer away from the person using it: they are not the persona, the rows stay
+ * clickable, and a folder on the way to a reachable one is not dimmed at all. */
+const { personas: lensPersonas } = usePersonas();
+const lensReach = computed(() => {
+    const card = lensPersonas.value.find((persona) => persona.id === lensPersonaId.value);
+    return card === undefined ? undefined : reachOf(card);
+});
+const refused = (path: string): boolean => lensReach.value?.refuses(path) === true;
 // Paths from a selection that the file ops may actually touch — a Ctrl+A then Delete must not send the daemon
 // a delete for a file it will refuse, and then report that refusal as "couldn't delete that".
 const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path));
@@ -1160,7 +1172,13 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <span
                             v-else
                             class="min-w-0 flex-1 truncate"
-                            :class="row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90'"
+                            :class="[
+                                row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90',
+                                // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
+                                // Opacity rather than a colour, so it stacks on whatever the row already was —
+                                // an ignored row outside the fence should read as both, not as one of the two.
+                                refused(row.entry.path) ? 'opacity-40' : '',
+                            ]"
                             >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
                         >
                         <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —

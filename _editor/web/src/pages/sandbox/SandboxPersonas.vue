@@ -3,8 +3,9 @@ import { type Persona, personaBounds } from "@intentic/sandbox-contract";
 import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
+import { createInlineRename } from "../../composables/inlineRename";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { identityHue } from "../../composables/identityHue";
@@ -55,36 +56,67 @@ const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, acco
  * of them on a workspace someone has just cloned and the state a surface must not paint as working. */
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
-// ── The editor ──────────────────────────────────────────────────────────────────────────────────────────────
-// One draft at a time, opened either by "Add a persona" (`original` undefined) or by a row's pencil.
+/* ── The editor ──────────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * AN ACCORDION OVER A SETTINGS OBJECT, and the two rules that follow from calling it that.
+ *
+ * A persona is settings, not a document: nine switches, two folder answers and a list of accounts, each of which
+ * means something on its own. So an OPEN card writes as you change it — flip a switch and it is flipped, the way
+ * every settings surface people already use behaves — and there is no Save button to leave a card half-decided
+ * behind. A NEW card is the exception and keeps its explicit Create, because there is nothing to write to until
+ * it has a name, and because "added a persona" should be something somebody did on purpose.
+ *
+ * The row is the disclosure. There is no pencil-to-edit mode: the thing you click to see a card is the thing you
+ * click to change it, which is one affordance instead of two and the pattern the Environment tab already uses.
+ * The NAME is not in the panel at all — it stays the row's own title, text until you click it (inlineRename). */
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
 
 const NO_SCOPE = { startIn: [], folders: [] };
+const draftOf = (persona: Persona): PersonaDraft => ({
+    original: persona.id,
+    label: persona.label ?? persona.id,
+    capabilities: [...persona.capabilities],
+    ...powersDraftOf(persona),
+    // One folder or none, carried as a list because that is what the picker models either way.
+    startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
+    folders: [...(persona.workspace?.folders ?? [])],
+});
+
+/* Changing the draft without the autosave below reading it as an edit — installing one on open, and writing a
+ * committed rename back into it. Both are the app catching the draft UP to the truth, and a save fired for
+ * either would be a write nobody asked for (and, on open, a write of every card the user merely looked at). */
+let settling = false;
+const quietly = (mutate: () => void): void => {
+    settling = true;
+    mutate();
+    void nextTick(() => {
+        settling = false;
+    });
+};
+
+const isOpen = (persona: Persona): boolean => draft.value?.original === persona.id;
+const toggleOpen = (persona: Persona): void => {
+    saveError.value = undefined;
+    if (isOpen(persona)) {
+        draft.value = undefined;
+        return;
+    }
+    quietly(() => {
+        draft.value = draftOf(persona);
+    });
+};
 
 const startAdd = (): void => {
     saveError.value = undefined;
-    draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE };
+    quietly(() => {
+        draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE };
+    });
 };
-const startEdit = (persona: Persona): void => {
-    saveError.value = undefined;
-    draft.value = {
-        original: persona.id,
-        label: persona.label ?? persona.id,
-        capabilities: [...persona.capabilities],
-        ...powersDraftOf(persona),
-        // One folder or none, carried as a list because that is what the picker models either way.
-        startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
-        folders: [...(persona.workspace?.folders ?? [])],
-    };
-};
-const cancelEdit = (): void => {
+const cancelAdd = (): void => {
     draft.value = undefined;
     saveError.value = undefined;
 };
-
-// Whether THIS row is the one being edited — which decides whether its title is a label or the name input.
-const editingHere = (persona: Persona): boolean => draft.value?.original === persona.id;
 
 const draftId = computed(() => draft.value?.original ?? personaSlug(draft.value?.label ?? ``));
 // A new card may not land on a name already taken — saving would silently edit the other one instead.
@@ -97,37 +129,101 @@ const nameHint = computed(() => {
     return taken.value ? `You already have a persona called ${draftId.value}.` : `Use letters or digits.`;
 });
 
+/* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits nothing
+ * stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made rather than a
+ * dump of every default, and a diff on it reads as the change it was.
+ *
+ * That is the same rule the label follows, applied to two objects instead of a field. The powers half lives in
+ * personaCard.ts, because the tree's quick panel writes cards too and two copies of this rule is two answers to
+ * "was anything actually decided here". */
+const cardFrom = (state: PersonaDraft, id: string): Persona => {
+    const workspace = {
+        ...(state.startIn[0] !== undefined ? { startIn: state.startIn[0] } : {}),
+        ...(state.folders.length > 0 ? { folders: [...state.folders] } : {}),
+    };
+    return {
+        id,
+        // Only worth storing when it says something the id does not.
+        ...(state.label.trim() !== `` && state.label.trim() !== id ? { label: state.label.trim() } : {}),
+        capabilities: [...state.capabilities],
+        ...(storedPowers(state) !== undefined ? { powers: storedPowers(state) } : {}),
+        ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
+    };
+};
+
+// The explicit half: creating a card, which closes the form on success.
 const submit = async (): Promise<void> => {
     if (draft.value === undefined || !draftValid.value) {
         return;
     }
-    const { label, capabilities: picked, startIn, folders } = draft.value;
     saveError.value = undefined;
-    /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits
-     * nothing stores no `workspace` — so the committed file stays a description of the DECISIONS somebody made
-     * rather than a dump of every default, and a diff on it reads as the change it was.
-     *
-     * That is the same rule the label already follows one block up, applied to two objects instead of a field.
-     * The powers half lives in personaCard.ts, because the tree's quick panel writes cards too and two copies
-     * of this rule is two answers to "was anything actually decided here". */
-    const powers = storedPowers(draft.value);
-    const workspace = {
-        ...(startIn[0] !== undefined ? { startIn: startIn[0] } : {}),
-        ...(folders.length > 0 ? { folders: [...folders] } : {}),
-    };
     try {
-        await save.mutateAsync({
-            id: draftId.value,
-            // Only worth storing when it says something the id does not.
-            ...(label.trim() !== `` && label.trim() !== draftId.value ? { label: label.trim() } : {}),
-            capabilities: picked,
-            ...(powers !== undefined ? { powers } : {}),
-            ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
-        });
+        await save.mutateAsync(cardFrom(draft.value, draftId.value));
         draft.value = undefined;
     } catch (err) {
         saveError.value = noticeFrom(err, `Could not save this persona.`);
     }
+};
+
+/* The live half. Debounced because a folder picked from the tree and a switch flipped twice while deciding are
+ * each several mutations of one intent, and a write per keystroke-equivalent would put a card's every
+ * intermediate state into a tracked file. Long enough to coalesce a decision, short enough that the spinner
+ * beside the name has stopped by the time attention moves on. */
+let pending: ReturnType<typeof setTimeout> | undefined;
+const persist = async (): Promise<void> => {
+    const state = draft.value;
+    if (state?.original === undefined) {
+        return;
+    }
+    saveError.value = undefined;
+    try {
+        await save.mutateAsync(cardFrom(state, state.original));
+    } catch (err) {
+        saveError.value = noticeFrom(err, `Could not save this persona.`);
+    }
+};
+watch(
+    draft,
+    () => {
+        if (settling || draft.value?.original === undefined) {
+            return;
+        }
+        clearTimeout(pending);
+        pending = setTimeout(() => void persist(), 400);
+    },
+    { deep: true },
+);
+onBeforeUnmount(() => clearTimeout(pending));
+
+/* ── The name ────────────────────────────────────────────────────────────────────────────────────────────────
+ * One state machine for the whole list rather than one per row: only ever one name is being typed, and a factory
+ * inside a v-for would build (and throw away) one for every persona on every render.
+ *
+ * A rename writes the WHOLE card, because the save is an upsert — and it reads that card from the open draft
+ * when there is one, so a rename lands on top of switches flipped a second ago rather than on the version the
+ * list was last told about. The id is frozen either way: automations pin to it, so only the label moves. */
+const renamingId = ref<string | undefined>(undefined);
+const renameTarget = computed(() => personas.value.find((persona) => persona.id === renamingId.value));
+const rename = createInlineRename(
+    () => renameTarget.value?.label ?? renamingId.value,
+    async (name) => {
+        const id = renamingId.value;
+        if (id === undefined) {
+            return;
+        }
+        const open = draft.value?.original === id ? draft.value : undefined;
+        await save.mutateAsync(open !== undefined ? { ...cardFrom(open, id), label: name } : { ...renameTarget.value!, label: name });
+        if (open !== undefined) {
+            quietly(() => {
+                open.label = name;
+            });
+        }
+    },
+    `Couldn't rename this persona.`,
+);
+const beginRename = (persona: Persona): void => {
+    renamingId.value = persona.id;
+    rename.begin();
 };
 
 // ── Removal ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -195,29 +291,56 @@ const confirmRemove = async (): Promise<void> => {
                     </Button>
                 </template>
 
-                <Row v-for="persona in personas" :key="persona.id" :title="persona.label ?? persona.id" density="comfortable">
+                <!-- THE ROW IS THE DISCLOSURE. Clicking it opens the card in place; there is no second
+                     affordance meaning the same thing, which is what the pencil used to be. -->
+                <Row
+                    v-for="persona in personas"
+                    :key="persona.id"
+                    :title="persona.label ?? persona.id"
+                    density="comfortable"
+                    interactive
+                    @click="toggleOpen(persona)"
+                >
                     <!-- A persona is a person, so it gets a person's mark and keeps the same colour on every
                          surface it appears on. Keyed by the id, not the label, so renaming does not recolour
-                         somebody you have learned to recognise — and while the name is being typed it follows
-                         the draft, so the mark beside the input is the one that persona will keep. -->
+                         somebody you have learned to recognise. The disclosure arrow rides in front of it —
+                         where a reader looks for one — rather than in the row's trailing cluster, which is
+                         where facts and actions live. -->
                     <template #lead>
-                        <Avatar
-                            :size="32"
-                            :name="editingHere(persona) ? draft?.label : (persona.label ?? persona.id)"
-                            :hue="identityHue(persona.id)"
-                            :idle="!ready(persona)"
-                        />
+                        <span class="flex items-center gap-1.5">
+                            <Icon
+                                :name="isOpen(persona) ? `chevron-down` : `chevron-right`"
+                                class="w-3 shrink-0 text-2xs text-subtle transition-colors"
+                            />
+                            <Avatar :size="32" :name="persona.label ?? persona.id" :hue="identityHue(persona.id)" :idle="!ready(persona)" />
+                        </span>
                     </template>
 
-                    <!-- EDIT IN PLACE: the row's own title IS the name field. Rendering the form's header as
-                         well would put the same name on screen twice, one read-only and one editable. -->
-                    <template v-if="editingHere(persona)" #title>
+                    <!-- THE NAME READS AS A NAME until you ask to change it — click-to-rename, on the app's one
+                         inline-rename machine (enter commits, escape cancels, blur commits, unchanged is a
+                         silent cancel). An input parked here permanently would make a settings list look like a
+                         form and put a text box where every other row in the app has a title. -->
+                    <template #title>
                         <input
-                            v-model="draft!.label"
-                            :class="cmp.input('w-full max-w-xs py-1 font-medium')"
-                            placeholder="Name this persona — Work, Personal, Acme…"
+                            v-if="rename.editing && renamingId === persona.id"
+                            v-model="rename.draft"
+                            :class="cmp.input('w-full max-w-xs py-0.5 font-medium')"
                             aria-label="Name"
+                            @vue:mounted="rename.focusInput"
+                            @click.stop
+                            @keydown.enter="rename.commit"
+                            @keydown.esc="rename.cancel"
+                            @blur="rename.blurCommit"
                         />
+                        <button
+                            v-else
+                            type="button"
+                            class="cursor-text rounded px-1 py-0.5 text-left font-medium transition-colors -mx-1 hover:bg-overlay"
+                            :aria-label="`Rename ${persona.label ?? persona.id}`"
+                            @click.stop="beginRename(persona)"
+                        >
+                            {{ persona.label ?? persona.id }}
+                        </button>
                     </template>
 
                     <!-- THE ACCOUNTS BY NAME, under the persona's own. The marks on the right say which
@@ -225,11 +348,10 @@ const confirmRemove = async (): Promise<void> => {
                          two being different is the entire problem this feature exists to solve, so the names
                          are not something the row can leave to a tooltip. -->
                     <template #description>
-                        <!-- While the name is being edited this line belongs to the input above it: why the
-                             name can't be used is the only thing a reader needs here, and the account list is
-                             still on screen as chips in the form below. -->
-                        <span v-if="editingHere(persona) && nameHint !== undefined" class="text-warning">{{ nameHint }}</span>
-                        <span v-else-if="persona.capabilities.length === 0" class="text-warning">No accounts — this persona can't post anywhere</span>
+                        <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
+                        <span v-else-if="persona.capabilities.length === 0" class="text-warning">
+                            No accounts — this persona can't post anywhere
+                        </span>
                         <!-- Separated, because two account names running together read as one. A signed-out
                              account is dimmed rather than struck through: a line through it says REMOVED, and
                              what is true is that it is listed and cannot act yet — which the badge names. -->
@@ -268,42 +390,44 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <template #control>
-                        <button type="button" :class="cmp.iconButton()" aria-label="Edit this persona" @click="startEdit(persona)">
-                            <Icon name="pencil" class="text-xs" />
-                        </button>
+                        <!-- A card that writes as you change it owes you a sign that it did. Only while the
+                             write is in the air: a tick that lingers is a second thing to read on every row. -->
+                        <Icon v-if="isOpen(persona) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
                         <button
                             type="button"
                             :class="cmp.iconButton('hover:text-danger')"
                             aria-label="Remove this persona"
-                            @click="removing = persona"
+                            @click.stop="removing = persona"
                         >
                             <Icon name="trash" class="text-xs" />
                         </button>
                     </template>
 
-                    <!-- The editor opens INSIDE the row it belongs to, so there is never a form on screen whose
+                    <!-- The card opens INSIDE the row it belongs to, so there is never a form on screen whose
                          subject you have to remember — and the name it would have asked for first is the row's
-                         own title, three lines up. -->
-                    <template v-if="draft !== undefined && draft.original === persona.id" #below>
-                        <PersonaForm
-                            class="pt-4"
-                            :draft="draft"
-                            :accounts="accounts"
-                            :connected="connected"
-                            :grantables="grantables"
-                            :valid="draftValid"
-                            :saving="save.isPending.value"
-                            :error="saveError"
-                            :name-hint="nameHint"
-                            :show-name="false"
-                            submit-label="Save"
-                            @submit="submit"
-                            @cancel="cancelEdit"
-                        />
+                         own title, three lines up. No Save: an open card writes as it is changed.
+
+                         `click.stop` because the row itself is the disclosure — without it every switch flipped
+                         in here would ALSO close the card it belongs to. -->
+                    <template v-if="isOpen(persona)" #below>
+                        <div class="pt-4" @click.stop>
+                            <PersonaForm
+                                :draft="draft!"
+                                :accounts="accounts"
+                                :connected="connected"
+                                :grantables="grantables"
+                                :valid="draftValid"
+                                :saving="save.isPending.value"
+                                :error="saveError"
+                                :show-name="false"
+                            />
+                        </div>
                     </template>
                 </Row>
 
-                <!-- A new card has no row to open inside, so it gets one of its own at the tail of the group. -->
+                <!-- A NEW card has no row to open inside, so it gets one of its own at the tail of the group —
+                     and it is the one card with an explicit action, because there is nothing to write to until
+                     it has a name. -->
                 <div v-if="draft !== undefined && draft.original === undefined" class="px-4 py-4">
                     <PersonaForm
                         :draft="draft"
@@ -316,7 +440,7 @@ const confirmRemove = async (): Promise<void> => {
                         :name-hint="nameHint"
                         submit-label="Add persona"
                         @submit="submit"
-                        @cancel="cancelEdit"
+                        @cancel="cancelAdd"
                     />
                 </div>
             </RowGroup>

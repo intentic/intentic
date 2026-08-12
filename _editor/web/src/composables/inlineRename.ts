@@ -1,12 +1,16 @@
 import { reactive, ref, type VNode } from "vue";
 import { errorMessage } from "@intentic/ui/async";
-import { useAgents } from "./useAgents";
 
-/* Inline title-edit state machine for one agent surface (fleet card, detail header). Per-instance factory —
- * each surface owns its editing/draft/error state; the actual write goes through useAgents().rename, which
- * handles the conversation/registry sync and optimistic revert. Returned reactive() so nested refs unwrap in
- * templates. Conventions match WorkspaceTree's inline rename: focus+select on mount, enter=commit, esc=cancel,
- * blur=commit, empty or unchanged = silent cancel. */
+/* THE APP'S ONE INLINE-RENAME STATE MACHINE — a name that reads as text until it is clicked. Per-instance
+ * factory; each surface owns its editing/draft/error state. Returned reactive() so nested refs unwrap in
+ * templates. Conventions match WorkspaceTree's inline rename, which is where they were set: focus+select on
+ * mount, enter=commit, esc=cancel, blur=commit, empty or unchanged = silent cancel.
+ *
+ * WHAT IT WRITES IS THE CALLER'S, which is the whole reason this is not in `composables/agents/` any more. It
+ * was written for the fleet card and reached into useAgents().rename itself, so the four agent surfaces shared
+ * one state machine and anything else that wanted a click-to-rename name had to grow a second copy of it. The
+ * personas list is the first such surface, and a name whose editing rules differ from every other name in the
+ * app by a keystroke is precisely the kind of drift a shared factory exists to prevent. */
 
 // Focus + select the input the moment it mounts (the @vue:mounted trick, see WorkspaceTree).
 const focusInput = (vnode: VNode): void => {
@@ -15,8 +19,14 @@ const focusInput = (vnode: VNode): void => {
     el.select();
 };
 
-export const createTitleEdit = (agentId: () => string, current: () => string | undefined) => {
-    const { rename } = useAgents();
+export const createInlineRename = (
+    /** The name as it stands, read at the moment editing begins and again to spot an unchanged commit. */
+    current: () => string | undefined,
+    /** Where a committed name goes. Throwing is how it reports failure; the message lands on `error`. */
+    write: (name: string) => Promise<void>,
+    /** What to say when the write fails, in the words of whatever is being renamed. */
+    failure = `Couldn't rename this.`,
+) => {
     const editing = ref(false);
     const draft = ref(``);
     const busy = ref(false);
@@ -47,9 +57,9 @@ export const createTitleEdit = (agentId: () => string, current: () => string | u
         }
         busy.value = true;
         try {
-            await rename(agentId(), trimmed);
+            await write(trimmed);
         } catch (caught) {
-            error.value = errorMessage(caught, `Couldn't rename the agent.`);
+            error.value = errorMessage(caught, failure);
         } finally {
             busy.value = false;
         }

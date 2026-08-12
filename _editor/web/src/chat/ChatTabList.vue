@@ -3,7 +3,7 @@ import { cmp, ContextMenu, type IconName, SearchBar } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
-import { createTitleEdit } from "../composables/agents/titleEdit";
+import { createInlineRename } from "../composables/inlineRename";
 import {
     activityIcon,
     activityLine,
@@ -72,7 +72,7 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, tabReveal, panes, openBeside, closePane, collapsePanes, setPanes } = useChat();
-const { agentById, fleet, loadArchived } = useAgents();
+const { agentById, fleet, loadArchived, rename } = useAgents();
 
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 
@@ -461,14 +461,15 @@ watch(
 
 /* --- Inline rename ------------------------------------------------------------------------------
  * One edit state for the whole list (only one card renames at a time), pointed at a card by `renamingId`. The
- * write goes through the same createTitleEdit the fleet cards use, so a chat renamed here renames the agent
+ * write goes through the same createInlineRename the fleet cards use, so a chat renamed here renames the agent
  * registry entry too — the card here and the card on /agents are one thing under two skins. Reached by
  * double-clicking a card or through its menu; F2 is the panel header's, and renames the ACTIVE chat there. */
 const renamingId = ref<string | undefined>(undefined);
 const renaming = computed(() => conversations.value.find((conversation) => conversation.conversationId === renamingId.value));
-const edit = createTitleEdit(
-    () => renaming.value?.conversationId ?? ``,
+const edit = createInlineRename(
     () => renaming.value?.title.value ?? undefined,
+    (name) => rename(renaming.value?.conversationId ?? ``, name),
+    `Couldn't rename the agent.`,
 );
 const beginRename = (id: string): void => {
     renamingId.value = id;
@@ -722,7 +723,7 @@ const closeTab = (event: Event, id: string): void => {
                         <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
                              button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur
                              commits, an empty or unchanged name silently cancels — the WorkspaceTree
-                             convention, via createTitleEdit. -->
+                             convention, via createInlineRename. -->
                         <input
                             v-if="edit.editing && renamingId === c.conversationId"
                             v-model="edit.draft"

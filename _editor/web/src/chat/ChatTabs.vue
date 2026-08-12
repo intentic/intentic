@@ -6,7 +6,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { turnInFlight } from "../composables/agents/agentStatus";
-import { createTitleEdit } from "../composables/agents/titleEdit";
+import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
@@ -50,7 +50,7 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions } = useChat();
-const { agentById } = useAgents();
+const { agentById, rename } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
 // teaches the chord that makes the trip unnecessary. Docked-only, so it never has to say the way back.
@@ -143,11 +143,12 @@ const pickNotOpen = (id: string): void => {
 /* --- Renaming the active chat --------------------------------------------------------------------
  * The header's title is the rename surface for the chat you are IN (F2, the app-wide rename key, and the
  * header's own double-click); a card in the list renames itself in place, where the pointer already is. Same
- * createTitleEdit both times, so a chat renamed on either surface renames its agent registry entry too. */
+ * createInlineRename both times, so a chat renamed on either surface renames its agent registry entry too. */
 const renaming = ref(false);
-const edit = createTitleEdit(
-    () => active.value.conversationId,
+const edit = createInlineRename(
     () => active.value.title.value ?? undefined,
+    (name) => rename(active.value.conversationId, name),
+    `Couldn't rename the agent.`,
 );
 const beginRename = (): void => {
     renaming.value = true;
@@ -464,7 +465,7 @@ const openHistory = (event: Event): void => {
              above it would say a third time what the ringed card and the transcript already say.
              Renaming REPLACES it rather than nesting a field inside it: an input in a button is neither valid
              markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty or unchanged name
-             silently cancels — the WorkspaceTree convention, via createTitleEdit. -->
+             silently cancels — the WorkspaceTree convention, via createInlineRename. -->
         <template v-if="!vertical">
             <input
                 v-if="edit.editing && renaming"

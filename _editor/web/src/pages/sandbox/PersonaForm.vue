@@ -73,7 +73,10 @@ const {
     grantables: readonly PersonaGrantable[];
     valid: boolean;
     saving: boolean;
-    submitLabel: string;
+    /* The verb on the button, and whether there IS one. Absent ⇒ this card is already saved as it is changed
+     * (the accordion on the personas page), so an action row would offer to commit what is committed. Present
+     * only where something has to be created before it exists anywhere. */
+    submitLabel?: string;
     error?: NoticeModel;
     /** Why the name is not usable yet, when it isn't. */
     nameHint?: string;
@@ -306,7 +309,7 @@ const folderBound = computed(() => draft.folders.length > 0);
         </div>
 
         <Notice v-if="error !== undefined" :of="error" />
-        <div class="flex items-center gap-3">
+        <div v-if="submitLabel !== undefined" class="flex items-center gap-3">
             <Button :label="submitLabel" size="small" :loading="saving" :disabled="!valid" @click="emit('submit')" />
             <button type="button" :class="cmp.linkButton('text-muted hover:text-content')" @click="emit('cancel')">Cancel</button>
         </div>

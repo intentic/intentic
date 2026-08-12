@@ -112,6 +112,24 @@ const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLIn
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 
+/* A persona's row, reached through the one thing on it with a stable accessible name. The row itself carries no
+ * label of its own — it is a settings row, not a control — and adding a test-only attribute to production markup
+ * to find it would be inventing a convention this app does not have. */
+const rowFor = (el: HTMLElement, id: string): HTMLElement => {
+    const persona = personas.value.find((entry) => entry.id === id)!;
+    return byAriaLabel(el, `Rename ${persona.label ?? persona.id}`)!.closest(`.ui-row-select`) as HTMLElement;
+};
+const openCard = async (el: HTMLElement, id: string): Promise<void> => {
+    rowFor(el, id).click();
+    await nextTick();
+};
+
+// Flip one of the powers switches by the label beside it. PrimeVue's ToggleSwitch is a checkbox under its skin.
+const toggleSwitch = (el: HTMLElement, label: string): void => {
+    const row = [...el.querySelectorAll(`label`)].find((entry) => (entry.textContent ?? ``).includes(label))!;
+    row.querySelector<HTMLInputElement>(`input[type="checkbox"]`)!.click();
+};
+
 /* One folder's row in an open picker. Searched from the DOCUMENT, not from the mounted element: the panel is an
  * <AnchoredOverlay>, which teleports into the anchor's own document body so it can escape the form's overflow —
  * so a query rooted at the mount finds nothing, whether or not the picker is open. Matched on the exact name so
@@ -261,20 +279,81 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
     expect(save.mock.calls[0]![0].workspace).toEqual({ folders: [`docs`] });
 });
 
-/* EDIT IN PLACE. Opening a persona for editing used to put its name on screen twice — the row's title above,
- * read-only, and the form's first field below, editable — which reads as two subjects rather than one thing
- * being changed. The row lends its title to the input, so there is exactly one name on screen. */
-it(`edits the name in the row's own title rather than repeating it below`, async () => {
+/* THE ROW IS THE DISCLOSURE, and there is no second way in. A pencil that opens what clicking the row also
+ * opens is two affordances for one act, and the one people try first is the row. */
+it(`opens a card by clicking its row, and closes it by clicking again`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    byAriaLabel(el, `Edit this persona`)!.click();
+    expect(text(el)).not.toContain(`What it may do`);
+    await openCard(el, `work`);
+    expect(text(el)).toContain(`What it may do`);
+    rowFor(el, `work`).click();
     await nextTick();
-    expect(el.querySelectorAll(`input[aria-label="Name"]`)).toHaveLength(1);
-    // And it is the row's field: typing into it renames the card that is open.
-    await type(el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!, `Work crew`);
-    buttonLabelled(el, `Save`)!.click();
+    expect(text(el)).not.toContain(`What it may do`);
+});
+
+/* A NAME READS AS A NAME until you ask to change it. An input parked in the title permanently makes a settings
+ * list look like a form; this is the app's one inline-rename machine, the same one the file tree uses. */
+it(`shows the name as text and turns it into a field only when clicked`, async () => {
+    personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    expect(el.querySelector(`input[aria-label="Name"]`)).toBeNull();
+    byAriaLabel(el, `Rename Work`)!.click();
+    await nextTick();
+    expect(el.querySelector(`input[aria-label="Name"]`)).not.toBeNull();
+});
+
+// Enter commits the rename, and the card it writes is the whole card — a rename that dropped the accounts would
+// be a rename that silently un-personas somebody.
+it(`renames a persona on Enter, keeping the rest of its card`, async () => {
+    personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
+    const el = mount();
+    byAriaLabel(el, `Rename Work`)!.click();
+    await nextTick();
+    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!;
+    await type(field, `Work crew`);
+    field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await vi.waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew` });
+    expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew`, capabilities: [`reddit-work`, `x-company`] });
+});
+
+// Escape is the way out, and it must leave the name alone — the WorkspaceTree convention this shares.
+it(`abandons a rename on Escape without writing`, async () => {
+    personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
+    const el = mount();
+    byAriaLabel(el, `Rename Work`)!.click();
+    await nextTick();
+    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!;
+    await type(field, `Nope`);
+    field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
+    await nextTick();
+    expect(save).not.toHaveBeenCalled();
+    expect(text(el)).toContain(`Work`);
+});
+
+/* AN OPEN CARD WRITES AS IT IS CHANGED. There is no Save button on it at all, so if the switch below did not
+ * reach the daemon by itself the change would simply be lost when the row closed. */
+it(`saves an open card as soon as a switch is flipped, with no Save button`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    await openCard(el, `work`);
+    expect(buttonLabelled(el, `Save`)).toBeUndefined();
+
+    const runCommands = [...el.querySelectorAll(`input[type="checkbox"]`)];
+    expect(runCommands.length).toBeGreaterThan(0);
+    toggleSwitch(el, `Run commands`);
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].powers).toMatchObject({ shell: false });
+});
+
+// Merely LOOKING at a card must not write it: opening every persona in the list would otherwise rewrite all of
+// them, and a tracked file would show a diff for a page somebody only scrolled past.
+it(`writes nothing when a card is only opened`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    await openCard(el, `work`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(save).not.toHaveBeenCalled();
 });
 
 /* THE COMMITTED FILE IS A RECORD OF DECISIONS, not a dump of defaults. A card nobody has bounded must save no
@@ -347,8 +426,7 @@ it(`keeps every account out of the form until the chooser is opened`, async () =
 it(`shows only the accounts a card speaks through when it is opened for editing`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    byAriaLabel(el, `Edit this persona`)!.click();
-    await nextTick();
+    await openCard(el, `work`);
     expect(text(el)).toContain(`reddit-work`);
     expect(text(el)).not.toContain(`x-company`);
 });
@@ -358,12 +436,10 @@ it(`shows only the accounts a card speaks through when it is opened for editing`
 it(`drops an account when its chip is clicked`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
-    byAriaLabel(el, `Edit this persona`)!.click();
-    await nextTick();
+    await openCard(el, `work`);
     byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
-    await nextTick();
-    buttonLabelled(el, `Save`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    // No Save to press: dropping the chip IS the change, and the card writes itself.
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
     expect(save.mock.calls[0]![0].capabilities).toEqual([`x-company`]);
 });
 
