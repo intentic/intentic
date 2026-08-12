@@ -117,7 +117,7 @@ const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElem
     app = createApp({
         setup() {
             const review = useAgentChanges(ref(AGENT));
-            return () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false });
+            return () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false, writing: false });
         },
     });
     // Registered app-wide by installUi in the real page. Icon prints the glyph it was handed, because WHICH

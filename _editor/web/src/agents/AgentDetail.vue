@@ -6,7 +6,7 @@ import Popover from "primevue/popover";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
-import { agentStatusMeta, unregistered } from "../composables/agents/agentStatus";
+import { agentStatusMeta, unregistered, writingNow } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { requestLandAgent } from "../composables/agents/agentActions";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
@@ -137,9 +137,43 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
 const changes = useAgentChanges(computed(() => (reviewable.value ? agentId.value : ``)));
 const streaming = computed(() => conversation.value?.streaming.value === true);
 
-// Land/discard stay gated on the turn: both are refused daemon-side while it streams (CONFLICT), so they are
-// disabled up front when this browser is the one streaming.
-const canLand = computed(() => !changes.actionBusy.value && !streaming.value && changes.pending.value.length > 0);
+/* Discard stays gated on the turn — it takes the worktree away and the daemon refuses it outright while one
+ * runs. Land does not, any more: it only READS that checkout, so the daemon lets it through whenever nobody is
+ * mid-sentence and asks for an explicit override when someone is (agents.routes.ts landable).
+ *
+ * So the button is live in every state that has something to apply, and `writing` decides which of the two
+ * presses it is: a plain land, or the one that opens the warning first. Read off the FLEET status rather than
+ * off `streaming` — this browser's stream is open for a parked turn exactly as it is for a working one, which
+ * is what made "wait for the agent turn to finish" the answer to a card that was waiting for the user. */
+const writing = computed(() => fleetAgent.value !== undefined && writingNow(fleetAgent.value));
+const canLand = computed(() => !changes.actionBusy.value && changes.pending.value.length > 0);
+// A live turn that is NOT writing: parked on a question or a permission card, or unwinding a Stop. Its land is
+// an ordinary one, and saying so is the point — this is the state the old copy called "running".
+const parked = computed(() => streaming.value && !writing.value);
+// What the button says it will do, in the three states it can be pressed in.
+const landHint = computed(() =>
+    writing.value
+        ? `The agent is still writing — you'll be asked to confirm`
+        : parked.value
+          ? `Applies what the agent has written so far`
+          : `Applies ${changes.pending.value.length} change(s) to your workspace`,
+);
+/* The mid-write land, behind the one modal it warrants. Not a tooltip and not a quiet press: this is the only
+ * land that can carry half-finished work, and the two facts that make it recoverable (it arrives uncommitted,
+ * and the rest of the turn lands on top at completion) are exactly what the user needs in front of them to
+ * judge it. A press on a parked or resting agent skips all of this and just lands. */
+const pendingForceLand = ref(false);
+const pressLand = (): void => {
+    if (writing.value) {
+        pendingForceLand.value = true;
+        return;
+    }
+    void changes.land();
+};
+const confirmForceLand = (): void => {
+    pendingForceLand.value = false;
+    void changes.land(`check`, `outstanding`, true);
+};
 
 // The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
 // land itself — see AgentCard for the same split on the board).
@@ -255,10 +289,8 @@ const confirmDiscard = (): void => {
                     severity="success"
                     class="shrink-0 gap-0 whitespace-nowrap px-2.5 py-1 text-2xs"
                     :disabled="!canLand"
-                    @click="changes.land()"
-                    v-tooltip.bottom="
-                        streaming ? 'Wait for the agent turn to finish' : `Applies ${changes.pending.value.length} change(s) to your workspace`
-                    "
+                    @click="pressLand"
+                    v-tooltip.bottom="landHint"
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land now
                 </Button>
@@ -303,6 +335,7 @@ const confirmDiscard = (): void => {
             :agent-id="agentId"
             :changes="changes"
             :streaming="streaming"
+            :writing="writing"
             class="min-h-0 flex-1"
             @chat="view = 'chat'"
         />
@@ -317,6 +350,7 @@ const confirmDiscard = (): void => {
                 :land-in-menu="true"
                 @selected="closeMenu"
                 @discard="pendingDiscard = true"
+                @force-land="pendingForceLand = true"
             />
         </BottomSheet>
         <Popover v-else ref="menu" :pt="{ content: { class: '!p-0' } }">
@@ -328,6 +362,7 @@ const confirmDiscard = (): void => {
                     :land-in-menu="false"
                     @selected="closeMenu"
                     @discard="pendingDiscard = true"
+                    @force-land="pendingForceLand = true"
                 />
             </div>
         </Popover>
@@ -341,6 +376,40 @@ const confirmDiscard = (): void => {
                 <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
             </div>
         </Popover>
+
+        <!-- THE MID-WRITE LAND'S WARNING. It states the one real risk and both reasons it is survivable,
+             because a warning that only says "are you sure" teaches people to click through it. -->
+        <Dialog
+            :visible="pendingForceLand"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '26rem' }"
+            header="Land while the agent is working?"
+            @update:visible="pendingForceLand = false"
+        >
+            <p class="text-xs text-content">
+                The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes — one side of a
+                rename, or three files of a larger edit.
+            </p>
+            <p class="mt-2 text-xs text-muted">
+                Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent
+                finishes.
+            </p>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingForceLand = false">
+                    Cancel
+                </button>
+                <Button
+                    size="small"
+                    severity="warning"
+                    label="Land anyway"
+                    class="px-3 py-1"
+                    :disabled="changes.actionBusy.value"
+                    @click="confirmForceLand"
+                />
+            </template>
+        </Dialog>
 
         <Dialog
             :visible="pendingDiscard"

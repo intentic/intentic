@@ -1038,7 +1038,24 @@ export type LandMode = z.infer<typeof LandModeSchema>;
  * report (land.ts, classifyDelta), so what actually applies is exactly what is gone. */
 export const AgentSpanSchema = z.enum(["cumulative", "outstanding"]);
 export type AgentSpan = z.infer<typeof AgentSpanSchema>;
-export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeSchema.optional(), span: AgentSpanSchema.optional() });
+/* LAND WHILE THE AGENT IS STILL WRITING — the user's deliberate override of the turn guard, and the only
+ * input here that is about WHEN a land may run rather than what it carries.
+ *
+ * A land snapshots the agent's checkout, so mid-turn it can catch work half-done: one leg of a rename, three
+ * files of a five-file change. The guard exists for that, and it stays the default. What makes the override
+ * defensible rather than reckless is that neither half of the damage is permanent — a land arrives as
+ * UNCOMMITTED changes the user reviews before committing, and the rest of the turn lands on top of it at
+ * completion like any other incremental land. So a premature land is a mess the user can see and one the next
+ * land repairs, which is a thing to warn about; it is not a thing to forbid.
+ *
+ * It does NOT cover a turn PARKED on a question or a permission card — nothing is being written there, so that
+ * land needs no override and takes none (agents.routes.ts). This flag means "yes, mid-write, I know". */
+export const AgentLandSchema = z.object({
+    id: z.string().min(1),
+    mode: LandModeSchema.optional(),
+    span: AgentSpanSchema.optional(),
+    force: z.boolean().optional(),
+});
 
 // ---- routed-provider subscriptions ----
 

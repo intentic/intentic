@@ -39,8 +39,12 @@ import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, use
 
 const props = defineProps<{
     conflicts: readonly LandConflict[];
-    // The agent has a turn in flight; every action here would be refused daemon-side until it settles.
+    // The agent has a turn in flight. What "have the agent resolve it" waits on: it sends a new turn, and a
+    // conversation already holding one refuses the second — parked or not, that turn has to end first.
     streaming: boolean;
+    // The agent is mid-WRITE. What the merge waits on: it is a land, so it only has to avoid catching the
+    // checkout half-written; a turn parked on a question is a fine moment to merge into your own tree.
+    writing: boolean;
     // A land / ask this panel itself has in flight.
     busy: boolean;
     // The user has already handed this conflict back to the agent (useAgentChanges.asked).
@@ -182,9 +186,9 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     size="small"
                     severity="secondary"
                     :class="INLINE"
-                    :disabled="busy || streaming"
+                    :disabled="busy || writing"
                     @click="emit('merge')"
-                    v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
+                    v-tooltip.bottom="writing ? 'Wait until the agent stops writing' : undefined"
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
                 </Button>

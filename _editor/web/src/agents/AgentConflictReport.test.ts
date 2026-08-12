@@ -59,6 +59,7 @@ const mount = (): { el: HTMLElement; selected: unknown[] } => {
             h(AgentConflictReport, {
                 conflicts,
                 streaming: false,
+                writing: false,
                 busy: false,
                 asked: false,
                 onSelect: (blocker: unknown) => selected.push(blocker),

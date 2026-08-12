@@ -158,6 +158,18 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
 export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `running` || agent.status === `starting` || agent.status === `stopping` || agent.status === `resuming`;
 
+/* THE AGENT IS WRITING RIGHT NOW — the browser's copy of the daemon's `writing` guard (agents-registry.ts),
+ * and the narrowest live reading on this file.
+ *
+ * It exists for Land, which is the one action whose answer differs between a turn that is TYPING and a turn
+ * that is PARKED. Everything else on this page treats them alike: `turnInFlight` deliberately excludes
+ * `awaiting` and the guards that care answer it in their own terms — this is one of those terms.
+ *
+ * `stopping` and `resuming` are absent for the same reason the daemon leaves them out: the provider is not
+ * producing anything, so nothing can be caught half-written. The two sides must agree on this or the UI offers
+ * a press the daemon refuses, so keep them in step. */
+export const writingNow = (agent: AgentStanding): boolean => agent.status === `running` || agent.status === `starting`;
+
 // "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
 // agents "need you" teaches them to ignore the word.

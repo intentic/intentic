@@ -272,9 +272,10 @@ export function useAgentChanges(agentId: Ref<string>) {
     // `span` is `cumulative` only for "Land again" — the way back after landed work was discarded from the
     // workspace, where every sha says the work went in and only a reading from the branch's base can still see
     // that it is gone (AgentSpanSchema).
-    const land = (mode: LandMode = `check`, span: AgentSpan = `outstanding`): Promise<void> =>
+    // `force` carries the user's answer to the mid-write warning — see landAgent. A parked turn needs none.
+    const land = (mode: LandMode = `check`, span: AgentSpan = `outstanding`, force = false): Promise<void> =>
         run(async () => {
-            resolving.value = (await landAgent(agentId.value, mode, span)).resolving;
+            resolving.value = (await landAgent(agentId.value, mode, span, force)).resolving;
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
 

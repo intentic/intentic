@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { effectiveAutoLand, landedAway } from "../composables/agents/agentStatus";
+import { effectiveAutoLand, landedAway, writingNow } from "../composables/agents/agentStatus";
 import type { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useRole } from "../composables/sandbox/useRole";
@@ -28,7 +28,9 @@ const { changes, agentId, landInMenu } = defineProps<{
     landInMenu: boolean;
     streaming: boolean;
 }>();
-const emit = defineEmits<{ selected: []; discard: [] }>();
+// `forceLand` goes up for the same reason `discard` does: the warning it raises is a modal, and modals live on
+// the page rather than inside a menu that closes on every press.
+const emit = defineEmits<{ selected: []; discard: []; forceLand: [] }>();
 
 const { agentById, restore, busyIds } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
@@ -70,9 +72,28 @@ const run = (action: () => void): void => {
     emit(`selected`);
 };
 
+/* WHETHER A LAND HERE NEEDS THE WARNING FIRST — the same split the header button makes (AgentDetail), and it
+ * has to be made in both places because either one can be the press.
+ *
+ * `streaming` still disables archive and discard below: those take the worktree away and the daemon refuses
+ * them for any live turn. A land only reads it, so the two land items follow `writing` instead — a turn parked
+ * on a question is not writing anything, and that is precisely when someone wants this menu. */
+const writing = computed(() => {
+    const agent = agentById(agentId);
+    return agent !== undefined && writingNow(agent);
+});
+// Every land in this menu goes through here: warn while the agent writes, otherwise just land.
+const pressLand = (land: () => void): void => {
+    if (writing.value) {
+        emit(`forceLand`);
+        emit(`selected`);
+        return;
+    }
+    run(land);
+};
 // The cumulative land — "Land again" (see `away`). Through `run` like every other item, so the menu closes on
 // the press and the panel's own busy/error line owns the round trip.
-const relandNow = (): void => run(() => changes.land(`check`, `cumulative`));
+const relandNow = (): void => pressLand(() => changes.land(`check`, `cumulative`));
 
 const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-overlay disabled:opacity-40 disabled:hover:bg-transparent max-md:py-3`;
 </script>
@@ -83,19 +104,21 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             v-if="landInMenu && away === undefined && canShip"
             type="button"
             :class="ITEM"
-            :disabled="changes.actionBusy.value || streaming || changes.pending.value.length === 0"
-            @click="run(() => changes.land())"
+            :disabled="changes.actionBusy.value || changes.pending.value.length === 0"
+            @click="pressLand(() => changes.land())"
         >
             <Icon name="check" class="mt-0.5 text-xs text-success" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">Land now</span>
                 <span class="text-2xs text-subtle">
                     {{
-                        streaming
-                            ? `Wait for the agent turn to finish`
+                        writing
+                            ? `The agent is still writing — you'll be asked to confirm`
                             : changes.pending.value.length === 0
                               ? `Already in your workspace`
-                              : `Applies ${changes.pending.value.length} change(s) to your workspace`
+                              : streaming
+                                ? `Applies what the agent has written so far`
+                                : `Applies ${changes.pending.value.length} change(s) to your workspace`
                     }}
                 </span>
             </span>
@@ -105,11 +128,11 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
              plain land carries the remainder and leaves the missing part exactly as missing, which is the one
              outcome that looks like it worked. Quiet like everything else in this menu — the card is where the
              fact is announced; this is just the second place the press can be found. -->
-        <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="relandNow">
+        <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">Land again</span>
-                <span class="text-2xs text-subtle">{{ streaming ? `Wait for the agent turn to finish` : away.text }}</span>
+                <span class="text-2xs text-subtle">{{ writing ? `The agent is still writing — you'll be asked to confirm` : away.text }}</span>
             </span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">

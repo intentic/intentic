@@ -163,6 +163,25 @@ export interface AgentsRegistry {
     // The persisted entry — the worktree composition (per-repo bases) diff/land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly running: (id: string) => boolean;
+    /* IS THE AGENT ACTUALLY WRITING RIGHT NOW — the narrow half of `running`, for the one caller that can
+     * safely act on a live turn.
+     *
+     * `running` is true for two states a user reads as opposites: an agent editing files, and an agent PARKED
+     * on a question, a permission card or a plan, doing nothing at all until someone answers. Every guard used
+     * the broad one, so "wait for the agent turn to finish" was also the answer to landing work from an agent
+     * that was, in fact, waiting for the user — the turn it was told to wait for could not end until they
+     * acted, and the thing they wanted to do was the acting.
+     *
+     * A park is the daemon's own definition of quiet: it already commits and rebases that very checkout when a
+     * parked card settles (agents/sync.ts), so a land there is a write of a class this codebase already takes
+     * unasked. `stopping` counts as quiet for the same reason — the provider has been aborted and is only
+     * unwinding; nothing new is being written.
+     *
+     * It is NOT a proof of stillness, and no caller should treat it as one: a turn can be parked on one card
+     * while a parallel tool call keeps running (see RuntimeState.pauses). It is the honest, cheap reading of
+     * "is anyone at the keyboard", which is what the land guard needs — the mid-write case stays behind an
+     * explicit user override rather than behind this. */
+    readonly writing: (id: string) => boolean;
     // The SDK session ids of the turns in flight RIGHT NOW. The terminals list maps them to the `agent-*` tmux
     // sessions those turns run their Bash in (agent/agent-terminals.ts), so a working agent's terminal doesn't
     // read as finished while it thinks — between two commands its only window is the last one's dead pane, and
@@ -583,6 +602,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         },
         entry: entryOf,
         running: (id) => runtime.get(id)?.running === true,
+        writing: (id) => {
+            const state = runtime.get(id);
+            return state?.running === true && state.stopping === undefined && state.pauses.size === 0;
+        },
         sessionIdOf: (id) => runtime.get(id)?.pendingSessionId ?? entryOf(id)?.sessionId,
         liveSessionIds: () =>
             [...runtime]

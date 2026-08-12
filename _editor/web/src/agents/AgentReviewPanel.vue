@@ -67,16 +67,20 @@ import { basename } from "@intentic/ui/path";
  *
  * Keyboard, while focus isn't in a text field or inside Monaco: ↑/↓ or j/k move, v marks viewed and advances,
  * ⇧V marks the current heading's rows and advances past them.
- * Land/discard stay gated on the turn: both are refused daemon-side while it streams (CONFLICT), so they are
- * disabled up front when this browser is the one streaming. */
+ * The conflict ladder's two gates are not the same gate, because its two offers are not the same kind of act.
+ * Asking the agent to resolve STARTS A TURN, and a conversation already holding one refuses the second — so it
+ * waits for any live turn, parked or not. The merge is a land: it only reads the agent's checkout, so it waits
+ * only while the agent is actually writing (see agents.routes.ts landable). */
 
 const { agentId, changes } = defineProps<{
     agentId: string;
     // The review's state, created and owned by AgentDetail — see the note there. This panel reads it and fires
     // the conflict ladder's own actions through it; Land, archive, discard and hold fire from the page header.
     changes: ReturnType<typeof useAgentChanges>;
-    // Whether THIS browser is streaming the agent's turn — the conflict report gates its offers on it.
+    // Whether THIS browser is streaming the agent's turn — what the "have the agent resolve it" offer waits on.
     streaming: boolean;
+    // The narrow half: the agent is mid-write, so a land would catch it half-done. What the merge offer waits on.
+    writing: boolean;
 }>();
 // "Watch it work" — the conflict block's link to the turn it just started. On desktop the conversation is
 // already on screen in the docked chat, so this is a mobile affair: only there is the chat a mode this view
@@ -593,6 +597,7 @@ const endResize = (event: PointerEvent): void => {
             class="mx-2 mt-2"
             :conflicts="changes.conflicts.value"
             :streaming="streaming"
+            :writing="writing"
             :busy="changes.actionBusy.value"
             :asked="changes.asked.value"
             @resolve="changes.askResolve()"

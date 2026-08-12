@@ -87,14 +87,25 @@ it("sends the land body as JSON, so the daemon parses an object and keeps the ag
     // The drag-to-Finished drop and the panel's Land button both take the defaults: check-only, so a refusal
     // leaves the workspace byte-identical, and the outstanding span, so a land carries only what has not
     // landed yet. The cumulative span is asked for by name and by one surface alone ("Land again").
-    expect(await request?.json()).toEqual({ mode: `check`, span: `outstanding` });
+    // `force: false` rides along on every ordinary land: it is the turn guard, and the default is to respect it.
+    expect(await request?.json()).toEqual({ mode: `check`, span: `outstanding`, force: false });
+});
+
+/* THE MID-WRITE LAND, and the reason it is a flag rather than a mode: it changes WHEN a land may run, not what
+ * it carries. The daemon refuses a land while the agent is writing unless this says the user was warned and
+ * said yes anyway (agents.routes.ts landable) — so it must reach the wire from the confirm dialog's press and
+ * from nowhere else. A land on a PARKED turn needs none of this and sends false like any other. */
+it("carries the force flag, so a warned user can land while the agent is still writing", async () => {
+    stubFetch();
+    await landAgent(`a1`, `check`, `outstanding`, true);
+    expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `outstanding`, force: true });
 });
 
 it("carries an explicit mode, so the conflict report's Merge is a different request and not the same one twice", async () => {
     stubFetch();
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
-    expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding` });
+    expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding`, force: false });
 });
 
 /* WHO THE ASK IS FOR, decided against the report and not against the card. The board arms its "Have the agent
@@ -173,5 +184,5 @@ it("refuses the ask when the agent has no conversation left", async () => {
 it("asks for the cumulative span by name, so a re-land carries work the default span can no longer see", async () => {
     stubFetch();
     await landAgent(`a1`, `check`, `cumulative`);
-    expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `cumulative` });
+    expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `cumulative`, force: false });
 });

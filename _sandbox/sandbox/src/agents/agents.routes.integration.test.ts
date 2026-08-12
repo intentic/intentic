@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 
-import { clientFor, codexConnectedProxy, errorCode, fakeHistory, runAgentTurn, services, withTranslator } from "../route-testing.js";
+import { clientFor, codexConnectedProxy, collect, errorCode, fakeHistory, runAgentTurn, services, withTranslator } from "../route-testing.js";
 
 /* The agents routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -306,4 +306,92 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
     expect(await client.agents.search({ query: "assistant-needle" })).toMatchObject({
         matches: [{ id: "codex-search", snippet: { text: "I mentioned an assistant-needle", speaker: "agent" } }],
     });
+});
+
+/* THE LAND GUARD, which is narrower than the one archive and discard sit behind (agents.routes.ts landable).
+ *
+ * A land only READS the agent's checkout, so the question it has to answer is not "is a turn alive" but "is
+ * anyone mid-sentence". These three cover the whole of that distinction, because the first two states are the
+ * ones a single `running` flag used to flatten into one refusal.
+ *
+ * `landed: false` is the tell that the guard PASSED: these fakes point main at a directory that does not
+ * exist, so a land that runs at all reports that per repo and lands nothing. What is under test is which
+ * calls reach the land, not what the land then makes of a stub composition. */
+test("a mid-write land is refused, and the same land with `force` goes through", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    await gate;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "a long edit", conversationId: "conv1", isolated: true });
+    // Parked on the gate with nothing raised: the agent is writing, which is the one state that refuses.
+    expect(await errorCode(client.agents.land({ id: "conv1" }))).toBe("CONFLICT");
+    // The user's deliberate override — the press behind the warning modal.
+    expect(await client.agents.land({ id: "conv1", force: true })).toMatchObject({ landed: false });
+    release?.();
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
+});
+
+test("a turn parked on a question lands without a force — it is waiting for the user, not writing", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield {
+                        kind: "question",
+                        requestId: "q1",
+                        questions: [{ question: "which one?", header: "Pick", multiSelect: false, options: [] }],
+                    };
+                    await gate;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "ask me something", conversationId: "conv1", isolated: true });
+    // The park has to have been observed before the guard is asked — the frame travels the relay to get there.
+    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"));
+    // No `force`, and no refusal: this is the state the old guard sent the user away to wait on, when the
+    // thing being waited for could only end once they came back and answered.
+    expect(await client.agents.land({ id: "conv1" })).toMatchObject({ landed: false });
+    release?.();
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
+});
+
+// The turn OUTLIVES the land, so the land must not close its books: `finish` releases the conversation mutex
+// and writes how the turn ended, and a mid-write land calling it would free the mutex a second turn could
+// claim beside the first. The card must still read as live afterwards, and the turn must still settle itself.
+test("a forced land leaves the running turn's bookkeeping to the turn", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    await gate;
+                    yield { kind: "usage", costUsd: 0.25, inputTokens: 4, outputTokens: 2 };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "a long edit", conversationId: "conv1", isolated: true });
+    await client.agents.land({ id: "conv1", force: true });
+    // Still running: the land recorded its own outcome and left the turn alone.
+    expect((await client.agents.list()).agents[0]?.status).toBe("running");
+    release?.();
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
+    // And the turn's own ending still lands — usage flushed, mutex released, status settled.
+    const { agents } = await client.agents.list();
+    expect(agents[0]).toMatchObject({ id: "conv1", costUsd: 0.25 });
+    expect(agents[0]?.status).not.toBe("running");
 });

@@ -77,8 +77,12 @@ export const revealConversation = (conversation: Conversation): void => {
 // it did — so the default `outstanding` span is empty and would carry nothing at all; only a reading from the
 // branch's base can still see what is gone. Paths the tree already holds drop out of it per file, so a
 // cumulative land applies the missing part and re-applies nothing (AgentSpanSchema).
-export const landAgent = (id: string, mode: LandMode = `check`, span: AgentSpan = `outstanding`): Promise<LandResult> =>
-    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span }));
+//
+// `force` is the user overriding the turn guard: land while the agent is mid-write, half-finished work and
+// all. It is never a default and never inferred — the daemon lets a PARKED turn (a question, a permission
+// card) land without it, so the flag reaches the wire only from a press that showed the warning first.
+export const landAgent = (id: string, mode: LandMode = `check`, span: AgentSpan = `outstanding`, force = false): Promise<LandResult> =>
+    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }));
 
 // A collaborator's stand-in for the land they may not perform (the daemon floors `land` at maintainer): stamp
 // the ask on the agent so every maintainer's board wears it. The daemon's roster frame carries the result —

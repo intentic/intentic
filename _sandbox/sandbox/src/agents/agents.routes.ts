@@ -39,6 +39,28 @@ export const createAgentsRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
         }
     };
+    /* THE LAND GUARD, which is a softer thing than notRunning and deliberately so.
+     *
+     * Discard and archive take the whole worktree away, so a live turn rules them out flatly. A land only READS
+     * that checkout and copies what it finds into the main tree, and the copy arrives as uncommitted changes
+     * the user reviews — so the question is not "is a turn alive" but "is anyone mid-sentence".
+     *
+     * Two of the three answers let it through. A turn PARKED on a question or a permission card is writing
+     * nothing, and refusing there was the sharpest form of the bug: the turn could only end once the user
+     * answered, so "wait for it to finish" asked them to do the very thing they had come here instead of doing.
+     * A turn genuinely mid-write is the one real hazard — half a rename, three files of five — and that is the
+     * user's call to make with the facts in front of them, so it costs an explicit `force` rather than a
+     * refusal. Both halves of that hazard are recoverable, which is why it is a warning and not a wall: the
+     * land is uncommitted, and the remainder of the turn lands on top of it at completion.
+     *
+     * Unforced mid-write still answers CONFLICT, and the message says which of the two states it means — the
+     * old one named the wrong one for a parked agent and sent people to wait on a turn that was waiting on
+     * them. */
+    const landable = (id: string, force: boolean): void => {
+        if (services.agents.writing(id) && !force) {
+            throw new ORPCError("CONFLICT", { message: "the agent is still writing — land again to apply its work as it stands" });
+        }
+    };
     /* Which SDK session holds this conversation's transcript — asked of the REGISTRY, which recorded it from
      * the turn's own `session` frame, never re-derived from where the turn happened to run. An isolated turn
      * runs in a mount namespace where its worktree IS the workspace root (agents/isolation.ts), so the SDK
@@ -261,7 +283,7 @@ export const createAgentsRoutes = (services: Services) => {
         // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
-            notRunning(input.id);
+            landable(input.id, input.force === true);
             // Snapshotted before the land advances every landedTip — the span a chore diffs from, exactly as
             // the auto-land path captures it before its own land (see streamIsolatedTurn). A cumulative land
             // reads from the base for the same reason the land itself does: the rung it is putting back is
@@ -277,7 +299,15 @@ export const createAgentsRoutes = (services: Services) => {
             // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to
             // land must not keep wearing the error), and takes no turn off the counter because none ran.
             await services.agents.recordLanded(input.id, result);
-            await services.agents.finish(input.id, Date.now());
+            /* ...but ONLY once the turn it describes is over. `finish` flushes the turn's usage, releases the
+             * conversation's mutex and writes how the turn ended — the right close for a land on a resting
+             * agent, and a lie on a live one. Called under a running turn it would free the mutex a second
+             * turn could then claim beside the first, and stamp an ending on a turn still streaming frames
+             * that will stamp their own. The land itself is complete either way; what waits is the
+             * bookkeeping, and the turn's own completion does it. */
+            if (!services.agents.running(input.id)) {
+                await services.agents.finish(input.id, Date.now());
+            }
             if (result.landed && result.changed) {
                 // What this work DID, drafted from the diff now sitting in the tree, for the Changes panel's
                 // chip to file into the commit box. Not awaited — the card's response does not wait on it.
