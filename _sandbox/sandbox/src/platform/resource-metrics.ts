@@ -66,7 +66,7 @@ export const classifyProcess = (command: string): ProcessRole => {
     const languageServer =
         /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u.test(
             value,
-        ) || /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)/u.test(value);
+        ) || /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u.test(value);
     if (languageServer) {
         return "languageServer";
     }

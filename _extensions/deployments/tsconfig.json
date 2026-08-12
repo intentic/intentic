@@ -2,8 +2,8 @@
  * type-checking (vue-tsc resolves the .vue view the extension registers). */
 {
     "compilerOptions": {
-        "baseUrl": "./",
         "noEmit": true,
+        "types": ["node"],
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
         "resolveJsonModule": true

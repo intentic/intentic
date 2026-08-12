@@ -567,7 +567,7 @@ const baseOptions = (
         // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
         // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
         // in there and speaks the agent's own paths (agent-diagnostics.ts).
-        editDiagnosticsHooks(request.cwd, request.isolation),
+        editDiagnosticsHooks(request.isolation),
         // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
         // or a build that failed on a package the tree is genuinely missing says so once, having checked first
         // (agent-deps.ts). Asked of the main checkout, which is what an isolated turn's dependencies are.

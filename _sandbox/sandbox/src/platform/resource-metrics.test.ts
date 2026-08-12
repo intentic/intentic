@@ -29,7 +29,8 @@ Threads:\t7
 
     test.each([
         ["node /opt/typescript-language-server --stdio", "languageServer"],
-        ["node /opt/node_modules/@intentic/lsp/dist/cli.js daemon /work", "languageServer"],
+        ["node /opt/node_modules/@intentic/lsp/dist/cli.js diag /work/src/a.ts", "languageServer"],
+        ["/opt/node_modules/@typescript/native-preview-linux-x64/lib/tsgo --noEmit -p tsconfig.json", "languageServer"],
         ["node /opt/@playwright/mcp/cli.js", "browser"],
         ["/usr/bin/chromium --headless", "browser"],
         ["/usr/local/bin/codex app-server", "agentRuntime"],

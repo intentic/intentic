@@ -28,7 +28,7 @@ description: Rename a TypeScript/JavaScript symbol across the project and read c
 
 # lsp — TypeScript rename & diagnostics
 
-The \`lsp\` CLI (on PATH) drives the TypeScript language service. Prefer it over hand-editing imports or eyeballing types — it updates every usage and reports real compiler errors.
+The \`lsp\` CLI (on PATH) drives the native TypeScript compiler. Prefer it over hand-editing imports or eyeballing types — it updates every usage and reports real compiler errors.
 
 ## Rename a symbol (updates every usage)
 \`lsp rename <file> <symbolName> <newName>\`

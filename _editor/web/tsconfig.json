@@ -1,6 +1,5 @@
 {
     "compilerOptions": {
-        "baseUrl": "./",
         "rootDir": "../..",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
         // Consume the source-first workspace libs directly from their .ts/.vue source — Vite + vue-tsc pull

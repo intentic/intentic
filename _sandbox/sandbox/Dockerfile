@@ -255,17 +255,17 @@ COPY --from=trees sandbox /opt/sandbox
 RUN cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
     && node-gyp rebuild
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
-# daemon writes/removes its skill at /work/.claude/skills/lsp). It drives the TS language service (its own
-# bundled typescript) over whatever tsconfig project the agent points it at in /work. `lsp diag` and the
-# sandbox's post-edit hook both route through a resident `lsp daemon`, started on demand by whichever asks
-# first and shared via one socket per repo — so no service runs for a workspace without TypeScript in it.
+# daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
+# bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.
+# Every question — `lsp diag`, `lsp rename`, and the sandbox's post-edit hook — is a fresh compiler run that
+# answers and exits; nothing stays resident, so a workspace pays memory only while a check is actually running.
 #
 # Symlinked out of the DAEMON'S tree rather than deployed as a tree of its own: @intentic/lsp is a dependency of
-# @intentic/sandbox, so /opt/sandbox already contains this exact package (and its bundled typescript) — a second
-# `pnpm deploy` root shipped a 54 MiB duplicate of it, 14.6 MiB of the pull. Node resolves the CLI's imports from
-# the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The chmod is the
-# intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying the
-# package fails the build here instead of leaving `lsp` off PATH.
+# @intentic/sandbox, so /opt/sandbox already contains this exact package (and its bundled native compiler) — a
+# second `pnpm deploy` root shipped a 54 MiB duplicate of it, 14.6 MiB of the pull. Node resolves the CLI's
+# imports from the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The
+# chmod is the intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying
+# the package fails the build here instead of leaving `lsp` off PATH.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp
 # The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)

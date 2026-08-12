@@ -313,6 +313,11 @@
     {
       "dev": false,
       "from": "_editor/web",
+      "to": "_extensions/drafts"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
       "to": "_extensions/git-history"
     },
     {
@@ -558,6 +563,31 @@
     {
       "dev": true,
       "from": "_extensions/documentation",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/drafts",
+      "to": "_editor/extension-ui"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/drafts",
+      "to": "_sandbox/extension-api"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/drafts",
+      "to": "_sandbox/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/drafts",
+      "to": "_sandbox/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/drafts",
       "to": "_tools/tsconfig"
     },
     {
@@ -1564,9 +1594,9 @@
       "loc": 649,
       "name": "@intentic/browser",
       "oneLiner": "Drive a Chromium-family browser from Node over CDP: open pages, read them as structured text, and click and type by element reference.",
-      "readmeRev": "6c6966539384dc27b9f89856dcab88fdf14aac2f",
+      "readmeRev": "f49b7d6aad2754f72b0f6f177236ab62a103d801",
       "stale": false,
-      "updatedAt": 1785938029000
+      "updatedAt": 1786483150000
     },
     {
       "anchors": [
@@ -2002,16 +2032,16 @@
           "what": "the shared formatters, so two extensions render a duration the same way."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "editor",
       "dir": "_editor/extension-ui",
       "files": 3,
       "hasTests": false,
-      "loc": 238,
+      "loc": 283,
       "name": "@intentic/extension-ui",
       "oneLiner": "The UI kit an extension renders with, so its views look like the app rather than like a website.",
       "readmeRev": "2c041c29d2a91cd8ac3a3bcbf25b967dc55fff0e",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1785938033000
     },
@@ -2042,16 +2072,16 @@
           "what": "design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors."
         }
       ],
-      "behind": 4,
+      "behind": 6,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 110,
+      "files": 113,
       "hasTests": false,
-      "loc": 10936,
+      "loc": 11088,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
       "readmeRev": "2493fe2aa291be27da3afb85c40a12596dadc60b",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786369516000
     },
@@ -2112,16 +2142,16 @@
           "what": "the full route table."
         }
       ],
-      "behind": 7,
+      "behind": 13,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 812,
+      "files": 801,
       "hasTests": true,
-      "loc": 129391,
+      "loc": 127785,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "b16f323f71695f2b126002921415a5633ab1593b",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "13 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786469457000
     },
@@ -2438,18 +2468,47 @@
           "what": "the conventions, taught to every turn"
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/documentation",
       "files": 29,
       "hasTests": true,
-      "loc": 3722,
+      "loc": 3742,
       "name": "@intentic/ext-documentation",
       "oneLiner": "Plain-language architecture documentation for every repository and package in the workspace.",
-      "readmeRev": "63726f41c7e4e90fe46c826f9ab85789cfb6b7dd",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1786302690000
+      "readmeRev": "bd61a623db6c87bb559540dd92f1f68c62bf3faa",
+      "stale": false,
+      "updatedAt": 1786484637000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_extensions/drafts/src/DraftsView.vue",
+          "what": "the queue, one section per decision."
+        },
+        {
+          "path": "_extensions/drafts/src/useDrafts.ts",
+          "what": "the list and the writes, plus owedOf, the one definition of what the"
+        },
+        {
+          "path": "_extensions/drafts/src/postText.ts",
+          "what": "platform caps, countdown words, and what makes a post a title."
+        },
+        {
+          "path": "_extensions/drafts/src/extension.ts",
+          "what": "activation, the permanent tile, and the badge's own timer."
+        }
+      ],
+      "behind": 0,
+      "dir": "_extensions/drafts",
+      "files": 18,
+      "hasTests": true,
+      "loc": 1944,
+      "name": "@intentic/ext-drafts",
+      "oneLiner": "The approval inbox for posts the agent proposed during its scheduled work.",
+      "readmeRev": "a7b5f5244a7c48d71cd418757fd08c0a069e0d19",
+      "stale": false,
+      "updatedAt": 1786488766000
     },
     {
       "anchors": [
@@ -3261,16 +3320,17 @@
           "what": "and src/surface.json — the protocol version, and what"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/extension-api",
       "files": 10,
       "hasTests": false,
-      "loc": 897,
+      "loc": 911,
       "name": "@intentic/extension-api",
       "oneLiner": "The one SDK an extension programs against — the extension-author contract for the intentic app.",
       "readmeRev": "f6cd00f3e31527bbac38a56700c699d7f7492ab5",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1786461198000
     },
     {
@@ -3485,16 +3545,16 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 3,
+      "behind": 9,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 740,
+      "files": 744,
       "hasTests": true,
-      "loc": 125271,
+      "loc": 125679,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "b16f323f71695f2b126002921415a5633ab1593b",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786469457000
     },
@@ -3537,16 +3597,16 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 2,
+      "behind": 7,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 95,
       "hasTests": true,
-      "loc": 17324,
+      "loc": 17351,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "31a48e2174c4f6ee2ffc2e7ab4ade9ae8f7510bb",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786462743000
     },
@@ -3836,16 +3896,16 @@
           "what": "the node:sqlite index itself."
         }
       ],
-      "behind": 2,
+      "behind": 4,
       "component": "search",
       "dir": "_search/iq-engine",
-      "files": 83,
+      "files": 85,
       "hasTests": true,
-      "loc": 7870,
+      "loc": 8284,
       "name": "@intentic/iq-engine",
       "oneLiner": "The search engine behind the iq CLI, and the heavy lib of the iq cluster.",
       "readmeRev": "29bb69e6a6229646e7f49685a483a9ff2fb872f3",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786274879000
     },
@@ -3888,20 +3948,20 @@
     {
       "anchors": [
         {
+          "path": "_search/lsp/src/checker.ts",
+          "what": "one compiler run over one project; refusal and .vue semantics live here."
+        },
+        {
+          "path": "_search/lsp/src/client.ts",
+          "what": "the asking side: grouping by project, single-flight, the trailing rerun."
+        },
+        {
           "path": "_search/lsp/src/rename.ts",
-          "what": "project-wide rename, and what it refuses to do."
+          "what": "project-wide rename over one short tsgo --lsp conversation."
         },
         {
-          "path": "_search/lsp/src/diag.ts",
-          "what": "syntactic and semantic diagnostics."
-        },
-        {
-          "path": "_search/lsp/src/project.ts",
-          "what": "resolving a tsconfig into a program; where \"refuse rather than guess\" lives."
-        },
-        {
-          "path": "_search/lsp/src/daemon.ts",
-          "what": "the warm process that makes a second call fast."
+          "path": "_search/lsp/src/report.ts",
+          "what": "what a check can say, and the parser that reads the compiler's output."
         },
         {
           "path": "_search/lsp/src/cli.ts",
@@ -3911,11 +3971,11 @@
       "behind": 0,
       "component": "search",
       "dir": "_search/lsp",
-      "files": 13,
-      "hasTests": true,
-      "loc": 1473,
+      "files": 8,
+      "hasTests": false,
+      "loc": 862,
       "name": "@intentic/lsp",
-      "oneLiner": "An agent-native CLI over the TypeScript language service: project-wide rename, and diagnostics.",
+      "oneLiner": "An agent-native CLI over the native TypeScript compiler: project-wide rename, and diagnostics.",
       "readmeRev": "b2f2b1214bd227eb027c8317a234777102176d85",
       "stale": false,
       "updatedAt": 1786271308000
@@ -4031,12 +4091,12 @@
           "what": "where the build-time integrations are wired in."
         }
       ],
-      "behind": 9,
+      "behind": 15,
       "component": "site",
       "dir": "_site/site",
       "files": 12,
       "hasTests": false,
-      "loc": 1873,
+      "loc": 1856,
       "name": "@intentic-dev/site",
       "oneLiner": "The public website at intentic.dev — an Astro build, all copy imported rather than written in the markup.",
       "readmeRev": "31a48e2174c4f6ee2ffc2e7ab4ade9ae8f7510bb",
@@ -4048,37 +4108,37 @@
       "anchors": [
         {
           "path": "_site/site-content/src/site.ts",
-          "what": "URLs, org name and tagline; the constants everything else composes from."
+          "what": ": URLs, org name and tagline; the constants everything else composes from."
         },
         {
           "path": "_site/site-content/src/landing.ts",
-          "what": "the front page's copy."
+          "what": ": the front page's copy."
         },
         {
           "path": "_site/site-content/src/docs.ts",
-          "what": "the docs tree: four shelves sorted by who is reading, their sub-groups and nested"
+          "what": ": the docs tree, with four shelves sorted by who is reading, their sub-groups and nested"
         },
         {
           "path": "_site/site-content/src/nav.ts",
-          "what": "/ src/page-meta.ts — navigation and per-page metadata."
+          "what": "/ src/page-meta.ts: navigation and per-page metadata."
         },
         {
           "path": "_site/site-content/src/structured-data.ts",
-          "what": "the JSON-LD the site emits."
+          "what": ": the JSON-LD the site emits."
         }
       ],
-      "behind": 11,
+      "behind": 3,
       "component": "site",
       "dir": "_site/site-content",
       "files": 14,
       "hasTests": false,
-      "loc": 3234,
+      "loc": 3264,
       "name": "@intentic-dev/site-content",
-      "oneLiner": "Every word on the public website, as data — so the marketing copy is reviewable in a diff instead of buried in markup.",
-      "readmeRev": "de433f2a2bda0c600ca432b5a272ce0cee77c187",
-      "reason": "11 commits have touched this package since its README was written",
+      "oneLiner": "Every word on the public website, as data.",
+      "readmeRev": "c2d00e1936cbb180ca54de8c73690c3b7fe9c17b",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1786397114000
+      "updatedAt": 1786488806000
     },
     {
       "anchors": [
@@ -4412,7 +4472,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1786482947647,
+  "generatedAt": 1786493154750,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

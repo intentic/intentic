@@ -814,25 +814,25 @@ them by spawning a process, never by import:
   workspace watcher), sharing the on-disk index with the CLI. Search is a **core editor feature**; iq is
   merely the interchangeable engine behind that route.
 - **lsp** ([`@intentic/lsp`](_search/lsp)) — an agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the
-  TS language service, advertised to the agent through a gated skill file. TypeScript/JavaScript only. Like
-  iq, the CLI is a subprocess but the service is **resident**: `lsp daemon <root>` holds one warm
-  LanguageService per tsconfig (sharing a document registry, so lib.d.ts is parsed once for the monorepo) and
-  keeps the markers for edited files current on a debounce, exactly as VS Code's tsserver does for open
-  buffers. Both callers — the agent's `lsp diag` and the daemon's post-edit hook
+  **native TypeScript compiler** (`@typescript/native-preview`, the Go port), advertised to the agent through
+  a gated skill file. TypeScript/JavaScript only. Unlike iq there is no resident half at all: every question —
+  the agent's `lsp diag`/`lsp rename` and the daemon's post-edit hook
   ([agent-diagnostics.ts](_sandbox/sandbox/src/agent/agent-diagnostics.ts), which imports
-  `@intentic/lsp/client`) — converge on one socket per repository *as each caller sees it*: the socket is
-  keyed on the root's `dev:ino` alone, so an isolated worktree mounted over the same path gets its own daemon
-  that sees its own tree, and the same directory named differently on either side of a mount boundary
-  converges on one. That last property is what lets the hook place the service where the files mean what the
-  agent means — an anchored turn's dependencies exist ONLY inside its namespace, so the hook starts the daemon
-  in there (through an `nsenter` wrapper it supplies) and asks about the agent's own paths, rather than
-  translating the path and checking a tree with nothing installed in it. It matters because the cold path was ~0.8-1.3s per edit against this monorepo and the
-  warm one is ~40-90ms, which is what makes checking after *every* edit affordable. The daemon is started by
-  the first caller with a tsconfig above its file and exits after 15 min idle, so a workspace with no
-  TypeScript in it never starts one. A project whose tsconfig chain or type foundations cannot be loaded from
-  where the checker runs is answered with an explicit per-file refusal (and `lsp diag` exits 2) instead of the
-  ES5-fallback phantom errors TypeScript would otherwise report on healthy code; the hook relays that as one
-  "diagnostics unavailable" notice per turn rather than injecting errors.
+  `@intentic/lsp/client`) — is a fresh compiler run that parses the file's tsconfig project, answers, and
+  exits. The native compiler checks a package-sized project cold in 0.1–2s, at or below what the previous
+  resident JS-compiler daemon answered in *warm* through its socket, so per-edit checking stays affordable
+  with zero resident memory — where the daemon it replaces held ~1 GB of warm program per view of the tree
+  (one per concurrent agent worktree) for a 15-minute idle window. The client single-flights concurrent asks
+  per project and pools a burst of edits into one trailing rerun, so six edits in a second cost two runs, not
+  six. Rename holds one short `tsgo --lsp` conversation for the server-computed project-wide edit, then tears
+  the process down. WHERE a check runs still follows the agent's view of the tree: an anchored turn's
+  dependencies exist ONLY inside its namespace, so the hook enters the compiler in there (through an `nsenter`
+  wrapper it supplies) and asks about the agent's own paths, rather than translating the path and checking a
+  tree with nothing installed in it. A project whose tsconfig chain or type foundations cannot be loaded from
+  where the checker runs is answered with an explicit per-file refusal (and `lsp diag` exits 2) instead of
+  phantom errors on healthy code — including the native-era case where @types sit in a parent node_modules the
+  native compiler does not auto-include; the hook relays that as one "diagnostics unavailable" notice per turn
+  rather than injecting errors.
 
 ## Scaling model & limits
 

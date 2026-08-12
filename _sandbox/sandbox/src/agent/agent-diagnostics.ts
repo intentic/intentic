@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { diagnoseVia, type ServiceLocation } from "@intentic/lsp/client";
+import { type CheckPlacement, diagnose } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { fromWorktree, inWorktree, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
 import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.js";
@@ -8,13 +8,11 @@ import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.j
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
  * so it self-corrects inside the same turn instead of leaving broken code for the user to find. VS Code gets this
  * for free because its language server is already resident and has already computed the markers; the sandbox has
- * no editor, so it keeps its own resident service (`lsp daemon`) and reads from that.
- *
- * That residency is the difference between a check worth running and one that isn't. Building a monorepo
- * package's LanguageService from cold costs ~1.7s, which is what this hook used to pay on EVERY edit by shelling
- * out to `lsp diag`; against a warm program the same question is a re-check of what actually moved. The daemon is
- * started by the first edit that has a tsconfig above it and exits on its own once the workspace goes quiet, so a
- * repo with no TypeScript in it never starts one.
+ * no editor, so it asks the native TypeScript compiler instead — a fresh whole-project run per question
+ * (@intentic/lsp), which answers a package-sized check in 0.1–2s and holds nothing in memory between edits.
+ * There used to be a resident JS-compiler daemon here to make per-edit checks affordable; the native compiler
+ * made cold checks as fast as the daemon's warm answers, and the ~1 GB per workspace view it stayed resident to
+ * protect is simply given back.
  *
  * The whole loop is GATED on the dependencies actually being installed. Without node_modules the compiler
  * cannot resolve a single import — not even `node:path`, whose types ship in @types/node — so it reports
@@ -32,35 +30,33 @@ import { modulesNear, type NearbyModules } from "../workspace/dependency-drift.j
  * Diagnostics still run — the rest of the file's errors are real and worth having — with the cause named
  * alongside them so an unresolved import is read as the install being behind rather than as a mistake. */
 
-// The language service is TypeScript/JavaScript only — other files are never checked.
+// The checker is TypeScript/JavaScript only — other files are never checked.
 const CHECKED_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 
 // Bound the feedback so a cascading break can't flood the transcript: errors only, first lines, capped chars.
 const MAX_LINES = 20;
 const MAX_CHARS = 4_000;
 
-// Ask the resident service about one file. Undefined means "no answer to be had" — no TypeScript project above
-// the file, or no daemon we could reach — which must stay distinguishable from "checked, and clean".
-// `unavailable` is the daemon itself refusing: it reached the file's project and could not load it well enough
-// to vouch for anything, so it checked nothing rather than answer from a half-loaded program. The refusal reason
-// names service-side paths the agent may have no window onto, so it is not carried here — the notice below says
-// what is true from here.
+// Ask the compiler about one file. Undefined means "no answer to be had" — no TypeScript project above the
+// file — which must stay distinguishable from "checked, and clean". `unavailable` is the checker itself
+// refusing: it reached the file's project and could not load it well enough to vouch for anything, so it
+// checked nothing rather than answer from a half-loaded program. The refusal reason names checker-side paths
+// the agent may have no window onto, so it is not carried here — the notice below says what is true from here.
 export type DiagAnswer = { readonly kind: "checked"; readonly lines: readonly string[] } | { readonly kind: "unavailable" };
 
-// One file's check, and everything about WHERE it is asked. `service` places the language service in the view
-// the paths are named for (undefined when that is this process's own), and `named` turns a file the service
+// One file's check, and everything about WHERE it is asked. `placement` enters the compiler into the view the
+// paths are named for (undefined when that is this process's own), and `named` turns a file the checker
 // reported back into the name the agent uses for it — identity when the two stand in the same view.
 export interface DiagRequest {
     readonly file: string;
-    readonly cwd: string;
-    readonly service: ServiceLocation | undefined;
+    readonly placement: CheckPlacement | undefined;
     readonly named: (file: string) => string;
 }
 
 export type DiagRunner = (request: DiagRequest) => Promise<DiagAnswer | undefined>;
 
-const runResidentDiag: DiagRunner = async ({ file, cwd, service, named }) => {
-    const report = await diagnoseVia(cwd, { files: [file], touched: [file], ...(service !== undefined ? { service } : {}) });
+const runNativeDiag: DiagRunner = async ({ file, placement, named }) => {
+    const report = await diagnose({ files: [file], ...(placement !== undefined ? { placement } : {}) });
     if (report === undefined) {
         return undefined;
     }
@@ -90,14 +86,14 @@ const NAMED_MISSING = 3;
 /* WHAT THIS NOTE MAY AND MAY NOT CLAIM, now that three different states reach it.
  *
  * One is a tree nobody has installed (dependency-drift.ts). One is an install this process cannot SEE — an
- * isolated turn's node_modules is mounted inside the turn's namespace, so the daemon finds an empty directory
- * where the agent finds 34 packages. And one is the type-checker itself refusing: the project's config chain or
- * type foundations would not load from where it stands, so it declined to answer at all rather than report the
- * phantom errors a half-loaded program produces (@intentic/lsp). They are one fact for this hook's purposes —
- * no truthful diagnostics from here — and completely different facts for the agent, which is why the sentence
- * names no cause and prescribes no install: told "dependencies are not installed" an agent whose own type-check
- * passes either distrusts working tooling or goes looking for an install that would land in an overlay and die
- * with the conversation.
+ * isolated turn's node_modules is mounted inside the turn's namespace, so a checker outside finds an empty
+ * directory where the agent finds 34 packages. And one is the type-checker itself refusing: the project's
+ * config chain or type foundations would not load from where it stands, so it declined to answer at all rather
+ * than report the phantom errors a half-loaded program produces (@intentic/lsp). They are one fact for this
+ * hook's purposes — no truthful diagnostics from here — and completely different facts for the agent, which is
+ * why the sentence names no cause and prescribes no install: told "dependencies are not installed" an agent
+ * whose own type-check passes either distrusts working tooling or goes looking for an install that would land
+ * in an overlay and die with the conversation.
  *
  * So it says only what is known from here, and points at the check that CAN answer — the package's own. */
 const UNAVAILABLE_NOTE =
@@ -137,30 +133,25 @@ const staleNote = (missing: readonly string[]): string =>
  * and checking from out here is therefore not a smaller version of the right answer, it is a different tree
  * with no dependencies in it — the state that produced 43,000 phantom "cannot find module 'vue'" errors in one
  * week of transcripts, and then, once the checker learned to refuse, near-total silence in their place. So the
- * service is placed INSIDE the turn instead (lsp/client.ts) and asked about the agent's own paths. It resolves
- * what the agent resolves, and it answers in the names the agent uses, which is also the end of reports that
- * quote a worktree path the agent must never reach for.
+ * compiler is ENTERED into the turn's namespace instead (lsp/checker.ts) and asked about the agent's own
+ * paths. It resolves what the agent resolves, and it answers in the names the agent uses, which is also the
+ * end of reports that quote a worktree path the agent must never reach for.
  *
  * UNANCHORED. No namespace could be built (no CAP_SYS_ADMIN), so the worktree stands on its own with its
  * dependency directories symlinked rather than mounted — reachable from here, and the translation IS the whole
  * of it. Only the reported names have to be mapped back for the agent to recognise its own files.
  */
 export const editDiagnosticsHooks = (
-    // The agent's own workspace root, in the agent's own naming.
-    cwd: string,
     placement?: TurnPlacement,
-    diag: DiagRunner = runResidentDiag,
+    diag: DiagRunner = runNativeDiag,
     modules: ModulesProbe = modulesNear,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const plan = placement?.plan;
     const anchor = placement?.anchor;
     // Both halves of the boundary, settled once: an anchored turn is asked in its own names and answers in
     // them, so nothing is translated in either direction.
-    const service: ServiceLocation | undefined =
-        anchor === undefined
-            ? undefined
-            : { reachableCwd: inWorktree(cwd, plan), enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) };
-    const checkedCwd = anchor === undefined ? inWorktree(cwd, plan) : cwd;
+    const checkPlacement: CheckPlacement | undefined =
+        anchor === undefined ? undefined : { enter: (command, args) => nsenterArgv(anchor.pid, anchor.cwd, command, args) };
     const asAgentNames = anchor === undefined ? (file: string): string => fromWorktree(file, plan) : (file: string): string => file;
     // Per PACKAGE, not per turn: a turn that edits two packages has two different answers to give, and one
     // shared flag would silence whichever it reached second. The absent and refused cases key on "" — they are
@@ -199,8 +190,8 @@ export const editDiagnosticsHooks = (
                             explained.add("");
                             return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: UNAVAILABLE_NOTE } };
                         }
-                        const output = await diag({ file: target, cwd: checkedCwd, service, named: asAgentNames });
-                        // The daemon refusing is the same fact as an absent tree — no truthful diagnostics from
+                        const output = await diag({ file: target, placement: checkPlacement, named: asAgentNames });
+                        // The checker refusing is the same fact as an absent tree — no truthful diagnostics from
                         // here — and shares its once-per-turn telling, keyed on "".
                         if (output !== undefined && output.kind === "unavailable") {
                             if (explained.has("")) {

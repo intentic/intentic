@@ -2,7 +2,6 @@
  * for standalone type-checking via `pnpm --filter @intentic/ui typecheck` (vue-tsc handles the .vue SFCs). */
 {
     "compilerOptions": {
-        "baseUrl": "./",
         "noEmit": true,
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo"
