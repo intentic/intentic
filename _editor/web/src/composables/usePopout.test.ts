@@ -15,35 +15,6 @@ import { createPopout, type Popout } from "./usePopout";
  * the answer is three-valued and comes from the PANEL — `waiting` is the whole of the difference between a
  * window whose app is coming and a window whose app has forgotten it. */
 
-/* THE DESK THE WINDOW OPENS ONTO. What the browser is willing to say about the desktop is a permission away
- * (screens.ts, tested there), so what is faked here is only the KNOWLEDGE — the arithmetic that turns it into a
- * frame stays the real thing. `screens` undefined is the ordinary case and the one every other test in this
- * file runs in: nothing granted, so windows are placed by the single screen the page can measure. */
-const desk = vi.hoisted(() => ({
-    screens: undefined as readonly { left: number; top: number; width: number; height: number }[] | undefined,
-    // What granting the permission does, for the one test that grants it mid-gesture.
-    onLearn: undefined as (() => void) | undefined,
-}));
-
-vi.mock(`./screens`, async (importOriginal) => {
-    const actual = await importOriginal<typeof import("./screens")>();
-    return {
-        ...actual,
-        knownScreens: () => desk.screens,
-        appScreen: () => desk.screens?.[0],
-        otherScreen: () => desk.screens?.[1],
-        learnScreens: () => {
-            desk.onLearn?.();
-            return Promise.resolve();
-        },
-    };
-});
-
-// A 2560×1400 primary with a smaller 1920×1040 monitor to its right — the desk this is for, and the size
-// difference that turns "reopen it where you left it" into a window wider than the screen it reopens on.
-const BIG = { left: 0, top: 0, width: 2560, height: 1400 };
-const SMALL = { left: 2560, top: 0, width: 1920, height: 1040 };
-
 // A stand-in for the pop-out window: a real (detached) document, so dressing it is exercised for real, plus the
 // window surface createPopout touches.
 const fakeWindow = (name: string) => {
@@ -60,10 +31,6 @@ const fakeWindow = (name: string) => {
         outerHeight: 1100,
         focus: vi.fn(),
         close: vi.fn(),
-        // How an already-open window is put where it belongs — the first pop-out of all, whose own gesture is
-        // what asked for the desktop's shape in the first place.
-        moveTo: vi.fn(),
-        resizeTo: vi.fn(),
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
     };
@@ -108,8 +75,6 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.useRealTimers();
-    desk.screens = undefined;
-    desk.onLearn = undefined;
 });
 
 describe(`createPopout`, () => {
@@ -549,177 +514,6 @@ describe(`createPopout`, () => {
         expect(open).toHaveBeenCalledWith(expect.any(String), `gone-panel`, `popup=1,width=500,height=400,left=262,top=184`);
         open.mockRestore();
         Reflect.deleteProperty(window.screen, `isExtended`);
-    });
-
-    /* WHICH MONITOR, AND HOW BIG — the half of "where the window comes back" that a page cannot answer from its
-     * own screen. A panel is popped out to be read BESIDE the app, which on a two-monitor desk means the other
-     * monitor; until the desktop's shape could be asked for, the reader carried it there by hand every time. */
-    it(`opens on the screen the app is not on`, () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`second-screen-panel`, `Panel`, size);
-        const open = vi.spyOn(window, `open`).mockReturnValue(null);
-
-        popout.popOut();
-
-        // Centred on the small monitor to the right, at the panel's own size — not centred on the app.
-        expect(open).toHaveBeenCalledWith(expect.any(String), `second-screen-panel`, `popup=1,width=500,height=400,left=3270,top=320`);
-        open.mockRestore();
-    });
-
-    /* The frame the reader left the window in still wins — where they keep this window is a preference, not a
-     * default. What it no longer does is win VERBATIM: a window sized on the big screen and left on the small
-     * one reopens cut down to the small one, instead of coming back with its own edges off the display. */
-    it(`shrinks a remembered frame to the monitor it reopens on`, () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`oversized-panel`, `Panel`, size);
-        const win = fakeWindow(`oversized-panel`); // 900×1100 at 2200,180 — mostly on the small monitor
-        adopt(`oversized-panel`, win);
-        unload(win);
-
-        const open = vi.spyOn(window, `open`).mockReturnValue(null);
-        popout.popOut();
-
-        // Too tall for the 1040 the small screen has, and starting left of it: capped and shoved fully onto it.
-        expect(open).toHaveBeenCalledWith(expect.any(String), `oversized-panel`, `popup=1,width=900,height=1040,left=2560,top=0`);
-        open.mockRestore();
-    });
-
-    it(`re-centres a frame remembered on a monitor that is no longer there`, () => {
-        desk.screens = [BIG];
-        localStorage.setItem(`ui-popout-frame-unplugged-panel`, `6000,180,900,1100`);
-        const popout = createPopout(`unplugged-panel`, `Panel`, size);
-        const open = vi.spyOn(window, `open`).mockReturnValue(null);
-
-        popout.popOut();
-
-        expect(open).toHaveBeenCalledWith(expect.any(String), `unplugged-panel`, `popup=1,width=500,height=400,left=262,top=184`);
-        open.mockRestore();
-    });
-
-    /* The frame the reader left it in must never drag the window back on top of the app. Popping the panel out
-     * is asking to read it BESIDE the app: once it lands on the app's own screen, "where I last left it" has
-     * stopped describing a preference and started describing an accident — the browser clamped the window, or
-     * the reader shoved it aside once — and honouring it turns every later pop-out into the same accident. */
-    it(`opens on the other screen even when it was last closed on the app's own`, () => {
-        desk.screens = [BIG, SMALL];
-        localStorage.setItem(`ui-popout-frame-drifted-panel`, `300,200,800,600`); // squarely on the app's screen
-        const popout = createPopout(`drifted-panel`, `Panel`, size);
-        const open = vi.spyOn(window, `open`).mockReturnValue(null);
-
-        popout.popOut();
-
-        // The other monitor, at the size it was last left — the size is the part of that frame worth keeping.
-        expect(open).toHaveBeenCalledWith(expect.any(String), `drifted-panel`, `popup=1,width=800,height=600,left=3120,top=220`);
-        open.mockRestore();
-    });
-
-    /* WHAT WINDOW.OPEN'S FOUR NUMBERS ACTUALLY ARE: a request. A browser is free to ignore them — and silently
-     * does, clamping the window to the screen the page is on, or dropping bounds handed to a window that is
-     * still being created. Neither says so; the window just opens on the wrong monitor. */
-    it(`hands the frame to the window again when the browser ignored it`, async () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`ignored-frame-panel`, `Panel`, size);
-        const win = fakeWindow(`ignored-frame-panel`);
-        win.screenX = 100; // where it actually opened: the app's screen, not the one it was sent to
-        win.screenY = 100;
-        win.outerWidth = 500;
-        win.outerHeight = 400;
-        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
-
-        popout.popOut();
-        await vi.advanceTimersByTimeAsync(0);
-
-        expect(win.moveTo).toHaveBeenCalledWith(3270, 320);
-
-        // Still on the wrong screen, so it is asked again — twice, a frame apart, and then left alone. A window
-        // manager that refuses to move a window refuses every time, and a placement that keeps trying twitches.
-        await vi.advanceTimersByTimeAsync(1000);
-        expect(win.moveTo).toHaveBeenCalledTimes(3);
-        open.mockRestore();
-    });
-
-    it(`stops asking the moment the window lands on the right screen`, async () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`landing-panel`, `Panel`, size);
-        const win = fakeWindow(`landing-panel`);
-        win.screenX = 100;
-        win.screenY = 100;
-        win.outerWidth = 500;
-        win.outerHeight = 400;
-        // A window that accepts the bounds it is handed, which is the ordinary case.
-        win.moveTo.mockImplementation((left: number, top: number) => {
-            win.screenX = left;
-            win.screenY = top;
-        });
-        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
-
-        popout.popOut();
-        await vi.advanceTimersByTimeAsync(1000);
-
-        expect(win.moveTo).toHaveBeenCalledTimes(1);
-        expect(win.moveTo).toHaveBeenCalledWith(3270, 320);
-        open.mockRestore();
-    });
-
-    // A window that outlived a page reload is one the reader has already placed. Shoving it back to a default is
-    // the same rudeness as leaving it on the wrong screen, in the other direction.
-    it(`leaves a window it did not just open where the reader put it`, () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`readopted-frame-panel`, `Panel`, size);
-        const win = fakeWindow(`readopted-frame-panel`);
-
-        adopt(`readopted-frame-panel`, win); // the keeper of a window from before this page's load
-
-        expect(popout.poppedOut.value).toBe(true);
-        expect(win.moveTo).not.toHaveBeenCalled();
-        expect(win.resizeTo).not.toHaveBeenCalled();
-    });
-
-    /* THE FIRST POP-OUT OF ALL. The desktop's shape is a permission, the permission is answered in human time,
-     * and a window.open that waits on it has spent its click and is blocked as a popup. So the window opens
-     * where one screen's worth of information allows, and moves the moment the reader agrees — which is the last
-     * time any of this is asked. */
-    it(`moves the window it just opened once the desktop's shape is granted`, async () => {
-        const popout = createPopout(`granting-panel`, `Panel`, size);
-        const win = fakeWindow(`granting-panel`);
-        const open = vi.spyOn(window, `open`).mockReturnValue(win as unknown as Window);
-        desk.onLearn = () => {
-            desk.screens = [BIG, SMALL];
-        };
-
-        popout.popOut();
-
-        // Opened blind: centred on the app, the only screen the page could measure at that instant.
-        expect(open).toHaveBeenCalledWith(expect.any(String), `granting-panel`, `popup=1,width=500,height=400,left=262,top=184`);
-
-        await vi.advanceTimersByTimeAsync(0);
-
-        // …and carried to the other monitor as soon as the answer lands. Shrunk before it is moved: a window
-        // still at its old size cannot be positioned inside a smaller screen.
-        expect(win.resizeTo).toHaveBeenCalledWith(500, 400);
-        expect(win.moveTo).toHaveBeenCalledWith(3270, 320);
-        open.mockRestore();
-    });
-
-    // Growing the window to fit a pane the panel has just added — measured against the screen the window is
-    // ACTUALLY on, which is the only way a window living on the second monitor gets to widen at all.
-    it(`widens a window on the second screen up to that screen's edge`, () => {
-        desk.screens = [BIG, SMALL];
-        const popout = createPopout(`widening-panel`, `Panel`, size);
-        const win = fakeWindow(`widening-panel`);
-        win.screenX = 2700;
-        win.screenY = 100;
-        win.outerWidth = 900;
-        win.outerHeight = 800;
-        adopt(`widening-panel`, win);
-
-        popout.fit(1500);
-        expect(win.resizeTo).toHaveBeenCalledWith(1500, 800);
-
-        // Past the right edge of that monitor, so it widens as far as it can rather than hanging off it.
-        win.resizeTo.mockClear();
-        popout.fit(3000);
-        expect(win.resizeTo).toHaveBeenCalledWith(1780, 800);
     });
 
     it(`syncs dynamically added style tags in document.head to pop-out documents`, async () => {
