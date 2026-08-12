@@ -11,7 +11,7 @@ import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { CAPABILITIES, ENVIRONMENT, PANELS, SECRETS_INVENTORY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The sandbox's unified capability manifest (.intentic/capabilities.json), read/written via the daemon's
@@ -19,7 +19,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * provision flow. Presence of a kind = it's active (DevOps present ⇒ the intent + desired-state operator panels
  * appear in the sidebar). */
 
-const QUERY_KEY = sandboxKey(`capabilities`);
+const QUERY_KEY = CAPABILITIES.of();
 
 // Named for the background loader (composables/prefetch), which warms the "+" view's list into the same entry
 // this reads.
@@ -54,7 +54,7 @@ export function useCapabilitySecret() {
         onSuccess: async () => {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
-                queryClient.invalidateQueries({ queryKey: sandboxKey(`secrets`, `inventory`) }),
+                queryClient.invalidateQueries({ queryKey: SECRETS_INVENTORY.of() }),
             ]);
         },
     });
@@ -71,8 +71,8 @@ export function useCapabilities() {
         // Three disjoint caches, no ordering — refetch them concurrently.
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
-            queryClient.invalidateQueries({ queryKey: sandboxKey(`environment`) }),
-            queryClient.invalidateQueries({ queryKey: sandboxKey(`panels`) }),
+            queryClient.invalidateQueries({ queryKey: ENVIRONMENT.of() }),
+            queryClient.invalidateQueries({ queryKey: PANELS.of() }),
         ]);
     };
 

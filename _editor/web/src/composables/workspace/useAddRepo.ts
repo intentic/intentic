@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { panelsKey } from "../extensions/usePanels";
+import { GIT_CHANGES, GIT_REPOS, WORKSPACE_TREE } from "../queryKeys";
 import { repoNameFromUrl } from "./repoName";
 
 /* CLONING A REPOSITORY INTO THE WORKSPACE — the daemon has offered this since the workspace did (POST
@@ -36,10 +37,10 @@ export function useAddRepo() {
         try {
             await sandboxJson(`/workspace/repos`, jsonBody(`POST`, { name, cloneUrl: url }));
             await Promise.all([
-                queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
+                queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }),
                 queryClient.invalidateQueries({ queryKey: panelsKey }),
-                queryClient.invalidateQueries({ queryKey: [`git`, `repos`] }),
-                queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }),
+                queryClient.invalidateQueries({ queryKey: GIT_REPOS.every }),
+                queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
             ]);
             return true;
         } catch (cause) {

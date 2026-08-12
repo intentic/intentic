@@ -1,7 +1,7 @@
 import type { WorkspaceState } from "@intentic-app/api-contract";
 import { computed } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { WORKSPACE_STATE } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
@@ -30,7 +30,7 @@ const readJson = async (path: string): Promise<unknown> => {
 
 export function useWorkspaceState() {
     const { query, error } = useSandboxQuery({
-        queryKey: sandboxKey(`workspace`, `state`),
+        queryKey: WORKSPACE_STATE.of(),
         queryFn: async (): Promise<WorkspaceState> => {
             const [graph, status] = await Promise.all([readJson(`desired-state.json`), readJson(`status.json`)]);
             return projectWorkspaceState(graph, status);

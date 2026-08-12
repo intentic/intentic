@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { devFillSet } from "../devFill";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { SECRETS, SECRETS_INVENTORY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* User-supplied env-var secrets (Cloudflare token, GitHub PAT, another-host SSH key), written straight to the
@@ -22,7 +22,7 @@ export const reveal = async (key: string): Promise<string> =>
 
 export function useSecretKeys() {
     const { query } = useSandboxQuery({
-        queryKey: sandboxKey(`secrets`),
+        queryKey: SECRETS.of(),
         // 412 until DevOps is active — treat as "no keys yet" rather than surfacing an error.
         queryFn: async (): Promise<string[]> => {
             try {
@@ -48,7 +48,7 @@ const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
 
 export function useSecretInventory() {
     const queryClient = useQueryClient();
-    const inventoryKey = sandboxKey(`secrets`, `inventory`);
+    const inventoryKey = SECRETS_INVENTORY.of();
     const { query } = useSandboxQuery({ queryKey: inventoryKey, queryFn: fetchInventory });
     const inventory = computed<SecretInventoryEntry[]>(() => query.data.value ?? []);
     return {
@@ -73,7 +73,7 @@ export function useSecretInventory() {
 const AMBIENT_STALE_MS = 5 * 60 * 1000;
 export function useMissingSecretCount() {
     const { query } = useSandboxQuery({
-        queryKey: sandboxKey(`secrets`, `inventory`),
+        queryKey: SECRETS_INVENTORY.of(),
         queryFn: fetchInventory,
         staleTime: AMBIENT_STALE_MS,
         refetchOnWindowFocus: false,
@@ -88,8 +88,8 @@ export function useSecrets() {
     const queryClient = useQueryClient();
 
     const invalidate = (): void => {
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`secrets`) });
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`secrets`, `inventory`) });
+        void queryClient.invalidateQueries({ queryKey: SECRETS.of() });
+        void queryClient.invalidateQueries({ queryKey: SECRETS_INVENTORY.of() });
     };
 
     const set = useMutation({

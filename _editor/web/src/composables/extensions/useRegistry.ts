@@ -1,7 +1,7 @@
 import type { Marketplace } from "@intentic-app/api-contract";
 import { OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { computed, ref } from "vue";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { REGISTRY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { browseMarketplace } from "./useCapabilities";
 
@@ -42,7 +42,7 @@ export function useRegistry({ read = true }: { read?: boolean } = {}) {
     const { query, error } = useSandboxQuery<Marketplace>({
         // The token is deliberately NOT in the key: it is a credential for the same registry, not a different
         // one, and keying on it would put it in the query cache's index — which is persisted.
-        queryKey: computed(() => sandboxKey(`registry`, url.value)),
+        queryKey: computed(() => REGISTRY.of(url.value)),
         queryFn: () => browseMarketplace(url.value, token.value === `` ? undefined : token.value),
         enabled: computed(() => read && url.value.length > 0),
         staleTime: 5 * 60_000,

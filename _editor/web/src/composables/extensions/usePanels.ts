@@ -2,7 +2,7 @@ import { PanelsListSchema, type PanelSummary } from "@intentic-app/api-contract"
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { PANELS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
@@ -16,7 +16,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * server left running for a week used to keep every open tab asking every four seconds for that flip long after
  * it had happened. */
 
-const QUERY_KEY = sandboxKey(`panels`);
+const QUERY_KEY = PANELS.of();
 
 // Named for the background loader (composables/prefetch): the rail's extension tiles are detected from these
 // facts, so having them early is what lets a tile open filled in rather than empty.

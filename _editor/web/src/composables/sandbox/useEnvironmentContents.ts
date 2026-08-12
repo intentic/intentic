@@ -1,7 +1,7 @@
 import { EnvironmentContentsSchema, type EnvironmentItem } from "@intentic-app/api-contract";
 import { computed, ref } from "vue";
 import { SandboxHttpError, sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { ENVIRONMENT_CONTENTS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* THE SANDBOX'S CONTENTS — what it has, grouped by whose decision put it there.
@@ -23,7 +23,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * there is, and it is a reliable one.
  */
 
-const ENVIRONMENT_CONTENTS_KEY = sandboxKey(`environment-contents`);
+const ENVIRONMENT_CONTENTS_KEY = ENVIRONMENT_CONTENTS.of();
 
 // The order the groups are read in: what an agent asked for and the owner approved, then the price of the
 // capabilities they turned on, then what nobody chose. Narrowest decision first — that is the one they revisit.

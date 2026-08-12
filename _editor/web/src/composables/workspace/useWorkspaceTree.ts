@@ -6,12 +6,13 @@ import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { readFileWindow } from "./fileWindow";
 import { resetEmptyDirsState } from "./useEmptyDirs";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { resetUploadQueue } from "./useUploadQueue";
 import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "./workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
+import { WORKSPACE_TREE } from "../queryKeys";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a
@@ -141,7 +142,7 @@ const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${
  *
  * Named out here for the background loader (composables/prefetch), which warms the tree into the entry the
  * explorer reads — and which must read the scope live, since a scope switch is a different tree entirely. */
-export const workspaceTreeKey = (): unknown[] => sandboxKey(`workspace`, `tree`, workspaceAgent.value ?? `shared`);
+export const workspaceTreeKey = (): unknown[] => WORKSPACE_TREE.of(workspaceAgent.value ?? `shared`);
 
 export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
     sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`);
@@ -160,9 +161,9 @@ export function useWorkspaceTree() {
 
     // Every user file mutation below refreshes the tree immediately (no waiting on the file-watch push); the
     // shared query key means any open explorer repaints. targetDir/paths are root-relative — the same space the
-    // tree and file routes speak. RAW prefix, not sandboxKey(): the sandbox id is APPENDED to query keys, so
-    // ["workspace","tree"] prefix-matches every ["workspace","tree","all"|"filtered", id] (see useSandbox).
-    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+    // tree and file routes speak. `.every`, not `.of()`: a tree key carries the focused scope before the
+    // appended sandbox id, so only the family-wide prefix reaches every cached variant (see queryKeys).
+    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
     // The editor's text save persists verbatim through the same upload route drag-drop uses (bulk drag-drop
     // uploads go through useUploadQueue). An emptied buffer writes an empty file. The tree refetch is fired but
     // NOT awaited: the caller must markSaved before the daemon's ~250ms file-watch echo re-reads the file, and a

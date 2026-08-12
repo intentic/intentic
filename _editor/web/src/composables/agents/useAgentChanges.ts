@@ -13,7 +13,7 @@ import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { useCodeStats } from "../workspace/useCodeStats";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { AGENTS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
 import { blockersOf } from "./conflictResolution";
@@ -56,7 +56,7 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
  * the same cache entry the panel later reads, rather than a parallel one. Both halves have to be shared for
  * that to hold: the key (or the warm lands somewhere the panel never looks) and the request (or the two
  * disagree the first time one of them changes). */
-export const agentChangesKey = (agentId: string): unknown[] => sandboxKey(`agents`, agentId, `diff`);
+export const agentChangesKey = (agentId: string): unknown[] => AGENTS.of(agentId, `diff`);
 
 export const fetchAgentChanges = (agentId: string): Promise<AgentChangesResponse> =>
     sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId)}/diff`);

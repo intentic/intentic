@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { PERSONAS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The sandbox's named personas (.intentic/personas.json), read/written via the daemon's /personas routes.
@@ -14,7 +14,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * signed into — because a card that cannot act yet is the ordinary state of a freshly cloned workspace, and a
  * surface that showed only the cards would present a persona as working when it is one login short. */
 
-const QUERY_KEY = sandboxKey(`personas`);
+const QUERY_KEY = PERSONAS.of();
 
 const fetchPersonas = async (): Promise<{ personas: Persona[]; connected: string[] }> => PersonasListSchema.parse(await sandboxJson(`/personas`));
 

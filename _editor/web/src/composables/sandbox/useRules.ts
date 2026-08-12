@@ -2,7 +2,7 @@ import { type Rule, type RuleFirings, RuleFiringsSchema } from "@intentic-app/ap
 import { computed } from "vue";
 import { NAMED_RULES } from "./rules";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { RULE_FIRINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 import { useSandboxSettings } from "./useSandboxSettings";
 
@@ -17,7 +17,7 @@ import { useSandboxSettings } from "./useSandboxSettings";
  * The rules live in the sandbox settings object, so everything here rides useSandboxSettings' one read, one
  * optimistic write and one "the daemon dropped a field" warning rather than adding a second of each. */
 
-const FIRINGS_KEY = sandboxKey(`rule-firings`);
+const FIRINGS_KEY = RULE_FIRINGS.of();
 
 export function useRules() {
     const { settings, patch } = useSandboxSettings();

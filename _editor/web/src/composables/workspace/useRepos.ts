@@ -1,7 +1,7 @@
 import type { GitReposResponse } from "@intentic-app/api-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { GIT_REPOS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* Every real git repo under /work — "root" (the /work repo itself, implicit) plus each discovered nested repo,
@@ -10,7 +10,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 export function useRepos() {
     const { query } = useSandboxQuery({
-        queryKey: sandboxKey(`git`, `repos`),
+        queryKey: GIT_REPOS.of(),
         queryFn: () => sandboxJson<GitReposResponse>(`/git/repos`),
     });
     const nested = computed<readonly string[]>(() => query.data.value?.repos ?? []);

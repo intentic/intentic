@@ -1,7 +1,7 @@
 import { type UsageRollupRow, UsageRollupSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { USAGE_ROLLUP } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The active sandbox's spend ledger, rolled up by the daemon (usage/usage-store.ts) — the one read behind the
@@ -15,7 +15,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * ponytail: if a multi-year sandbox ever makes that payload matter, fetch `from` = the previous window's start
  * and drop All-time to a separate query — the bounds are already on the contract. */
 
-const QUERY_KEY = sandboxKey(`usage-rollup`);
+const QUERY_KEY = USAGE_ROLLUP.of();
 
 export function useUsage() {
     const { query, error } = useSandboxQuery({

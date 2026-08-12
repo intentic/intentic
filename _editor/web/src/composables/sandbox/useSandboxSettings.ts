@@ -3,14 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxJson } from "./sandboxClient";
 import { jsonBody } from "./jsonBody";
-import { sandboxKey } from "./useSandbox";
+import { SANDBOX_SETTINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The active sandbox's agent settings (.intentic/settings.json), read/written via the daemon's /settings routes.
  * All per-sandbox agent toggles (iq search, hashline edits, output cleaning, prompt stability, …). `save`
  * overwrites the whole object; the next turn's streamAgent reads it to gate each behavior. */
 
-const QUERY_KEY = sandboxKey(`settings`);
+const QUERY_KEY = SANDBOX_SETTINGS.of();
 
 /* MODULE-LEVEL, not per-caller: this describes the DAEMON — that it is older than this app and silently drops a
  * field it doesn't know — so every settings surface is entitled to say so no matter which one wrote. The Agent

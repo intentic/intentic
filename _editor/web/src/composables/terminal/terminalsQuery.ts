@@ -3,7 +3,7 @@ import { computed, type ComputedRef, ref } from "vue";
 import type { z } from "zod";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { TERMINALS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The ONE session list every surface reads — the rail's activity badge, the background-process rows, AND the
@@ -24,7 +24,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * keeps streaming into a strip that no longer shows it. A pending entry is this browser's claim on a name it
  * just created; it retires the moment the daemon lists it, or when the session ends. */
 
-const QUERY_KEY = sandboxKey(`terminals`);
+const QUERY_KEY = TERMINALS.of();
 
 export type TerminalSession = z.infer<typeof TerminalSessionSchema>;
 

@@ -2,7 +2,7 @@ import { type Computer, type MachineSandboxOp, ComputersListSchema, SyncStatusSc
 import { computed, type ComputedRef } from "vue";
 import { sandboxError, sandboxJson, sandboxRequest } from "./sandboxClient";
 import { readIntenticLines } from "../intenticStream";
-import { sandboxKey } from "./useSandbox";
+import { COMPUTERS, SYNC_HEALTH } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* THE COMPUTERS ON THE OTHER END OF THIS SANDBOX — every machine the daemon can see, however it can see it
@@ -15,7 +15,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * Polled rather than pushed: the facts are a snapshot of somebody's laptop and move in seconds at most, and the
  * daemon caches the half it has to pull, so a tab left open costs the far end nothing beyond that cache's TTL. */
 
-const QUERY_KEY = sandboxKey(`computers`);
+const QUERY_KEY = COMPUTERS.of();
 const POLL_MS = 10_000;
 
 export function useComputers(): { computers: ComputedRef<Computer[]>; error: ComputedRef<string | undefined>; refetch: () => void } {
@@ -123,7 +123,7 @@ const HEALTH_POLL_MS = 60_000;
 
 export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; contendedPorts: ComputedRef<number[]> } {
     const { query } = useSandboxQuery({
-        queryKey: sandboxKey(`sync-health`),
+        queryKey: SYNC_HEALTH.of(),
         queryFn: async () => SyncStatusSchema.parse(await sandboxJson(`/system/sync`)),
         refetchInterval: HEALTH_POLL_MS,
     });

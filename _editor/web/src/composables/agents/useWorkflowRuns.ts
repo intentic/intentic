@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { WORKFLOW_DESIGNS, WORKFLOW_RUNS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { blocked, type FleetLane } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
@@ -28,8 +29,8 @@ import type { FleetAgent } from "./useAgents";
 // Shared by every caller, because vue-query keys the cache by them: the board and the composer each build
 // their own query objects and land on ONE fetch between them. The daemon's file-change push invalidates by
 // these exact names — see WORKSPACE_STATE_FILES.
-const runsKey = [`workflow-runs`] as const;
-const designsKey = [`workflows`] as const;
+const runsKey = WORKFLOW_RUNS.every;
+const designsKey = WORKFLOW_DESIGNS.every;
 
 /* WHERE A RUN SITS ON THE BOARD — the same three lanes as an agent, decided from the run's own state, so a
  * board sorted by "what needs me / what is moving / what is done" keeps meaning what it says.

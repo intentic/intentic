@@ -1,7 +1,7 @@
 import type { WorkspaceModule, WorkspaceModules } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { WORKSPACE_MODULES } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* Every repo's modules AS /work HAS THEM — the package dirs the workspace's Changes panel groups its rows
@@ -26,7 +26,7 @@ const MODULES_STALE_MS = 5 * 60_000;
 
 // Named for the background loader (composables/prefetch): the Changes panel groups its rows by this, so having
 // it early is the difference between a review that groups on arrival and one that regroups a beat later.
-export const modulesKey = (): unknown[] => sandboxKey(`workspace`, `modules`);
+export const modulesKey = (): unknown[] => WORKSPACE_MODULES.of();
 export const fetchModules = (): Promise<WorkspaceModules> => sandboxJson<WorkspaceModules>(`/workspace/modules`);
 
 export function useModules() {

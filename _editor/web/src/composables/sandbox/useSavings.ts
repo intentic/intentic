@@ -1,7 +1,7 @@
 import { type DayWindowQuery, type SavingsReport, SavingsReportSchema } from "@intentic/sandbox-contract";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { SANDBOX_SAVINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* What each of this sandbox's token-reduction mechanisms was worth, from the daemon's /settings/savings route:
@@ -16,7 +16,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
 
 export function useSavings(window: MaybeRefOrGetter<DayWindowQuery>) {
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => sandboxKey(`settings-savings`, toValue(window).from ?? `all`, toValue(window).to)),
+        queryKey: computed(() => SANDBOX_SAVINGS.of(toValue(window).from ?? `all`, toValue(window).to)),
         queryFn: async (): Promise<SavingsReport> => {
             const { from, to } = toValue(window);
             const params = new URLSearchParams({ ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) });

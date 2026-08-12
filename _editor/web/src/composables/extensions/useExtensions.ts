@@ -10,14 +10,14 @@ import {
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { EXTENSIONS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The installed extensions (extension-kind capabilities resolved to their manifests) for the UI — the Sandbox
  * hub's Extensions tab. The extension host's boot does its own one-shot fetch of the same route (loader.ts);
  * this query exists for reactive rendering, not for loading code. */
 
-const QUERY_KEY = sandboxKey(`extensions`);
+const QUERY_KEY = EXTENSIONS.of();
 
 // What a click would approve — the version story and the mechanical powers diff, read from a staged clone.
 // Module-scoped (unlike the verbs below) because it reads nothing back into the query.

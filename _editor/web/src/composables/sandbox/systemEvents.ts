@@ -4,6 +4,7 @@ import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { desyncAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
+import { GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
@@ -27,7 +28,7 @@ import { useSandbox } from "./useSandbox";
 // drag-dropped repo used to fire ~15 of them in 9 seconds. A second of staleness is imperceptible next to that.
 const CHANGES_REFRESH_MS = 1000;
 
-const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }), CHANGES_REFRESH_MS);
+const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }), CHANGES_REFRESH_MS);
 
 // Only to tell whether a workspace-replaced frame concerns the sandbox the user is LOOKING at — the storage
 // sweep is safe for any sandbox's frame, but the live re-scope must not blank the view of a different one.
@@ -128,7 +129,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `reposChanged`:
             // The rail's panel list is derived from the repo set. The watcher never sees .git paths, so no
             // workspaceChanged batch could carry this — the daemon diffs its own discovery instead.
-            void queryClient.invalidateQueries({ queryKey: [`panels`] });
+            void queryClient.invalidateQueries({ queryKey: PANELS.every });
             return;
         case `refsChanged`: {
             /* A commit, checkout, branch, tag or rebase landed — usually the AGENT's, out-of-band, with no HTTP
@@ -142,7 +143,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
              * The buffers are dropped only when the worktree actually moved, which `workspaceChanged` has
              * already told us: a plain commit leaves the tree identical and must not cost the user an edit. */
             refreshChanges();
-            void queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
+            void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
             if (worktreeMovedRecently()) {
                 resetEditBuffers();
             }

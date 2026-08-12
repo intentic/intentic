@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
 import { useEndpoint } from "./useEndpoint";
-import { sandboxKey } from "./useSandbox";
+import { BUNDLE_EXPORTS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* THE EXPORTS THAT EXIST — read off the daemon's export directory, never remembered in a component.
@@ -19,7 +19,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * finished bundle does not change, so the poll stops entirely and the card costs one request per open.
  */
 
-export const BUNDLE_EXPORTS_KEY = sandboxKey(`bundle-exports`);
+export const BUNDLE_EXPORTS_KEY = BUNDLE_EXPORTS.of();
 
 // Fast enough that a growing bundle looks alive, slow enough to be free next to the packing itself.
 const PACKING_POLL_MS = 2_000;

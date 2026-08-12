@@ -9,7 +9,8 @@ import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
+import { AGENTS } from "../queryKeys";
 
 /* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
  * `agents` roster snapshots (last frame wins, the presence pattern — see useSandboxLiveness) and an explicit
@@ -124,7 +125,7 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
     const held = new Map(registry.value.map((agent) => [agent.id, agent.status]));
     for (const agent of agents) {
         if (held.get(agent.id) !== agent.status) {
-            void queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, agent.id, `diff`) });
+            void queryClient.invalidateQueries({ queryKey: AGENTS.of(agent.id, `diff`) });
             /* AND THE TRANSCRIPT WITH IT, on exactly the same signal and for the same reason one step further
              * along. The daemon writes a conversation's record as each turn SETTLES, so a status change is the
              * one moment that record can have grown — and the copy this browser warmed ahead of the click was

@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
+import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../queryKeys";
 
 /* Live workspace-change state, fed from the daemon's /events SSE (useSandboxLiveness) and read by the tree
  * (auto-invalidate), the review lists' module grouping (auto-invalidate), the file viewer (re-read the open file),
@@ -22,10 +23,10 @@ const TREE_REFRESH_MS = 1000;
 // same continuous batches an install or a scaffold produces.
 const MODULES_REFRESH_MS = 1000;
 
-// RAW prefix, not sandboxKey(): the sandbox id is APPENDED to query keys, so ["workspace","tree"] prefix-matches
-// every ["workspace","tree","all"|"filtered", id] (see useSandbox).
-const refreshTree = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), TREE_REFRESH_MS);
-const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`workspace`, `modules`] }), MODULES_REFRESH_MS);
+// `.every`, not `.of()`: a tree key carries the focused scope before the appended sandbox id, so only the
+// family-wide prefix reaches every cached variant (see queryKeys).
+const refreshTree = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), TREE_REFRESH_MS);
+const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: WORKSPACE_MODULES.every }), MODULES_REFRESH_MS);
 
 /* Could this batch have changed WHICH PACKAGES EXIST? A manifest is the only file that decides that (see the
  * daemon's workspace/modules.ts), so an ordinary source write costs nothing here — which is what lets the

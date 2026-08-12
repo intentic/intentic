@@ -8,7 +8,7 @@ import { activityIcon } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
-import { sandboxKey } from "../composables/sandbox/useSandbox";
+import { SUBAGENT_TRANSCRIPT } from "../composables/queryKeys";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import ChatToolCard from "../chat/ChatToolCard.vue";
@@ -183,7 +183,7 @@ onBeforeUnmount(() => clearInterval(ticker));
  * live one out of its parent turn's frame log and a settled one out of whichever store ran it, so this side needs
  * to know neither (see sessions/subagent-transcript.ts). */
 const transcript = useQuery({
-    queryKey: computed(() => sandboxKey(`subagent-transcript`, selected.value ?? ``)),
+    queryKey: computed(() => SUBAGENT_TRANSCRIPT.of(selected.value ?? ``)),
     enabled: computed(() => selected.value !== undefined),
     refetchInterval: computed(() => (current.value !== undefined && subagentLive(current.value) ? TRANSCRIPT_POLL_MS : false)),
     queryFn: async (): Promise<RestoredMessage[]> => {

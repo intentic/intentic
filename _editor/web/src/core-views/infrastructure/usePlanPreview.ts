@@ -6,7 +6,7 @@ import { useSecretKeys } from "../../composables/secrets/useSecrets";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { sandboxKey } from "../../composables/sandbox/useSandbox";
+import { SECRETS, WORKSPACE_STATE } from "../../composables/queryKeys";
 import { describeProvisionError } from "./provisionError";
 
 /* The pre-apply change preview: run `intentic deploy resolve` then `intentic deploy plan` in the sandbox (read + diff, nothing
@@ -94,8 +94,8 @@ export function usePlanPreview() {
         }
         // resolve rewrote desired-state.json and named its secrets — refresh both the graph read-model and the
         // secrets query (the SSH key is written out-of-band at host-enroll, so the gate must read fresh keys).
-        await queryClient.refetchQueries({ queryKey: sandboxKey(`secrets`) });
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`workspace`, `state`) });
+        await queryClient.refetchQueries({ queryKey: SECRETS.of() });
+        void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
     };
 
     // plan (SSE) → per-resource create/update/noop verdicts + the orphan list, narrating as it reads.

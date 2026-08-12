@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { globalTerminalSource, useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { sandboxKey } from "../../composables/sandbox/useSandbox";
+import { DEPLOYMENTS, INVENTORY, WORKSPACE_STATE } from "../../composables/queryKeys";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
 
@@ -53,9 +53,9 @@ export function useApplyProgress() {
     // Refresh the world once apply → adopt has changed it: the desired-state read-model, live deployments, and
     // the inventory (adopt syncs CI secrets that can flip a deployment live).
     const refreshWorld = (): void => {
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`workspace`, `state`) });
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`deployments`) });
-        void queryClient.invalidateQueries({ queryKey: sandboxKey(`inventory`) });
+        void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
+        void queryClient.invalidateQueries({ queryKey: DEPLOYMENTS.of() });
+        void queryClient.invalidateQueries({ queryKey: INVENTORY.of() });
     };
 
     const stopWatching = (): void => {

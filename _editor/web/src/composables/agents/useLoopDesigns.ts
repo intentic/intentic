@@ -2,6 +2,7 @@ import { type LoopDesign, LoopDesignSchema, LoopDesignsListSchema } from "@inten
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { LOOP_DESIGNS } from "../queryKeys";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
@@ -21,7 +22,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 // Shared, because vue-query caches by it and every composer in the app lands on one fetch between them. The
 // daemon's file-change push invalidates by this exact name.
-const designsKey = [`loop-designs`] as const;
+const designsKey = LOOP_DESIGNS.every;
 
 export function useLoopDesigns() {
     const queryClient = useQueryClient();

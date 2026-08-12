@@ -1,7 +1,7 @@
 import { SubagentsListSchema, type SubagentSession } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { SUBAGENTS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* THE ONE ROSTER of the agents this sandbox's agents started — shared by the rail tile and the Subagents area,
@@ -15,7 +15,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * daemon rate-limits it to roughly the interval this used to poll on; what changes is that a quiet sandbox now
  * asks nothing at all, and a busy one repaints on the child's clock rather than on ours. */
 
-const QUERY_KEY = sandboxKey(`subagents`);
+const QUERY_KEY = SUBAGENTS.of();
 
 // Named for the background loader (composables/prefetch), which warms this list into the very entry the tile
 // and the area read.

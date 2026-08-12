@@ -6,6 +6,7 @@ import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../page
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { WORKSPACE_TREE } from "../queryKeys";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 
 // The workspace upload queue: drops (and file-input picks) funnel through here instead of a one-shot spinner, so a
@@ -430,9 +431,9 @@ const run = async (): Promise<void> => {
             void run();
         } else if (!signal.aborted) {
             finished.value = true;
-            // Refresh the tree once the queue drains. The RAW prefix matches every ["workspace","tree", …, id]
-            // query — sandboxKey would append the id and break the prefix match (see useSandbox).
-            await queryClient?.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+            // Refresh the tree once the queue drains. `.every` rather than `.of(scope)`: a drop can land files
+            // outside the focused scope, so every cached tree variant is stale, not just the one on screen.
+            await queryClient?.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
             // Then make the tree usable: the imported project's dependencies. Last, so an install can never
             // delay the files appearing, and after the abort checks, so a cancelled drop installs nothing.
             await runInstall();

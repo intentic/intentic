@@ -4,7 +4,7 @@ import { computed, type ComputedRef, type Ref } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "./sandboxClient";
 import { jsonBody } from "./jsonBody";
-import { sandboxKey } from "./useSandbox";
+import { CAPABILITIES, VPN } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The sandbox's VPN tunnels, live, from the daemon's /vpn routes. A VPN is ADDED as a capability (credentials,
@@ -15,7 +15,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * The daemon reads every field back from the OS, so this is also how the UI stays truthful about tunnels the
  * AGENT dialled or dropped through its own `vpn` command — there is one state, not two. */
 
-const QUERY_KEY = sandboxKey(`vpn`);
+const QUERY_KEY = VPN.of();
 // A dial takes seconds and passes through "connecting"; poll while anything is mid-flight so the card settles
 // on its own. A steady list still refreshes on the slower default so an externally-dropped tunnel shows up.
 const TRANSIENT_POLL_MS = 2000;
@@ -50,10 +50,7 @@ export function useVpn(): {
     const invalidate = async (): Promise<void> => {
         // A VPN's capability row carries the same state under a different shape — refresh both so the
         // Capabilities page and the Status card never disagree about one tunnel.
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
-            queryClient.invalidateQueries({ queryKey: sandboxKey(`capabilities`) }),
-        ]);
+        await Promise.all([queryClient.invalidateQueries({ queryKey: QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CAPABILITIES.of() })]);
     };
 
     // POST + read the streamed dial, calling onLine per frame; throws with the daemon's message on an error

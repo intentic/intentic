@@ -9,11 +9,11 @@ vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
-    return {
-        useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
-        sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
-    };
+    return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
+// The scoping rule the key registry builds on, pinned to a fixed id so the assertions below can spell the whole
+// key out (activeSandbox is a leaf module — it needs no browser, only a predictable answer).
+vi.mock("../sandbox/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";

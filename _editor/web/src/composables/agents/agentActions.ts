@@ -7,10 +7,11 @@ import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 import { markAgentStarted } from "./firstRun";
 import { useAgents } from "./useAgents";
+import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 
 /* The fleet's mutations, addressed by agent id — the true source for both surfaces that invoke them: the
  * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
@@ -182,8 +183,8 @@ export const stopAgent = async (id: string): Promise<void> => {
 // history — invalidate all three so every surface converges. Three disjoint caches, no ordering.
 export const invalidateAgentAction = async (id: string): Promise<void> => {
     await Promise.all([
-        queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, id, `diff`) }),
-        queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }),
-        queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] }),
+        queryClient.invalidateQueries({ queryKey: AGENTS.of(id, `diff`) }),
+        queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
+        queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every }),
     ]);
 };

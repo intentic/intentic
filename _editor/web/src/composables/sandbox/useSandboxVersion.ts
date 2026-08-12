@@ -1,7 +1,7 @@
 import { InfoSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { SANDBOX_INFO } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 import { useEnvironment } from "./useEnvironment";
 
@@ -16,7 +16,7 @@ import { useEnvironment } from "./useEnvironment";
  * nothing left to silence. The fact wears a badge on the sandbox chip now, and a badge already goes quiet on
  * its own the moment it stops being true. */
 
-const INFO_KEY = sandboxKey(`info`);
+const INFO_KEY = SANDBOX_INFO.of();
 
 export function useSandboxVersion() {
     const { serverManaged, state: envState } = useEnvironment();

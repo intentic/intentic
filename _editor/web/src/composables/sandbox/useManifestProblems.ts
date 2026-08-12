@@ -1,7 +1,7 @@
 import { type ManifestProblemReport, ManifestProblemsSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { MANIFESTS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* WHAT THE SANDBOX COULDN'T READ IN ITS OWN SETTINGS FILES.
@@ -20,7 +20,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * the daemon's existing file watcher is what refreshes this. Fixing the typo on disk clears the notice by
  * itself: no polling, no dismiss button, nothing to go stale. */
 
-const QUERY_KEY = sandboxKey(`manifests`);
+const QUERY_KEY = MANIFESTS.of();
 
 export function useManifestProblems() {
     const { query } = useSandboxQuery({

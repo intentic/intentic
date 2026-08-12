@@ -3,8 +3,9 @@ import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { type ChatSession, useChat } from "../chat/useChat";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
 import { type FleetAgent, useAgents } from "./useAgents";
+import { AGENTS, SESSIONS } from "../queryKeys";
 
 /* Filter the fleet by what was SAID in it — the board's header field and the popped-out rail's.
  *
@@ -147,7 +148,7 @@ export function useAgentFilter() {
     const params = computed(() => `query=${encodeURIComponent(settled.value)}${matchCase.value ? `&caseSensitive=true` : ``}`);
 
     const fleetSearch = useQuery({
-        queryKey: computed(() => sandboxKey(`agents`, `search`, params.value)),
+        queryKey: computed(() => AGENTS.of(`search`, params.value)),
         queryFn: ({ signal }) => sandboxJson<AgentSearchResult>(`/agents/search?${params.value}`, { signal }),
         enabled,
         placeholderData: keepPreviousData,
@@ -159,7 +160,7 @@ export function useAgentFilter() {
      * what a popover in another corner of the app is showing.
      */
     const sessionSearch = useQuery({
-        queryKey: computed(() => sandboxKey(`sessions`, `search`, params.value)),
+        queryKey: computed(() => SESSIONS.of(`search`, params.value)),
         queryFn: ({ signal }) => sandboxJson<{ sessions: ChatSession[] }>(`/sessions?${params.value}`, { signal }),
         enabled,
         placeholderData: keepPreviousData,

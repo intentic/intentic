@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { SKILLS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 import { useSandboxSettings } from "./useSandboxSettings";
 
@@ -22,7 +22,7 @@ import { useSandboxSettings } from "./useSandboxSettings";
  * refetching afterwards, since a skill's row reads its enabled state from the daemon's join and not from the
  * settings object this patched. */
 
-const QUERY_KEY = sandboxKey(`skills`);
+const QUERY_KEY = SKILLS.of();
 
 export function useSkills() {
     const queryClient = useQueryClient();

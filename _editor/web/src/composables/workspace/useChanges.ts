@@ -15,12 +15,12 @@ import { useChat } from "../chat/useChat";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { outgoingWork } from "./outgoingWork";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { useCodeStats } from "./useCodeStats";
 import { resetEditBuffers } from "./useEditBuffers";
+import { GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos, including git's index: each repo
  * reports `staged` (index vs HEAD — what a bare commit would record) and `unstaged` (worktree vs index, plus
@@ -41,14 +41,14 @@ import { resetEditBuffers } from "./useEditBuffers";
 // stream: a background tab's turn lands into the same tree, and watching only the focused one meant the panel
 // went stale for exactly the turns the user wasn't watching. Module scope (like sandboxScope.ts), NOT inside
 // useChanges(): a watch installed from a component dies with that component's effect scope, and the /setup
-// round-trip unmounts the shell that calls useChanges() first. Prefix match: the real keys are
-// ["git","changes",<sandboxId ref>] / ["history","snapshots",<id>] (sandboxKey appends the id).
+// round-trip unmounts the shell that calls useChanges() first. `.every` because a background tab's turn can
+// have landed in another sandbox's tree, and only the family-wide prefix reaches it (see queryKeys).
 const { conversations } = useChat();
 const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.streaming.value).length);
 watch(turnsRunning, (now, was) => {
     if (now < was) {
-        void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
-        void queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
+        void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+        void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
     }
 });
 
@@ -171,7 +171,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
 const FILE_DIFF_GC_MS = 5 * 60 * 1000;
 
 export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
-    ...sandboxKey(`git`, `changes`),
+    ...GIT_CHANGES.of(),
     UNPERSISTED,
     `file-diff`,
     repo,
@@ -230,9 +230,9 @@ const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDi
     queryClient.fetchQuery(fileDiffQuery(repo, path, side));
 
 // The review set itself — named apart from the composable that observes it so the background loader can warm
-// the same entry rather than a parallel one. `sandboxKey("git","changes")` is also the PREFIX every file diff
+// the same entry rather than a parallel one. `GIT_CHANGES.of()` is also the PREFIX every file diff
 // above is filed under, which is what makes one invalidation drop the list and its diffs together.
-export const changesKey = (): unknown[] => sandboxKey(`git`, `changes`);
+export const changesKey = (): unknown[] => GIT_CHANGES.of();
 
 export const fetchChanges = (): Promise<GitChangesResponse> => sandboxJson<GitChangesResponse>(`/git/changes`);
 
@@ -310,11 +310,11 @@ const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
             },
         })),
         () => {
-            // Stale buffers would silently resurrect discarded files on save. RAW prefix for the tree — its keys
-            // carry an "all"/"filtered" discriminator before the appended sandbox id, so sandboxKey("workspace",
-            // "tree") would NOT prefix-match them (see useSandbox).
+            // Stale buffers would silently resurrect discarded files on save. `.every` for the tree — its keys
+            // carry the focused scope before the appended sandbox id, so `.of()` would NOT prefix-match them
+            // (see queryKeys).
             resetEditBuffers();
-            return Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
+            return Promise.all([queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), invalidateChanges()]);
         },
     );
 
@@ -342,7 +342,7 @@ const abortOperation = (repo: string): Promise<void> =>
         ],
         () => {
             resetEditBuffers();
-            return Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
+            return Promise.all([queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), invalidateChanges()]);
         },
     );
 
@@ -367,7 +367,7 @@ const stageGroups = (groups: readonly RepoPaths[], staged: boolean): Promise<voi
 // the next keystroke. fetch and push move refs the worktree never sees, so they need neither.
 const afterPull = async (): Promise<void> => {
     resetEditBuffers();
-    await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+    await queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
 };
 
 // Remote sync, per repo. Each reports a GitActionResult rather than throwing, so "won't fast-forward" or a
@@ -396,7 +396,7 @@ const syncRepo = (repo: string, action: "fetch" | "pull", label: string): Promis
                 },
             },
         ],
-        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
+        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
     );
 
 // The aggregate the panel's primary button fires once the commit box has nothing left to show: the commits you
@@ -435,7 +435,7 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
                 }
             },
         })),
-        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
+        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
     );
 
 /* How often to re-ask while SOMEONE ELSE'S commit is running — a second tab's, or this tab's own from before a

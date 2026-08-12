@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { DEPLOYMENTS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand, read DIRECTLY
@@ -33,7 +33,7 @@ const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoRe
 
 export function useDeployments() {
     const { query, error } = useSandboxQuery({
-        queryKey: sandboxKey(`deployments`),
+        queryKey: DEPLOYMENTS.of(),
         queryFn: fetchDeployments,
     });
 

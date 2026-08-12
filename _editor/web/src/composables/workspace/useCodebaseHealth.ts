@@ -1,7 +1,7 @@
 import type { WorkspaceHealth } from "@intentic-app/api-contract";
 import { computed, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { WORKSPACE_HEALTH } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import type { ChurnWindow } from "../../pages/workspace/codebaseHealth";
 
@@ -11,7 +11,7 @@ import type { ChurnWindow } from "../../pages/workspace/codebaseHealth";
 
 export function useCodebaseHealth(repo: Ref<string>, window: Ref<ChurnWindow>) {
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => sandboxKey(`workspace`, `health`, repo.value, window.value)),
+        queryKey: computed(() => WORKSPACE_HEALTH.of(repo.value, window.value)),
         queryFn: ({ signal }) =>
             sandboxJson<WorkspaceHealth>(
                 `/workspace/health?repo=${encodeURIComponent(repo.value)}${window.value === `all` ? `` : `&since=${window.value}`}`,

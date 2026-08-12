@@ -5,7 +5,8 @@ import { computed, onScopeDispose, ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useSearchOptions } from "./useSearchOptions";
 import { workspaceAgent } from "./workspaceScope";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
+import { WORKSPACE_SEARCH } from "../queryKeys";
 
 /* Search over /work, read directly from the sandbox daemon (GET /workspace/search).
  *
@@ -86,7 +87,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     });
     const query = useInfiniteQuery({
         // Every switch is in the key: flipping one is a different search, and its previous answer stays cached.
-        queryKey: computed(() => sandboxKey(`workspace`, `search`, params.value)),
+        queryKey: computed(() => WORKSPACE_SEARCH.of(params.value)),
         queryFn: ({ pageParam, signal }) =>
             sandboxJson<WorkspaceSearchResult>(`/workspace/search?${params.value}${pageParam === undefined ? `` : `&after=${pageParam}`}`, {
                 signal,

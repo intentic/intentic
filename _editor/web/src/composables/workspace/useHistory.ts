@@ -6,7 +6,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { useChat } from "../chat/useChat";
 import { resetEditBuffers } from "./useEditBuffers";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { GIT_CHANGES, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
@@ -26,17 +26,17 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
  * one thing that rewrites it: the timeline's restore below, and the chat bubble's rewind, which restores
  * daemon-side as one step of a larger operation and so cannot go through the POST above.
  *
- * RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox id,
- * so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no such
- * discriminator, so the exact sandboxKey match is fine there. A restore never moves the repos' HEADs, so the
- * restored-vs-HEAD delta IS the new review set. Disjoint caches — refetch concurrently. */
+ * `.every` for the tree — its keys carry the focused scope before the appended sandbox id, so `.of()` would
+ * NOT prefix-match them (see queryKeys). Snapshots and changes have no such variant, so the sandbox-scoped
+ * `.of()` is the right reach there. A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS
+ * the new review set. Disjoint caches — refetch concurrently. */
 export const invalidateWorkspace = async (queryClient: QueryClient): Promise<void> => {
     // Stale buffers would silently resurrect post-restore files on save.
     resetEditBuffers();
     await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
-        queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) }),
-        queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) }),
+        queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }),
+        queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.of() }),
+        queryClient.invalidateQueries({ queryKey: GIT_CHANGES.of() }),
     ]);
 };
 
@@ -63,7 +63,7 @@ export function useHistory() {
     const queryClient = useQueryClient();
 
     const { query, error } = useSandboxQuery({
-        queryKey: sandboxKey(`history`, `snapshots`),
+        queryKey: HISTORY_SNAPSHOTS.of(),
         queryFn: () => sandboxJson<SnapshotsResponse>(`/history/snapshots`),
     });
 

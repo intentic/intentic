@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { INVENTORY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The sandbox's inventory — the i.have.* / i.want.service entries in its intent repo deploy.config.ts. Read +
@@ -24,7 +24,7 @@ const fetchEntries = async (path: string, init?: RequestInit): Promise<Inventory
 
 export function useInventory() {
     const queryClient = useQueryClient();
-    const queryKey = sandboxKey(`inventory`);
+    const queryKey = INVENTORY.of();
 
     const { query, error } = useSandboxQuery({
         queryKey,

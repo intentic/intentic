@@ -2,7 +2,7 @@ import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { supportsRoute } from "../sandbox/useDaemonRoutes";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { AGENTS } from "../queryKeys";
 
 /* A REGISTERED AGENT'S TRANSCRIPT AS A CACHED READ, so the browser asks the daemon for it ONCE however many
  * surfaces want it.
@@ -30,7 +30,7 @@ import { sandboxKey } from "../sandbox/useSandbox";
 // only that we could not ask right now.
 export type AgentTranscript = { readonly sessionId?: string; readonly messages: RestoredMessage[] } | "gone";
 
-export const agentTranscriptKey = (conversationId: string): unknown[] => [...sandboxKey(`agents`, conversationId, `transcript`), UNPERSISTED];
+export const agentTranscriptKey = (conversationId: string): unknown[] => [...AGENTS.of(conversationId, `transcript`), UNPERSISTED];
 
 // A turn is what makes a transcript wrong — see the header. Called wherever the daemon reports one settled.
 export const invalidateAgentTranscript = (conversationId: string): void =>

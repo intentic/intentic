@@ -13,7 +13,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { queryClient } from "../composables/queryPersistence";
-import { sandboxKey } from "../composables/sandbox/useSandbox";
+import { AGENTS, WORKSPACE_MODULES } from "../composables/queryKeys";
 import { router } from "../router";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time
@@ -109,7 +109,7 @@ const mount = async (modules: readonly WorkspaceModule[] = []): Promise<HTMLElem
     for (const repo of changes.repos) {
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
-    queryClient.setQueryData(sandboxKey(`agents`, AGENT, `diff`), { ...changes, repos } satisfies AgentChangesResponse);
+    queryClient.setQueryData(AGENTS.of(AGENT, `diff`), { ...changes, repos } satisfies AgentChangesResponse);
     const el = document.createElement(`div`);
     document.body.append(el);
     // The review's state is created by AgentDetail in the real page and handed down, so one instance serves
@@ -217,7 +217,7 @@ it(`narrows to exactly the blocked files`, async () => {
  * the unnamed "loose in this repo" bucket and were drawn as bare paths under no package at all. It groups by
  * the layout its own diff shipped with; the workspace read below is seeded to disagree, and is not consulted. */
 it(`groups by the packages of the agent's own tree, not the workspace's`, async () => {
-    queryClient.setQueryData(sandboxKey(`workspace`, `modules`), { repos: [{ repo: `root`, modules: [] }] });
+    queryClient.setQueryData(WORKSPACE_MODULES.of(), { repos: [{ repo: `root`, modules: [] }] });
     const el = await mount(MODULES);
     const heading = packageHeading(el, `@shop/auth`);
     expect(heading).toBeDefined();

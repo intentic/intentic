@@ -2,7 +2,8 @@ import type { SandboxSummary } from "@intentic-app/api-contract";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { localPosture } from "../../environments/posture";
-import { removeStoredValue, storedValue, storeValue } from "../browserStorage";
+import { removeStoredValue, storeValue } from "../browserStorage";
+import { ACTIVE_KEY, activeSandboxId } from "./activeSandbox";
 import { queryClient } from "../queryPersistence";
 import { apiClient } from "../useApi";
 import { withConcurrency } from "../concurrency";
@@ -13,9 +14,6 @@ import { daemonReady } from "./useDaemonBoot";
  * be a member of others; the platform is the registry — each daemon announces its own URL + lastSeenAt, and the
  * browser only reads them (sandbox.list). `reachable` stays browser-owned (useSandboxLiveness's direct SSE probe
  * of the ACTIVE sandbox): it answers "can THIS browser reach it", which the registry can't know. */
-
-// The key under which the active sandbox id is persisted, so a reload keeps the same one selected.
-const ACTIVE_KEY = `intentic.activeSandboxId`;
 
 // The account-scoped key for the sandbox list in the shared query cache. Static (unlike sandboxKey, which
 // APPENDS the active id for per-sandbox daemon queries) — this list is the registry of ALL sandboxes, and its
@@ -54,8 +52,6 @@ queryClient.getQueryCache().subscribe((event) => {
         sandboxes.value = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY) ?? [];
     }
 });
-// Which sandbox the workspace is pointed at right now.
-const activeSandboxId = ref<string | undefined>(storedValue(ACTIVE_KEY));
 
 /* LOCAL POSTURE (environments/posture.ts): there is no platform registry to read — the one sandbox is the
  * engine the host launched, and it is seeded here so every downstream reader (endpoint, target, liveness,
@@ -119,12 +115,6 @@ const reachable = computed(() => connection.value.phase === `online` && daemonRe
 const active = computed(() => sandboxes.value.find((sandbox) => sandbox.id === activeSandboxId.value));
 // The active sandbox's public URL — what the sandbox client + liveness talk to. Undefined until one is bound.
 const daemonUrl = computed(() => active.value?.daemonUrl ?? undefined);
-
-// Append the active sandbox id to a vue-query key so each sandbox's cached server state is independent
-// (switching never serves another sandbox's data). Appended, not prepended, so existing prefix-based
-// invalidateQueries(['workspace','tree']) still match. vue-query deep-unrefs the id ref, so the query
-// refetches under a fresh key the moment the active sandbox changes.
-export const sandboxKey = (...parts: readonly unknown[]): unknown[] => [...parts, activeSandboxId];
 
 const persistActive = (id: string | undefined): void => {
     activeSandboxId.value = id;

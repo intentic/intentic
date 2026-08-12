@@ -1,7 +1,7 @@
 import { AppsListSchema } from "@intentic-app/api-contract";
 import { computed, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { WORKSPACE_APPS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { usePanels } from "./usePanels";
 
@@ -14,7 +14,7 @@ export function useWorkspaceApps(active: Ref<boolean>) {
     const repos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
 
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => sandboxKey(`workspace`, `apps`, ...repos.value)),
+        queryKey: computed(() => WORKSPACE_APPS.of(...repos.value)),
         queryFn: async () => {
             const lists = await Promise.all(
                 repos.value.map(async (repo) => {

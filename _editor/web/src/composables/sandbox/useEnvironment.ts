@@ -1,14 +1,14 @@
 import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey } from "./useSandbox";
+import { ENVIRONMENT } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The sandbox's composed environment overlay (.intentic/environment.approved.Dockerfile), read via the daemon's
  * /environment route. Shared by the Environment card, the shell's rebuild banner, and the capabilities page so
  * "a rebuild is pending" / "a proposal awaits review" derives from ONE query (vue-query dedupes on the key). */
 
-export const ENVIRONMENT_KEY = sandboxKey(`environment`);
+export const ENVIRONMENT_KEY = ENVIRONMENT.of();
 
 export function useEnvironment() {
     const { query } = useSandboxQuery({

@@ -2,7 +2,7 @@ import { BrowsersListSchema, type BrowserSession } from "@intentic/sandbox-contr
 import { computed, type ComputedRef } from "vue";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { BROWSERS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The ONE roster of the agent's browsers, shared by the rail tile and the Browsers view — the same single-cache
@@ -19,7 +19,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * navigate and finish a session (runtime-watch.ts), and the agent opening a page repaints the tile as it
  * happens rather than up to ten seconds later. */
 
-const QUERY_KEY = sandboxKey(`browsers`);
+const QUERY_KEY = BROWSERS.of();
 
 // Named for the background loader (composables/prefetch), which warms this list into the very entry the tile
 // and the view read.
