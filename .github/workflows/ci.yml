@@ -239,7 +239,9 @@ jobs:
       # checked nowhere but release-prepare, which runs on main AFTER the release has already been decided.
       # That is where the extension-manifest → base dependency surfaced: the release failed on a list that a
       # pull request could have failed in milliseconds, and there was nothing to revert but the merge.
-      - run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
+      # `shell: bash` because the job's default is `sh`, where `source` and the array expansion are not syntax.
+      - shell: bash
+        run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
 
   # The CI job image itself. Runs only when _tools/ci-base changes — every other pipeline skips it. It cannot
   # run inside ci-base (building that is the point), so it runs on the host runner directly.
