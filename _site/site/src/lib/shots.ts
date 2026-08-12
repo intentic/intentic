@@ -22,7 +22,7 @@ export function shotAsset(name: string): ImageMetadata {
 /* The rungs of every shot's srcset. Far enough apart that no page ships a variant it will never serve, close
  * enough that a phone at 2× and a laptop at 1× each land within a few percent of what they paint. One list for
  * every shot: astro:assets drops the rungs a given file cannot reach and closes the ladder at its real width,
- * so the 736px portrait capture is offered at 480 and 736 rather than upscaled to a blurry 1440. */
+ * so a portrait capture closes early rather than being upscaled into a blurry 1920. */
 export const SHOT_WIDTHS = [480, 768, 1024, 1440, 1920];
 
 /* The two column widths every page of this site shares, as the `sizes` a browser needs to pick a rung with.

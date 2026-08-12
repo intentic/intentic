@@ -303,7 +303,7 @@ export const productPages: ProductPage[] = [
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Hand off the running, and keep full control.",
         hero: {
             name: "sandbox-overview",
-            alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",
+            alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds — environment, secrets, agent account, extensions, access, personas and computers.",
             frame: "browser",
             label: "acme-shop · /sandbox",
         },

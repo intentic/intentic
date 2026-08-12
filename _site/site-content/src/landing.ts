@@ -126,7 +126,7 @@ export const landingContent: LandingContent = {
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
-            alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries. Each card shows its model, branch, cost and diff stats.",
+            alt: "The intentic fleet board: an agent with a question for you and one blocked on a land conflict, beside three running on a Stripe checkout, a reviewed change and a latency spike, and three finished waiting to land. Each card shows its model, branch, cost and diff stats.",
             frameLabel: "acme-shop · /agents",
         },
         demo: {
@@ -185,7 +185,7 @@ export const landingContent: LandingContent = {
                 line: "Give the workspace its own server and hand off day-to-day operation. It stays on your hardware and under your control.",
                 shot: {
                     name: "sandbox-overview",
-                    alt: "The sandbox hub: the acme-shop sandbox online with its installed version and URL, and an at-a-glance list of its agent account, secrets, capabilities, running services and access.",
+                    alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds — environment, secrets, agent account, extensions, access, personas and computers.",
                     label: "acme-shop · /sandbox",
                 },
             },
