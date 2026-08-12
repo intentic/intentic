@@ -113,6 +113,29 @@ const toAccount = (raw: unknown): ConnectAccount => {
 // webhook treats that as "not for us", exactly as it does for a subscription it cannot read.
 export const accountFromEvent = (raw: unknown): ConnectAccount | undefined => (AccountSchema.safeParse(raw).success ? toAccount(raw) : undefined);
 
+/* WHAT ACTUALLY SETTLED IN A MONTH, from the one place that knows. The live ledger states revenue as members ×
+ * price, which is the right estimate for a month in progress and the wrong number to publish as fact: it
+ * counts a member whose card failed on the 3rd, misses a mid-month joiner's proration, and can never be
+ * reconciled against a bank account.
+ *
+ * Balance transactions are the honest read because they are what moved money: a charge adds, a refund
+ * subtracts, a dispute adjusts, and every one of them carries the fee Stripe took. Payout and transfer rows are
+ * excluded on purpose — those are money leaving for the platform's own bank or a creator's, not revenue, and
+ * summing them would net the month down to roughly nothing. */
+const COUNTED_TYPES = new Set([`charge`, `payment`, `refund`, `payment_refund`, `adjustment`]);
+
+const BalancePageSchema = z.object({
+    has_more: z.boolean(),
+    data: z.array(z.object({ id: z.string(), type: z.string(), amount: z.number(), fee: z.number() })),
+});
+
+export interface SettledRevenue {
+    // Gross movement in the window, refunds and disputes already netted out.
+    readonly grossCents: number;
+    // What Stripe took on it.
+    readonly feeCents: number;
+}
+
 export interface StripeGateway {
     // A subscription-mode Checkout Session; the answer is the URL to send the browser to.
     // `clientReferenceId` is the platform's user id — it comes back on checkout.session.completed and is the
@@ -140,6 +163,8 @@ export interface StripeGateway {
     readonly accountLink: (opts: { readonly accountId: string; readonly refreshUrl: string; readonly returnUrl: string }) => Promise<{ url: string }>;
     // One connected account, read fresh — what an unfinished onboarding is re-checked against.
     readonly account: (id: string) => Promise<ConnectAccount>;
+    // What settled between two instants, paged to the end — the revenue figure a closed month publishes.
+    readonly settledRevenue: (opts: { readonly from: Date; readonly to: Date }) => Promise<SettledRevenue>;
 }
 
 export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
@@ -176,6 +201,34 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
             }),
         ),
     account: async (id) => toAccount(await get(fetchFn, secretKey, `/accounts/${id}`)),
+    settledRevenue: async ({ from, to }) => {
+        const seconds = (at: Date) => String(Math.floor(at.getTime() / 1000));
+        let grossCents = 0;
+        let feeCents = 0;
+        let startingAfter: string | undefined;
+        /* Paged to the very end rather than capped: a month of memberships is more rows than one page holds,
+         * and a truncated sum published as "what we took" would be a quietly wrong number on the one page whose
+         * entire purpose is being checkable. `starting_after` walks Stripe's cursor; the loop ends when it says
+         * there is no more. */
+        do {
+            const query = new URLSearchParams({
+                "created[gte]": seconds(from),
+                "created[lt]": seconds(to),
+                limit: `100`,
+                ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
+            });
+            const page = BalancePageSchema.parse(await get(fetchFn, secretKey, `/balance_transactions?${query.toString()}`));
+            for (const entry of page.data) {
+                if (!COUNTED_TYPES.has(entry.type)) {
+                    continue;
+                }
+                grossCents += entry.amount;
+                feeCents += entry.fee;
+            }
+            startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+        } while (startingAfter !== undefined);
+        return { grossCents, feeCents };
+    },
 });
 
 // How far a webhook's timestamp may sit from now — Stripe's own recommended replay window.

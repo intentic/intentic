@@ -389,6 +389,68 @@ model PayoutAccount {
     @@map("payout_account")
 }
 
+/* A MONTH, CLOSED. The public ledger recomputes its figures live from the donation and run rows every time
+ * anyone reads it, which is right for a month still in progress and impossible to pay against: a number that
+ * moves cannot be settled on, and the rows it is computed from are swept at thirteen months (retention.ts).
+ * This row is the month frozen — computed once, never recomputed, and from then on the record.
+ *
+ * `grossCents`/`feeCents` are what actually SETTLED at Stripe in the month, not members × price: the published
+ * promise is a share of what members spend, and a revenue figure that is really an estimate multiplied out
+ * cannot be reconciled against anything. `poolCents` keeps the ceiling the live ledger states, so the two
+ * surfaces can be read side by side; `earnedCents` is what this month's own spent credits came to, `sweptCents`
+ * is expired unclaimed money folded back in, and `distributedCents` is the sum of the statements below.
+ *
+ * The shares are frozen alongside the money. If the split ever changes, a closed month must keep paying by the
+ * number that was published while it was open — otherwise the promise is retroactive, which is the one thing
+ * this whole design exists to prevent. */
+model PoolMonth {
+    id                String             @id @default(cuid())
+    month             String             @unique
+    closedAt          DateTime           @default(now())
+    members           Int
+    grossCents        Int
+    feeCents          Int
+    poolCents         Int
+    earnedCents       Int
+    sweptCents        Int
+    distributedCents  Int
+    creatorShare      Float
+    serviceShare      Float
+    // The date this month's statements become payable — stated at close so a creator reads a date, not "soon".
+    payableAt         DateTime
+    statements        CreatorStatement[]
+
+    @@map("pool_month")
+}
+
+/* ONE PUBLISHER'S EARNINGS FOR ONE CLOSED MONTH — the unit a payout is later made against, and after the raw
+ * ledger is swept, the only surviving record that the money was ever owed.
+ *
+ * Deliberately NOT bound to a user. Who a publisher name belongs to is answered by the claim table, which can
+ * change after a close: a creator who claims in October must be paid for July, and binding a user here would
+ * mean rewriting frozen rows to make that true. Payability is therefore derived — a claim exists and this row
+ * has not expired — and the frozen row stays frozen.
+ *
+ * `expiresAt` is the published twelve-month window. `expiredAt` is set only when the amount has actually been
+ * swept back into a later month's distribution, so the two together answer "is this still claimable" and "where
+ * did it go" without a status string that could disagree with either. */
+model CreatorStatement {
+    id          String    @id @default(cuid())
+    month       String
+    poolMonth   PoolMonth @relation(fields: [month], references: [month], onDelete: Cascade)
+    publisher   String
+    amountCents Int
+    credits     Int
+    expiresAt   DateTime
+    expiredAt   DateTime?
+    createdAt   DateTime  @default(now())
+
+    @@unique([month, publisher])
+    // A creator's own statements are read by publisher; the unique above leads with month.
+    @@index([publisher])
+    @@map("creator_statement")
+}
+
 model SandboxMember {
     id              String    @id @default(cuid())
     sandboxId       String

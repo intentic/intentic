@@ -44,6 +44,16 @@ onMounted(load);
 
 const payouts = computed(() => state.value?.payouts);
 
+const money = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+const monthName = (month: string): string =>
+    new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, { year: `numeric`, month: `long`, timeZone: `UTC` });
+const day = (stamp: string): string => new Date(stamp).toLocaleDateString(undefined, { year: `numeric`, month: `long`, day: `numeric` });
+
+/* Closed months only, newest first — and a total, because a creator holding several names wants the answer to
+ * "what am I owed" without adding up rows themselves. */
+const statements = computed(() => state.value?.statements ?? []);
+const owedTotal = computed(() => statements.value.reduce((sum, statement) => sum + statement.amountCents, 0));
+
 // One sentence for where the payout setup stands, because "connected" alone is the one word that could mislead:
 // an account can be finished and still not payable, and a creator needs to know which of those they are in.
 const payoutLine = computed(() => {
@@ -145,6 +155,24 @@ const connect = async (): Promise<void> => {
                     <p v-for="claim in state.claims" :key="claim.publisher" class="text-xs text-muted">
                         <span class="font-medium text-content">{{ claim.publisher }}</span> — proved with
                         <span class="font-mono">{{ claim.repo }}</span>
+                    </p>
+                </div>
+
+                <!-- Earnings, once a month is closed. Absent until then rather than shown as zero: a creator
+                     whose first month is still running has earned an amount nobody can state yet. -->
+                <div v-if="statements.length > 0" class="flex flex-col gap-1.5">
+                    <h3 class="text-xs font-semibold">Earnings</h3>
+                    <p class="text-sm">
+                        {{ money(owedTotal) }} across {{ statements.length }} closed
+                        {{ statements.length === 1 ? `month` : `months` }}.
+                    </p>
+                    <p v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`" class="text-xs text-muted">
+                        <span class="font-medium text-content">{{ monthName(statement.month) }}</span> — {{ money(statement.amountCents) }} for
+                        <span class="font-mono">{{ statement.publisher }}</span
+                        >, payable {{ day(statement.payableAt) }}
+                    </p>
+                    <p v-if="!payouts?.payoutsEnabled" class="text-2xs text-muted">
+                        Nothing can be sent until payouts are connected below. Earnings stay yours for twelve months from the month they were earned.
                     </p>
                 </div>
 

@@ -5,6 +5,7 @@ import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
+import { startPoolClose } from "./pool/pool-close-job.js";
 import { seedDemoService } from "./pool/pool-demo.js";
 import { startRetention } from "./retention.js";
 import { startSandboxPool } from "./sandbox/sandbox-pool.js";
@@ -33,6 +34,9 @@ if (!config.email.apiKey || !config.email.from) {
 const prisma = createPrisma(config);
 startRetention(prisma, config, logger);
 startSandboxPool(prisma, config, logger);
+// Freezes every finished month the platform has not closed yet — what payouts settle on, and the only record
+// of what was owed once the ledger rows behind it age out. No-ops on a platform without a pool.
+startPoolClose(prisma, config, logger);
 // The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
 // and self-swallowing — a catalog short one demo row must never hold the platform's boot.
 void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));

@@ -207,7 +207,7 @@ describe(`creator routes`, () => {
         const routes = creatorRoutes({ reader: reader([]) });
         const off = context({ config: poolOffConfig });
 
-        expect(await call(routes.status, {}, { context: off })).toEqual({ enabled: false, claims: [] });
+        expect(await call(routes.status, {}, { context: off })).toEqual({ enabled: false, claims: [], statements: [] });
         await expectOrpcCode(call(routes.challenge, { publisher: `acme` }, { context: off }), `NOT_FOUND`);
         await expectOrpcCode(call(routes.claim, { publisher: `acme` }, { context: off }), `NOT_FOUND`);
         await expectOrpcCode(call(routes.connectPayouts, {}, { context: off }), `NOT_FOUND`);
@@ -286,7 +286,12 @@ describe(`payout connection`, () => {
 
         const result = await call(routes.status, {}, { context: context({ prisma }) });
 
-        expect(result).toEqual({ enabled: true, claims: [], payouts: { connected: false, payoutsEnabled: false, detailsSubmitted: false } });
+        expect(result).toEqual({
+            enabled: true,
+            claims: [],
+            statements: [],
+            payouts: { connected: false, payoutsEnabled: false, detailsSubmitted: false },
+        });
         // Nothing to refresh, so Stripe is not called at all.
         expect(account).not.toHaveBeenCalled();
     });
@@ -295,6 +300,7 @@ describe(`payout connection`, () => {
         const account = vi.fn();
         const prisma = fakePrisma({
             publisherClaim: { findMany: vi.fn().mockResolvedValue([{ publisher: `acme`, repo: `acme/one`, createdAt: new Date(`2026-08-01T00:00:00Z`) }]) },
+            creatorStatement: { findMany: vi.fn().mockResolvedValue([]) },
             payoutAccount: {
                 findUnique: vi.fn().mockResolvedValue({ stripeAccountId: `acct_1`, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null }),
             },
@@ -305,5 +311,34 @@ describe(`payout connection`, () => {
 
         expect(result.claims).toEqual([{ publisher: `acme`, repo: `acme/one`, claimedAt: `2026-08-01T00:00:00.000Z` }]);
         expect(account).not.toHaveBeenCalled();
+    });
+
+    it(`shows earnings for a name claimed AFTER the month closed, and hides money already swept away`, async () => {
+        const findMany = vi.fn().mockResolvedValue([
+            {
+                month: `2026-07`,
+                publisher: `acme`,
+                amountCents: 12_840,
+                expiresAt: new Date(`2027-08-01T00:00:00Z`),
+                poolMonth: { payableAt: new Date(`2026-08-15T00:00:00Z`) },
+            },
+        ]);
+        const prisma = fakePrisma({
+            // Claimed in August, for a month that closed before the claim existed — statements are never bound
+            // to a user, so this simply works.
+            publisherClaim: { findMany: vi.fn().mockResolvedValue([{ publisher: `acme`, repo: `acme/one`, createdAt: new Date(`2026-08-09T00:00:00Z`) }]) },
+            creatorStatement: { findMany },
+            payoutAccount: { findUnique: vi.fn().mockResolvedValue(null) },
+        });
+        const routes = creatorRoutes({ gateway: gatewayWith({ account: vi.fn() }) });
+
+        const result = await call(routes.status, {}, { context: context({ prisma }) });
+
+        expect(result.statements).toEqual([
+            { month: `2026-07`, publisher: `acme`, amountCents: 12_840, payableAt: `2026-08-15T00:00:00.000Z`, expiresAt: `2027-08-01T00:00:00.000Z` },
+        ]);
+        // Swept money is no longer theirs — listing it as an earning with no payment behind it would be the
+        // most misleading row on the screen.
+        expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { publisher: { in: [`acme`] }, expiredAt: null } }));
     });
 });

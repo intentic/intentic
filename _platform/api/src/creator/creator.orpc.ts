@@ -49,11 +49,34 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
          * something to render the offer against. */
         status: os.creator.status.handler(async ({ context }): Promise<CreatorState> => {
             if (!poolEnabled(context.config)) {
-                return { enabled: false, claims: [] };
+                return { enabled: false, claims: [], statements: [] };
             }
             const user = requireUser(context);
             const [claims, payouts] = await Promise.all([claimsOf(context, user.id), payoutState(context.prisma, stripeOf(context), user.id)]);
-            return { enabled: true, claims, payouts };
+            /* Statements are looked up by the names the caller holds, not by a stored user id: a creator who
+             * claims in October is owed for July, and the frozen rows are never rewritten to say so. Money
+             * already swept back into the pool is excluded — it is no longer theirs, and listing it as an
+             * earning with no payment behind it would be the most misleading row on the screen. */
+            const statements =
+                claims.length === 0
+                    ? []
+                    : await context.prisma.creatorStatement.findMany({
+                          where: { publisher: { in: claims.map((claim) => claim.publisher) }, expiredAt: null },
+                          select: { month: true, publisher: true, amountCents: true, expiresAt: true, poolMonth: { select: { payableAt: true } } },
+                          orderBy: [{ month: `desc` }, { publisher: `asc` }],
+                      });
+            return {
+                enabled: true,
+                claims,
+                payouts,
+                statements: statements.map((statement) => ({
+                    month: statement.month,
+                    publisher: statement.publisher,
+                    amountCents: statement.amountCents,
+                    payableAt: statement.poolMonth.payableAt.toISOString(),
+                    expiresAt: statement.expiresAt.toISOString(),
+                })),
+            };
         }),
 
         /* What proving one name would take. A pure read: it computes the token, names every repository the

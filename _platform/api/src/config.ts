@@ -144,6 +144,16 @@ const configSchema = z.object({
             // a platform running its own points this at that repository's marketplace file, and claims are then
             // proved against the listings it actually serves. POOL_REGISTRY_URL.
             registryUrl: z.url().default(`https://raw.githubusercontent.com/intentic/registry/HEAD/.claude-plugin/marketplace.json`),
+            // The day of the month a closed month's statements become payable. A month closes as soon as it is
+            // over and pays mid-month, so the gap is a stated hold window for refunds and card disputes rather
+            // than an unexplained delay — and a creator reads a date instead of "soon". POOL_PAYOUT_DAY.
+            payoutDayOfMonth: z.coerce.number().int().min(1).max(28).default(15),
+            // How long earnings owed to an unclaimed publisher name stay claimable before returning to the pool
+            // and being split among creators who are still shipping. The published promise is twelve months;
+            // it lives here so the close and the page it is stated on cannot disagree. Deliberately shorter
+            // than the 396-day ledger retention, so a window never outlives the rows behind it.
+            // POOL_CLAIM_WINDOW_MONTHS.
+            claimWindowMonths: z.coerce.number().int().positive().default(12),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`

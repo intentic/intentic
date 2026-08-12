@@ -14,6 +14,9 @@ import type { Config } from "./config.js";
 // One stable key per exclusive job.
 export const JOB_RETENTION = 1;
 export const JOB_SANDBOX_POOL = 2;
+// The monthly close. Exclusive for a stronger reason than the others: two replicas closing the same month
+// would each write a set of statements, and money counted twice is not a duplicate log line.
+export const JOB_POOL_CLOSE = 3;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

@@ -734,10 +734,27 @@ export const PayoutStateSchema = z.object({
 });
 export type PayoutState = z.infer<typeof PayoutStateSchema>;
 
+/* ONE CLOSED MONTH'S EARNINGS for one of the caller's publisher names. Only closed months appear: a month in
+ * progress is a number that still moves, and showing it beside settled ones would invite a creator to read an
+ * estimate as an amount owed.
+ *
+ * `payableAt` is the date the money is due, stated rather than implied. `expiresAt` rides along because the
+ * twelve-month window is a promise with a deadline in it, and a deadline nobody is shown is a trap. */
+export const CreatorStatementSchema = z.object({
+    month: z.string(),
+    publisher: z.string(),
+    amountCents: z.number(),
+    payableAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime(),
+});
+export type CreatorStatement = z.infer<typeof CreatorStatementSchema>;
+
 export const CreatorStateSchema = z.object({
     enabled: z.boolean(),
     claims: z.array(PublisherClaimSchema),
     payouts: PayoutStateSchema.optional(),
+    // Newest month first — every closed month for every name the caller holds.
+    statements: z.array(CreatorStatementSchema),
 });
 export type CreatorState = z.infer<typeof CreatorStateSchema>;
 
