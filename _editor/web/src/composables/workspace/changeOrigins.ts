@@ -1,4 +1,4 @@
-import type { GitDiffSide, LandedMessage, RepoChanges } from "@intentic-app/api-contract";
+import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic-app/api-contract";
 
 /* WHO PUT THIS FILE IN THE TREE — the Changes panel's attribution layer over the daemon's per-repo `origins`
  * map (path → agent ids that landed it, newest land first; derived from the landed shas in
@@ -106,7 +106,7 @@ type MessageCarrier = { readonly landedMessage?: LandedMessage } | undefined;
  * follow, for the same two reasons.
  *
  * Undefined ⇒ neither has one: nothing was written for this landing, or it is still being written (the card's
- * `draftingSubject` is what tells those apart). The chip then files nothing and simply filters. */
+ * `landedMessageDraft` is what tells those apart). The chip then files nothing and simply filters. */
 export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): LandedMessage | undefined =>
     card?.landedMessage ?? origin?.landedMessage;
 
@@ -132,6 +132,55 @@ export const commitMessageOf = (landed: LandedMessage | undefined): string | und
     return [landed.subject, trailers].filter((part) => part !== ``).join(`\n\n`);
 };
 
+// A draft with no outcome yet is one being written right now — the state every wait-related surface keys on.
+export const draftRunning = (draft: LandedMessageDraft | undefined): boolean => draft !== undefined && draft.outcome === undefined;
+
+// Seconds, said like a person: under a minute plain, above it minutes+seconds — a refusal that burned 58s and
+// one that burned 8 must not read alike.
+const seconds = (ms: number): string => {
+    const total = Math.round(ms / 1000);
+    return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
+};
+
+/* ONE STEP OF THE DRAFT, ONE LINE — the walk's own record said in the user's terms, model named, time and
+ * reason attached. The four statuses are the four things that can happen to a model in the chain, and each
+ * earns different words:
+ *   asking   — in flight, with a ticking elapsed read against `now` so the wait is visibly moving;
+ *   answered — done, with what it cost;
+ *   refused  — done, with what it cost AND its own words, because "refused" alone sends the user hunting;
+ *   skipped  — never asked, on the strength of its own refusal minutes ago — the memo working, said as such. */
+export const draftStepLine = (step: LandedMessageStep, now: number): string => {
+    switch (step.status) {
+        case `asking`:
+            return `Asking ${step.model}… ${step.at === undefined ? `` : seconds(Math.max(0, now - step.at))}`.trimEnd();
+        case `answered`:
+            return `${step.model} answered${step.ms === undefined ? `` : ` in ${seconds(step.ms)}`}`;
+        case `refused`:
+            return `${step.model} refused${step.ms === undefined ? `` : ` after ${seconds(step.ms)}`}${step.reason === undefined ? `` : ` — ${step.reason}`}`;
+        case `skipped`:
+            return `Skipped ${step.model} — refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
+    }
+};
+
+/* THE FULL REPORT, one line per fact, newest last — what "surface everything that is happening" renders to.
+ * Empty for no draft at all (nothing has ever been asked; the notice below covers that in one line). A draft
+ * with no steps yet is the diff being read, which is a real phase and gets its line. The failure line closes a
+ * failed report with the one-line reason when the steps alone don't already say it (a chain spent to the
+ * bottom repeats its rungs' reasons — repeating them again would say less, not more). */
+export const draftReportLines = (draft: LandedMessageDraft | undefined, now: number): readonly string[] => {
+    if (draft === undefined) {
+        return [];
+    }
+    const lines = draft.steps.map((step) => draftStepLine(step, now));
+    if (draft.steps.length === 0 && draft.outcome === undefined) {
+        return [`Reading the landed diff…`];
+    }
+    if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {
+        return [...lines, `No message was written — ${draft.reason}`];
+    }
+    return lines;
+};
+
 // What the commit box knows about the lit chip when it is deciding what to say: who is lit, what that chip has
 // to file, and whether the box is free to take it.
 export interface ChipMessageState {
@@ -141,10 +190,12 @@ export interface ChipMessageState {
     readonly yours: boolean;
     // What that chip would file, if anything exists yet.
     readonly message: string | undefined;
-    // A model is writing that sentence right now (the roster's `draftingSubject`).
-    readonly drafting: boolean;
+    // The full account of that message being drafted, when one exists (the roster's `landedMessageDraft`).
+    readonly draft: LandedMessageDraft | undefined;
     // The box holds something the user wrote, so a fill would be declined (commitMessage's `boxIsYours`).
     readonly boxIsYours: boolean;
+    // The reader's clock, for the in-flight step's ticking elapsed.
+    readonly now: number;
 }
 
 /* WHY THE BOX DID NOT JUST FILL ITSELF — said in the box, at the moment of the click that expected it.
@@ -169,16 +220,20 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
     if (state.yours) {
         return `Your own changes — name this commit yourself`;
     }
+    const running = draftRunning(state.draft);
     // Said whether the sentence exists yet or is still being written: either way this box is not taking it, and
     // the same clearing lets the one that arrives land.
-    if (state.boxIsYours && (state.message !== undefined || state.drafting)) {
+    if (state.boxIsYours && (state.message !== undefined || running)) {
         return `Keeping your message — clear the box to use ${state.label}'s`;
     }
-    if (state.drafting) {
-        return `Writing a message for ${state.label}…`;
+    /* The wait, as it stands THIS second: the walk's newest step, not a generic "writing…". The report list
+     * under the box carries the whole story; this is its last line, in the place the eye is already resting. */
+    if (running) {
+        const latest = state.draft === undefined ? undefined : draftReportLines(state.draft, state.now).at(-1);
+        return `Writing a message for ${state.label} — ${latest ?? `starting…`}`;
     }
-    // Nothing was written and nothing is coming: no quick model answered, the draft failed, or the work landed
-    // before anything was writing these. The honest answer is that there is nothing to file, not a guess at
-    // which of the three it was — and the same words the receipt used when the draft ended empty.
+    // Nothing was written and nothing is coming: the draft failed (its report below says exactly how), no
+    // quick model answered, or the work landed before anything was writing these. The honest answer is that
+    // there is nothing to file — and the same words the receipt used when the draft ended empty.
     return state.message === undefined ? `No message was written for ${state.label} — name the commit yourself` : undefined;
 };

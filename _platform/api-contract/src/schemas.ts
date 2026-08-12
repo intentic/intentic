@@ -54,7 +54,9 @@ import {
     GitLogSchema,
     GitRemoteStateSchema,
     GitReposSchema,
+    LandedMessageDraftSchema,
     LandedMessageSchema,
+    LandedMessageStepSchema,
     OriginAgentSchema,
     RepoChangesSchema,
     RepoPathsSchema,
@@ -293,6 +295,10 @@ export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 // What a landing is called: the commit message drafted from its diff, carried by the agent's card while it is
 // on the board and by the review's origin record after it leaves. One shape, so the panel reads one lookup.
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
+// The full account of that message being drafted — which models were asked, how each went, how it ended —
+// live on the agent's card while it runs, kept after it ends until the next land replaces it.
+export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
+export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
 export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
 // What a commit answers with: whether it recorded anything, plus that repo's review row as the commit left it
 // (absent ⇒ the repo has nothing left to show), so the panel replaces one repo instead of re-reading them all.

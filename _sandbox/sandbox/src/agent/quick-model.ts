@@ -79,6 +79,26 @@ export interface QuickModelAnswer {
     readonly skipped: readonly QuickModelRefusal[];
 }
 
+/* ONE RUNG'S TURN, AS IT IS BEING SPENT — what a caller that wants to SHOW the walk receives, live, where
+ * QuickModelAnswer only says how it ended. `asking` is a rung in flight; the other three are settled, with the
+ * time each cost and (for a refusal, or a rung skipped on its own recent refusal) the sentence it gave. */
+export interface QuickModelAttempt {
+    readonly choice: QuickModelChoice;
+    readonly status: "asking" | "answered" | "refused" | "skipped";
+    // When this rung started being asked — what a consumer's ticking "12s…" is measured from. Absent for
+    // `skipped`, which cost nothing.
+    readonly at?: number;
+    readonly ms?: number;
+    readonly reason?: string;
+}
+
+/* The live view of the walk: called with the WHOLE list after every transition — a rung starting, settling, or
+ * being stepped over — so the consumer holds a snapshot rather than replaying events. Optional, because most
+ * callers only want the answer; the one that is drawing a progress report wants every beat.
+ *
+ * A listener's throw must not kill the walk it is only watching. */
+export type QuickModelProgress = (attempts: readonly QuickModelAttempt[]) => void;
+
 // What went wrong, as a sentence rather than an object. Every throw this walks over already carries a
 // user-facing message (one-shot.ts turns a spent allowance and a dead credential into prose deliberately), so
 // there is nothing to classify here — this is the seam that keeps a stray non-Error from becoming "[object
@@ -134,11 +154,27 @@ const cooling = (choice: QuickModelChoice, now: number): string | undefined => {
  * caller already has one place to record a failure. Nothing connected is a message about the sandbox; a chain
  * that is spent to the bottom names every model it asked and what each one said, because "couldn't draft a
  * message" without that is indistinguishable from a helper that is simply broken. */
-export const askQuickModel = async (services: Services, prompt: string, signal: AbortSignal): Promise<QuickModelAnswer> => {
+export const askQuickModel = async (
+    services: Services,
+    prompt: string,
+    signal: AbortSignal,
+    onProgress?: QuickModelProgress,
+): Promise<QuickModelAnswer> => {
     const chain = resolveQuickModels(await quickModelSources(services), (await services.sandboxSettings.get()).quickModel);
     if (chain.length === 0) {
         throw new Error(`No AI account is connected to this sandbox — connect one in Sandbox ▸ Agent first.`);
     }
+    /* The walk as it stands, re-told whole after every beat. Wrapped so a listener that throws is the
+     * listener's problem: this function's job is the answer, and the report may never cost the user the
+     * sentence it is reporting on. */
+    const attempts: QuickModelAttempt[] = [];
+    const tell = (): void => {
+        try {
+            onProgress?.([...attempts]);
+        } catch {
+            // A broken listener forfeits its updates, nothing else.
+        }
+    };
     const now = Date.now();
     /* THE MEMO MAY NEVER EMPTY THE CHAIN. When every rung is cooling down at once this walk ignores it and asks
      * them all: a memo exists to save time, and one that could stand between the user and every account they
@@ -152,6 +188,8 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
         const remembered = honourMemo ? cooling(choice, now) : undefined;
         if (remembered !== undefined) {
             skipped.push({ choice, reason: remembered });
+            attempts.push({ choice, status: `skipped`, reason: remembered });
+            tell();
             continue;
         }
         /* EVERY RUNG IS TIMED, answered or refused, and named as it is spent. The call as a whole was already
@@ -162,6 +200,15 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
         const from = Date.now();
         const spent = (): number => Date.now() - from;
         const key = quickModelKey(choice);
+        // In flight, said before the wait rather than after: "asking X" during the seconds X is taking is the
+        // one line of this report that answers a user staring at it right now.
+        attempts.push({ choice, status: `asking`, at: from });
+        tell();
+        // The in-flight entry settles in place — the walk's list is a timeline, and one rung is one entry.
+        const settle = (attempt: QuickModelAttempt): void => {
+            attempts[attempts.length - 1] = attempt;
+            tell();
+        };
         try {
             // Inside the try with the call itself: a credential that fails on the way in (a token that no longer
             // refreshes passes the cheap readiness check but fails resolution) is the same kind of dead end as
@@ -175,6 +222,7 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
             // describes would keep steering work off an account that is plainly working again.
             refusals.delete(key);
             services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model });
+            settle({ choice, status: `answered`, at: from, ms: spent() });
             return { text, choice, skipped };
         } catch (error) {
             if (signal.aborted) {
@@ -186,6 +234,7 @@ export const askQuickModel = async (services: Services, prompt: string, signal: 
             refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
             services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
             skipped.push({ choice, reason: refusalText(error) });
+            settle({ choice, status: `refused`, at: from, ms: spent(), reason: refusalText(error) });
         }
     }
     throw new Error(skipped.map((refusal) => `${refusal.choice.model}: ${refusal.reason}`).join(`; `));

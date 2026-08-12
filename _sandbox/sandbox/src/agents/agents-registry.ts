@@ -1,4 +1,4 @@
-import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, type LandedMessageDraft, planParts } from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
@@ -228,10 +228,11 @@ export interface AgentsRegistry {
      * the review's copy is what an ARCHIVED agent's chip is read through. Leaves updatedAt alone for the same
      * reason setTitle does — the land already stamped the activity this describes. */
     readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string }) => Promise<void>;
-    /* Say that the sentence above is being written right now, or has stopped being written — the only part of a
-     * landing a user ever waits for, and therefore the only part worth drawing a pending state for. Runtime and
-     * broadcast rather than persisted and published; the implementation says why. Unknown id ⇒ no-op. */
-    readonly setDraftingSubject: (id: string, drafting: boolean) => void;
+    /* Publish the full account of the sentence above being drafted — which models were asked, how each went,
+     * and how it ended — as it changes. The wait is the only part of a landing a user ever experiences, so it
+     * is the one part that owes them a report rather than a spinner. Runtime and broadcast rather than
+     * persisted and published; the implementation says why. `undefined` withdraws it. Unknown id ⇒ no-op. */
+    readonly setLandedMessageDraft: (id: string, draft: LandedMessageDraft | undefined) => void;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -342,11 +343,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
      * bookkeeping could clear is not a lease. Empty in the overwhelmingly common case, so the extra read in
      * begin costs a Set miss. */
     const rewinding = new Set<string>();
-    /* Agents whose landed work is having its commit message written this second (agents/landed-subject.ts).
-     * A Set beside `rewinding` rather than a flag on RuntimeState, and for the same reason: the drafting starts
-     * AFTER the turn that landed the work has ended, so a per-turn map is either stale or already replaced by
-     * the next turn's fresh state by the time this would be cleared. */
-    const draftingSubjects = new Set<string>();
+    /* The live account of each agent's commit message being drafted (agents/landed-subject.ts) — which models
+     * have been asked, how each went, and how it ended. A Map beside `rewinding` rather than a flag on
+     * RuntimeState, and for the same reason: the drafting starts AFTER the turn that landed the work has ended,
+     * so a per-turn map is either stale or already replaced by the next turn's fresh state by the time this
+     * would be cleared. A finished report stays until the next land replaces it — how the LAST draft went is
+     * exactly what a user staring at an unfilled commit box needs to read. */
+    const messageDrafts = new Map<string, LandedMessageDraft>();
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
     // Bumped by broadcast(), so it advances exactly once per published change — see `revision` on the interface.
     let revision = 0;
@@ -444,8 +447,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(state?.contextTokens !== undefined ? { contextTokens: state.contextTokens } : {}),
             ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
-            // True only for the seconds a model is writing this landing's commit message — see setDraftingSubject.
-            ...(draftingSubjects.has(entry.id) ? { draftingSubject: true as const } : {}),
+            // The full account of this landing's commit message being drafted — live while a model is writing,
+            // kept after it ends until the next land replaces it. See setLandedMessageDraft.
+            ...(messageDrafts.has(entry.id) ? { landedMessageDraft: messageDrafts.get(entry.id) } : {}),
             /* …and the sentence itself the moment it exists. The flag above is a promise, and this is the frame
              * that keeps it: the Changes panel's "From" chip files this into the commit box, and a landing's
              * message is the one thing about that panel which arrives SECONDS after everything else it draws.
@@ -774,24 +778,27 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             await persist();
         },
-        /* WHETHER A SENTENCE IS BEING WRITTEN FOR THIS AGENT RIGHT NOW — set around the model call and nowhere
-         * else (agents/landed-subject.ts).
+        /* THE DRAFT'S OWN STORY, RE-TOLD WHOLE ON EVERY BEAT — set by the drafter and nowhere else
+         * (agents/landed-subject.ts). Snapshot-not-diff like every roster fact: the caller hands the complete
+         * report as it now stands, so a browser that missed a frame is merely late, never wrong.
          *
          * Runtime, never persisted, and that is the point rather than a shortcut: a daemon that died mid-draft
-         * did not leave a draft running, so a flag restored from disk would be a spinner nothing will ever
-         * clear. A restart forgetting it is the correct answer.
+         * did not leave a draft running, so a report restored from disk would show a walk nothing will ever
+         * finish. A restart forgetting it is the correct answer.
          *
-         * Broadcast, because a flag nobody is told about is a flag nobody can draw. This is the cheap frame the
-         * roster already sends, not the review — see the note at the publish site for which of the two carries
-         * what. */
-        setDraftingSubject: (id, drafting) => {
-            if (entryOf(id) === undefined || draftingSubjects.has(id) === drafting) {
+         * Broadcast, because a report nobody is told about is a report nobody can draw. This is the cheap frame
+         * the roster already sends, not the review — see the note at the publish site for which of the two
+         * carries what. `undefined` withdraws it (a land that turned out to have nothing to describe). */
+        setLandedMessageDraft: (id, draft) => {
+            if (entryOf(id) === undefined) {
                 return;
             }
-            if (drafting) {
-                draftingSubjects.add(id);
+            if (draft === undefined) {
+                if (!messageDrafts.delete(id)) {
+                    return;
+                }
             } else {
-                draftingSubjects.delete(id);
+                messageDrafts.set(id, draft);
             }
             broadcast();
         },

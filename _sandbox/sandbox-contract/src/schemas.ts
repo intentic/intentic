@@ -743,6 +743,45 @@ export const LandedMessageSchema = z.object({
 });
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 
+/* ONE MODEL'S TURN IN THE DRAFTING WALK — asked, and what became of the ask. The quick-model chain tries the
+ * connected models in order (agent/quick-model.ts), and each rung ends one of four ways:
+ *   asking   — in flight right now; `ms` absent because it is still being spent.
+ *   answered — it wrote the sentence, in `ms`.
+ *   refused  — it failed or declined, in `ms`, with its own words in `reason`.
+ *   skipped  — not asked at all: it refused within the last few minutes and the walk stepped over it, with the
+ *              reason it gave back then. Skipping is the memo working, and it reads as such.
+ * The steps arrive in the order they were spent, so the list IS the timeline. */
+export const LandedMessageStepSchema = z.object({
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    status: z.enum(["asking", "answered", "refused", "skipped"]),
+    // When this rung started being asked, ms since epoch — what an in-flight step's ticking "12s…" is measured
+    // from, client-side, without a frame per second. Absent for `skipped`, which cost no time at all.
+    at: z.number().optional(),
+    ms: z.number().optional(),
+    reason: z.string().optional(),
+});
+export type LandedMessageStep = z.infer<typeof LandedMessageStepSchema>;
+
+/* THE FULL ACCOUNT OF ONE LANDING'S COMMIT MESSAGE BEING DRAFTED — everything a user waiting at the commit box
+ * is owed: that the draft started, which models have been asked, how each one went, and how it ended.
+ *
+ * `outcome` is absent while the draft is RUNNING, which is what "a sentence is on its way" now means — the
+ * boolean flag this replaces could say only that, and nothing else this schema carries. Ended, it is:
+ *   written — the sentence is on the card (`landedMessage`) and in the box; the steps say who wrote it.
+ *   failed  — nothing usable came back. The steps carry each model's own words; `reason` is the one-line
+ *             account for the surfaces with a single line to spend (an answer that was itself a refusal
+ *             sentence, or the whole chain spent).
+ * An empty `steps` with no outcome is the moment before the first model is asked — the diff is being read. */
+export const LandedMessageDraftSchema = z.object({
+    startedAt: z.number(),
+    steps: z.array(LandedMessageStepSchema),
+    outcome: z.enum(["written", "failed"]).optional(),
+    reason: z.string().optional(),
+    finishedAt: z.number().optional(),
+});
+export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
+
 export const AgentSummarySchema = z.object({
     // The conversationId.
     id: z.string(),
@@ -801,17 +840,18 @@ export const AgentSummarySchema = z.object({
     contextTokens: z.number().optional(),
     contextWindow: z.number().optional(),
     activity: AgentActivitySchema.optional(),
-    /* PRESENT WHILE A MODEL IS WRITING THIS LANDING'S COMMIT MESSAGE, and absent every other moment of the
-     * agent's life — including before the first land and after the sentence is stored.
+    /* THE WHOLE STORY OF THIS LANDING'S COMMIT MESSAGE BEING WRITTEN — present from the moment the land starts
+     * the draft, updated on every transition, and kept after it ends until the next land replaces it.
      *
-     * The drafting starts the instant work lands and answers seconds later (agents/landed-subject.ts), which is
-     * long enough for a user to reach the Changes panel and click the agent's "From" chip in between. Without
-     * this the two states behind an empty commit box — a sentence on its way, and no sentence coming at all —
-     * are the same empty box, and the honest thing to say about the first is that it is on its way.
+     * This used to be one boolean ("a model is writing"), and a boolean is exactly one fact short of every
+     * question the wait raises: WHICH model, for how long, what refused and in what words, what finally
+     * answered. All of that was known in the daemon and thrown away at the door — a first-pinned model that
+     * burned 58 seconds refusing on every landing had to be caught by watching CLI processes by hand, because
+     * nothing on any screen could have shown it.
      *
      * Runtime only: nothing about it is persisted, so a daemon restart forgets it. That is correct rather than
      * lossy — a restart also killed the draft it would have been describing. */
-    draftingSubject: z.literal(true).optional(),
+    landedMessageDraft: LandedMessageDraftSchema.optional(),
     /* AND THE SENTENCE ITSELF, once the flag above clears — what this agent's landed work is called, for the
      * Changes panel's "From" chip to file into the commit box.
      *
@@ -823,7 +863,7 @@ export const AgentSummarySchema = z.object({
      * them doesn't, the box stays empty with nothing to say why — while the flag above, which travels on THIS
      * frame, has already told them a sentence was coming.
      *
-     * So the fact goes where the promise went. Same push, same instant: the frame that clears `draftingSubject`
+     * So the fact goes where the promise went. Same push, same instant: the frame that ends `landedMessageDraft`
      * is the frame that carries the answer, which is also what makes "your commit message is ready" honest.
      *
      * Absent for every agent that has not landed, and for a landing nothing could be written about. Replaced
@@ -2236,7 +2276,7 @@ export const OriginAgentSchema = z.object({
      * in the tree, and the sentence about them has to be too.
      *
      * Absent for a landing nothing was written about, and — for the seconds after a land — for one whose
-     * sentence is still being drafted. Those two are told apart by `draftingSubject` on the agent's card, and
+     * sentence is still being drafted. Those two are told apart by `landedMessageDraft` on the agent's card, and
      * neither has a title-shaped fallback: guessing a subject from the ask is exactly the habit this replaced,
      * so a chip with no message files nothing and simply filters. */
     landedMessage: LandedMessageSchema.optional(),

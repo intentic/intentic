@@ -1,7 +1,7 @@
 import { computed, watch } from "vue";
 import { useAgents } from "../agents/useAgents";
 import { useReceipts } from "../receipts";
-import { commitMessageOf } from "./changeOrigins";
+import { commitMessageOf, draftRunning } from "./changeOrigins";
 import { fillCommitMessage, namedAfter } from "./commitMessage";
 
 /* THE WHOLE LIFE OF A LANDING'S COMMIT MESSAGE, WATCHED FROM OUTSIDE ANY VIEW — it has started, it arrived, or
@@ -27,8 +27,9 @@ import { fillCommitMessage, namedAfter } from "./commitMessage";
  * chip that had nothing behind it. A promise made at module scope has to be KEPT at module scope. */
 
 // Live drafts, by agent id. Read off the fleet roster, which is broadcast: this costs no request at all, and no
-// workspace rescan — see the daemon's setDraftingSubject for why the flag rides the roster rather than the review.
-const drafting = computed(() => useAgents().fleet.value.filter((agent) => agent.draftingSubject === true));
+// workspace rescan — see the daemon's setLandedMessageDraft for why the report rides the roster rather than
+// the review.
+const drafting = computed(() => useAgents().fleet.value.filter((agent) => draftRunning(agent.landedMessageDraft)));
 
 // The sentence for the session the commit is being named after, as it stands this tick — undefined while it is
 // still being written, and for a session nothing was ever written about. The roster only: an ALREADY-written
@@ -64,14 +65,22 @@ export const startDraftingReceipts = (): void => {
          * them the same courtesy: it is the cue to go and look, and withholding it is what left people waiting
          * on a sentence with no way of knowing it had arrived. One line per landing either way. */
         for (const agent of was.filter((before) => !now.some((current) => current.id === before.id))) {
-            // Read off the roster's CURRENT frame, not the stale summary in `was` — the flag and the sentence
-            // are broadcast in that order, so `was` is by construction the frame before the answer existed.
-            const written = useAgents().fleet.value.find((entry) => entry.id === agent.id)?.landedMessage !== undefined;
-            say(
-                written
-                    ? `Commit message ready for ${titleOf(agent.id)}`
-                    : `Couldn't write a commit message for ${titleOf(agent.id)} — name the commit yourself.`,
-            );
+            // Read off the roster's CURRENT frame, not the stale summary in `was` — the report ends only after
+            // the sentence is written, so `was` is by construction the frame before the answer existed.
+            const current = useAgents().fleet.value.find((entry) => entry.id === agent.id);
+            if (current?.landedMessage !== undefined && current.landedMessageDraft?.outcome === `written`) {
+                say(`Commit message ready for ${titleOf(agent.id)}`);
+                continue;
+            }
+            /* The failure names WHO refused, in its own words — "couldn't write" alone is indistinguishable
+             * from a broken feature, and the difference between "your Claude allowance is out" and "no model
+             * is connected" is the difference between waiting and acting. One refusal quoted here (the full
+             * list is in the Changes panel's report); the report's own one-liner when the walk never got as
+             * far as a refusal. */
+            const report = current?.landedMessageDraft;
+            const refused = report?.steps.filter((step) => step.status === `refused`) ?? [];
+            const blame = refused.length > 0 ? `${refused.map((step) => step.model).join(`, `)} refused` : report?.reason;
+            say(`Couldn't write a commit message for ${titleOf(agent.id)}${blame === undefined ? `` : ` — ${blame}`}. Name the commit yourself.`);
         }
     });
 

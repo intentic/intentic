@@ -1,5 +1,6 @@
+import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract";
 import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
-import { askQuickModel } from "../agent/quick-model.js";
+import { askQuickModel, type QuickModelAttempt } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
 import { cleanBreakingNote, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, fallbackBreakingNote, markSubjectBreaking, type RepoDiff } from "../git/commit-message.js";
 import { claimedContractShrink } from "../git/contract-shrink.js";
@@ -57,6 +58,16 @@ const claimedDiff = async (services: Services, id: string, repo: string): Promis
     return { diff: await services.git.collectRepoDiff(repo, dir, { paths }), removed: await claimedContractShrink(dir, paths) };
 };
 
+// One rung of the walk, restated as the report's own step — the same fact, in the contract's shape.
+const step = (attempt: QuickModelAttempt): LandedMessageStep => ({
+    provider: attempt.choice.provider,
+    model: attempt.choice.model,
+    status: attempt.status,
+    ...(attempt.at === undefined ? {} : { at: attempt.at }),
+    ...(attempt.ms === undefined ? {} : { ms: attempt.ms }),
+    ...(attempt.reason === undefined ? {} : { reason: attempt.reason }),
+});
+
 /* Draft and store the subject for what this agent has landed. Resolves without effect whenever there is
  * nothing to say; never throws — every caller is a land that has already succeeded.
  *
@@ -68,10 +79,24 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     if (entry === undefined) {
         return;
     }
+    /* THE REPORT OPENS WITH THE WORK, not with the model call — "the draft has started" is the first fact the
+     * user is owed, and it is true from here. An open report with no steps is the diff being read; every later
+     * beat replaces the whole report on the roster (snapshot-not-diff), so a browser only ever renders the
+     * draft as it now stands. */
+    let draft: LandedMessageDraft = { startedAt: Date.now(), steps: [] };
+    const publish = (next: LandedMessageDraft): void => {
+        draft = next;
+        services.agents.setLandedMessageDraft(id, draft);
+    };
+    const ended = (outcome: `written` | `failed`, reason?: string): void =>
+        publish({ ...draft, outcome, ...(reason === undefined ? {} : { reason }), finishedAt: Date.now() });
+    publish(draft);
     const claims = (await Promise.all(entry.repos.slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
         (claim) => claim !== undefined,
     );
     if (claims.length === 0) {
+        // Nothing left to describe (history absorbed the claim) — a report about it would be noise, withdraw it.
+        services.agents.setLandedMessageDraft(id, undefined);
         return;
     }
     const diffs = claims.map((claim) => claim.diff);
@@ -89,25 +114,23 @@ export const describeLanding = async (services: Services, id: string): Promise<v
      * committed under that question no matter what the four turns since had done. Worse, the title is itself
      * model-written — a naming pass that failed and asked for more context put that request into the commit
      * message. What the change was for is legible in what it did, and the diff cannot go stale. */
-    /* SAY THAT IT IS BEING WRITTEN, before the call rather than after it. The sentence is the one thing about a
-     * landing that arrives LATE, so the seconds it takes are the only part of this feature a user ever
-     * experiences as a wait — and until this flag they waited at a chip that looked exactly like one with
-     * nothing behind it. Broadcast on the roster, which is where the ANSWER now travels too: both are facts
-     * about the agent, and a promise and its answer arriving down two different roads is what made a written
-     * message and an unwritten one look the same in the box (see LandedMessage in the contract).
+    /* EVERY BEAT OF THE MODEL WALK GOES OUT AS IT HAPPENS. The sentence is the one thing about a landing that
+     * arrives LATE, so the seconds it takes are the only part of this feature a user ever experiences — and a
+     * report that says WHICH model is being asked, what refused and in what words, is the difference between a
+     * wait and a mystery. The walk re-tells its whole list per beat and the report re-publishes it: a
+     * first-pinned model burning a minute is on screen while it burns, not in a log after.
      *
-     * THE FLAG CLEARS LAST, after the sentence is on the roster — the whole ordering rule of this function. It
-     * is what a user is told by: "writing…" stops meaning "wait" only once there is something to show, so the
-     * panel can announce a message that is ready without checking whether the message actually arrived. Clearing
-     * it first, as this did while the flag rode a different road from the answer, published a finished draft
-     * over an empty box and left the panel to guess which kind of nothing it was looking at.
+     * THE OUTCOME LANDS LAST, after the sentence is on the roster — the ordering rule of this function. It is
+     * what a user is told by: the walk stops meaning "wait" only once there is something to show, so the panel
+     * can announce a message that is ready without checking whether the message actually arrived.
      *
-     * The `finally` is the whole of the cleanup: every road out — an answer, a refusal, the chain running dry, a
-     * throw — has to clear it, or a chip keeps saying "writing…" about a call that ended minutes ago. */
-    await services.agents.setDraftingSubject(id, true);
+     * Every road out ends the report — an answer, a reply that was itself a refusal, the chain running dry, a
+     * throw — or a chip keeps saying "writing…" about a call that ended minutes ago. */
     try {
         const { text } = await services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
-            askQuickModel(services, commitMessagePrompt(diffs, wantsNote, removed), new AbortController().signal),
+            askQuickModel(services, commitMessagePrompt(diffs, wantsNote, removed), new AbortController().signal, (attempts) =>
+                publish({ ...draft, steps: attempts.map(step) }),
+            ),
         );
         // The `!` is enforced rather than trusted whenever the detector saw a shrink: the marker is what the
         // release tooling majors on, and a model that dropped it would ship the removal as a minor bump.
@@ -118,6 +141,9 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         // instead of describing the diff has not written a subject either. The same pair of guards, for the
         // same reasons, as the naming pass makes over its own reply (agent/title-namer.ts).
         if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
+            // The model produced words, just not a usable subject — say that, or the report reads "answered"
+            // over a box that never fills.
+            ended(`failed`, `The model's reply wasn't a usable commit subject.`);
             return;
         }
         /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
@@ -140,6 +166,8 @@ export const describeLanding = async (services: Services, id: string): Promise<v
             ...(note === `` ? {} : { note }),
             ...(breaking === `` ? {} : { breaking }),
         });
+        // The sentence is on the card; now the report may say so — see the ordering note above.
+        ended(`written`);
         /* AND TELL THE REVIEW, for the one reader the roster cannot serve: an ARCHIVED agent, whose card is off
          * the board while its lines are still sitting in the tree. That chip reads its message out of the
          * review (agents/origins.ts), and nothing else would refresh it — the entry is on /history so no
@@ -148,8 +176,11 @@ export const describeLanding = async (services: Services, id: string): Promise<v
          * One workspace-wide rescan per landing, spent on the copy that outlives the card. The panel does not
          * WAIT on it: the roster frame above has already filled the box for every agent still on the board. */
         publishRuntimeChange("landings");
-    } finally {
-        services.agents.setDraftingSubject(id, false);
+    } catch (error) {
+        // The chain ran dry, or nothing was connected to ask. The steps already carry each model's own words;
+        // this line is for the surfaces with one line to spend.
+        ended(`failed`, error instanceof Error ? error.message : String(error));
+        throw error;
     }
 };
 

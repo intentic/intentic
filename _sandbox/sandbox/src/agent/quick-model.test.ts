@@ -233,6 +233,40 @@ test("does not report a cooling rung that sits behind the model that answered", 
     expect(answer.skipped).toEqual([]);
 });
 
+/* THE LIVE VIEW OF THE WALK — every beat re-told whole, which is what the Changes panel's draft report renders.
+ * The order pinned here IS the user-visible timeline: asked, refused with the reason, asked the next, answered. */
+test("tells a listener every beat: asking, the refusal in its own words, and the answer", async () => {
+    const beats: string[] = [];
+    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+
+    await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), `draft`, signal(), (attempts) =>
+        beats.push(attempts.map((attempt) => `${attempt.choice.model}:${attempt.status}`).join(` `)),
+    );
+
+    expect(beats).toEqual([
+        `gpt-5.6:asking`,
+        `gpt-5.6:refused`,
+        `gpt-5.6:refused claude-haiku-4-5:asking`,
+        `gpt-5.6:refused claude-haiku-4-5:answered`,
+    ]);
+});
+
+test("a rung skipped on its memo is a beat too, with the remembered reason, and a listener's throw costs the walk nothing", async () => {
+    const pinned = [`codex:gpt-5.6`, `claude:claude-haiku-4-5`];
+    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    await askQuickModel(fakeServices(pinned), `draft`, signal());
+
+    const beats: { model: string; status: string; reason?: string | undefined }[] = [];
+    oneShot.mockClear();
+    const answer = await askQuickModel(fakeServices(pinned), `draft`, signal(), (attempts) => {
+        beats.push(...attempts.slice(beats.length > 0 ? -1 : 0).map((a) => ({ model: a.choice.model, status: a.status, reason: a.reason })));
+        throw new Error(`a broken listener`);
+    });
+
+    expect(answer.text).toBe(`fix: tree truncation`);
+    expect(beats[0]).toEqual({ model: `gpt-5.6`, status: `skipped`, reason: `usage limit reached` });
+});
+
 /* WHICH MODEL TOOK THE TIME — the question the caller's own timing cannot answer, and the one that had to be
  * answered by watching CLI processes by hand. */
 test("bills every model it asks, by name, answered or refused", async () => {

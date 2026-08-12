@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import type { GitChange, GitDiffSide, LandedMessage, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
+import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
 import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import Dialog from "primevue/dialog";
@@ -18,6 +18,8 @@ import {
     ALL_SIDES,
     chipMessageNotice,
     commitMessageOf,
+    draftReportLines,
+    draftRunning,
     landedMessage,
     originHue,
     originsOf,
@@ -282,18 +284,31 @@ const filterMessage = computed<string | undefined>(() =>
 );
 followFilledMessage(filterMessage);
 
-/* IS A SENTENCE ON ITS WAY FOR THIS SESSION — read off the fleet roster (AgentSummary.draftingSubject), which
- * is live and costs nothing to ask, rather than off the review, which costs a workspace-wide rescan.
+/* THE FULL ACCOUNT OF A SESSION'S MESSAGE BEING WRITTEN — read off the fleet roster
+ * (AgentSummary.landedMessageDraft), which is live and costs nothing to ask, rather than off the review, which
+ * costs a workspace-wide rescan.
  *
  * This exists because "no message" and "a message you are about to get" were the same empty box, and the second
  * is the ordinary state in the seconds after a land — exactly the window in which somebody who just watched an
- * agent finish walks over to Changes and clicks its chip. Being told costs one line and turns a control that
- * looks broken into one that is obviously working. */
-const originDrafting = (id: string): boolean => agentOf(id)?.draftingSubject === true;
-// The lit chip's own answer, for the box's readout below.
-const filterDrafting = computed(
-    () => originFilter.value !== undefined && originFilter.value !== YOURS && filterMessage.value === undefined && originDrafting(originFilter.value),
+ * agent finish walks over to Changes and clicks its chip. The report carries every beat of that wait: which
+ * model is being asked right now, what refused and in its own words, what finally answered and how long each
+ * took — so a first choice quietly burning a minute is on screen while it burns, not a mystery to reload at. */
+const originDraft = (id: string): LandedMessageDraft | undefined => agentOf(id)?.landedMessageDraft;
+const originDrafting = (id: string): boolean => draftRunning(originDraft(id));
+// The lit chip's own report, for the box's readout and the step list below it.
+const filterDraft = computed<LandedMessageDraft | undefined>(() =>
+    originFilter.value === undefined || originFilter.value === YOURS ? undefined : originDraft(originFilter.value),
 );
+// A clock that ticks only while the lit chip's draft is running — the in-flight step's "12s…" has to move for
+// the wait to read as a wait rather than a hang.
+const draftClock = useNow(() => draftRunning(filterDraft.value));
+/* The step list under the commit box: the whole walk while it runs, and the post-mortem after a failure — the
+ * two states in which "what exactly happened" is the question on the user's mind. A draft that ENDED WELL
+ * vanishes from here on purpose: its message is in the box, which is the only report success needs. */
+const filterDraftLines = computed<readonly string[]>(() => {
+    const draft = filterDraft.value;
+    return draft === undefined || draft.outcome === `written` ? [] : draftReportLines(draft, draftClock.value);
+});
 
 /* BOTH EDGES OF THE WAIT — it started, and what became of it — are reported above this panel and outlive it
  * (composables/workspace/draftingReceipts.ts). Neither is this component's to make: the wait begins on the
@@ -347,8 +362,9 @@ const chipNotice = computed<string | undefined>(() =>
         label: filterLabel.value,
         yours: originFilter.value === YOURS,
         message: filterMessage.value,
-        drafting: filterDrafting.value,
+        draft: filterDraft.value,
         boxIsYours: boxIsYours.value,
+        now: draftClock.value,
     }),
 );
 
@@ -1061,6 +1077,23 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
             ></textarea>
+            <!-- THE DRAFT'S FULL REPORT, one line per model, while the lit chip's message is being written and
+                 after a draft that failed — the two states in which "what exactly is happening" is the question.
+                 Every line is a fact off the daemon's own walk: the model being asked right now with a ticking
+                 clock, each refusal with its duration and its own words, each skip with the reason remembered
+                 for it. A draft that ends well takes the list with it — its message lands in the box above,
+                 which is all the report success needs. -->
+            <div v-if="filterDraftLines.length > 0" class="flex flex-col gap-0.5 px-0.5">
+                <p
+                    v-for="line in filterDraftLines"
+                    :key="line"
+                    class="min-w-0 truncate text-2xs leading-snug"
+                    :class="filterDraft?.outcome === `failed` ? `text-warning` : `text-muted`"
+                    v-tooltip.right.overflow="line"
+                >
+                    {{ line }}
+                </p>
+            </div>
             <!-- What the commit will record, then the one button that records it. No checkboxes: the sentence
                  on the left is a readout of the index, not a control. A conflict replaces it outright — nothing
                  about the index matters while git is refusing to commit at all. -->
