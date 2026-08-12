@@ -1,5 +1,9 @@
 export const SITE_URL = "https://intentic.dev";
 export const APP_URL = "https://app.intentic.dev";
+// The platform API. The site is static, so the one page that shows live numbers — the pool ledger — reads
+// them from here in the browser. That endpoint is public and unauthenticated by design; a number anybody is
+// asked to trust should not need a login to check.
+export const API_URL = "https://api.intentic.dev";
 // The interactive demo (@intentic-dev/demo): the real app running against a recorded fixture instead of a
 // sandbox. It builds into this site's own public/, so it ships in one deploy. More importantly, the
 // hero's iframe is SAME-ORIGIN: a cross-origin frame gets partitioned storage, and the demo seeds credentials

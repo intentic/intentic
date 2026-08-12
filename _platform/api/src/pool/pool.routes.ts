@@ -7,11 +7,11 @@ import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
 import { DEMO_SLUG, demoAnswer } from "./pool-demo.js";
-import { applySubscription, isPremium, poolEnabled, premiumOf } from "./pool-membership.js";
+import { buildLedger } from "./pool-ledger.js";
+import { applySubscription, poolEnabled, premiumOf } from "./pool-membership.js";
 import { forwardToService, verifyServiceSignature } from "./pool-services.js";
 import { applyAccountEvent } from "../creator/creator-payouts.js";
 import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
-import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./pool-share.js";
 
 /* THE CREATOR POOL's sandbox-facing and public routes. The browser-facing half (membership state, checkout,
  * portal) rides the oRPC contract in pool.orpc.ts; what lives here is what a BROWSER SESSION cannot
@@ -29,12 +29,6 @@ const EXTENSION_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,120}$/;
 const DonateSchema = z.object({ extensionId: z.string().regex(EXTENSION_ID_RE) });
 
 const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
-
-// "2026-08" for the month `shift` months before the one `at` falls in.
-const monthShifted = (at: Date, shift: number): string => {
-    const base = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - shift, 1));
-    return base.toISOString().slice(0, 7);
-};
 
 export interface PoolDeps {
     readonly config: Config;
@@ -242,70 +236,18 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         return c.json(demoAnswer(typeof query === `string` ? query : `(no query)`));
     });
 
-    /* The public ledger: this month and the two before it, as the pool math states them (pool-share.ts).
-     * Member count is TODAY's active-membership count for every month shown — the platform keeps no status
-     * history, and publishing an exact-looking reconstruction would be less honest than a stated snapshot.
-     * The docs page says exactly this; payouts, when they land, settle on a month's closing numbers. */
+    /* The public ledger (pool-ledger.ts): the month in progress computed live and marked open, then every
+     * closed month exactly as it was frozen. Public on purpose — an economy whose numbers need a login is not
+     * the promise. Member count on the OPEN month is today's snapshot, because the platform keeps no
+     * membership history; a closed month's is the count recorded when it closed. */
     app.get(`/transparency`, async (c) => {
         if (!poolEnabled(config)) {
             return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
         }
-        const at = now();
-        const months = [2, 1, 0].map((shift) => monthShifted(at, shift));
-        const [donations, memberships, runs] = await Promise.all([
-            prisma.donation.findMany({
-                where: { month: { gte: months[0]! } },
-                select: { extensionId: true, month: true, credits: true },
-            }),
-            prisma.membership.findMany({ select: { status: true } }),
-            // Only served runs earn — a refunded run charged nobody and pays nobody, but its row keeps the
-            // service's reliability visible to anyone who queries deeper.
-            prisma.serviceRun.findMany({
-                where: { status: `ok`, createdAt: { gte: new Date(`${months[0]}-01T00:00:00.000Z`) } },
-                select: { credits: true, createdAt: true, service: { select: { slug: true, publisher: true } } },
-            }),
-        ]);
-        const members = memberships.filter((membership) => isPremium(membership)).length;
-        // (month → aggregates), priced by pool-share.ts inside computeMonth.
-        const donationsOf = (month: string): DonationAggregate[] => {
-            const byExtension = new Map<string, DonationAggregate>();
-            for (const donation of donations) {
-                if (donation.month !== month) {
-                    continue;
-                }
-                const previous = byExtension.get(donation.extensionId);
-                byExtension.set(donation.extensionId, {
-                    extensionId: donation.extensionId,
-                    donors: (previous?.donors ?? 0) + 1,
-                    credits: (previous?.credits ?? 0) + donation.credits,
-                });
-            }
-            return [...byExtension.values()];
-        };
-        const servicesOf = (month: string): ServiceAggregate[] => {
-            const byService = new Map<string, ServiceAggregate>();
-            for (const run of runs) {
-                if (!run.createdAt.toISOString().startsWith(`${month}-`)) {
-                    continue;
-                }
-                const previous = byService.get(run.service.slug);
-                byService.set(run.service.slug, {
-                    slug: run.service.slug,
-                    publisher: run.service.publisher,
-                    runs: (previous?.runs ?? 0) + 1,
-                    credits: (previous?.credits ?? 0) + run.credits,
-                });
-            }
-            return [...byService.values()];
-        };
-        return c.json({
-            priceUsd: config.pool.priceUsd,
-            creatorShare: config.pool.creatorShare,
-            serviceShare: config.pool.serviceShare,
-            dailyCredits: config.pool.dailyCredits,
-            donationCredits: config.pool.donationCredits,
-            months: months.map((month) => computeMonth(month, members, config, donationsOf(month), servicesOf(month))).toReversed(),
-        });
+        // Cross-origin because the site renders this ledger from a different host, and a public number that
+        // only a server can read is not really public.
+        c.header(`access-control-allow-origin`, `*`);
+        return c.json(await buildLedger(prisma, config, now()));
     });
 
     /* Stripe's webhook. Signature-authenticated against the RAW body; a pool that is enabled but has no

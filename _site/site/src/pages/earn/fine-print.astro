@@ -112,19 +112,46 @@ const entry = `{
                     endpoint, signature checks, payments, refunds and admission.
                 </p>
 
-                <h2>The ledger is public</h2>
+                <h2>The books are open</h2>
                 <p>
-                    The platform serves <code>GET /pool/transparency</code> to anyone, no login. It carries member count, gross revenue, the split, the
-                    pool ceiling and the paid total, every premium extension's donors, credits and earnings, and every service's runs, credits and
-                    earnings: for this month and the two before it. The numbers are exact, computed from the same ledger the payouts will settle on.
-                    Member counts for past months are today's snapshot (the platform keeps no status history), and the page you are reading says so
-                    rather than dressing an estimate up as an audit.
+                    The platform serves <code>GET /pool/transparency</code> to anyone, no login, and <a href="/earn/ledger/">the ledger</a> renders it
+                    for people. It publishes two kinds of month and never lets them be confused. The month in progress is computed live and its
+                    revenue is an <em>estimate</em> — members × price — because nobody can know what a month took until it is over. A finished month
+                    is the frozen record: what <strong>actually settled</strong> at Stripe, the <strong>fees</strong> Stripe took on it, the pool, what
+                    creators earned, and what became of every cent of it — paid, in flight, carried, unclaimed, or expired back into the pool.
+                </p>
+                <p>
+                    Publishing only the total earned would let "90% to creators" hide any amount of money that never actually reached anybody, which
+                    is why the outcomes are broken out and why they add up to the distributed total. It also means the margin is visible: revenue
+                    minus fees minus the pool is what the platform keeps, and you can do that subtraction yourself. Member counts on an open month are
+                    today's snapshot (the platform keeps no membership history); a closed month's is the count recorded when it closed.
+                </p>
+
+                <h2>Getting paid</h2>
+                <p>
+                    Earnings accrue against the <strong>publisher name</strong> in your manifest, which is a label until somebody proves it is theirs.
+                    You claim it by committing a token the platform gives you to any repository the registry already lists under that name — push
+                    access is the proof, and it is the same thing the registry vouched for when it accepted your listing. Then you connect a payout
+                    account through Stripe's own hosted setup; bank details, identity documents and tax forms are collected by Stripe, and this
+                    platform never sees or stores them.
+                </p>
+                <p>
+                    A month closes as soon as it is over and becomes payable mid-month. The gap is a deliberate hold window for refunds and card
+                    disputes, not an unexplained delay, and the date is stated rather than implied. You are paid once per cycle for everything you are
+                    owed across every name you hold; a balance under the published minimum carries to the next run rather than becoming a transfer
+                    whose fee eats it. A payment that fails is never abandoned and never sent twice — it is retried until it lands.
+                </p>
+                <p>
+                    Claim late and you still get paid: statements are never bound to an account, so proving a name in October settles what it earned in
+                    July. Earnings owed to a name nobody proves stay claimable for twelve months, then return to the pool and are split among creators
+                    who are still shipping. That is the one case where money you earned can stop being yours, so it is stated here, shown on the
+                    ledger, and given a deadline you can see.
                 </p>
 
                 <h2>What exists today, honestly</h2>
                 <ul>
-                    <li><strong>Working now:</strong> premium listings, the membership, install donations with the monthly dedupe, credits and metered service runs (spend, refund, signed forwarding), the demo service, the pool math, and the public ledger.</li>
-                    <li><strong>Not yet:</strong> payout rails: the ledger accrues and is public from day one; moving money to creators (Stripe Connect or similar) is the next layer, and until it lands the numbers are the commitment, visibly accumulating. Also not yet: credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
+                    <li><strong>Working now:</strong> premium listings, the membership, install donations with the monthly dedupe, credits and metered service runs (spend, refund, signed forwarding), the demo service, the pool math, publisher claims, connected payout accounts, the monthly close against settled revenue, automatic payouts, and the public ledger.</li>
+                    <li><strong>Not yet:</strong> credit top-ups and rollover (the daily allowance is the whole meter), streaming runs (a run is JSON in, JSON out, up to a minute), and self-serve provider onboarding (the first services are onboarded by hand).</li>
                 </ul>
                 <p>
                     The split ({creatorSharePct}%) is configuration the platform publishes on the ledger itself, so this page and the endpoint cannot quietly

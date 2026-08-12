@@ -62,6 +62,15 @@ export const pageMeta: Record<string, PageMeta> = {
             "One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger.",
         datePublished: "2026-08-11",
     },
+    /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the
+     * platform promises, and this is where a reader goes to check it — read live in their own browser from the
+     * public endpoint, so nothing here is authored. */
+    "/earn/ledger/": {
+        title: "The ledger · Earn · intentic",
+        description:
+            "Every month of the creator pool, live from the platform: what came in, what payment processing cost, what the pool was, what reached creators, and what is still owed.",
+        datePublished: "2026-08-12",
+    },
     // The argued version of every promise /earn makes. Its own page so the short one stays scannable.
     "/earn/fine-print/": {
         title: "The fine print · Earn · intentic",

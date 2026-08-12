@@ -88,9 +88,9 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 stored.donations.push(data);
                 return data;
             }),
-            findMany: vi.fn(async ({ where }: { where: { month: { gte: string } } }) =>
-                stored.donations.filter((row) => row.month >= where.month.gte),
-            ),
+            // The ledger reads ONE month of donations now — the open one — because every earlier month is
+            // served from its frozen record rather than recomputed.
+            findMany: vi.fn(async ({ where }: { where: { month: string } }) => stored.donations.filter((row) => row.month === where.month)),
         },
         membership: {
             findUnique: vi.fn(async ({ where }: { where: { userId: string } }) =>
@@ -116,6 +116,10 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 return { count: hits.length };
             }),
         },
+        // The ledger's closed-month half. These suites exercise the OPEN month — the frozen record has its own
+        // suite (pool-close.test.ts) — so a platform with nothing closed yet is exactly the right fixture.
+        poolMonth: { findMany: vi.fn(async () => []) },
+        publisherClaim: { findMany: vi.fn(async () => []) },
         service: {
             findUnique: vi.fn(async ({ where }: { where: { slug: string } }) => stored.services.find((service) => service.slug === where.slug) ?? null),
             findMany: vi.fn(async () =>
@@ -253,14 +257,24 @@ describe(`the creator pool`, () => {
         const body = (await response.json()) as {
             creatorShare: number;
             donationCredits: number;
-            months: { month: string; poolCents: number; paidCents: number; extensions: { extensionId: string; donors: number; credits: number; earningsCents: number }[] }[];
+            months: {
+                month: string;
+                state: string;
+                poolCents: number;
+                earnedCents: number;
+                estimatedGrossCents: number;
+                extensions: { extensionId: string; donors: number; credits: number; earningsCents: number }[];
+            }[];
         };
         expect(body.creatorShare).toBe(0.9);
         expect(body.donationCredits).toBe(50);
         const current = body.months.find((entry) => entry.month === month);
-        // Ceiling: 1 member × $20 × 90% = 1800¢. Paid: 50 credits × (2000¢/3000) × 90% = 29¢ — the ledger
+        // Ceiling: 1 member × $20 × 90% = 1800¢. Earned: 50 credits × (2000¢/3000) × 90% = 29¢ — the ledger
         // states both, so nobody can read the ceiling as a promise.
-        expect(current).toMatchObject({ poolCents: 1800, paidCents: 29 });
+        expect(current).toMatchObject({ state: `open`, poolCents: 1800, earnedCents: 29 });
+        // The month in progress cannot know what it took, so its revenue is named as the estimate it is.
+        expect(current?.estimatedGrossCents).toBe(2000);
+        expect(current).not.toHaveProperty(`grossCents`);
         expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 29 }]);
     });
 
@@ -477,7 +491,7 @@ describe(`metered service runs`, () => {
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/transparency`);
         const body = (await response.json()) as {
             serviceShare: number;
-            months: { month: string; poolCents: number; paidCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { extensionId: string; earningsCents: number }[] }[];
+            months: { month: string; poolCents: number; earnedCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { extensionId: string; earningsCents: number }[] }[];
         };
         expect(body.serviceShare).toBe(0.9);
         const current = body.months.find((entry) => entry.month === month);
@@ -485,6 +499,6 @@ describe(`metered service runs`, () => {
         // earns nothing). Donation: 50 credits × 2/3¢ × 90% = 29¢. Both on the same ledger, side by side.
         expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 24 }]);
         expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 29 }]);
-        expect(current).toMatchObject({ poolCents: 1800, paidCents: 53 });
+        expect(current).toMatchObject({ poolCents: 1800, earnedCents: 53 });
     });
 });

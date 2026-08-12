@@ -1,0 +1,184 @@
+---
+import { API_URL } from "@intentic-dev/site-content/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* THE LEDGER, FOR PEOPLE. The platform has always served these numbers at GET /pool/transparency, which is
+ * honest and unreadable: an economy whose only public account is a JSON document is transparent to engineers
+ * and opaque to everybody it is meant to reassure.
+ *
+ * The numbers are fetched IN THE BROWSER rather than at build time, on purpose and for two reasons. A static
+ * build would freeze figures that move daily and republish them as current, which is exactly the sin the
+ * open/closed distinction exists to prevent. And a reader watching their own browser call the same public URL
+ * this page names is checking the claim, not taking it — which is the entire point of publishing it.
+ *
+ * Every figure below therefore comes from the platform. Nothing on this page is authored, and there is no
+ * fallback content: if the endpoint cannot be reached the page says so plainly instead of showing a number
+ * whose provenance the reader cannot establish. */
+
+const endpoint = `${API_URL}/pool/transparency`;
+---
+
+<BaseLayout
+    title="The ledger · Earn · intentic"
+    description="Every month of the creator pool, live from the platform: what came in, what payment processing cost, what the pool was, what reached creators, and what is still owed."
+>
+    <Nav />
+    <main class="flex-1">
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-12 lg:pt-32">
+                <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The ledger</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">The books, open.</h1>
+                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    What came in, what payment processing cost, what the pool was, and what actually reached creators — month by month. A
+                    finished month is settled and will not change. The month in progress is an estimate, and says so.
+                </p>
+                <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
+                    Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a>, which is public and needs
+                    no login. Your browser is fetching it now — nothing on this page is typed by hand.
+                </p>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-7xl px-6 py-14 lg:py-16">
+            <div id="ledger-loading" class="text-sm text-muted">Reading the ledger…</div>
+            <div id="ledger-error" class="hidden text-sm text-danger"></div>
+            <div id="ledger-rules" class="hidden mb-10 grid gap-x-8 gap-y-5 sm:grid-cols-3"></div>
+            <div id="ledger-months" class="flex flex-col gap-8"></div>
+        </section>
+    </main>
+
+    <Footer />
+</BaseLayout>
+
+<script is:inline define:vars={{ endpoint }}>
+    const money = (cents) => `$${(cents / 100).toLocaleString(`en-GB`, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const monthName = (month) =>
+        new Date(`${month}-01T00:00:00Z`).toLocaleDateString(`en-GB`, { year: `numeric`, month: `long`, timeZone: `UTC` });
+    const day = (stamp) => new Date(stamp).toLocaleDateString(`en-GB`, { year: `numeric`, month: `long`, day: `numeric` });
+
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
+
+    // One figure, with its name under it. The label carries the honesty: "estimated" is part of the name, not
+    // a footnote somewhere else on the page.
+    const stat = (label, value, note) => {
+        const wrap = el(`div`, `border-t border-line pt-3`);
+        wrap.append(el(`div`, `font-mono text-xl font-semibold tracking-tight text-content`, value));
+        wrap.append(el(`div`, `mt-1 text-2xs text-subtle`, label));
+        if (note) wrap.append(el(`div`, `mt-0.5 text-2xs text-subtle`, note));
+        return wrap;
+    };
+
+    const STATUS_TEXT = {
+        paid: `paid`,
+        pending: `payment in flight`,
+        carried: `owed — carrying to the next payout`,
+        unclaimed: `unclaimed — nobody has proved this name yet`,
+        expired: `expired — returned to the pool`,
+    };
+
+    const monthCard = (entry) => {
+        const card = el(`article`, `card flex flex-col gap-5 p-6 sm:p-7`);
+        const header = el(`header`, `flex flex-wrap items-center gap-3`);
+        header.append(el(`h2`, `text-lg font-semibold tracking-tight text-content`, monthName(entry.month)));
+        const open = entry.state === `open`;
+        header.append(
+            el(
+                `span`,
+                open
+                    ? `chip border border-primary-600/35 bg-primary-600/12 text-primary-300`
+                    : `chip border border-success/30 bg-success/10 text-success`,
+                open ? `In progress` : `Closed`,
+            ),
+        );
+        if (!open) header.append(el(`span`, `text-2xs text-subtle`, `closed ${day(entry.closedAt)} · payable ${day(entry.payableAt)}`));
+        card.append(header);
+
+        const stats = el(`div`, `grid gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-4`);
+        if (open) {
+            stats.append(stat(`Revenue, estimated`, money(entry.estimatedGrossCents), `${entry.members} members × the list price`));
+            stats.append(stat(`Pool ceiling`, money(entry.poolCents)));
+            stats.append(stat(`Earned so far`, money(entry.earnedCents), `credits members have actually spent`));
+        } else {
+            stats.append(stat(`Revenue, settled`, money(entry.grossCents), `what actually cleared`));
+            stats.append(stat(`Payment fees`, money(entry.feeCents), `what Stripe took`));
+            stats.append(stat(`Pool ceiling`, money(entry.poolCents)));
+            stats.append(stat(`Earned`, money(entry.earnedCents)));
+            if (entry.sweptCents > 0) stats.append(stat(`Returned from expiry`, money(entry.sweptCents), `unclaimed past its window`));
+            stats.append(stat(`Distributed`, money(entry.distributedCents)));
+            stats.append(stat(`Paid out`, money(entry.paidCents)));
+            if (entry.pendingCents > 0) stats.append(stat(`In flight`, money(entry.pendingCents)));
+            if (entry.carriedCents > 0) stats.append(stat(`Carried`, money(entry.carriedCents), `owed, under the payout minimum or not yet due`));
+            if (entry.unclaimedCents > 0) stats.append(stat(`Unclaimed`, money(entry.unclaimedCents), `waiting for its publisher`));
+        }
+        card.append(stats);
+
+        // Per-listing detail. An open month can show each listing because the rows are still there; a closed
+        // month shows what was frozen, which is per publisher — the unit a payment is actually made in.
+        const rows = open
+            ? [...entry.extensions.map((row) => ({ name: row.extensionId, cents: row.earningsCents, note: `${row.donors} supporters` })),
+               ...entry.services.map((row) => ({ name: row.slug, cents: row.earningsCents, note: `${row.runs} runs` }))]
+            : entry.creators.map((row) => ({ name: row.publisher, cents: row.amountCents, note: STATUS_TEXT[row.status] ?? row.status }));
+        if (rows.length > 0) {
+            const list = el(`div`, `flex flex-col gap-1.5 border-t border-line pt-4`);
+            for (const row of rows.sort((a, b) => b.cents - a.cents)) {
+                const line = el(`p`, `flex flex-wrap items-baseline gap-x-2 text-xs text-muted`);
+                line.append(el(`span`, `font-mono text-content`, row.name));
+                line.append(el(`span`, `font-medium text-content`, money(row.cents)));
+                line.append(el(`span`, `text-subtle`, row.note));
+                list.append(line);
+            }
+            card.append(list);
+        } else {
+            card.append(el(`p`, `border-t border-line pt-4 text-xs text-subtle`, `Nothing earned in this month yet.`));
+        }
+        return card;
+    };
+
+    const render = (data) => {
+        const rules = document.getElementById(`ledger-rules`);
+        const pairs = [
+            [`${Math.round(data.creatorShare * 100)}% to creators`, `Of every credit a member spends, whichever way they spend it.`],
+            [
+                `Paid on the ${data.payoutDayOfMonth}th`,
+                `A month closes when it ends and pays mid-month — a hold window for refunds and disputes. Balances under ${money(data.minPayoutCents)} carry to the next run.`,
+            ],
+            [
+                `${data.claimWindowMonths} months to claim`,
+                `Earnings owed to a publisher name nobody has proved stay claimable for a year, then return to the pool and go to creators who are still shipping.`,
+            ],
+        ];
+        for (const [title, body] of pairs) {
+            const block = el(`div`, `border-t border-line pt-4`);
+            block.append(el(`h3`, `text-sm font-semibold tracking-tight text-content`, title));
+            block.append(el(`p`, `mt-1.5 text-2xs leading-relaxed text-subtle`, body));
+            rules.append(block);
+        }
+        rules.classList.remove(`hidden`);
+
+        const months = document.getElementById(`ledger-months`);
+        for (const entry of data.months) months.append(monthCard(entry));
+        document.getElementById(`ledger-loading`).classList.add(`hidden`);
+    };
+
+    fetch(endpoint, { headers: { accept: `application/json` } })
+        .then((response) => {
+            if (!response.ok) throw new Error(`the platform answered ${response.status}`);
+            return response.json();
+        })
+        .then(render)
+        .catch((error) => {
+            document.getElementById(`ledger-loading`).classList.add(`hidden`);
+            const box = document.getElementById(`ledger-error`);
+            // No cached numbers, no placeholder: a figure a reader cannot trace is worse than none.
+            box.textContent = `The ledger couldn't be read just now (${error.message}). It is served live, so there is nothing cached to show — please try again shortly.`;
+            box.classList.remove(`hidden`);
+        });
+</script>
