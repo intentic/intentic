@@ -2862,9 +2862,6 @@ importers:
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
     devDependencies:
       '@intentic/testing':
         specifier: workspace:*
