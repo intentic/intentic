@@ -652,11 +652,20 @@ if (process.argv.includes("--checks-only")) {
     process.exit(0);
 }
 
-/* A package needs building exactly when its `exports` resolve into `dist/`: that is the path a DEPENDENT's
- * compiler reads, so a stale or absent dist there is a phantom error in somebody else's package. The ones that
- * export `./src/...` (the Vue libraries) are already the source of truth and have nothing to emit.
+/* A package needs building exactly when its `exports` hand a dependent a MODULE out of `dist/`: that `.js` is
+ * what a dependent's compiler reads (through the `.d.ts` beside it), so a stale or absent dist there is a
+ * phantom error in somebody else's package. The ones that export `./src/...` (the Vue libraries) are already
+ * the source of truth and have nothing to emit.
+ *
+ * The module part is the whole test, not merely `dist/` appearing somewhere in `exports`. `_editor/share-view`
+ * exports `./page` as `./dist/index.html` — a page Vite builds, resolved at runtime by `import.meta.resolve` to
+ * find the asset directory, and read by no compiler anywhere. Matching on the directory alone put it in this
+ * set, where `tsgo` — which has no Vue SFC support, that being what the package's own `vue-tsc` typecheck is
+ * for — reported four TS2307s for imports that resolve perfectly well, and the whole gate died before a single
+ * test ran. A built artifact that is not a module belongs to `build`, not here.
+ *
  * `tsgo -b` orders the set itself from the project references, and is incremental — a no-op pass is ~1s. */
-const needsDeclarations = packages.filter(({ pkg }) => /\.\/dist\//.test(JSON.stringify(pkg.exports ?? "")));
+const needsDeclarations = packages.filter(({ pkg }) => /"\.\/dist\/[^"]+\.js"/.test(JSON.stringify(pkg.exports ?? "")));
 
 /* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
  * run: `_platform/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git
