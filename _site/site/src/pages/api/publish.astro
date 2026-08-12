@@ -52,6 +52,17 @@ const sources = `// A repo of its own
     heading="Publish & registries"
     lead="Your extension stays in your repo. A registry is a git repo of pointers to other repos, so listing costs a pull request and nobody has to trust a build service."
 >
+    {/* THE WRONG-ARTIFACT CATCH, and it is first because the mis-route happens before the page starts. "List
+        your work" and "Get listed" are the most-used creator CTAs on this site (the Earn hero, the Earn pool
+        band, the gallery hero) and every one of them is worded artifact-neutrally, but all of them land here,
+        where the entire page is git repos and extension bundles. A provider with an endpoint to sell had to
+        read four screens of registry mechanics to discover none of it was addressed to them. */}
+    <p>
+        <strong>Selling metered runs rather than shipping code?</strong> That is a service rather than an extension: no repo, no bundle
+        and no pointer, just one endpoint the platform forwards paid calls to. Take{" "}
+        <a href="/api/services/">Offer a paid service</a> instead. Everything below is the extension's route.
+    </p>
+
     <h2>The shape of it</h2>
     <p>
         intentic does not host extension code, build it, sign it, or take a cut of it. A registry entry is a{" "}

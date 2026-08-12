@@ -101,7 +101,11 @@ export const apiBook: Book = {
              * category; "Ship" tells them the rows under it are in order and that following them is the point.
              * list it, understand what the trust words claim, then keep it alive release after release. */
             label: "Ship",
-            audience: "From your repo to the marketplace, and staying listed.",
+            /* The audience line names BOTH artifacts, because this shelf holds both and it is the only place
+             * in the top bar either of them is described. It read "From your repo to the marketplace, and
+             * staying listed", which is an extension's sentence: a provider with an endpoint to sell was told
+             * by the one nav surface that could have caught them that this shelf was not about their thing. */
+            audience: "Getting listed and staying listed: a free extension, or a paid service.",
             entry: "publish",
             groups: [
                 {
@@ -154,10 +158,15 @@ export const apiBook: Book = {
                              * above are one artifact's lifecycle and this is a different artifact. Before it, the
                              * provider's story was one honest sentence in /earn/'s fine print and a dead end. */
                             id: "services",
-                            title: "Offer a service",
+                            /* "PAID" IS LOAD-BEARING IN THE LABEL. "Offer a service" reads as consulting to
+                             * half the people who see it, and against a shelf of extension rows the one word
+                             * that separates the two artifacts is the money: an extension is free to run and
+                             * this is not. The label is the same everywhere it appears, so the footer, the
+                             * rail and the two forks that point here cannot teach three vocabularies. */
+                            title: "Offer a paid service",
                             blurb: "One endpoint, a signed forward, and a price in credits",
                             meta: {
-                                title: "Offer a premium service · intentic API",
+                                title: "Offer a paid service · intentic API",
                                 description:
                                     "Wire a service into intentic: one JSON endpoint, the Stripe-style signature to verify, what is paid versus refunded, pricing in credits, and how onboarding works today.",
                                 datePublished: "2026-08-12",
@@ -176,6 +185,27 @@ export const apiDestinations = bookDestinations(apiBook);
 export function apiHref(id: string): string {
     return bookHref(apiBook, id);
 }
+
+/* THE ONE PAGE THAT IS ALSO A NAV ROW, and the single exception to "the bar shows shelves, not pages".
+ *
+ * The rule earns its keep for the four extension pages: they are one artifact's lifecycle, they will keep
+ * multiplying, and a bar listing them individually would go stale the week someone adds a fifth. A service is
+ * the opposite shape. It is one page because it is one endpoint, there is no second page coming, and it is
+ * the only OTHER THING YOU CAN SHIP here: filed under a shelf whose entry page is about git registries, the
+ * bar told a provider this menu was not about their thing. A rule that hides the second of two artifacts is
+ * being applied past the point it was reasoning about.
+ *
+ * Derived from the book entry rather than retyped, so the row still cannot drift from the page: rename the
+ * page and the bar, the phone menu and the footer all follow. The throw is the anti-drift half of the same
+ * bargain, turning a page that moved into a loud build failure instead of a blank menu row. */
+const servicesPage = apiPages.find((page) => page.id === "services");
+if (servicesPage === undefined) throw new Error("The api book has no services page for the nav row to derive from.");
+
+export const apiServicesDestination = {
+    label: servicesPage.title,
+    href: apiHref(servicesPage.id),
+    description: servicesPage.blurb,
+};
 
 /* THE SEVEN STEPS, in order, with the page that owns each: the cycle the API overview draws as a diagram and
  * the gallery draws as a strip of chips.

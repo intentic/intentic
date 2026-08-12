@@ -1,4 +1,4 @@
-import { apiDestinations } from "./api";
+import { apiDestinations, apiServicesDestination } from "./api";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
 import { productHref, productPages } from "./product";
@@ -109,10 +109,21 @@ export const navEntries: NavEntry[] = [
         action: { label: "Changelog", href: "/changelog/" },
     },
     /* The authoring book, its own entry in the bar rather than a shelf inside Docs: the split this whole tree
-     * exists to make. Two rows, one per shelf, and the reason a reader picks one over the other is the audience
+     * exists to make. Two shelf rows, and the reason a reader picks one over the other is the audience
      * line under each: Build is the code, Ship is the process. "Developers" rather than "API" because the menu
      * holds both jobs, and a bar that says "API" over registry policy is promising reference it isn't holding.
      * The URLs stay /api/*, because a label is a word and a URL is a promise other people have already linked to.
+     *
+     * THE THIRD ROW IS A PAGE, not a shelf, and it is the second thing you can ship here. Both artifacts are
+     * now named on the one surface every visitor passes: the shelves cover the extension, and the service
+     * gets the row it cannot get any other way, because one endpoint will never be a shelf of its own. This
+     * is the ONLY place the derived-from-shelves rule bends, and it bends because the rule was written to
+     * stop a menu listing twenty pages, not to hide one of two artifacts (see apiServicesDestination).
+     *
+     * It is a menu row rather than a top-level label on purpose. In the bar it would read as a peer
+     * destination, announcing a curated, hand-onboarded catalog to every visitor who has no endpoint to sell,
+     * and the bar is already six labels, two marks and a button wide. Inside the menu it costs nobody
+     * anything: whoever opened "Developers" is already the audience it is written for.
      *
      * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an
      * author arrives with: what does a listed extension actually look like, and the row it would otherwise
@@ -121,7 +132,7 @@ export const navEntries: NavEntry[] = [
         type: "menu",
         label: "Developers",
         prefix: "/api",
-        sections: [{ items: [...apiDestinations] }],
+        sections: [{ items: [...apiDestinations, apiServicesDestination] }],
         action: { label: "Browse the gallery", href: "/extensions/" },
     },
     // A bare link: the gallery's contents come from the registry repo at build time, so there is no authored

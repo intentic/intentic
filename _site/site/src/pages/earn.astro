@@ -348,6 +348,18 @@ const rules = [
                             The service here is invented. Each real one publishes its own price, shown like this before every run, and
                             entered the catalog through a human review at the platform, not a signup form.
                         </p>
+                        {/* THE PROVIDER'S DOOR, and this is the only place on the page it belongs: a reader
+                            who has just watched a run get priced and approved is the one reader who knows what
+                            being on the other end would mean. It is a qualified fork rather than a button
+                            because the qualifier does the filtering: everybody else on this page should be
+                            building a free extension, and a third CTA in the closing band would offer a
+                            hand-onboarded catalog the same weight as the self-serve path most people want. */}
+                        <p class="mt-6 max-w-copy text-sm leading-relaxed text-muted">
+                            On the other end of that exchange? A paid data API, heavy compute or a licensed corpus is a{" "}
+                            <strong class="font-medium text-content">service</strong> rather than an extension, because every run costs you
+                            real money.{" "}
+                            <a class="font-medium text-link hover:underline" href="/api/services/">Offer a paid service →</a>
+                        </p>
                     </div>
 
                     <figure class="w-full lg:justify-self-end">

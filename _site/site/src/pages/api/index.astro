@@ -310,6 +310,25 @@ const agentPoints = [
         everywhere: no view, no command, no PATH entry, no connector card, no env var, no background process.
     </p>
 
+    {/* THE SECOND ARTIFACT, named on the book's own front page. This page defined "what you can ship here" for
+        nine screens without once using the word service, so the only reader who learned the other one existed
+        was the reader who happened to scroll the rail to the end of a shelf they had no reason to open. It
+        closes the page rather than opening it because the proportion is real: almost everything should be an
+        extension, and the fork is worth one section at the end, not a fifty-fifty framing at the top. */}
+    <h2>The other thing you can ship</h2>
+    <p>
+        Everything above is an <strong>extension</strong>: code of yours that runs in somebody else's sandbox, free to install and free to
+        run forever. There is a second artifact here, and it is not a smaller version of this one. A <strong>service</strong> is a single
+        HTTPS endpoint that the platform forwards metered, signed calls to. No manifest, no bundle, no repo pointer, and none of your code on
+        anybody's machine.
+    </p>
+    <p>
+        The line between them is who pays per run. An extension costs you nothing each time it is used, so it is free. A service is for
+        when every run costs <em>you</em> real money, such as a paid data API, heavy compute or a licensed corpus, where giving it away per
+        run would mean paying to be used. Almost everything should be an extension; if yours is the exception,{" "}
+        <a href="/api/services/">Offer a paid service</a> is the provider's whole side of it.
+    </p>
+
     <DocsRelated
         links={[
             { href: "/api/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },

@@ -35,7 +35,13 @@ const columns: { label: string; links: { href: string; label: string; external?:
          * on purpose. Its shelves are two, so shelf rows would be a column of two; and these are the pages
          * people deep-link and search for by name. A footer column is a shortcut, and "Manifest reference" is a
          * shortcut in a way that "Reference" is not. Earn rides here too: it left the book for its own
-         * top-level page, but "how do creators get paid" is searched from the same seat these are. */
+         * top-level page, but "how do creators get paid" is searched from the same seat these are.
+         *
+         * "Offer a paid service" sits beside Earn because it is the OTHER thing you can ship here, and this
+         * column is its only sitewide row. The top bar cannot carry it (that menu is one row per shelf, by
+         * construction) and its readers are people who already run a paid API: they arrive from a search
+         * engine rather than from browsing the product, and a page with one inbound link is a page search
+         * never surfaces. A footer row costs no attention and fixes exactly that. */
         label: "Developers",
         links: [
             { href: apiHref(""), label: "Extension API" },
@@ -43,6 +49,7 @@ const columns: { label: string; links: { href: string; label: string; external?:
             { href: apiHref("publish"), label: "Publish & registries" },
             { href: apiHref("manifest"), label: "Manifest reference" },
             { href: apiHref("http"), label: "HTTP API" },
+            { href: apiHref("services"), label: "Offer a paid service" },
             { href: "/earn/", label: "Earn & the creator pool" },
         ],
     },
