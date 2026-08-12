@@ -509,7 +509,19 @@ for (const file of HEADING_FILES) {
  * Compared against merge-base rather than the worktree so it gates the PUSH (pre-push hook, PR preflight) —
  * on main itself the merge-base IS HEAD and the check stands down, which is honest: by then the declaration
  * either landed or the moment for it has passed. No base, no lock at base, no git: stand down rather than
- * guess. */
+ * guess.
+ *
+ * A LINKED WORKTREE STANDS DOWN TOO. Every conversation runs in one (invariant 2), and a conversation is the
+ * one place this gate can never be satisfied: landing carries work to the main tree as PATCHES, so a
+ * declaring commit written on a conversation's branch never joins any range a push is checked on — the
+ * five-sessions lesson at the remedy below. Firing here therefore blocked `pnpm test` on a commit that could
+ * only ever be theater, and taxed every legitimate shrink one hand-typed empty commit per conversation. The
+ * declaration is the landing draft's to write — git/contract-shrink.ts (in _sandbox/sandbox) detects the
+ * shrink in the claim and agents/landed-subject.ts forces the `!` and the Breaking-Note into the message —
+ * and the commit that draft becomes joins a range this gate still checks, at the pre-push hook and the CI
+ * preflight, both of which run from a primary checkout. Recognized by shape: a checkout whose git dir is not
+ * its common dir is a linked worktree. A git too old to answer the question reads as primary, which fails
+ * toward checking. */
 const LOCK_FILE = "_sandbox/sandbox-contract/contract.lock.json";
 const undeclaredBreaks = [];
 const git = (...args) => {
@@ -557,7 +569,10 @@ const shrunk = (base, head, at, out) => {
         }
     }
 };
-if (existsSync(join(root, LOCK_FILE))) {
+const gitDir = git("rev-parse", "--absolute-git-dir")?.trim();
+const gitCommonDir = git("rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();
+const conversation = gitDir !== undefined && gitCommonDir !== undefined && gitDir !== gitCommonDir;
+if (!conversation && existsSync(join(root, LOCK_FILE))) {
     const head = git("rev-parse", "HEAD")?.trim();
     const mergeBase = (git("merge-base", "HEAD", "origin/main") ?? git("merge-base", "HEAD", "main"))?.trim();
     const baseLock = head !== undefined && mergeBase !== undefined && mergeBase !== head ? git("show", `${mergeBase}:${LOCK_FILE}`) : undefined;
@@ -626,7 +641,9 @@ console.log(`typecheck coverage: every package with tests type-checks them, and 
 console.log(`lockfile: ${importers.length} importers record the specifiers their package.json declares`);
 console.log(`fork boundary: no self-hosted job is reachable from a fork's pull request`);
 console.log(`release headings: writer and both parsers spell the same two sections`);
-console.log(`wire contract: nothing shrank undeclared against merge-base`);
+console.log(
+    `wire contract: ${conversation ? "conversation worktree — the landing draft declares any shrink, and the push re-runs this gate from the primary checkout" : "nothing shrank undeclared against merge-base"}`,
+);
 console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
