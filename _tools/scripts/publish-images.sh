@@ -16,6 +16,9 @@
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
+# GHCR refuses a burst of manifest PUTs with a 403 that is a clock, not a permissions problem — one pipeline
+# writes this image six times. registry-retry.sh says the rest; every push below goes through it.
+. "$(dirname "$0")/registry-retry.sh"
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
 # Which of the two images to build — the multi-arch flow builds `sandbox` per arch on different runners while
@@ -102,7 +105,7 @@ publish() {
             fi
         done
     done
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
+    registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
         "$@" --push "$context"
 }

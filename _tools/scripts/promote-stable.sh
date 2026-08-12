@@ -22,6 +22,9 @@
 #   SOAK_HOURS=48 bash _tools/scripts/promote-stable.sh
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
+# Three manifest writes back to back is the shape GHCR throttles — and a promotion refused halfway leaves the
+# stable lane pointing at two versions at once. registry-retry.sh says the rest.
+. "$(dirname "$0")/registry-retry.sh"
 cd "$(repo_root)"
 
 REPO="${GITHUB_REPOSITORY:-intentic/intentic}"
@@ -80,9 +83,9 @@ echo "==> promoting ${candidate} to stable (current: ${current:-none})"
 # 1. Images. `imagetools create` copies the version's manifest (list or single) under the stable name without
 # pulling a layer — the same digests the beta lane has been running all along.
 printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "${GITHUB_ACTOR:-promote}" --password-stdin >/dev/null
-docker buildx imagetools create -t "${REGISTRY}/sandbox:stable" "${REGISTRY}/sandbox:${VERSION}"
-docker buildx imagetools create -t "${REGISTRY}/sandbox:core-stable" "${REGISTRY}/sandbox:core-${VERSION}"
-docker buildx imagetools create -t "${REGISTRY}/dind-host:stable" "${REGISTRY}/dind-host:${VERSION}"
+registry_retry docker buildx imagetools create -t "${REGISTRY}/sandbox:stable" "${REGISTRY}/sandbox:${VERSION}"
+registry_retry docker buildx imagetools create -t "${REGISTRY}/sandbox:core-stable" "${REGISTRY}/sandbox:core-${VERSION}"
+registry_retry docker buildx imagetools create -t "${REGISTRY}/dind-host:stable" "${REGISTRY}/dind-host:${VERSION}"
 
 # 2. The git pointer. The release tag is on the remote (semantic-release pushed it); moving `stable` onto its
 # commit needs no local tag object.

@@ -17,6 +17,10 @@
 # and nothing is built or pushed, so a main push that only touched engine libs re-releases the platform for
 # the cost of two manifest calls. Outside turbo (no TURBO_HASH) the skip is disabled and every run builds.
 set -euo pipefail
+# The platform's two images push several tags in a row into the same registry the sandbox images are filling
+# in the same pipeline, so they share its rate-limit window. registry-retry.sh says the rest — it wraps the
+# REGISTRY writes below and not the local build, which has nothing to wait out.
+. "$(dirname "$0")/registry-retry.sh"
 
 APP="${1:?usage: docker-release.sh <image> [--prune]}"
 shift
@@ -42,7 +46,7 @@ if [ -n "${TURBO_HASH:-}" ]; then
             done
         done
         echo "content unchanged — aliasing tags onto $IMAGE:$HASH_TAG"
-        docker buildx imagetools create "${alias_args[@]}" "$IMAGE:$HASH_TAG"
+        registry_retry docker buildx imagetools create "${alias_args[@]}" "$IMAGE:$HASH_TAG"
         exit 0
     fi
 fi
@@ -69,6 +73,6 @@ docker build --provenance=false -f Dockerfile "${tag_args[@]}" "$CONTEXT"
 
 for registry in $REGISTRIES; do
     for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
-        docker push "$registry/$APP:$tag"
+        registry_retry docker push "$registry/$APP:$tag"
     done
 done
