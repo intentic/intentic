@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Capability, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
@@ -30,6 +30,7 @@ const withStore = (capabilities: Capability[] = []) => {
                     await mkdir(dirname(path), { recursive: true });
                     await writeFile(path, content);
                 },
+                remove: (path) => rm(path, { recursive: true, force: true }),
             }),
             sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
                 get: async () => stored,

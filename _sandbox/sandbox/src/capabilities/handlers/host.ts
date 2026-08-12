@@ -36,7 +36,7 @@ export const hostHandler: CapabilityHandler = {
         carry: async (ctx, from, to) => {
             await ctx.hosts.rename(from, to);
             ctx.hostHub.disconnect(from, "this computer was renamed — reconnecting under its new name");
-            await removeLoadedSkill(ctx.workspace.root, from);
+            await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -49,7 +49,7 @@ export const hostHandler: CapabilityHandler = {
         if (skill === undefined) {
             throw new Error(`the extension declaring "${host.platform}" has no readable skill pack — reinstall it`);
         }
-        await writeLoadedSkill(ctx.workspace.root, id, skill);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
         if (!(await ctx.hosts.enrolled(id))) {
             yield {
                 kind: "log",
@@ -85,6 +85,6 @@ export const hostHandler: CapabilityHandler = {
     remove: async (ctx, id) => {
         ctx.hostHub.disconnect(id, "this computer was disconnected from the sandbox");
         await ctx.hosts.revoke(id);
-        await removeLoadedSkill(ctx.workspace.root, id);
+        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },
 };

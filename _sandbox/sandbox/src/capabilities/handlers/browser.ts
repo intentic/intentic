@@ -75,7 +75,7 @@ export const browserHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to, config) => {
             await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
-            await removeLoadedSkill(ctx.workspace.root, from);
+            await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -111,7 +111,7 @@ export const browserHandler: CapabilityHandler = {
         if (skill === undefined) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
         }
-        await writeLoadedSkill(ctx.workspace.root, id, skill);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
         yield {
             kind: "log",
             message:
@@ -139,7 +139,7 @@ export const browserHandler: CapabilityHandler = {
     // own marker and skill — the shared browser (and every sibling signed in beside it) belongs to the identity
     // and outlives any one account.
     remove: async (ctx, id, config) => {
-        await removeLoadedSkill(ctx.workspace.root, id);
+        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
         if ((config as BrowserConfig).identity === undefined) {
             await clearSession(ctx.workspace.root, id);
         } else {

@@ -64,7 +64,7 @@ export const identityHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to) => {
             await moveSession(ctx.workspace.root, from, to);
-            await removeLoadedSkill(ctx.workspace.root, from);
+            await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -77,7 +77,7 @@ export const identityHandler: CapabilityHandler = {
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
             throw new Error(`no capability "${mailbox}" to read mail from — connect the mailbox (IMAP) first, or leave the field empty`);
         }
-        await writeLoadedSkill(ctx.workspace.root, id, identitySkill(id, email, openAccounts === "on"));
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, identitySkill(id, email, openAccounts === "on"));
         yield {
             kind: "log",
             message: `Identity "${id}" (${email}) is set up. Rebuild the sandbox if prompted, then open "Log in" and sign into the email provider yourself — that one login stays human. Accounts the agent opens through it will share this browser.`,
@@ -105,7 +105,7 @@ export const identityHandler: CapabilityHandler = {
         if (born.length > 0) {
             throw new Error(`"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`);
         }
-        await removeLoadedSkill(ctx.workspace.root, id);
+        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
         await clearSession(ctx.workspace.root, id);
     },
 };

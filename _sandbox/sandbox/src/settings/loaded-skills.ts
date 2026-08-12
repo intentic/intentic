@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import type { Services } from "../composition.js";
 import { parseSkillFile } from "./skill-file.js";
 
 /* THE LOADED-SKILLS FOLDER, in the one place every writer and reader spells it.
@@ -19,9 +20,21 @@ import { parseSkillFile } from "./skill-file.js";
  * Both projections are DERIVED, scan-to-converge, and serialized per workspace (a capability apply and the boot
  * reconcile may write concurrently; two interleaved index rebuilds would otherwise let the earlier scan land
  * last and drop the newer skill until something else wrote). Writers await the queue, so "write returned" means
- * every runtime's view is current. */
+ * every runtime's view is current.
+ *
+ * CONTENT GOES THROUGH THE FILES SEAM, the tree is walked directly, and the split is not stylistic. A skill file
+ * and the index are workspace CONTENT — the seam is what a test replaces to keep a fake workspace off the real
+ * disk, and a store that wrote around it put a stray skill into the developer's own /work the first time a route
+ * suite exercised a real handler. The links and the scan have no seam to go through and need none: they only
+ * ever DESCRIBE what is on disk, so a suite whose content writes went to memory converges the real tree against
+ * itself and writes nothing. */
 
 const SKILL_FILE = "SKILL.md";
+
+/* The two writes this store owes the workspace. A structural subset of `Services["files"]` (`ctx.files` on a
+ * capability handler is the same object), so every caller already holds one and no caller can pass something
+ * that writes somewhere else. */
+export type SkillFiles = Pick<Services["files"], "write" | "remove">;
 
 export const loadedSkillsRoot = (root: string): string => join(root, ".agents", "skills");
 export const loadedSkillDir = (root: string, name: string): string => join(loadedSkillsRoot(root), name);
@@ -110,7 +123,7 @@ const spliceIndex = (existing: string | undefined, section: string | undefined):
     return `${before}${block}\n${after}`;
 };
 
-const convergeIndex = async (root: string, names: readonly string[]): Promise<void> => {
+const convergeIndex = async (files: SkillFiles, root: string, names: readonly string[]): Promise<void> => {
     const skills: { name: string; description: string }[] = [];
     for (const name of names) {
         const text = await readFile(loadedSkillFile(root, name), "utf8").catch(() => undefined);
@@ -125,16 +138,16 @@ const convergeIndex = async (root: string, names: readonly string[]): Promise<vo
         return;
     }
     if (next === undefined) {
-        await rm(path, { force: true });
+        await files.remove(path);
         return;
     }
-    await writeFile(path, next);
+    await files.write(path, next);
 };
 
 /* One converge pass: a Claude link per canonical skill, no Claude link without one, and the index current. The
  * sweep only ever deletes SYMLINKS THAT POINT AT THE CANONICAL FOLDER — a real directory (a drop-in meant for
  * Claude alone) and a link somebody made to somewhere else are both outside this pass's ownership. */
-const converge = async (root: string): Promise<void> => {
+const converge = async (files: SkillFiles, root: string): Promise<void> => {
     const names = await skillDirNames(loadedSkillsRoot(root));
     for (const name of names) {
         await ensureClaudeLink(root, name);
@@ -147,15 +160,15 @@ const converge = async (root: string): Promise<void> => {
             await rm(link, { force: true });
         }
     }
-    await convergeIndex(root, names);
+    await convergeIndex(files, root, names);
 };
 
 /* The serialization, per workspace root. The stored chain swallows its own failure so one bad pass cannot wedge
  * every later write; the RETURNED promise does not, so the caller that triggered the pass still hears about it. */
 const chains = new Map<string, Promise<void>>();
 
-const queueConverge = (root: string): Promise<void> => {
-    const next = (chains.get(root) ?? Promise.resolve()).then(() => converge(root));
+const queueConverge = (files: SkillFiles, root: string): Promise<void> => {
+    const next = (chains.get(root) ?? Promise.resolve()).then(() => converge(files, root));
     chains.set(
         root,
         next.catch(() => undefined),
@@ -165,20 +178,18 @@ const queueConverge = (root: string): Promise<void> => {
 
 // Write one loaded skill — the canonical file, then both projections. What every writer calls, so a skill
 // cannot land where one runtime reads it and not another.
-export const writeLoadedSkill = async (root: string, name: string, text: string): Promise<void> => {
-    const file = loadedSkillFile(root, name);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, text);
-    await queueConverge(root);
+export const writeLoadedSkill = async (files: SkillFiles, root: string, name: string, text: string): Promise<void> => {
+    await files.write(loadedSkillFile(root, name), text);
+    await queueConverge(files, root);
 };
 
 // Remove one loaded skill everywhere it is projected. The link is taken out here rather than left to the sweep
 // so the caller's postcondition — "no runtime offers this skill anymore" — holds when the promise resolves.
-export const removeLoadedSkill = async (root: string, name: string): Promise<void> => {
-    await rm(loadedSkillDir(root, name), { recursive: true, force: true });
+export const removeLoadedSkill = async (files: SkillFiles, root: string, name: string): Promise<void> => {
+    await files.remove(loadedSkillDir(root, name));
     const link = claudeSkillLink(root, name);
     if ((await lstat(link).catch(() => undefined))?.isSymbolicLink() === true && isManagedLink(await readlink(link).catch(() => undefined))) {
         await rm(link, { force: true });
     }
-    await queueConverge(root);
+    await queueConverge(files, root);
 };

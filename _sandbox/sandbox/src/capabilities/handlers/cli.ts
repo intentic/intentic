@@ -63,7 +63,7 @@ export const cliHandler: CapabilityHandler = {
      * suffixes inside it, the env the agent gets each turn — so the re-apply writes the lot. All that is left
      * is the old skill directory, which nothing would otherwise delete and which would go on offering the agent
      * a cheatsheet for credentials that no longer exist under those names. */
-    rename: { carry: async (ctx, from) => removeLoadedSkill(ctx.workspace.root, from) },
+    rename: { carry: async (ctx, from) => removeLoadedSkill(ctx.files, ctx.workspace.root, from) },
     apply: async function* (ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;
@@ -95,7 +95,7 @@ export const cliHandler: CapabilityHandler = {
         for (const key of keys) {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);
         }
-        await writeLoadedSkill(ctx.workspace.root, id, skill);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
         // The connector's optional privileged hook (github/gitlab git-over-ssh), run visibly in the capability's
         // job session — surfaced only when it actually shells out. A returned message is a non-fatal warning.
         const hook = CORE_CONNECTOR_HOOKS[provider];
@@ -155,6 +155,6 @@ export const cliHandler: CapabilityHandler = {
             config as CliConfig,
             terminalExec(ctx.terminalRun, capabilityJobSession(id), ctx.workspace.root),
         );
-        await removeLoadedSkill(ctx.workspace.root, id);
+        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },
 };

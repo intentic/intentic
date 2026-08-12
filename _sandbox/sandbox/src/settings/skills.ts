@@ -109,7 +109,7 @@ export const writeOwnSkill = async (services: Services, skill: OwnSkill): Promis
 // copy behind would keep a deleted skill in the agents' context until the next reconcile happened to notice.
 export const removeOwnSkill = async (services: Services, name: string): Promise<void> => {
     await rm(ownSkillDir(services.workspace.root, name), { recursive: true, force: true });
-    await removeLoadedSkill(services.workspace.root, name);
+    await removeLoadedSkill(services.files, services.workspace.root, name);
 };
 
 /* Converge every skill this daemon owns against the enabled list: written when its name is present (so the agent
@@ -128,9 +128,9 @@ export const reconcileSkills = async (services: Services, enabled: readonly stri
     ];
     for (const [name, body] of sources) {
         if (enabled.includes(name)) {
-            await writeLoadedSkill(services.workspace.root, name, body);
+            await writeLoadedSkill(services.files, services.workspace.root, name, body);
             continue;
         }
-        await removeLoadedSkill(services.workspace.root, name);
+        await removeLoadedSkill(services.files, services.workspace.root, name);
     }
 };

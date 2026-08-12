@@ -158,7 +158,7 @@ export const vpnHandler: CapabilityHandler = {
         // Persist the connection first: the manifest entry is what puts the fragment into the overlay, so an
         // add must land even when the tooling isn't installed yet.
         await driver.write(id, vpn);
-        await writeLoadedSkill(ctx.workspace.root, "vpn", VPN_SKILL);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, "vpn", VPN_SKILL);
         // Re-applying (an edited credential, an auto-connect flip) must never leave a tunnel running the old
         // config — drop it, then re-dial below if it should be up.
         await disconnectVpn(entry).catch(() => undefined);
@@ -190,7 +190,7 @@ export const vpnHandler: CapabilityHandler = {
         // manifest entry AFTER this handler, so `id` is still counted here.
         const vpnCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "vpn").length;
         if (vpnCount <= 1) {
-            await removeLoadedSkill(ctx.workspace.root, "vpn");
+            await removeLoadedSkill(ctx.files, ctx.workspace.root, "vpn");
         }
     },
 };

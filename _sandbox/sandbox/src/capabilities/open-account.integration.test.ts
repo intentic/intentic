@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fakeFiles, memoryCapabilitiesStore, services, tempWorkspace } from "../route-testing.js";
@@ -13,19 +12,25 @@ import { openBrowserAccount } from "./open-account.js";
 const identity = (id: string, openAccounts: "on" | "off"): Capability =>
     ({ id, kind: "identity", config: { email: `${id}@gmail.com`, openAccounts } }) as Capability;
 
-// The skill lands on the real temp workspace (the loaded-skills store writes disk directly, not through the
-// services seam): what matters here is that the account's skill is written at all — an account with no skill is
-// an entry the agent never learns it has — not what the renderer put in it.
+// Writes are recorded rather than performed: what matters here is that the account's skill is written at all
+// (an account with no skill is an entry the agent never learns it has), not what the renderer put in it.
 const harness = (entries: Capability[]) => {
     const store = memoryCapabilitiesStore(entries);
-    return { store, services: services({ workspace: tempWorkspace([]), capabilities: store, files: fakeFiles({}) }) };
+    const written = new Map<string, string>();
+    // Skills are written as text; the binary arm of the writer's signature is decoded rather than refused so
+    // this fake matches the real one instead of narrowing it.
+    const files = fakeFiles({
+        write: async (path: string, content: string | Uint8Array) =>
+            void written.set(path, typeof content === "string" ? content : new TextDecoder().decode(content)),
+    });
+    return { store, written, services: services({ workspace: tempWorkspace([]), capabilities: store, files }) };
 };
 
 const configOf = async (store: ReturnType<typeof memoryCapabilitiesStore>, id: string): Promise<BrowserConfig> =>
     (await store.get(id))?.config as BrowserConfig;
 
 test("files a carded site on its own card, with the account's purpose and the date it was opened", async () => {
-    const { store, services: deps } = harness([identity("scout", "on")]);
+    const { store, written, services: deps } = harness([identity("scout", "on")]);
 
     await openBrowserAccount(deps, { id: "reddit-scout", platform: "reddit", identity: "scout", purpose: "community research" });
 
@@ -39,7 +44,7 @@ test("files a carded site on its own card, with the account's purpose and the da
     // The card's own URLs are pinned, so the entry must not carry a second opinion about them.
     expect(config["homeUrl"]).toBeUndefined();
     // The account is real the moment it is filed: its skill is what gives the agent the site's playbook.
-    expect(await readFile(loadedSkillFile(deps.workspace.root, "reddit-scout"), "utf8")).toContain("reddit-scout");
+    expect(written.get(loadedSkillFile(deps.workspace.root, "reddit-scout"))).toContain("reddit-scout");
 });
 
 /* THE CASE THAT USED TO BE REFUSED. An uncarded site — the four Product Hunt accounts this replaced were exactly

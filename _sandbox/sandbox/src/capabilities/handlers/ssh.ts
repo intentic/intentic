@@ -49,7 +49,7 @@ export const sshHandler: CapabilityHandler = {
         } else {
             await writeFile(hostPassPath(id), ssh.password, { mode: 0o600 });
         }
-        await writeLoadedSkill(ctx.workspace.root, "ssh", SSH_SKILL);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, "ssh", SSH_SKILL);
         yield { kind: "log", message: `Connected ${id}. The agent can reach it next turn via \`ssh ${id}\`.` };
     },
     status: async (_ctx, id) =>
@@ -60,7 +60,7 @@ export const sshHandler: CapabilityHandler = {
         // the manifest entry AFTER this handler, so `id` is still counted here.
         const sshCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "ssh").length;
         if (sshCount <= 1) {
-            await removeLoadedSkill(ctx.workspace.root, "ssh");
+            await removeLoadedSkill(ctx.files, ctx.workspace.root, "ssh");
         }
     },
 };

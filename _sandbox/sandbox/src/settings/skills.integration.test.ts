@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
@@ -18,6 +18,7 @@ const stubServices = (root: string): Services =>
                 await mkdir(dirname(path), { recursive: true });
                 await writeFile(path, content);
             },
+            remove: (path) => rm(path, { recursive: true, force: true }),
         }),
     });
 
