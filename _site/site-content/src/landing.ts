@@ -122,11 +122,12 @@ export const landingContent: LandingContent = {
         // headline owns the working stance — you hand over the work, the agent does it, nothing lands
         // without you — and says it in words nobody has to translate.
         headlineLines: ["You delegate. They work.", "You approve."],
-        // The headline spends itself on control, so the subhead carries the other two differentiators —
-        // ownership (your hardware) and persistence (survives the browser closing) — plus the price of
-        // scale, which is what makes "ten" credible. "Close the browser", not "log off": nothing is
-        // ended for the runs to continue.
-        subhead: "Ten agents on hardware you own, running on the subscriptions you already pay for — and still working after you close the browser.",
+        // Two facts, twelve words. Scale is the reason to want it and persistence is the reason to
+        // believe it, so those are the two the subhead buys. Ownership is deliberately NOT here: it
+        // answers an objection rather than creating a want, so it earns its keep in the chip, the
+        // ownership band and the FAQ instead of the one line everybody reads. "Close the browser",
+        // not "log off": nothing is ended for the runs to continue.
+        subhead: "Ten agents at once. They keep working after you close the browser.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",
@@ -135,7 +136,7 @@ export const landingContent: LandingContent = {
         },
         demo: {
             playLabel: "Open the live workspace",
-            note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff. Nothing to install.",
+            note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff.",
         },
     },
     // The tour: five verbs, each said once, each a picture instead of a paragraph. Order matches the
@@ -145,12 +146,12 @@ export const landingContent: LandingContent = {
     verbs: {
         eyebrow: "What you do",
         heading: "Run a fleet. Stay in control.",
-        sub: "Run ten agents at once, connect them to your systems, start them from events and review every change before it lands.",
+        sub: "Run them, wire them to your systems, wake them on events, read every change.",
         items: [
             {
                 verb: "Run",
                 href: productHref("orchestrate"),
-                line: "Run ten agents at once. The board shows who is blocked, running or done, and brings the agent that needs you to the front.",
+                line: "The board holds every agent at once and brings the one that needs you to the front.",
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -160,7 +161,7 @@ export const landingContent: LandingContent = {
             {
                 verb: "Connect",
                 href: productHref("empower"),
-                line: "Give an agent access to GitHub, Postgres, Stripe, Discord or any MCP server. It can use them while the keys stay in your sandbox.",
+                line: "Give an agent GitHub, Postgres, Stripe, Discord or any MCP server. The keys stay in your sandbox.",
                 shot: {
                     name: "capabilities",
                     alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -170,13 +171,13 @@ export const landingContent: LandingContent = {
             {
                 verb: "Automate",
                 href: productHref("automate"),
-                line: "Start agents from an event you choose and a guard command you write. Each run opens a fresh session you can watch.",
+                line: "Wake an agent on an event you pick. Each run opens a fresh session you can watch.",
                 triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
             },
             {
                 verb: "Review",
                 href: productHref("supervise"),
-                line: "It plans first and you approve; finished work waits on its own branch until you have read every hunk of the diff.",
+                line: "It plans first and you approve. Finished work waits on its branch until you have read the diff.",
                 shot: {
                     name: "workspace-changes",
                     alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
@@ -186,10 +187,10 @@ export const landingContent: LandingContent = {
             {
                 verb: "Host",
                 href: productHref("delegate"),
-                line: "Give the workspace its own server and hand off day-to-day operation. It stays on your hardware and under your control.",
+                line: "Give the workspace its own server and hand off the day-to-day. It stays under your control.",
                 shot: {
                     name: "sandbox-overview",
-                    alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds — environment, secrets, agent account, extensions, access, personas and computers.",
+                    alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",
                     label: "acme-shop · /sandbox",
                 },
             },
@@ -202,7 +203,7 @@ export const landingContent: LandingContent = {
     ownership: {
         eyebrow: "Ownership",
         heading: "Your code never leaves your machine.",
-        sub: "An agent with your keys is safest when you own where it runs. Here is what stays on your hardware and what the platform stores.",
+        sub: "What stays on your machine, and everything the platform stores.",
         ledger: {
             yours: {
                 label: "Your machine",
@@ -226,7 +227,7 @@ export const landingContent: LandingContent = {
     economics: {
         eyebrow: "Economics",
         heading: "A whole fleet, on the subscriptions you already pay for.",
-        sub: "Ten agents sounds expensive. It isn't: each runs on a plan you already have, on hardware you already own.",
+        sub: "Ten agents sounds expensive. Each one runs on a plan you already pay for.",
         accounts: [
             { name: "Claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
@@ -249,7 +250,7 @@ export const landingContent: LandingContent = {
     connect: {
         eyebrow: "Get connected",
         heading: "One command, and an agent has a home.",
-        sub: "Sign in, then paste one command on the machine that should host it. The workspace opens the moment it reports in.",
+        sub: "Sign in, paste one command, and the workspace opens the moment it answers.",
         steps: [
             {
                 title: "Sign in with Google",
@@ -270,11 +271,11 @@ export const landingContent: LandingContent = {
             cta: "Get the app for Windows or Linux",
             // Says what it IS, so nobody reads it as a different product: the same install with a window
             // around it. The Mac reader is not stranded: the command above is what the app runs anyway.
-            note: "The app runs this very command for you: it puts Docker in place if the machine has none, starts the sandbox, and opens your workspace when it answers.",
+            note: "It runs the same command for you: Docker if the machine needs it, then the sandbox, then your workspace.",
         },
     },
     finalCta: {
         heading: "Put ten agents to work. Come back whenever.",
-        sub: "One command starts a live sandbox on your hardware. It is free, and nothing lands until you have read the diff.",
+        sub: "One command, and it is free. Nothing lands until you have read the diff.",
     },
 };

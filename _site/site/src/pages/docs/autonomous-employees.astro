@@ -30,18 +30,13 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>2 · Install its tools</h2>
     <p>
-        Tell the agent what the job runs on and let it propose an environment layer: a database client, a headless browser, a language
-        toolchain, whatever the work needs. You approve the layer, then it is installed in the image instead of only being described in a
-        prompt. The mechanics are in <a href="/docs/docker/">Docker setup</a>; the rule is that an agent can never change its own environment
+        Tell the agent what the job runs on and let it propose an environment layer: a database client, a headless browser, a language toolchain. You approve it, and it is installed in the image rather than described in a prompt. The mechanics are in <a href="/docs/docker/">Docker setup</a>; the rule is that an agent can never change its own environment
         without your sign-off.
     </p>
 
     <h2>3 · Connect its systems</h2>
     <p>
-        Add the services the role touches as <strong>capabilities</strong>: GitHub, a database, Sentry, Stripe, an SSH host, an MCP server,
-        or your own internal tools, in a click each. The credential is stored inside the sandbox and never shown back to you or written into
-        the workspace files; the agent operates the service from chat. A capability that ships a skill also teaches the agent how to use it
-        the same turn.
+        Add the services the role touches as <strong>capabilities</strong>: GitHub, a database, Sentry, Stripe, an SSH host, an MCP server or your own tools, a click each. The credential is stored inside the sandbox and never shown back or written into workspace files, and the agent operates the service from chat. A capability that ships a skill teaches the agent to use it the same turn.
     </p>
 
     <h2>4 · Curate its context</h2>
@@ -56,9 +51,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>5 · Give it work, keep the wheel</h2>
     <p>
-        Hand it a real task. In interactive chat the agent starts in <strong>plan mode</strong>: it proposes, you approve, and every change
-        it makes is a diff you commit or discard. Loosen or tighten that per conversation. Environment rebuilds always wait for your explicit
-        approval. This is how you trust an agent with real access without losing the ability to say no.
+        Hand it a real task. In interactive chat the agent starts in <strong>plan mode</strong>: it proposes, you approve, and every change is a diff you commit or discard. Loosen or tighten it per conversation, and environment rebuilds always wait for explicit approval. That is how you trust an agent with real access without losing the ability to say no.
     </p>
 
     <h2>6 · Make it autonomous</h2>
@@ -75,8 +68,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>7 · Grow a team</h2>
     <p>
-        Once one role is specialized, the next is cheap: give it its own sandbox and repeat. Roles can hand work down the line, too. An
-        agent's run can fire the webhook that wakes another, so triage passes to a fixer and a fixer passes to a reviewer.
+        Once one role is specialized the next is cheap: give it its own sandbox and repeat. Roles hand work down the line too, because a run can fire the webhook that wakes another: triage to a fixer, fixer to a reviewer.
     </p>
 
     <h2>Another sandbox, or another persona?</h2>
@@ -91,9 +83,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
             environment.
         </li>
         <li>
-            <strong>A new persona</strong> is the same worker with a different face for the outside world. A persona ties together the logins
-            that are the same someone, so the agent posts as that account and no others. One social sandbox can speak as your brand and as
-            your founder; a single support agent can answer for two products. Keep a persona draft-only and it proposes instead of publishing.
+            <strong>A new persona</strong> is the same worker with a different face for the outside world. A persona ties together the logins that are the same someone, so the agent posts as that account and no other. One sandbox can speak as your brand and your founder, or answer for two products. Keep a persona draft-only and it proposes rather than publishes.
         </li>
     </ul>
     <p>

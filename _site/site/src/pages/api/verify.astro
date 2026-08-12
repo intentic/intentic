@@ -101,9 +101,7 @@ const checks = [
         passed intentic's admission checks.
     </p>
     <p>
-        A blocked entry <em>stays in the file</em>. Removing the row would hide it from people browsing and tell the people who already
-        installed it nothing, which is backwards: they are the ones at risk. Every blocked row carries its reason, so an advisory can quote it
-        rather than saying "this was withdrawn" and leaving the reader to guess.
+        A blocked entry <em>stays in the file</em>. Removing the row would hide it from browsers and tell the people who already installed it nothing, which is backwards: they are the ones at risk. Every blocked row carries its reason, so an advisory can quote it rather than saying "this was withdrawn".
     </p>
 
     <h2>What the nightly scan checks</h2>
@@ -152,16 +150,12 @@ const checks = [
         </tbody>
     </table>
     <p>
-        The honest summary: installing an extension is trusting its author, the same way installing an editor plugin is. What intentic
-        contributes is source-bound deterministic scanning and adversarial review, optional human verification, and a legible declaration of
-        cooperative host access. Those reduce risk; they do not turn code sharing the app and sandbox into confined code.
+        The honest summary: installing an extension is trusting its author, like installing an editor plugin. What intentic adds is source-bound scanning and adversarial review, optional human verification, and a legible declaration of host access. Those reduce risk; they do not confine code that shares the app and sandbox.
     </p>
 
     <h2>Getting verified</h2>
     <p>
-        Ask, in the pull request that lists you or one after it. Verification is somebody reading your source at the commit you pinned, so what
-        makes it quick is what makes it possible to read: a small entry bundle you didn't minify beyond recognition, a manifest whose declared
-        routes are the ones the code actually calls, and a description that matches the two.
+        Ask, in the pull request that lists you or one after it. Verification is somebody reading your source at the pinned commit, so what makes it quick is what makes it readable: a small entry bundle you did not minify beyond recognition, a manifest whose declared routes are the ones the code calls, and a description that matches.
     </p>
     <p>Three things follow from it, and they're worth knowing before you decide it matters to you:</p>
     <ul>

@@ -55,9 +55,7 @@ const scopes = [
 
     <h2>Desktop sync</h2>
     <p>
-        Pick a folder, press Enable, and you get a one-liner carrying a single-use pairing token. Run it and a small resident agent installs on
-        your machine, doing two things: keeping that folder in step with the sandbox's workspace, and mirroring the sandbox's ports onto your
-        localhost. So a dev server running in the sandbox opens in your own browser at the address you'd expect.
+        Pick a folder, press Enable, and you get a one-liner carrying a single-use pairing token. Run it and a small resident agent installs, doing two things: keeping that folder in step with the sandbox's workspace, and mirroring the sandbox's ports onto your localhost, so a dev server there opens in your browser at the address you would expect.
     </p>
     <p>
         There is no Google sign-in on the laptop. The pairing token is the whole exchange, and it is single-use.
@@ -74,9 +72,7 @@ const scopes = [
 
     <h2>Letting the agent use your computer</h2>
     <p>
-        The opposite direction: add your machine as a capability and the agent can work <em>on</em> it. Your computer dials the sandbox
-        rather than the other way round: a personal machine sits behind NAT with a closing lid, so it can only ever be the side that
-        connects, even though it is the side being asked.
+        The opposite direction: add your machine as a capability and the agent can work <em>on</em> it. Your computer dials the sandbox rather than the reverse: a personal machine sits behind NAT with a closing lid, so it can only be the side that connects, even though it is the side being asked.
     </p>
     <p>
         What it may do is a set of switches on the machine's card, and the grants are narrow by default:
@@ -99,9 +95,7 @@ const scopes = [
     </table>
     <p>
         File access is bounded to folders you name: your home directory if you name none. The switches are enforced{" "}
-        <strong>on your machine</strong>, not in the sandbox: they're pushed down on every connect and the agent on your computer refuses
-        out-of-scope calls itself. So a compromised sandbox, or an agent talked into something by a page it read, still cannot exceed what
-        you ticked.
+        <strong>on your machine</strong>, not in the sandbox: they are pushed down on every connect and the agent on your computer refuses out-of-scope calls itself. A compromised sandbox, or an agent talked into something by a page it read, cannot exceed what you ticked.
     </p>
 
     <h2>The editor bridge</h2>
@@ -115,17 +109,13 @@ const scopes = [
         editor has open.
     </p>
     <p>
-        The token is shown once. The sandbox stores only its hash, and the token is scoped to one conversation. The bridge can run a turn, answer
-        a question it parked on, read transcripts and search the tree; it cannot see the fleet or land work. Treat it like a
-        password anyway, because within that scope it can edit files and run commands here. The card lists <em>every</em> control token
+        The token is shown once. The sandbox stores only its hash, scoped to one conversation. The bridge can run a turn, answer a parked question, read transcripts and search the tree; it cannot see the fleet or land work. Treat it like a password anyway, because within that scope it edits files and runs commands. The card lists <em>every</em> control token
         against the sandbox rather than only the ones it minted, so a revoke surface can't hide the token somebody made elsewhere.
     </p>
 
     <h2>Servers, as opposed to computers</h2>
     <p>
-        A server is something the sandbox <em>dials</em>; a computer of yours is something that dials the sandbox, and the difference you
-        feel is that one of them is the machine you're sitting at. Remote machines over SSH and private networks over VPN are ordinary
-        capabilities; see <a href="/docs/capabilities/">Capabilities</a>.
+        A server is something the sandbox <em>dials</em>; a computer of yours dials the sandbox, and the difference you feel is that one of them is the machine you are sitting at. Remote machines over SSH and private networks over VPN are ordinary capabilities; see <a href="/docs/capabilities/">Capabilities</a>.
     </p>
 
     <DocsRelated

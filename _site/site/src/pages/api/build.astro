@@ -151,9 +151,7 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <DocsCodeBlock code={activate} lang="typescript" title="src/extension.ts" />
     <p>
-        <code>detect()</code> decides when your view appears, and it runs against <strong>facts, not names</strong>: it receives the repos
-        found in the workspace and the capabilities the owner connected, and returns one activation per sidebar element. Activating on
-        "the repo contains a vitest config" survives a rename; activating on "the repo is called api" does not.
+        <code>detect()</code> decides when your view appears, and it runs against <strong>facts, not names</strong>: it receives the repos found in the workspace and the capabilities the owner connected, and returns one activation per sidebar element. Activating on "the repo contains a vitest config" survives a rename; "the repo is called api" does not.
     </p>
     <p>
         A <code>badge</code> is the one thing your tile can say without being opened, so treat it as a claim on attention: it must mean
@@ -183,9 +181,7 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <DocsCodeBlock code={viteConfig} lang="typescript" title="vite.config.ts" />
     <p>
-        <code>@intentic/extension-ui</code>, the shell's own buttons, inputs, cards and icons, is resolved by the host at runtime today;
-        its typed npm artifact lands with the marketplace. Until then you can render with plain Vue and the shell's CSS variables, or mark
-        it external and import it untyped.
+        <code>@intentic/extension-ui</code>, the shell's own buttons, inputs, cards and icons, is resolved by the host at runtime today, and its typed npm artifact lands with the marketplace. Until then render with plain Vue and the shell's CSS variables, or mark it external and import it untyped.
     </p>
 
     <h2>6 · Install it</h2>
@@ -229,9 +225,7 @@ const workspace = `.intentic/workspace-extensions/
         lesser kind of extension; it is the same kind that skipped the courier.
     </p>
     <p>
-        This is the path to hand your <strong>agent</strong>, and the reason it exists. "Build me a rail view that lists our incidents" is a
-        thing you can now ask for and have five minutes later: the agent writes files into the workspace and the sandbox picks them up. No
-        publish, no install, and nothing to clone from a machine that doesn't have it yet.
+        This is the path to hand your <strong>agent</strong>, and the reason it exists. "Build me a rail view that lists our incidents" is something you can ask for and have five minutes later: the agent writes files into the workspace and the sandbox picks them up. No publish, no install, nothing to clone.
     </p>
 
     <h3>The loop</h3>

@@ -55,11 +55,7 @@ const policies = [
         decision, and one switch that unwires all of it.
     </p>
     <p>
-        Most of the product you already use is extensions: over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
-        Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google Workspace
-        connection, the connector catalog. They're built against the same public interface a third-party one uses, which is worth knowing for
-        a practical reason rather than a philosophical one: there is no privileged internal path, so a third-party extension can be as good as
-        a built-in one.
+        Most of the product you already use is extensions: over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, Google Workspace, the connector catalog. All are built against the same public interface a third-party one uses, so there is no privileged internal path and a third-party extension can be as good as a built-in.
     </p>
 
     <h2>Where they come from</h2>
@@ -107,16 +103,12 @@ const policies = [
         <li>An extension that registers a view its manifest never declared is <strong>refused at runtime</strong>, not warned about.</li>
     </ul>
     <p>
-        The extension API injects transport authorization, and a secret setting reads back as "still set" rather than as its value. That
-        reduces routine credential handling; it is not a secrecy or confinement boundary. A browser bundle shares the app's JavaScript realm
-        and can reach its DOM, storage, browser globals and ordinary network APIs, while process code runs on the sandbox machine.
+        The extension API injects transport authorization, and a secret setting reads back as "still set" rather than its value. That reduces routine credential handling; it is not a confinement boundary. A browser bundle shares the app's JavaScript realm and can reach its DOM, storage and network APIs, and process code runs on the sandbox machine.
     </p>
 
     <h3>You approve a commit, not a project</h3>
     <p>
-        Installing from anywhere but your own workspace takes a full 40-character commit sha, never a branch. The code you read about is the
-        code that runs; if the author force-pushes their branch tomorrow, nothing on your machine changes. It also means an update is always an
-        explicit, visible act: there is no mechanism by which the code quietly becomes different code.
+        Installing from anywhere but your own workspace takes a full 40-character commit sha, never a branch. The code you read about is the code that runs, and if the author force-pushes tomorrow nothing on your machine changes. An update is always an explicit, visible act.
     </p>
     <p>
         Your own workspace extensions are pinned to nothing, for the same reason your own repositories aren't: there is no upstream that could
@@ -134,22 +126,15 @@ const policies = [
         <li><strong>Blocked</strong>: known-malicious or known-broken, with the reason recorded for installed-extension advisories.</li>
     </ul>
     <p>
-        A separate <strong>✓ loads</strong> mark means a nightly job re-checked the pinned commit and it would install. That is evidence, not
-        endorsement: "it loads" and "somebody read it" are different claims by different parties, and the gallery keeps them apart. Stars are
-        just the source repo's stars.
+        A separate <strong>✓ loads</strong> mark means a nightly job re-checked the pinned commit and it would install. That is evidence, not endorsement: "it loads" and "somebody read it" are different claims, and the gallery keeps them apart. Stars are the source repo's stars.
     </p>
     <p>
-        <a href="/api/verify/">Verification &amp; trust</a> is precise about what each of those words guarantees and, more usefully, what none
-        of them do. The short version: installing an extension is trusting its author, the same as installing an editor plugin. What you get
-        here is source-bound automated review plus a declaration of cooperative host access. Those reduce risk; they do not isolate extension
-        code from the app or sandbox.
+        <a href="/api/verify/">Verification &amp; trust</a> is precise about what each of those words guarantees, and what none of them do. The short version: installing an extension is trusting its author, like installing an editor plugin. Source-bound automated review and a declaration of host access reduce risk; they do not isolate extension code from the app or sandbox.
     </p>
 
     <h2>Living with one</h2>
     <p>
-        <strong>Sandbox → Extensions</strong> is the whole management surface. Each row has a switch, and switching one off unwires it
-        everywhere at once: no view, no command, no PATH entry, no connector card, no environment variable, no background process. Nothing is
-        left half-connected, which is why "turn it off and see" is a reasonable first move when something is behaving oddly.
+        <strong>Sandbox → Extensions</strong> is the whole management surface. Each row has a switch, and switching one off unwires it everywhere at once: no view, no command, no PATH entry, no connector card, no environment variable, no background process. Nothing is left half-connected, so "turn it off and see" is a reasonable first move.
     </p>
     <p>
         The daemon stores settings, secrets and requested environment variables under the
@@ -158,21 +143,15 @@ const policies = [
 
     <h2>Updates</h2>
     <p>
-        Because what you installed is a commit and a listing carries one, "there's a newer version" is a comparison your sandbox makes for
-        itself: daily, and whenever you have the Extensions tab open. A newer pinned commit badges the row. What happens when you click depends
-        on one thing only: whether the new version wants more than the old one did:
+        Because what you installed is a commit and a listing carries one, "there's a newer version" is a comparison your sandbox makes itself: daily, and whenever the Extensions tab is open. A newer pinned commit badges the row. What happens when you click depends on one thing: whether the new version wants more than the old one:
     </p>
     <ul>
         <li>
-            <strong>Same powers, new code</strong>: one click. The new version is cloned into staging and validated first, the outgoing
-            version's processes are stopped, and the swap only happens if the new one is sound. A broken release cannot replace a working
-            install, and nothing is left running the version you replaced.
+            <strong>Same powers, new code</strong>: one click. The new version is cloned into staging and validated first, the outgoing processes are stopped, and the swap happens only if the new one is sound. A broken release cannot replace a working install.
         </li>
         <li>
             <strong>It wants more than before.</strong> A new route, process, PATH entry or badge means the update{" "}
-            <strong>asks again</strong>. The dialog computes the difference for you and states every addition as a plain sentence. Approval
-            never transfers to powers you didn't approve. You can also ask your own agent to read the code diff between the two commits before
-            deciding.
+            <strong>asks again</strong>. The dialog computes the difference and states every addition as a plain sentence, and approval never transfers to powers you did not approve. You can also ask your own agent to read the code diff first.
         </li>
     </ul>
     <p>
@@ -182,8 +161,7 @@ const policies = [
 
     <h3>Nothing updates itself unless you say so</h3>
     <p>
-        On a machine you own, silently changing the code that runs against your repos and credentials is not a convenience. So the default is
-        that nothing moves without you, and you raise individual extensions up a ladder as you come to trust them:
+        Silently changing the code that runs against your repos and credentials is not a convenience. So nothing moves without you by default, and you raise individual extensions up a ladder as you come to trust them:
     </p>
     <table>
         <thead>
@@ -221,9 +199,7 @@ const policies = [
     <h2>Premium extensions</h2>
     <p>
         Almost everything is free. Publishing and installing cost nothing, and no cut is taken. A publisher may mark a single extension{" "}
-        <strong>premium</strong>, and both the gallery and the app badge it before you click: installing one needs a monthly membership and
-        donates a published number of your credits to its creator. Nothing about it is ever metered or telemetered. The membership, credits,
-        split and public ledger are all explained on <a href="/earn/">Earn</a>.
+        <strong>premium</strong>, and both the gallery and the app badge it before you click: installing one needs a monthly membership and donates a published number of your credits to its creator. Nothing is metered or telemetered. The membership, credits, split and ledger are explained on <a href="/earn/">Earn</a>.
     </p>
 
     <DocsRelated

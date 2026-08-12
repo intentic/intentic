@@ -33,26 +33,18 @@ const lifecycle = [
 
     <h3>The sandbox</h3>
     <p>
-        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds
-        your repos and credentials, and exposes its daemon over its own Cloudflare tunnel. This is the whole product surface: chat,
-        terminals, files, panels, capabilities, and automations all come from here. Your keys ride straight into it and never reach the
-        platform. Inside it the agent can run whatever a job needs (a database client, a headless browser, even a bundled deployment
-        engine if you add that capability), but those are tools it invokes, not tiers of the product.
+        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds your repos and credentials, and exposes its daemon over its own Cloudflare tunnel. That is the whole product surface: chat, terminals, files, panels, capabilities and automations all come from here, and your keys never reach the platform. Inside it the agent runs whatever a job needs (a database client, a headless browser, a deployment engine), but those are tools it invokes, not tiers of the product.
     </p>
 
     <h2>Ownership &amp; trust</h2>
     <p>
         The trust root is your browser's Google sign-in. Your browser drives the daemon directly with a Google ID token; the daemon verifies
-        it against Google's keys and binds you as owner on first use. <strong>The platform never holds that token</strong>, so it cannot
-        drive your sandbox even if it were breached. Repos, credentials, and history live where the sandbox runs; capability secrets are
-        stored inside the sandbox and echoed back to the UI only as "set" / "not set" booleans, never as values.
+        it against Google's keys and binds you as owner on first use. <strong>The platform never holds that token</strong>, so it cannot drive your sandbox even if breached. Repos, credentials and history live where the sandbox runs, and capability secrets echo back to the UI only as "set" or "not set", never as values.
     </p>
 
     <h2>Reachability</h2>
     <p>
-        Every connection is <strong>outbound-only</strong>. <code>cloudflared</code> dials out from your machine, so the sandbox is reachable
-        from any browser with no inbound ports and no firewall changes. Bring your own Cloudflare zone and it absorbs the tunnel under your
-        domain; bring nothing and intentic provisions one under its own domain and hands the sandbox a narrow per-tunnel token.
+        Every connection is <strong>outbound-only</strong>. <code>cloudflared</code> dials out from your machine, so the sandbox is reachable from any browser with no inbound ports and no firewall changes. Bring your own Cloudflare zone and it absorbs the tunnel under your domain; bring nothing and intentic provisions one under its own, with a narrow per-tunnel token.
     </p>
 
     <h2>The lifecycle</h2>

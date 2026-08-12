@@ -123,7 +123,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <h2>What you need</h2>
     <ul>
         <li>A machine that stays on while the agent works: a laptop, a desktop, or a VPS.</li>
-        <li><strong>Docker Engine</strong> on Linux, WSL2, or macOS. The app and the setup command install it for you if it's missing (both ask first); the Compose and <code>docker run</code> paths assume you already have it.</li>
+        <li><strong>Docker Engine</strong> on Linux, WSL2 or macOS. The app and the setup command install it if missing, both asking first; the Compose and <code>docker run</code> paths assume you already have it.</li>
         <li>A <strong>Google account</strong> to sign in. No card, no repo permissions, no code upload.</li>
     </ul>
     <p>
@@ -133,14 +133,11 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
 
     <h2 id="setup-code">1 · Sign in and get your setup code</h2>
     <p>
-        Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. A sandbox is created as setup opens: named for you, renameable
-        from the same card. So intentic can start preparing a private tunnel for it under its own domain straight away. No Cloudflare
-        account required.
+        Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. A sandbox is created as setup opens, named for you and renameable from the same card, so a private tunnel is prepared under intentic's own domain straight away. No Cloudflare account required.
     </p>
     <p>
         <strong>You never type the setup code, and there is nothing to generate.</strong> The moment your address is ready, the setup
-        screen's <em>Run it</em> step shows you a finished command with the code already in it, behind a Copy button. There is one tab per
-        install path, so the line you copy is the one your machine needs:
+        screen's <em>Run it</em> step shows a finished command with the code in it, behind a Copy button. One tab per install path, so the line you copy is the one your machine needs:
     </p>
     <table>
         <thead>
@@ -169,15 +166,14 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         </tbody>
     </table>
     <p>
-        That's the whole of step 1. The code expires 30 minutes after the screen creates it. If that happens, you
-        reopen the sandbox's setup screen for a fresh one, losing nothing. <a href="#setup-codes">More about setup codes</a> has the rest.
+        That is the whole of step 1. The code expires 30 minutes after the screen creates it; reopen the setup screen for a fresh one, losing nothing. <a href="#setup-codes">More about setup codes</a> has the rest.
     </p>
     <p>
-        Throughout, the platform stores your identity and your sandbox's URL, nothing else. It never sees your code or your keys.
+        Throughout, the platform stores your identity and your sandbox's URL, nothing else. It never sees your code or keys.
     </p>
 
     <h2>2 · Pick how you install it</h2>
-    <p>Four routes to the identical result. Pick on how much you want to type and how much you want to read first.</p>
+    <p>Four routes to the same result. Pick by how much you want to type, and how much you want to read first.</p>
     <table>
         <thead>
             <tr>
@@ -210,42 +206,36 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         </tbody>
     </table>
     <p>
-        Nothing binds you to the one you pick. Every path uses the same container, volume, and network names, so a sandbox can move between
-        them later without losing <code>/work</code>: see <a href="/docs/docker/">Docker setup</a> for the anatomy they all share.
+        Nothing binds you to the one you pick: every path uses the same container, volume and network names, so a sandbox can move between them later without losing <code>/work</code>: see <a href="/docs/docker/">Docker setup</a> for the anatomy they all share.
     </p>
 
     <h3 id="desktop-app">Install with the desktop app</h3>
     <p>
-        The no-terminal path, and the one that keeps paying off: a sandbox can never recreate its own container, so without the app every
-        update and environment rebuild is a command you paste on the host. In the app it's a button.
+        The no-terminal path, and the one that keeps paying off: a sandbox can never recreate its own container, so without the app every update and rebuild is a command you paste on the host. In the app it is a button.
     </p>
     <ul>
         <li><strong>Windows</strong>: <a href="/desktop/windows">Intentic setup .exe</a>, Windows 10 and 11, 64-bit. Installs for your user; no admin rights.</li>
         <li><strong>Linux</strong>: <a href="/desktop/linux">AppImage</a> (<code>chmod +x</code> and run), or <a href="/desktop/deb">.deb</a> / <a href="/desktop/rpm">.rpm</a>.</li>
         <li><strong>macOS</strong>: no build yet. Use the <a href="#setup-command">setup command</a>; it does the same thing.</li>
     </ul>
-    <p>Install it, sign in, and click <strong>Run on this computer</strong> on the setup card. There is no code to copy: the click hands the app your setup code directly, and the app installs Docker if the machine has none, starts the sandbox and its tunnel, and opens your workspace as soon as it answers.</p>
+    <p>Install it, sign in, and click <strong>Run on this computer</strong> on the setup card. There is no code to copy: the click hands the app your setup code, and the app installs Docker if the machine has none, starts the sandbox and its tunnel, and opens your workspace when it answers.</p>
     <p>
         Afterwards it stays in your tray to start, stop, update, rebuild and remove the sandbox, and to show its logs. It is not a second
         product: it runs the very same setup script the pasted command runs, and you can still reach the same sandbox from any browser at{" "}
-        <a href={APP_URL}>app.intentic.dev</a>. Removing the app removes only the app: your sandbox, its files and its history stay in
-        Docker until you remove them yourself. More on the <a href="/download/">download page</a>.
+        <a href={APP_URL}>app.intentic.dev</a>. Removing the app removes only the app; your sandbox, its files and its history stay in Docker until you remove them. More on the <a href="/download/">download page</a>.
     </p>
 
     <h3 id="setup-command">Install with the setup command</h3>
-    <p>Run it on the machine that should host the sandbox. The setup screen shows the line with your own code already in it.</p>
+    <p>Run it on the machine that should host the sandbox. The setup screen shows the line with your code in it.</p>
     <DocsCodeBlock code={connectUnix} lang="bash" title="Linux / macOS" />
     <DocsCodeBlock code={connectWin} lang="powershell" title="Windows · PowerShell" />
     <p>
-        The <code>sudo</code> is for <strong>installing Docker and nothing else</strong>. Every other step is a docker or curl call your own
-        user can make, so on a machine that already has Docker you can drop it. That's what the <em>I already have Docker</em> switch on the
-        setup page does to the command it shows you. Run it without <code>sudo</code> on a machine that turns out to have no Docker and it
-        stops and names your two options rather than escalating on its own.
+        The <code>sudo</code> is for <strong>installing Docker and nothing else</strong>. Every other step is a docker or curl call your own user can make, so drop it on a machine that already has Docker. That is what the <em>I already have Docker</em> switch on the
+        setup page does to the command it shows you. Run it without <code>sudo</code> on a machine with no Docker and it stops, naming your two options rather than escalating on its own.
     </p>
     <p>
         The script itself is short and readable before you pipe it anywhere:{" "}
-        <a href="https://intentic.dev/connect">intentic.dev/connect</a>. It handles the one step that needs a dependency-free start:
-        get Docker onto the machine, after asking, then fetches the <code>ic</code> CLI and hands over to it. Re-running the same line
+        <a href="https://intentic.dev/connect">intentic.dev/connect</a>. It handles the one step needing a dependency-free start: getting Docker onto the machine, after asking, then fetches the <code>ic</code> CLI and hands over to it. Re-running the same line
         upgrades that CLI in place.
     </p>
     <DocsCodeBlock code={connectAdvanced} lang="bash" title="Variations" />
@@ -257,8 +247,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <h3 id="docker-compose">Install with Docker Compose</h3>
     <p>
         The path for someone who would rather read a file than run a script: <strong>nothing executes on your machine until you start it
-        yourself</strong>. Setup's <strong>Docker Compose</strong> tab renders these two services with your hostname, client id and a
-        digest-pinned connector image already filled in; paste them into your own <code>docker-compose.yml</code>.
+        yourself</strong>. Setup's <strong>Docker Compose</strong> tab renders these two services with your hostname, client id and a digest-pinned connector image filled in; paste them into your own <code>docker-compose.yml</code>.
     </p>
     <DocsCodeBlock code={composeFile} lang="yaml" title="docker-compose.yml" />
     <p>Then, once, in the same folder: the same tab prints this with your <a href="#setup-code">setup code</a> already in the URL:</p>
@@ -271,7 +260,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     </p>
     <p>
         On your own Cloudflare zone there are two extra bootstrap steps before <code>up</code>: append your token to the{" "}
-        <code>.env</code>, and mint the tunnel with the CLI the image already carries. The setup page prints both with your values in place.
+        <code>.env</code>, and mint the tunnel with the CLI the image carries. The setup page prints both with your values in place.
     </p>
     <p>
         Two things this path leaves out on purpose. The <strong>docker capability</strong>'s nested engine needs{" "}
@@ -282,10 +271,8 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
 
     <h3 id="docker-run">Install with a plain docker run</h3>
     <p>
-        No intentic script anywhere in the loop: useful when you're folding this into your own provisioning tooling. One rule makes it
-        safe: <strong>ask the image what its run command is instead of writing the flags yourself.</strong> The container's shape (its
-        capability posture, volumes, network alias, environment allowlist) ships <em>with</em> the image and changes with it, so a flag list
-        copied into your scripts today is a sandbox quietly missing something next release.
+        No intentic script in the loop, which suits folding this into your own provisioning tooling. One rule makes it safe: <strong>ask the image what its run command is instead of writing the flags yourself.</strong> The container's shape (its
+        capability posture, volumes, network alias, environment allowlist) ships <em>with</em> the image and changes with it, so a flag list copied into your scripts today is a sandbox quietly missing something next release.
     </p>
     <p>
         Setup has no tab for this one, so fill in the three values yourself. Your <strong>slug</strong> is the first label of your sandbox's
@@ -295,15 +282,13 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
     <DocsCodeBlock code={runInline} lang="bash" title="Your machine · bash" />
     <p>
         Step 4 is the whole idea: <code>sandbox run-command</code> reads your environment on stdin and prints the complete, correctly quoted{" "}
-        <code>docker run</code> line. Print it, read it, run it, and your tooling keeps working against future images without being
-        updated. The line it gives you names the container <code>intentic-sandbox-&lt;slug&gt;</code>, mounts the three named volumes, grants{" "}
+        <code>docker run</code> line. Print it, read it, run it, and your tooling keeps working against future images unchanged. The line names the container <code>intentic-sandbox-&lt;slug&gt;</code>, mounts the three named volumes, grants{" "}
         <code>SYS_ADMIN</code> and <code>SYS_PTRACE</code> and nothing else, and publishes only a loopback port. Every field of it is
         explained on <a href="/docs/docker/">Docker setup</a>.
     </p>
     <p>
         If <code>docker run</code> fails because the loopback port is already taken, re-run step 4 with{" "}
-        <code>--no-local-publish</code>. That port is only a shortcut for a browser on this same machine; the sandbox works over its tunnel
-        without it.
+        <code>--no-local-publish</code>. That port is only a shortcut for a browser on the same machine; the sandbox works over its tunnel without it.
     </p>
 
     <h2>3 · Check what came up</h2>
@@ -313,9 +298,7 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         <li>a <strong>cloudflared</strong> connector that dials out to establish the private tunnel.</li>
     </ul>
     <p>
-        Both are <strong>outbound-only</strong>: no port is opened on your machine. The daemon announces its URL to the platform, your
-        browser probes the sandbox directly until it reports healthy, and the workspace opens on its own. From that moment you're talking to
-        the daemon over its tunnel and the platform is out of the loop.
+        Both are <strong>outbound-only</strong>: no port is opened on your machine. The daemon announces its URL, your browser probes the sandbox directly until it reports healthy, and the workspace opens on its own. From then you are talking to the daemon over its tunnel and the platform is out of the loop.
     </p>
 
     {/* An appendix, not part of the numbered path: all of it is contingency: what to do when the code expired,
@@ -324,21 +307,18 @@ docker run -d --restart unless-stopped --name intentic-sandbox-tunnel-$SLUG \\
         to "how do I start" arrived about 900 words in. */}
     <h2 id="setup-codes">More about setup codes</h2>
     <p>
-        Wherever a command above reads <code>&lt;SETUP_CODE&gt;</code>, the real one is already filled in on the setup screen. If you're
-        building the command yourself, the <a href="#docker-run">docker run</a> path has no tab of its own. The code is the trailing
+        Wherever a command above reads <code>&lt;SETUP_CODE&gt;</code>, the real one is filled in on the setup screen. If you are building the command yourself, the <a href="#docker-run">docker run</a> path has no tab of its own. The code is the trailing
         argument of the Linux/macOS line, or the <code>code=</code> value in the Compose bootstrap.
     </p>
     <p>
-        Within its 30 minutes the code is redeemed on your machine for the real connection token. That is why no long-lived secret ever
-        lands in your shell history, and why re-running the same command still works.
+        Within its 30 minutes the code is redeemed on your machine for the real connection token. That is why no long-lived secret lands in your shell history, and why re-running the command still works.
     </p>
     <p>
         Setting up on a different machine from the one you're reading this on? On a phone, setup offers to{" "}
         <strong>email you the link back to this screen</strong>: open it on the target machine and copy the command there.
     </p>
     <p>
-        Prefer your own Cloudflare zone? Paste a Cloudflare token on the setup screen; it's used once to list your zones and is never
-        stored. The <a href="#setup-command">setup command</a>'s variations show how to pass it on the command line instead.
+        Prefer your own Cloudflare zone? Paste a token on the setup screen; it is used once to list your zones and never stored. The <a href="#setup-command">setup command</a>'s variations show how to pass it on the command line instead.
     </p>
 
     <h2>After it's running</h2>

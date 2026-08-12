@@ -35,7 +35,7 @@ const entry = `{
                 <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The fine print</div>
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every promise, argued in full.</h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    <a href="/earn/">Earn</a> is the shape of the economy; this page is its reasoning — the arithmetic behind the split, the
+                    <a href="/earn/">Earn</a> is the shape of the economy; this page is its reasoning: the arithmetic behind the split, the
                     design choices behind the rules, and an honest account of what exists today.
                 </p>
             </div>
@@ -57,8 +57,7 @@ const entry = `{
                     <li><strong>Service runs</strong>: metered per-run spends on priced services (the section below).</li>
                 </ul>
                 <p>
-                    There is no per-extension checkout, no subscription-per-tool, and no cut taken from anything you sell outside the pool. A creator
-                    lists once and earns from installs; a member pays once and supports what they choose by choosing it.
+                    No per-extension checkout, no subscription per tool, no cut of anything you sell outside the pool. A creator lists once and earns from installs; a member pays once and supports what they pick by picking it.
                 </p>
 
                 <h2>No telemetry, by construction</h2>
@@ -91,20 +90,14 @@ const entry = `{
                 </p>
                 <ul>
                     <li><strong>The price is visible before the run.</strong> Any surface can ask what a run costs and what's left today; a refusal for lack of credits answers with the remaining count and when it resets.</li>
-                    <li><strong>No charge on failure.</strong> Credits are spent atomically before the call and refunded automatically when the provider errors or never answers. A provider's "your query was malformed" is an answer: that one is paid for and relayed verbatim.</li>
-                    <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is; the user never holds a provider account or key. Every forwarded call is signed so a provider can verify it came from intentic and drop everything else.</li>
+                    <li><strong>No charge on failure.</strong> Credits are spent before the call and refunded when the provider errors or never answers. A provider's "your query was malformed" is an answer: paid for, and relayed verbatim.</li>
+                    <li><strong>The platform is the intermediary.</strong> The provider never learns who the user is, and the user never holds a provider key. Every forwarded call is signed, so a provider can verify it came from intentic.</li>
                 </ul>
                 <p>
-                    A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. Donations and runs both
-                    spend from the same daily allowance, so a member's total support is bounded by exactly what they paid, which is what makes the
-                    whole economy sybil-proof. Credits nobody spends pay nobody: the pool figure is a ceiling payouts approach, and the ledger prints
-                    both numbers so neither can pose as the other.
+                    A credit's dollar value is derived, not invented: the membership price divided by a month's allowance. Donations and runs spend from the same allowance, so a member's support is bounded by what they paid, which is what makes the economy sybil-proof. Credits nobody spends pay nobody, so the pool figure is a ceiling payouts approach and the ledger prints both.
                 </p>
                 <p>
-                    <strong>Who let it in, and your worst case.</strong> The catalog is curated: in v1 every service is admitted, and when it
-                    goes bad delisted, by the platform; there is no self-serve path onto it. Nothing of a provider's ever runs on your
-                    machine, so a run's whole blast radius is its listed price and the JSON answer your agent reads back. The mechanical case
-                    never needs a dispute (no answer, no charge, enforced in code); a <em>served</em> answer is paid even when it disappoints,
+                    <strong>Who let it in, and your worst case.</strong> The catalog is curated: the platform admits every service and delists a bad one, with no self-serve path onto it. Nothing of a provider's runs on your machine, so a run's blast radius is its listed price and the JSON your agent reads back. The mechanical case never needs a dispute (no answer, no charge, enforced in code); a <em>served</em> answer is paid even when it disappoints,
                     and chronic disappointment is what delisting is for rather than a per-run argument.
                 </p>
                 <p>
@@ -116,36 +109,23 @@ const entry = `{
                 <p>
                     The platform serves <code>GET /pool/transparency</code> to anyone, no login, and <a href="/earn/ledger/">the ledger</a> renders it
                     for people. It publishes two kinds of month and never lets them be confused. The month in progress is computed live and its
-                    revenue is an <em>estimate</em> — members × price — because nobody can know what a month took until it is over. A finished month
+                    revenue is an <em>estimate</em> (members × price), because nobody can know what a month took until it is over. A finished month
                     is the frozen record: what <strong>actually settled</strong> at Stripe, the <strong>fees</strong> Stripe took on it, the pool, what
-                    creators earned, and what became of every cent of it — paid, in flight, carried, unclaimed, or expired back into the pool.
+                    creators earned, and what became of every cent of it: paid, in flight, carried, unclaimed, or expired back into the pool.
                 </p>
                 <p>
-                    Publishing only the total earned would let "90% to creators" hide any amount of money that never actually reached anybody, which
-                    is why the outcomes are broken out and why they add up to the distributed total. It also means the margin is visible: revenue
-                    minus fees minus the pool is what the platform keeps, and you can do that subtraction yourself. Member counts on an open month are
-                    today's snapshot (the platform keeps no membership history); a closed month's is the count recorded when it closed.
+                    Publishing only the total earned would let "90% to creators" hide money that never reached anybody, so the outcomes are broken out and add up to the distributed total. The margin is visible too: revenue minus fees minus the pool is what the platform keeps. Member counts on an open month are today's snapshot; a closed month's is the count recorded when it closed.
                 </p>
 
                 <h2>Getting paid</h2>
                 <p>
-                    Earnings accrue against the <strong>publisher name</strong> in your manifest, which is a label until somebody proves it is theirs.
-                    You claim it by committing a token the platform gives you to any repository the registry already lists under that name — push
-                    access is the proof, and it is the same thing the registry vouched for when it accepted your listing. Then you connect a payout
-                    account through Stripe's own hosted setup; bank details, identity documents and tax forms are collected by Stripe, and this
-                    platform never sees or stores them.
+                    Earnings accrue against the <strong>publisher name</strong> in your manifest, which is a label until somebody proves it is theirs. You claim it by committing a token the platform gives you to any repository the registry already lists under that name: push access is the proof. Then you connect a payout account through Stripe's own hosted setup, which collects bank details, identity documents and tax forms. This platform never sees them.
                 </p>
                 <p>
-                    A month closes as soon as it is over and becomes payable mid-month. The gap is a deliberate hold window for refunds and card
-                    disputes, not an unexplained delay, and the date is stated rather than implied. You are paid once per cycle for everything you are
-                    owed across every name you hold; a balance under the published minimum carries to the next run rather than becoming a transfer
-                    whose fee eats it. A payment that fails is never abandoned and never sent twice — it is retried until it lands.
+                    A month closes as soon as it is over and becomes payable mid-month. The gap is a hold window for refunds and disputes, not an unexplained delay, and the date is stated rather than implied. You are paid once per cycle across every name you hold, and a balance under the minimum carries rather than becoming a transfer whose fee eats it. A failed payment is retried until it lands, never abandoned and never sent twice.
                 </p>
                 <p>
-                    Claim late and you still get paid: statements are never bound to an account, so proving a name in October settles what it earned in
-                    July. Earnings owed to a name nobody proves stay claimable for twelve months, then return to the pool and are split among creators
-                    who are still shipping. That is the one case where money you earned can stop being yours, so it is stated here, shown on the
-                    ledger, and given a deadline you can see.
+                    Claim late and you still get paid: statements are never bound to an account, so proving a name in October settles what it earned in July. Earnings nobody claims stay claimable for twelve months, then return to the pool and are split among creators still shipping. That is the one case where money you earned stops being yours, so it is stated here and shown on the ledger.
                 </p>
 
                 <h2>What exists today, honestly</h2>

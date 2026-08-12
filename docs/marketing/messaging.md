@@ -17,6 +17,18 @@ GitHub — the trust layer you can read and run yourself.
 - Engineer-to-engineer. Declarative sentences. Second person for the reader; "intentic" always lowercase.
 - Evidence over adjectives: no claim a screenshot, code block, or repo link can't back.
   Banned words: effortless, blazingly, seamless, magic, revolutionize, supercharge.
+- **Shortest version that still lands.** A visitor skims; every extra clause is a chance to leave. One
+  idea per sentence, one sentence per point, and no second paragraph doing the first one's job again.
+  A hero subhead is under fifteen words, a card line under twenty, an FAQ answer one paragraph. If a
+  sentence survives being cut in half, it was too long.
+- **No em-dashes in copy.** They signal an aside the reader has to hold open, which is exactly the
+  cost brevity is trying to remove. Use a full stop where the thought ends, a colon where a list or
+  explanation follows, a semicolon where two clauses genuinely balance, or parentheses for a true
+  aside. This applies to everything a visitor reads, on the site and in the app; source comments are
+  their own business.
+- **Ownership is an answer, not an opener.** "On hardware you own" removes a fear, it does not create
+  a want, so it never buys headline or subhead space. It earns its keep in the hero chip, the
+  ownership band, the comparison pages and the FAQ, where somebody is already asking.
 - The product already wrote its best lines — reuse in-app copy verbatim before writing new copy.
   The app and the site must sound like one author.
 - Ownership language is the spine: "your machine", "your accounts", "you own every line",

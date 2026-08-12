@@ -81,9 +81,7 @@ const others = [
         seats, and a turn can name which serves it. Absent, it takes the provider's first.
     </p>
     <p>
-        Naming one matters most where nobody is watching. An automation, a Doorbell, a nightly workflow: when the first account runs out of
-        headroom, or belongs to an organisation that switched the plan off, every unattended run errors against it until someone reads the
-        row. That is why an automation can pin an account and a chat rarely bothers.
+        Naming one matters most where nobody is watching. When an automation's first account runs out of headroom, or belongs to an organisation that switched the plan off, every unattended run errors against it until somebody reads the row. That is why an automation can pin an account and a chat rarely bothers.
     </p>
 
     <h2>The harness</h2>
@@ -100,9 +98,7 @@ const others = [
         at all: all three run that loop whatever you pick. Only <strong>Codex and Grok</strong> have a native runtime to switch away from.
     </p>
     <p>
-        The choice matters because the loops support different features, and the app tells you before you
-        find out mid-turn. A runtime that lacks mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort
-        control has those limitations listed against it, and the composer hides the controls that runtime would ignore.
+        The choice matters because the loops support different features, and the app tells you before you find out mid-turn. A runtime lacking mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort control lists those limits, and the composer hides the controls it would ignore.
     </p>
 
     <h2>Per-turn controls</h2>
@@ -112,18 +108,14 @@ const others = [
         <em>that</em> conversation rather than from whatever another tab last picked.
     </p>
     <p>
-        Permission modes are the other half of this. A runtime that reports the full axis gets per-tool approval cards; one that doesn't gets
-        propose-then-approve or run, and nothing in between: the container is the isolation boundary there, and every tool call inside it is
-        pre-approved.
+        Permission modes are the other half. A runtime that reports the full axis gets per-tool approval cards; one that does not gets propose-then-approve or run, nothing between. There the container is the isolation boundary and every tool call inside it is pre-approved.
     </p>
 
     <h2>Models for work you didn't start</h2>
     <p>Two settings on <strong>Sandbox → Agent</strong> decide what runs when nobody picked:</p>
     <ul>
         <li>
-            <strong>Agent runs.</strong> The model for unattended work: an automation's wake, a chore, a documentation or acceptance run,
-            the fix a failed pre-push check proposes. Pinned rather than derived, because that work has to read a failing suite or a
-            container log and repair something, and a wrong guess is billed in whole sessions.
+            <strong>Agent runs.</strong> The model for unattended work: an automation's wake, a chore, an acceptance run, the fix a failed pre-push check proposes. Pinned rather than derived, because that work has to read a failing suite or a container log and repair something, and a wrong guess is billed in whole sessions.
         </li>
         <li>
             <strong>Quick helpers.</strong> The model behind one-click helpers that aren't a conversation, like autofilling a commit message.
@@ -143,10 +135,7 @@ const others = [
         extensions, described on <a href="/earn/">Earn</a>.
     </p>
     <p>
-        <strong>Sandbox → Usage</strong> reports the durable spend ledger: a row is appended when a turn ends, grouped by day, provider,
-        account and model, with cache hit rates alongside. Rows are written daemon-side and never edited, so it is a record of what was
-        actually spent rather than an estimate. Individual agent cards carry their own cost and token counts, and a workflow step can be
-        capped in dollars: the one resource you cannot recover after an unattended fan-out.
+        <strong>Sandbox → Usage</strong> reports the durable spend ledger: a row appended when a turn ends, grouped by day, provider, account and model, with cache hit rates alongside. Rows are written daemon-side and never edited, so it records what was spent rather than estimating it. Agent cards carry their own cost, and a workflow step can be capped in dollars: the one resource you cannot recover after an unattended fan-out.
     </p>
     <p>
         When a provider refuses a turn because an allowance is spent or a plan is off, the last refusal is kept and shown beside the

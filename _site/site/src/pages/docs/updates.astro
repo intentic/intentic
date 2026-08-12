@@ -16,9 +16,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <h2>The promises</h2>
     <ul>
         <li>
-            <strong>Your files are never touched.</strong> Your code, notes and agent history live outside the
-            software that updates. Updating, rolling back and rebuilding all keep them, and we test that against real releases every
-            night: a sandbox is updated, rolled back, and force-failed mid-update, and the files must come through all three.
+            <strong>Your files are never touched.</strong> Your code, notes and agent history live outside the software that updates. Updating, rolling back and rebuilding all keep them, and we test that nightly against real releases: a sandbox is updated, rolled back and force-failed mid-update, and the files must survive all three.
         </li>
         <li>
             <strong>Updates are offered, never forced.</strong> A new release shows up as a card in your workspace saying what's in it, in
@@ -30,9 +28,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
             command, offered right on the same card.
         </li>
         <li>
-            <strong>Breaking changes are flagged before you take them, not after.</strong> When an update removes or changes something you
-            may rely on, its card stops looking routine. It turns into a warning that says what stops working and what to do instead, and
-            asks you to read that before it hands over the update command. The <a href="/changelog/">changelog</a> carries the same lines
+            <strong>Breaking changes are flagged before you take them, not after.</strong> When an update removes or changes something you may rely on, its card stops looking routine: it becomes a warning naming what stops working and what to do instead, and asks you to read it before handing over the command. The <a href="/changelog/">changelog</a> carries the same lines
             under a Breaking badge.
         </li>
         <li>
@@ -43,9 +39,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>The two lanes</h2>
     <p>
-        Every release lands on the <strong>beta</strong> lane the moment it publishes. The <strong>stable</strong> lane is the default and
-        serves every download link. It moves onto a release only after it has soaked on beta for about two days with nothing superseding
-        it. We run beta ourselves, so a bad release is caught by the people who made it, not by you.
+        Every release lands on the <strong>beta</strong> lane the moment it publishes. The <strong>stable</strong> lane is the default and serves every download link. It takes a release only after about two days on beta with nothing superseding it. We run beta ourselves, so a bad release is caught by the people who made it.
     </p>
     <p>
         Your sandbox shows its lane on the update card. Moving to beta is one command on the machine that runs your sandbox, and moving
@@ -55,15 +49,11 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>What can change freely</h2>
     <p>
-        The promise is narrow. Everything outside it can improve without ceremony: how screens look, how features
-        work internally, defaults for things you haven't set. A changelog entry tells you when a change is worth noticing; the warning
-        treatment is reserved for the changes that take something away. So that when you see one, it means it.
+        The promise is narrow. Everything outside it can improve without ceremony: how screens look, how features work internally, defaults you never set. A changelog entry tells you when a change is worth noticing; the warning treatment is reserved for changes that take something away, so that when you see one it means it.
     </p>
 
     <h2>If an update went badly anyway</h2>
     <p>
-        Open the update card and take the rollback it offers: your files stay as they are now, only the software moves back. If a settings
-        file then reads as unreadable, that's usually the older version looking at a newer file, and the notice will say so rather than
-        asking you to fix a file that isn't broken; updating again reads it fine.
+        Open the update card and take the rollback it offers: your files stay as they are and only the software moves back. If a settings file then reads as unreadable, that is usually the older version looking at a newer file, and the notice says so rather than asking you to fix something that is not broken.
     </p>
 </DocsLayout>

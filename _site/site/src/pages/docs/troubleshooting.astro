@@ -43,14 +43,12 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 >
     <h2>The two checks worth making first</h2>
     <p>
-        If something is not working and you can't yet tell which half broke, start here. A sandbox is two containers and one outbound tunnel,
-        and almost everything below is one of those three not being where you think it is. So ask them directly rather than reading the app.
+        If something is not working and you cannot tell which half broke, start here. A sandbox is two containers and one outbound tunnel, and almost everything below is one of those three not being where you think. Ask them directly rather than reading the app.
     </p>
     <DocsCodeBlock code={twoContainers} lang="bash" title="On the machine hosting the sandbox" />
     <p>
         Your sandbox's exact address is on <strong>Sandbox → Overview</strong>. If <code>/health</code> answers with{" "}
-        <code>"ok": true</code>, the daemon is alive and the tunnel is up, and the problem is above that line: a session, an account, a
-        permission. If it does not answer, the problem is below it, and the logs are the next stop.
+        <code>"ok": true</code>, the daemon is alive and the tunnel is up, so the problem is above that line: a session, an account, a permission. If it does not answer, the problem is below it and the logs are next.
     </p>
     <DocsCodeBlock code={logs} lang="bash" title="When /health says nothing" />
     <p>
@@ -69,9 +67,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>The setup code no longer works</h3>
     <p>
-        Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the sandbox's setup screen and a fresh code is
-        minted into a fresh command; nothing else is lost, and the sandbox you already created is still the same sandbox. Re-running a command
-        whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.
+        Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the setup screen and a fresh code is minted into a fresh command; nothing else is lost, and it is still the same sandbox. Re-running a command whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.
     </p>
 
     <h3>docker run says the port is already in use</h3>
@@ -91,24 +87,19 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>A capability the image was supposed to carry isn't there</h3>
     <p>
-        An <em>optional</em> image fragment that this host cannot satisfy, such as a GPU fragment on a machine with no NVIDIA runtime, is skipped
-        instead of failing the launch. The sandbox records the skip, so the container is healthy and the tool is
-        absent. Required fragments behave the opposite way, and stop the launch.
+        An <em>optional</em> image fragment this host cannot satisfy, such as a GPU fragment on a machine with no NVIDIA runtime, is skipped rather than failing the launch. The sandbox records the skip, so the container is healthy and the tool absent. Required fragments do the opposite and stop the launch.
     </p>
 
     <h2>It was working yesterday</h2>
 
     <h3>Every browser session stopped verifying at once</h3>
     <p>
-        That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session for this sandbox
-        stops verifying: including yours. Your own browser silently re-establishes from the Google credential it already holds, so it looks
-        like nothing happened locally while everyone else is signed out. That is the intended shape of it.
+        That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session stops verifying, including yours. Your own browser re-establishes from the Google credential it holds, so it looks like nothing happened locally while everyone else is signed out. That is intended.
     </p>
 
     <h3>An update left the sandbox worse</h3>
     <p>
-        An update that cannot come up healthy puts your previous sandbox back by itself, so a failed update is not something you have to
-        recover from. An update that came up healthy but works worse is a rollback you ask for: <code>/work</code> and your history
+        An update that cannot come up healthy puts the previous sandbox back by itself, so a failed update is not yours to recover from. One that came up healthy but works worse is a rollback you ask for: <code>/work</code> and your history
         survive both, because they live in named volumes rather than in the container. See{" "}
         <a href="/docs/updates/">Updates &amp; rollback</a>.
     </p>
@@ -121,8 +112,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>The app offers no update or rebuild button</h3>
     <p>
-        A sandbox can never recreate its own container, so something on the host has to do it. Without the desktop app that is a command you
-        paste on the machine; the platform prints the exact one on your <strong>Sandbox</strong> and <strong>Environment</strong> cards when
+        A sandbox can never recreate its own container, so something on the host has to. Without the desktop app that is a command you paste on the machine, and the platform prints the exact one on your <strong>Sandbox</strong> and <strong>Environment</strong> cards when
         it applies. <a href="/docs/docker/">Docker setup</a> has them all.
     </p>
 
@@ -130,9 +120,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Unattended runs error every time and chats are fine</h3>
     <p>
-        This is the commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the
-        provider's first unless something pinned one. When that first account runs out of headroom, or belongs to an organisation that turned
-        the plan off: every automation, Doorbell and nightly workflow errors against it until a person reads the row.
+        The commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the first unless something pinned one. When that account runs out of headroom, or belongs to an organisation that turned the plan off, every automation, Doorbell and nightly workflow errors against it until somebody reads the row.
     </p>
     <p>
         The sandbox keeps the last refusal per provider and shows it beside the account on <strong>Sandbox → Agent</strong>, which is where
@@ -142,9 +130,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>An automation records runs as skipped and never wakes</h3>
     <p>
-        A <a href="/docs/glossary/">guard</a> is doing its job. A guard is a shell one-liner run in the workspace before the wake: exit 0 and
-        the agent wakes, anything else and the run is recorded as skipped. A guard that can never exit 0: a path that moved, a command the
-        image no longer has: reads exactly like an automation that stopped firing.
+        A <a href="/docs/glossary/">guard</a> is doing its job. A guard is a shell one-liner run before the wake: exit 0 and the agent wakes, anything else is recorded as skipped. A guard that can never exit 0, because a path moved or the image lost a command, reads exactly like an automation that stopped firing.
     </p>
 
     <h3>Fires are queued and nothing runs</h3>
@@ -165,16 +151,12 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Nothing landed and the card says conflict</h3>
     <p>
-        The agent's patch could not apply to your main tree: you edited the same lines, or an overlapping file is dirty. Nothing lands for
-        that repo, and the card says so instead of landing half of it. The worktree keeps everything, so resolve your side and land again;
-        it works the moment the tree is clean. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
+        The agent's patch could not apply: you edited the same lines, or an overlapping file is dirty. Nothing lands for that repo and the card says so, rather than landing half of it. The worktree keeps everything, so resolve your side and land again. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
     </p>
 
     <h3>Work is already in main and the card still wants to land</h3>
     <p>
-        Work that reached the main tree by another road is not treated as a conflict. An agent that committed onto the main line itself, or a
-        branch you merged by hand, resolves as "already there". So landing it is a no-op rather than a refusal. Landing twice is safe by
-        design.
+        Work that reached the main tree by another road is not a conflict. An agent that committed onto the main line, or a branch you merged by hand, resolves as "already there", so landing is a no-op rather than a refusal. Landing twice is safe by design.
     </p>
 
     <h3>Finished agents disappeared</h3>
@@ -188,9 +170,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>An extension is installed and one of its surfaces is missing</h3>
     <p>
-        A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and a
-        route it did not declare throws. So a missing surface usually means the manifest and the code disagree. When an extension's manifest
-        grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences. Approval never transfers to powers you did
+        A view, command, viewer, setting or process the approved manifest never declared is refused at runtime rather than warned about, and an undeclared route throws. A missing surface usually means the manifest and the code disagree. When a manifest grows, the update <strong>re-asks</strong> and shows the added powers as plain sentences. Approval never transfers to powers you did
         not approve. <a href="/docs/extensions/">Extensions</a> covers what you approved; the{" "}
         <a href="/api/manifest/">manifest reference</a> is what its author had to declare.
     </p>

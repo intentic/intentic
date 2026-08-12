@@ -104,10 +104,7 @@ const shapes = [
 
     <h2>Adding one</h2>
     <p>
-        Pick a card and you get two things side by side: a <strong>guide</strong> and a <strong>form</strong>. The guide is the part that
-        usually costs the time. Where to create the credential, and which scopes it needs. It carries a deep link straight to the right
-        settings page, at the provider or at your own instance if you're self-hosting one. The form is the fields that connection needs, with
-        secrets masked.
+        Pick a card and you get two things side by side: a <strong>guide</strong> and a <strong>form</strong>. The guide is the part that usually costs the time: where to create the credential and which scopes it needs, with a deep link to the right settings page, at the provider or your own instance. The form is the fields that connection needs, secrets masked.
     </p>
     <p>
         Saving applies it, and you watch it happen: provisioning runs as a real terminal job with its output on screen, rather than a spinner
@@ -137,9 +134,7 @@ const shapes = [
 
     <h2>Where the credentials live</h2>
     <p>
-        In your sandbox, in a file the agent is specifically not allowed to read. The manifest of active capabilities sits in your
-        workspace's control-plane directory and is on the daemon's secret denylist, so the generic file routes answer "not found" for it. An
-        agent cannot read its own credential store out through the file API, and neither can an extension.
+        In your sandbox, in a file the agent is not allowed to read. The manifest of active capabilities sits in the workspace's control-plane directory and is on the daemon's secret denylist, so the file routes answer "not found". Neither an agent nor an extension can read its own credential store out through the file API.
     </p>
     <p>
         Nothing goes to the intentic platform. The platform holds your identity and your sandbox's address; every credential here is one your

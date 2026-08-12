@@ -85,18 +85,12 @@ const triggers = [
 
     <h3>Deciding not to run</h3>
     <p>
-        A <strong>guard</strong> is a shell one-liner run in the workspace before the wake. Exit 0 and the agent wakes; anything else and the
-        run is recorded as skipped. It is the cheap way to stop a schedule from spending a turn to discover there was nothing to do: check
-        whether the queue is empty, whether the branch moved, whether yesterday's report already exists.
+        A <strong>guard</strong> is a shell one-liner run in the workspace before the wake. Exit 0 and the agent wakes; anything else is recorded as skipped. It is the cheap way to stop a schedule spending a turn to discover there was nothing to do: is the queue empty, did the branch move, does yesterday's report already exist.
     </p>
 
     <h3>Who serves the wake</h3>
     <p>
-        An automation can pin its provider, model, <a href="/docs/glossary/">harness</a> and <strong>account</strong>. The account matters
-        more here than anywhere else, for a reason a chat never meets: nobody is watching. A sandbox holds several accounts side by side, and
-        the first one can run out of headroom, or belong to an organisation that turned the plan off. Every fire then errors against it until
-        a human happens to read the row. Pinning is the difference between a quiet nightly sweep and a Doorbell that turned visitors away all
-        day.
+        An automation can pin its provider, model, <a href="/docs/glossary/">harness</a> and <strong>account</strong>. The account matters more here than anywhere else, because nobody is watching. A sandbox holds several side by side, and the first can run out of headroom or belong to an organisation that turned the plan off. Every fire then errors until somebody reads the row. Pinning is the difference between a quiet nightly sweep and a Doorbell that turned visitors away all day.
     </p>
 
     <h3>Approving a fire</h3>
@@ -106,34 +100,24 @@ const triggers = [
             <strong>Require approval</strong> holds every fire in a queue until you approve it. Nothing runs on its own.
         </li>
         <li>
-            <strong>Hold for a while</strong> puts the fire in the same visible queue and then runs it itself once the hold has elapsed and
-            no turn is live: your window to cancel or start it early, with silence as consent. This is what a "checks broke, a fix is about
-            to start" notice wants: time to see it, without a standing decision to make.
+            <strong>Hold for a while</strong> puts the fire in the same visible queue and runs it once the hold elapses and no turn is live: a window to cancel or start early, with silence as consent. That is what a "checks broke, a fix is about to start" notice wants.
         </li>
     </ul>
     <p>
-        An explicit "ask me" always wins over a hold. A held fire snapshots the payload that caused it, so approving it later replays exactly
-        what fired, and it survives a daemon restart. The snapshot keeps the conversation it belonged to, too, so a visitor's chat stays one
-        thread rather than becoming a second card.
+        An explicit "ask me" always wins over a hold. A held fire snapshots the payload that caused it, so approving it later replays exactly what fired, and it survives a restart. The snapshot keeps its conversation too, so a visitor's chat stays one thread.
     </p>
 
     <h3>Chores</h3>
     <p>
-        An automation can be marked a <strong>chore</strong>: maintenance of this codebase, rather than a reaction to the outside world. It
-        fires exactly like any other automation: the flag only decides which shelf it sits on, because a nightly dependency audit and a
-        nightly Stripe poll are both "schedule" and are not the same kind of thing.
+        An automation can be marked a <strong>chore</strong>: maintenance of this codebase rather than a reaction to the outside world. It fires like any other automation; the flag only decides which shelf it sits on, because a nightly dependency audit and a nightly Stripe poll are both "schedule" and are not the same kind of thing.
     </p>
 
     <h2>Workflows</h2>
     <p>
-        A workflow is a <strong>design</strong>: named steps, each declaring which steps must finish before it starts. That makes it a graph
-        instead of a list, so independent steps run at once. You can put two models on the same task or three reviewers on one diff. The design is
-        checked when you save it. A cycle, a dependency naming a step that isn't there, or a step with no way to know it's finished is
-        refused with the same sentence the editor shows you while you type.
+        A workflow is a <strong>design</strong>: named steps, each declaring which must finish before it starts. That makes it a graph rather than a list, so independent steps run at once: two models on one task, or three reviewers on one diff. The design is checked when you save. A cycle, a dependency naming a missing step, or a step with no way to know it is finished is refused with the sentence the editor shows you while you type.
     </p>
     <p>
-        Every step is an ordinary isolated agent. It appears on the fleet board, you can open it and read the transcript, and it lands like
-        anything else. Nothing fires a workflow on its own: somebody runs it, or an automation's prompt does.
+        Every step is an ordinary isolated agent: it appears on the fleet board, you can read its transcript, and it lands like anything else. Nothing fires a workflow on its own; somebody runs it, or an automation's prompt does.
     </p>
     <table>
         <thead>
@@ -149,20 +133,15 @@ const triggers = [
         </tbody>
     </table>
     <p>
-        A step's own word for it is advisory by construction: that is why a command check outranks everything else here. "The suite passes"
-        is a fact; "I believe I am done" is a self-assessment, and it exists because plenty of goals have no command that could check them.
+        A step's own word for it is advisory, which is why a command check outranks everything else. "The suite passes" is a fact; "I believe I am done" is a self-assessment, and it exists because plenty of goals have no command to check them.
     </p>
 
     <h3>Gates</h3>
     <p>
-        A <strong>gate</strong> turns a finished run into a release decision, for a pipeline that has no way to sign in. It reads exactly one
-        declared field off one named step and compares it against the values that mean ship it: an allowlist, never a blocklist. A model that
-        answers "mostly-pass" or "pass with notes" must not ship, and nobody should have had to enumerate the ways it can hedge. The gate's
-        webhook carries its own token, minted on save.
+        A <strong>gate</strong> turns a finished run into a release decision, for a pipeline that cannot sign in. It reads one declared field off one named step and compares it against the values that mean ship it: an allowlist, never a blocklist. A model answering "mostly-pass" must not ship, and nobody should have to enumerate the ways it can hedge. The gate's webhook carries its own token, minted on save.
     </p>
     <p>
-        Keeping the gate separate from the design is the point. What a run does stays the graph's business, so today's release check can be an
-        acceptance sweep and next month's a security review, without the gate ever learning what either of them is.
+        Keeping the gate separate from the design is the point. What a run does stays the graph's business, so today's release check can be an acceptance sweep and next month's a security review, without the gate learning what either is.
     </p>
     <p>
         On GitHub it's one step. Paste the gate's URL into a repository secret and add the <strong>Intentic Agent Gate</strong> action, from
@@ -172,16 +151,12 @@ const triggers = [
     </p>
     <DocsCodeBlock code={gate} lang="yaml" title="A release gate in GitHub Actions" />
     <p>
-        Any other CI system calls the same URL with a single command: the URL is all it needs. The action is also the tidy way to fire a
-        webhook automation from a workflow: point that same step at an automation's address instead, and it hands over what just happened
-        without you keeping any <code>curl</code> around.
+        Any other CI system calls the same URL with one command. The action is also the tidy way to fire a webhook automation from a workflow: point the step at an automation's address instead, and it hands over what just happened without you keeping any <code>curl</code> around.
     </p>
 
     <h2>Loops</h2>
     <p>
-        A loop is started <em>against a conversation</em>: "keep going until this is true". It has no editor and no id of its own, because it
-        isn't a thing you maintain: it converges or it gives up, and then it's history. The conversation need not exist yet, which is what lets
-        "run this until it's green" be the first thing you ever say to a new agent.
+        A loop is started <em>against a conversation</em>: "keep going until this is true". It has no editor and no id, because it is not a thing you maintain: it converges or gives up, and then it is history. The conversation need not exist yet, which lets "run this until it's green" be the first thing you say to a new agent.
     </p>
     <p>
         It uses the same fields as a workflow step: a goal, an output and checks. It also asks whether each iteration
@@ -189,9 +164,7 @@ const triggers = [
         keep-refining-this loop wants continue.
     </p>
     <p>
-        <strong>Stopping a loop does not stop the turn.</strong> Stop means "don't start another iteration" and leaves the
-        work in flight alone, so you can say "this is the last one" while watching iteration six do something good. Killing the running turn
-        is the agent's own Stop; pressing both is how you abandon a loop outright.
+        <strong>Stopping a loop does not stop the turn.</strong> Stop means "don't start another iteration" and leaves work in flight alone, so you can call the last one while watching iteration six do something good. Killing the running turn is the agent's own Stop; press both to abandon a loop outright.
     </p>
     <p>Every loop that has run is kept, with its iteration history because "why did it stop at four?" is the question a loop gets read for.</p>
 

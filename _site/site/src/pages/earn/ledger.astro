@@ -32,12 +32,12 @@ const endpoint = `${API_URL}/pool/transparency`;
                 <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The ledger</div>
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">The books, open.</h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    What came in, what payment processing cost, what the pool was, and what actually reached creators — month by month. A
+                    What came in, what payment processing cost, what the pool was, and what actually reached creators, month by month. A
                     finished month is settled and will not change. The month in progress is an estimate, and says so.
                 </p>
                 <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
                     Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a>, which is public and needs
-                    no login. Your browser is fetching it now — nothing on this page is typed by hand.
+                    no login. Your browser is fetching it now; nothing on this page is typed by hand.
                 </p>
             </div>
         </section>
@@ -79,9 +79,9 @@ const endpoint = `${API_URL}/pool/transparency`;
     const STATUS_TEXT = {
         paid: `paid`,
         pending: `payment in flight`,
-        carried: `owed — carrying to the next payout`,
-        unclaimed: `unclaimed — nobody has proved this name yet`,
-        expired: `expired — returned to the pool`,
+        carried: `owed, carrying to the next payout`,
+        unclaimed: `unclaimed, nobody has proved this name yet`,
+        expired: `expired, returned to the pool`,
     };
 
     const monthCard = (entry) => {
@@ -148,7 +148,7 @@ const endpoint = `${API_URL}/pool/transparency`;
             [`${Math.round(data.creatorShare * 100)}% to creators`, `Of every credit a member spends, whichever way they spend it.`],
             [
                 `Paid on the ${data.payoutDayOfMonth}th`,
-                `A month closes when it ends and pays mid-month — a hold window for refunds and disputes. Balances under ${money(data.minPayoutCents)} carry to the next run.`,
+                `A month closes when it ends and pays mid-month, a hold window for refunds and disputes. Balances under ${money(data.minPayoutCents)} carry to the next run.`,
             ],
             [
                 `${data.claimWindowMonths} months to claim`,
@@ -178,7 +178,7 @@ const endpoint = `${API_URL}/pool/transparency`;
             document.getElementById(`ledger-loading`).classList.add(`hidden`);
             const box = document.getElementById(`ledger-error`);
             // No cached numbers, no placeholder: a figure a reader cannot trace is worse than none.
-            box.textContent = `The ledger couldn't be read just now (${error.message}). It is served live, so there is nothing cached to show — please try again shortly.`;
+            box.textContent = `The ledger couldn't be read just now (${error.message}). It is served live, so there is nothing cached to show. Please try again shortly.`;
             box.classList.remove(`hidden`);
         });
 </script>

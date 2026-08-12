@@ -25,9 +25,7 @@ git push
 >
     <h2>Shipping an update</h2>
     <p>
-        Open another pull request against the registry with the new sha. That is the entire release process: the version in your manifest is
-        what users see, and the sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong, and if your repo
-        carries the <code>intentic-extension</code> topic, the nightly scan opens the pull request for you, same as it did the first time.
+        Open another pull request against the registry with the new sha. That is the whole release process: the version in your manifest is what users see and the sha is what runs. Nothing is built or uploaded, so there is no artifact to get wrong, and if your repo carries the <code>intentic-extension</code> topic, the nightly scan opens the pull request for you, same as it did the first time.
     </p>
     <DocsCodeBlock code={update} lang="bash" title="Release two" />
 

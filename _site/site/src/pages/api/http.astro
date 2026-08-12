@@ -186,10 +186,7 @@ const groups = [
 
     <h3>A person, in a browser</h3>
     <p>
-        The sandbox authenticates the end user <strong>directly against Google</strong>: the browser presents a Google ID token, and the
-        daemon verifies its signature against Google's published keys. The platform never holds or signs this credential, so a platform
-        compromise cannot command your sandbox. The first verified identity to arrive becomes the owner; further people are granted access
-        by the owner, with a role that decides how far they reach.
+        The sandbox authenticates the end user <strong>directly against Google</strong>: the browser presents a Google ID token and the daemon verifies its signature against Google's published keys. The platform never holds or signs it, so a platform compromise cannot command your sandbox. The first verified identity to arrive becomes the owner, who grants everyone else a role that decides how far they reach.
     </p>
     <p>
         <code>POST /system/session</code> exchanges that token for a daemon-minted session, which is what every steady-state call presents
@@ -256,9 +253,7 @@ const groups = [
 
     <h2>Drive an agent</h2>
     <p>
-        The reason most scripts are here. A turn executes as a <strong>detached daemon-side run</strong>: starting it acks with a run id, and
-        any number of clients render it by attaching. So a reload, a second window, another device and your script all watch the same work
-        identically, and nothing is lost if the caller goes away.
+        The reason most scripts are here. A turn executes as a <strong>detached daemon-side run</strong>: starting it acks with a run id, and any number of clients render it by attaching. A reload, a second window, another device and your script all watch the same work, and nothing is lost if the caller goes away.
     </p>
     <DocsCodeBlock code={turn} lang="bash" title="Start a turn and watch it" />
     <p>
@@ -311,8 +306,7 @@ const groups = [
         </tbody>
     </table>
     <p>
-        Those change pushes are not a nicety. An intentic workspace is file-first: the agent edits files and moves git refs with its own
-        tools, out of band from every HTTP route. Without them a client is only ever as fresh as the last thing someone clicked.
+        Those change pushes are not a nicety. An intentic workspace is file-first: the agent edits files and moves git refs with its own tools, out of band from every HTTP route. Without them a client is only as fresh as the last thing someone clicked.
     </p>
 
     <h2>Routes that aren't JSON</h2>

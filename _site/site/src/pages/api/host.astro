@@ -171,8 +171,7 @@ const packages = [
     </table>
     <DocsCodeBlock code={badge} lang="typescript" title="A rail view with a badge" />
     <p>
-        A badge is a claim on someone's attention, so the bar is high: it must mean "something happened here you don't know about", never
-        "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose{" "}
+        A badge is a claim on someone's attention, so the bar is high: it must mean "something happened here you do not know about", never "here is a statistic". A count lit most of the day teaches people to stop seeing the rail. <code>count</code> is for work whose{" "}
         <em>size</em> is what you act on, and <code>mark</code> is a glyph for a pending action where the size changes nothing.{" "}
         <code>tone</code> is <code>info</code> at rest, <code>warning</code> for a risk being carried, or <code>danger</code> for something
         broken: stay sparing with that one, because its value is that it is rare.
@@ -244,9 +243,7 @@ const packages = [
 
     <h2>api.models, which model a run will spend</h2>
     <p>
-        The picker is not a widget: it is a live read of every connected provider's catalog, which credentials the sandbox actually holds,
-        and what each model can do. An extension that rendered its own control could only offer a worse list, and would happily offer
-        models the sandbox has no credential for, which is a run that fails minutes later.
+        The picker is not a widget: it is a live read of every connected provider's catalog, the credentials the sandbox holds, and what each model can do. An extension rendering its own control could only offer a worse list, including models the sandbox has no credential for, which is a run that fails minutes later.
     </p>
     <table>
         <thead>
@@ -279,18 +276,13 @@ const packages = [
         </tbody>
     </table>
     <p>
-        A view's own route space is the query, not the path: <code>/ext/:ext/:key?</code> is the whole route and <code>:key</code> already
-        means "which activation". A view with internal navigation puts state such as an open document or selected run in the query,
-        which is what lets a reload keep it and a link carry it. Derive from the URL rather than mirroring it into a ref; back and forward
-        then work for free.
+        A view's own route space is the query, not the path: <code>/ext/:ext/:key?</code> is the whole route and <code>:key</code> already means "which activation". A view with internal navigation puts state such as an open document or selected run in the query, which is what lets a reload keep it and a link carry it. Derive from the URL rather than mirroring it into a ref, and back and forward work for free.
     </p>
 
     <h2 id="backend">The backend half: activateServer()</h2>
     <p>
         An extension with a manifest <code>server</code> entry has a second, smaller surface. The bundle exports{" "}
-        <code>activateServer(api, context)</code>. The daemon's backend host is one supervised node process shared by every enabled
-        backend. It imports the bundle and calls it once per host start. There is no deactivate. Retirement is the host process ending, the
-        one teardown that cannot leak.
+        <code>activateServer(api, context)</code>. The daemon's backend host is one supervised node process shared by every enabled backend. It imports the bundle and calls it once per host start. There is no deactivate: retirement is the host process ending, the one teardown that cannot leak.
     </p>
     <table>
         <thead>
@@ -306,9 +298,7 @@ const packages = [
         </tbody>
     </table>
     <p>
-        The surface stays small because the trust model is full trust: installs are owner-only and sha-pinned, and the backend runs
-        as the same user the daemon does. What the API mediates is exactly the two things a path cannot carry: your route namespace, and
-        your declared reach into the daemon.
+        The surface stays small because the trust model is full trust: installs are owner-only and sha-pinned, and the backend runs as the daemon's own user. The API mediates exactly the two things a path cannot carry: your route namespace, and your declared reach into the daemon.
     </p>
 
     <h2>Versioning</h2>

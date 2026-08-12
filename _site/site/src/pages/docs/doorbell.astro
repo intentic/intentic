@@ -9,9 +9,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 >
     <h2>What it is</h2>
     <p>
-        A <strong>Doorbell</strong> is an automation with a chat widget in front of it. A visitor to your site types a question; your sandbox
-        agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering is the same agent that has
-        your repository, your docs and your connected tools, so it can answer from what is actually true today.
+        A <strong>Doorbell</strong> is an automation with a chat widget in front of it. A visitor types a question and your sandbox agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering has your repository, your docs and your connected tools, so it answers from what is true today.
     </p>
     <p>
         Every visitor's thread becomes <strong>one conversation on your fleet board</strong>: a card you can open, read, and type into. If a
@@ -33,18 +31,14 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <pre><code>https://example.com
 https://www.example.com</code></pre>
     <p>
-        <strong>Those two are different origins.</strong> This is the single commonest reason a freshly installed Doorbell stays silent: the
-        site redirects one to the other, the browser ends up on the one you did not list, and every request is refused. List both. If you
-        forget, the install panel will tell you exactly which origin was turned away and offer to add it.
+        <strong>Those two are different origins.</strong> This is the commonest reason a fresh Doorbell stays silent: the site redirects one to the other, the browser lands on the one you did not list, and every request is refused. List both. The install panel names the origin it turned away and offers to add it.
     </p>
 
     <h2>3 · Paste the snippet</h2>
     <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
     <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/webchat/widget.js" data-automation="website-concierge" defer&gt;&lt;/script&gt;</code></pre>
     <p>
-        The script carries one piece of information: which automation to talk to. The sandbox it calls is the origin the script itself came
-        from, so there is no second address to keep in sync and no key to leak. The widget is about 6 kB gzipped, renders in a shadow root so
-        your site's CSS cannot reshape it and its CSS cannot leak into your page, and it loads no framework.
+        The script carries one piece of information: which automation to talk to. The sandbox it calls is the origin the script came from, so there is no second address to keep in sync and no key to leak. The widget is about 6 kB gzipped, renders in a shadow root so neither stylesheet can reach the other, and loads no framework.
     </p>
 
     <h2>4 · Check that it landed</h2>
@@ -61,9 +55,7 @@ https://www.example.com</code></pre>
             continues the same conversation.
         </li>
         <li>
-            <strong>Google sign-in</strong>: a visitor must sign in before they can write. This uses <em>your own</em> Google OAuth client,
-            not ours: Google only issues a token to an origin authorized on the client, and ours cannot list every customer's domain. Create
-            a web client, add each allowed site as an authorized JavaScript origin, and paste the client id.
+            <strong>Google sign-in</strong>: a visitor must sign in before they can write. This uses <em>your own</em> Google OAuth client, not ours: Google issues a token only to an origin authorized on the client, and ours cannot list every customer's domain. Create a web client, add each allowed site as an authorized origin, and paste the client id.
         </li>
     </ul>
     <p>
@@ -80,9 +72,7 @@ https://www.example.com</code></pre>
 
     <h2>What the agent may do behind it</h2>
     <p>
-        A Doorbell is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it can read files, search the
-        workspace and fetch a page, and it cannot run commands or write anything. This is enforced as a list of allowed tools on the
-        automation, not as a request in the prompt: an instruction smuggled into a support question has nothing to reach.
+        A Doorbell is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it reads files, searches the workspace and fetches a page, and it cannot run commands or write anything. That is enforced as a list of allowed tools on the automation, not asked for in the prompt, so an instruction smuggled into a question has nothing to reach.
     </p>
     <p>
         On top of that, each visitor thread runs in its own throwaway git worktree. There is a per-conversation rate limit and a daily message

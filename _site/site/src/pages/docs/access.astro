@@ -36,13 +36,10 @@ const roles = [
 >
     <h2>How the owner is decided</h2>
     <p>
-        Trust on first use. The first verified identity to reach a new sandbox becomes its owner, and the daemon remembers it. Nobody is
-        assigned an owner, and the intentic platform cannot name one for you: it holds your identity and your sandbox's address, and has no
-        way to reach in.
+        Trust on first use. The first verified identity to reach a new sandbox becomes its owner, and the daemon remembers it. The platform cannot name one for you: it holds your identity and your sandbox's address, and has no way to reach in.
     </p>
     <p>
-        Sign-in is directly against Google: your browser presents a Google ID token and your sandbox verifies it against Google's published
-        keys. The platform never holds or signs that credential, which is what makes a platform compromise unable to command your sandbox.
+        Sign-in is directly against Google: your browser presents an ID token and your sandbox verifies it against Google's published keys. The platform never holds or signs that credential, so a platform compromise cannot command your sandbox.
     </p>
 
     <h2>The tiers</h2>
@@ -87,17 +84,12 @@ const roles = [
 
     <h2>What people see about each other</h2>
     <p>
-        Everyone sees who is here now: a live roster of connected browsers with the view each is on, the conversation they have active, and
-        whether they've gone idle. Presence is per browser tab and lasts exactly as long as its connection, so there is nothing to time out
-        and no clocks to compare. Each person's tier is on the roster too, which is how everyone can see who may do what, and how a tab
-        knows its own role without asking a question only the owner may ask.
+        Everyone sees who is here now: a live roster of connected browsers with the view each is on, the conversation they have active, and whether they have gone idle. Presence is per tab and lasts as long as its connection, so there is nothing to time out. Each person's tier is on the roster too, so everyone can see who may do what and a tab knows its own role without asking a question only the owner may ask.
     </p>
 
     <h2>When a member is refused</h2>
     <p>
-        The daemon answers a member below a route's tier with a refusal that <em>names</em> the tier required, so the app can say "ask a
-        maintainer" instead of failing blankly. That is deliberate: an unlisted read defaults to the viewer tier and an unlisted change
-        defaults to maintainer, so a route nobody has classified can under-serve a collaborator but can never hand one a power by accident.
+        The daemon answers a member below a route's tier with a refusal that <em>names</em> the tier required, so the app can say "ask a maintainer" rather than failing blankly. An unlisted read defaults to viewer and an unlisted change to maintainer, so an unclassified route can under-serve a collaborator but never hand one a power by accident.
     </p>
 
     <h2>Programs, not people</h2>
@@ -109,10 +101,7 @@ const roles = [
 
     <h2>If you lose a laptop</h2>
     <p>
-        <strong>Sign out everywhere</strong> re-keys the session signer, so every browser session for this sandbox stops verifying at once,
-        including your own, which then silently re-establishes from the Google credential it already holds. That is what makes it a button
-        rather than a support procedure. Control tokens are revoked separately, per token, because they are held by programs rather than
-        people.
+        <strong>Sign out everywhere</strong> re-keys the session signer, so every session stops verifying at once, including your own, which re-establishes from the Google credential it holds. That is what makes it a button rather than a support procedure. Control tokens are revoked separately, per token, because programs hold them.
     </p>
 
     <DocsRelated

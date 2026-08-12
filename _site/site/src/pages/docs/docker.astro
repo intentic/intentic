@@ -110,8 +110,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <DocsCodeBlock code={inspect} lang="bash" title="Look at yours" />
     <p>
         <code>/history</code> is a <strong>separate volume mounted outside <code>/work</code></strong>, and that is deliberate: an agent{" "}
-        <code>rm -rf</code>-ing its workspace cannot reach the history that would let you recover from it. Both survive a container being
-        removed and recreated, which is exactly why update and rebuild can swap the image underneath a sandbox without touching your files.
+        <code>rm -rf</code>-ing its workspace cannot reach the history that would let you recover from it. Both survive a container being removed and recreated, which is why update and rebuild can swap the image under a sandbox without touching your files.
     </p>
 
     {/* WRITTEN BECAUSE THE DOCS DID NOT SAY IT. Searching these docs for "backup" returned nothing, on a product
@@ -134,9 +133,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     </p>
     <p>
         The one exception is a shortcut, not an opening. A browser on the <em>same machine</em> shouldn't have to travel to Cloudflare and
-        back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id.
-        Nobody announces that address: your browser computes the same number from the token it already holds. If something else already
-        holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
+        back, so the container publishes a second listener on <code>127.0.0.1</code> only, at a port derived from your sandbox's own id. Nobody announces that address; your browser computes the same number from the token it holds. If something else holds the port, every install path retries without it and the sandbox works over its tunnel as usual.
     </p>
 
     <h2>What the container may do</h2>
@@ -214,9 +211,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
 
     <h2>Moving between install paths</h2>
     <p>
-        Because the names are derived, not invented, a sandbox is not locked to the way it was created. Bring one up with the setup command
-        and later manage it with Compose, or the reverse: the containers are recreated, the three volumes are reused, and your workspace is
-        untouched. Stop the old container first (<code>docker rm -f intentic-sandbox-&lt;slug&gt;</code>) so the two managers aren't holding
+        Because the names are derived rather than invented, a sandbox is not locked to how it was created. Bring one up with the setup command and later manage it with Compose, or the reverse: the containers are recreated, the three volumes reused, your workspace untouched. Stop the old container first (<code>docker rm -f intentic-sandbox-&lt;slug&gt;</code>) so the two managers aren't holding
         the same name.
     </p>
 </DocsLayout>

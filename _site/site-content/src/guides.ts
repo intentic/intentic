@@ -107,7 +107,7 @@ export const guidePages: GuidePage[] = [
         question: "How do you run multiple AI coding agents in parallel?",
         navLabel: "Agents in parallel",
         blurb: "Give each agent its own checkout so they cannot edit the same file, then pick how much isolation the work needs.",
-        answer: "Give every agent its own checkout of the repository, so two agents can never edit the same file at the same time. Git worktrees do this on one machine and cost nothing. Containers do it with more isolation, since each agent also gets its own processes, ports and installed tools. Then run each agent against its own branch and merge the results one at a time, reviewing each.",
+        answer: "Give every agent its own checkout, so two can never edit the same file at once. Git worktrees do this on one machine for free. Containers go further, giving each agent its own processes, ports and installed tools. Then run each on its own branch and merge one at a time, reviewing each.",
         facts: [
             "The failure mode is shared state, not model quality: two agents in one working tree overwrite each other's edits and produce a build that neither of them broke.",
             "A git worktree is a second checkout of the same repository on a different branch, sharing one .git directory. Creating one is a single command and costs the size of the files, not the history.",
@@ -156,7 +156,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Start with git worktrees. They solve the collision that actually bites, they cost nothing, and you will find out within a day whether you need more.",
             "Move to a container per agent when the agents start needing an environment rather than just files: installing packages, running a dev server, holding a database password, or touching a system you do not want every task to reach.",
-            "That second step is what intentic packages. Each agent gets a Docker sandbox on a machine you own, with its own worktree inside it, its own installed tools, and its own credentials. It is free and MIT licensed, so the way to evaluate it is to run it rather than to read about it.",
+            "That second step is what intentic packages: a Docker sandbox on a machine you own, with its own worktree, tools and credentials. It is free and MIT licensed, so evaluate it by running it.",
         ],
         sections: [
             {
@@ -189,7 +189,7 @@ export const guidePages: GuidePage[] = [
                 heading: "What to give each agent beyond files",
                 body: [
                     "Once agents run the code rather than only editing it, they need an environment each. That means their own ports, their own database, their own installed language versions, and their own copies of whatever credentials the job needs.",
-                    "This is the point where worktrees stop being enough and a container per agent starts paying for itself. It is also the point where credential handling stops being theoretical, because an agent that can reach production with a shared key is a real risk rather than a hypothetical one.",
+                    "This is where worktrees stop being enough and a container per agent pays for itself. It is also where credential handling stops being theoretical: an agent that can reach production with a shared key is a real risk.",
                 ],
             },
         ],
@@ -197,7 +197,7 @@ export const guidePages: GuidePage[] = [
             {
                 id: "how-many-agents-at-once",
                 question: "How many AI coding agents can you run at once?",
-                answer: "Technically as many as your machine has memory and your provider allows. Practically the limit is how fast you can review what they produce, which puts most people between three and six agents on real work. Running more usually means the extra output is merged without being read, which removes the point of running agents at all.",
+                answer: "Technically as many as your machine has memory for. Practically the limit is how fast you can review what they produce, which puts most people between three and six on real work. Running more means the extra output gets merged unread, which removes the point.",
             },
             {
                 id: "worktrees-or-containers",
@@ -207,17 +207,17 @@ export const guidePages: GuidePage[] = [
             {
                 id: "same-repo-different-agents",
                 question: "Can two agents work on the same repository at the same time?",
-                answer: "Yes, provided each one has its own checkout and its own branch. Two agents sharing a single working tree will overwrite each other's edits with no error, so the isolation has to come first. Git worktrees are the cheapest way to give each agent a separate checkout of the same repository.",
+                answer: "Yes, provided each has its own checkout and branch. Two agents sharing one working tree will overwrite each other with no error, so isolation comes first. Git worktrees are the cheapest way to give each a separate checkout.",
             },
             {
                 id: "mixing-different-agents",
                 question: "Can you run different agent CLIs in parallel, such as Claude Code and Codex?",
-                answer: "Yes. They are separate processes with separate accounts and they do not know about each other, so mixing them is a matter of isolating their working directories like any other parallel run. Some people deliberately give the same task to two different models and compare the diffs before picking one.",
+                answer: "Yes. They are separate processes with separate accounts and do not know about each other, so mixing them is just isolating their working directories. Some people give the same task to two models and compare the diffs.",
             },
             {
                 id: "parallel-agents-cost",
                 question: "Does running agents in parallel cost more?",
-                answer: "Yes, roughly in proportion to how many are running, since each one consumes its own tokens. The saving is wall-clock time rather than money, so it is worth tracking spend per agent from the first day rather than discovering the total at the end of the month.",
+                answer: "Yes, roughly in proportion to how many run, since each consumes its own tokens. The saving is wall-clock time, not money, so track spend per agent from day one rather than discovering the total at month end.",
             },
         ],
         related: [
@@ -237,7 +237,7 @@ export const guidePages: GuidePage[] = [
         question: "How do you keep a coding agent running after you close your laptop?",
         navLabel: "Agents that persist",
         blurb: "Move the agent off the thing that sleeps. A detached session survives a disconnect; only another machine survives a lid close.",
-        answer: "Run the agent somewhere that does not sleep. A terminal multiplexer such as tmux keeps it alive when your SSH connection drops, but not when the machine itself suspends. To survive closing a laptop the agent has to be on a machine that stays awake: a desktop, a home server, a VPS, or a hosted service. Everything else is a workaround.",
+        answer: "Run the agent somewhere that does not sleep. A multiplexer such as tmux keeps it alive when your SSH connection drops, but not when the machine suspends. To survive a closed laptop the agent has to be on a machine that stays awake: a desktop, a home server, a VPS. Everything else is a workaround.",
         facts: [
             "Closing a laptop lid suspends the CPU by default on macOS, Windows and most Linux desktops, which stops the agent process wherever it is running locally.",
             "tmux and screen survive a lost SSH connection or a closed terminal window, because the session is owned by a daemon rather than by your terminal. Neither survives the host suspending or rebooting.",
@@ -277,7 +277,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "If the problem is a dropped connection, use tmux. If the problem is a closed lid, no session manager will help and the agent has to move to a machine that stays on.",
             "The cheapest version of that is a desktop you already own, reached over SSH. The most convenient version is something that also gives you a way back in from a browser, so checking on the run does not require a terminal.",
-            "intentic is built for the second case: the sandbox runs on your own desktop, server or VPS as a Docker container, keeps working while nothing is connected to it, and is reachable again from any device through a private tunnel that dials outward, so no ports are opened. It is free and MIT licensed.",
+            "intentic is built for the second case: the sandbox runs on your own desktop, server or VPS as a Docker container, keeps working with nothing connected to it, and is reachable from any device through a tunnel that dials outward. It is free and MIT licensed.",
         ],
         sections: [
             {
@@ -291,7 +291,7 @@ export const guidePages: GuidePage[] = [
                 heading: "Running unattended safely",
                 body: [
                     "An agent working while nobody watches needs its limits set in advance. That means a spending cap, an explicit list of what it may touch, and work that lands somewhere reviewable rather than on the main branch.",
-                    "The pattern that holds up is that unattended work produces a proposal rather than a result. The agent commits to its own branch and stops, and a person reads the diff before anything merges. Nothing then depends on the agent having been right while unobserved.",
+                    "The pattern that holds up: unattended work produces a proposal, not a result. The agent commits to its own branch and stops, and a person reads the diff before anything merges. Nothing depends on the agent having been right while unobserved.",
                 ],
                 points: [
                     "Set a spend limit before the run, not after.",
@@ -304,7 +304,7 @@ export const guidePages: GuidePage[] = [
                 heading: "Getting back to a run in progress",
                 body: [
                     "Persistence is only half of it. An agent that kept working but can only be reached from one terminal on one network is still a run you cannot check on from a train.",
-                    "The useful shape is a process that stays on a machine you own, plus a way in that works from any device without exposing that machine to the internet. Outbound tunnels do this: the machine dials out and holds the connection open, so nothing inbound is ever opened and no port forwarding is involved.",
+                    "The useful shape is a process that stays on a machine you own, plus a way in that works from any device without exposing it to the internet. Outbound tunnels do this: the machine dials out and holds the connection open, so nothing inbound is opened.",
                 ],
             },
         ],
@@ -312,22 +312,22 @@ export const guidePages: GuidePage[] = [
             {
                 id: "tmux-closed-laptop",
                 question: "Does tmux keep an agent running when I close my laptop?",
-                answer: "No. tmux keeps a session alive when your terminal closes or your SSH connection drops, because the session belongs to a background daemon. If the machine itself suspends, the daemon stops with everything else. Closing a laptop lid suspends by default, so the agent stops.",
+                answer: "No. tmux keeps a session alive when your terminal closes or SSH drops, because it belongs to a background daemon. If the machine suspends, the daemon stops with everything else, and closing a laptop lid suspends by default.",
             },
             {
                 id: "agent-on-vps",
                 question: "Can I run a coding agent on a VPS?",
-                answer: "Yes, and it is the usual answer for work that has to keep going. The agent runs on a machine that never sleeps, and you reach it over SSH or a tunnel. The trade is that credentials and code now live on that server, so it needs the same care as any machine holding your keys.",
+                answer: "Yes, and it is the usual answer for work that has to keep going. The agent runs on a machine that never sleeps, reached over SSH or a tunnel. The trade is that code and credentials now live there, so it needs the same care as any machine holding keys.",
             },
             {
                 id: "check-agent-from-phone",
                 question: "Can I check on a running agent from my phone?",
-                answer: "Only if the agent is somewhere reachable over the network and has an interface that is not a terminal. A tmux session on a desktop technically qualifies if you SSH in from the phone, but in practice this means running the agent behind a web interface on a machine that stays on.",
+                answer: "Only if it is reachable over the network and has an interface that is not a terminal. A tmux session qualifies if you SSH in from the phone, but in practice this means a web interface on a machine that stays on.",
             },
             {
                 id: "agent-overnight",
                 question: "Is it safe to leave an agent working overnight?",
-                answer: "It is safe when the limits are set beforehand: a spending cap, credentials scoped to the job, and work that lands on its own branch for review rather than merging itself. Without those, an unattended agent can spend a lot and change a lot before anyone looks.",
+                answer: "It is safe when the limits are set beforehand: a spending cap, credentials scoped to the job, and work that lands on a branch for review. Without those, an unattended agent can spend a lot and change a lot before anyone looks.",
             },
         ],
         related: [
@@ -347,7 +347,7 @@ export const guidePages: GuidePage[] = [
         question: "How do you give an AI agent database or API access without leaking credentials?",
         navLabel: "Credentials for agents",
         blurb: "Keep the secret out of the conversation. The agent should operate a tool that holds the credential, never read the credential itself.",
-        answer: "Keep the credential out of the model's context. The agent should run a tool that already holds the secret, rather than being told the secret and asked to use it. That means environment variables or a secret store the process reads, scoped credentials with the narrowest rights the job needs, and separate keys per task so one mistake does not expose everything.",
+        answer: "Keep the credential out of the model's context. The agent should run a tool that already holds the secret, not be told the secret and asked to use it. That means a secret store the process reads, credentials scoped to the narrowest rights the job needs, and separate keys per task.",
         facts: [
             "Anything in the model's context can be repeated in its output, quoted into a log, or included in a message to another service. A pasted key is a disclosed key.",
             "A credential in an environment variable is readable by the process but never enters the conversation unless something prints it.",
@@ -392,7 +392,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Two rules do most of the work. The credential never enters the model's context, and each task gets only the access it needs.",
             "In practice that means tools holding secrets rather than agents holding secrets, plus per-task isolation so the scope of any single mistake is small.",
-            "intentic is built around that arrangement. A capability installs a real tool and its credential inside your sandbox, the agent operates the tool, and the value never leaves your machine or reaches the platform. The platform stores your identity and your sandbox's address, and nothing else.",
+            "intentic is built around that. A capability installs a real tool and its credential inside your sandbox, the agent operates the tool, and the value never leaves your machine. The platform stores your identity and your sandbox's address, nothing else.",
         ],
         sections: [
             {
@@ -418,7 +418,7 @@ export const guidePages: GuidePage[] = [
             {
                 heading: "What isolation buys you",
                 body: [
-                    "Running each agent in its own container changes the question from whether an agent will make a mistake to how far the mistake reaches. An agent with a staging database credential and no network access to production cannot cause a production incident, whatever it does.",
+                    "A container per agent changes the question from whether an agent will make a mistake to how far it reaches. An agent with a staging credential and no route to production cannot cause a production incident, whatever it does.",
                     "This is also what makes running several agents at once tolerable. Without isolation, every agent shares one environment and one set of keys, so the blast radius of any single task is the whole machine.",
                 ],
             },
@@ -427,27 +427,27 @@ export const guidePages: GuidePage[] = [
             {
                 id: "safe-to-give-agent-db-access",
                 question: "Is it safe to give an AI agent access to a database?",
-                answer: "It is safe in proportion to what the credential can do. A read-only role on a staging copy is low risk and often enough to be useful. A write-capable production role is a serious risk regardless of which agent or model is used, and should be a deliberate exception rather than the default.",
+                answer: "It is safe in proportion to what the credential can do. A read-only role on a staging copy is low risk and often enough. A write-capable production role is a serious risk whatever the model, and should be a deliberate exception.",
             },
             {
                 id: "does-the-model-see-my-key",
                 question: "Does the AI model see my API key?",
-                answer: "Only if it ends up in the context. A key in an environment variable or held inside a tool is used by the process without being shown to the model. A key pasted into the prompt or printed by a command the agent ran is in the context, and should be treated as disclosed.",
+                answer: "Only if it reaches the context. A key in an environment variable or held inside a tool is used by the process without being shown to the model. A key pasted into a prompt, or printed by a command the agent ran, should be treated as disclosed.",
             },
             {
                 id: "env-vars-enough",
                 question: "Are environment variables good enough for agent credentials?",
-                answer: "For one person on one machine, usually yes, because they keep the value out of the conversation. They stop being enough when several agents share the machine, since they all see the same environment, or when the credential needs rotation and an audit trail.",
+                answer: "For one person on one machine, usually yes: they keep the value out of the conversation. They stop being enough when several agents share the machine and all see the same environment, or when the credential needs rotation and an audit trail.",
             },
             {
                 id: "mcp-server-credentials",
                 question: "Do MCP servers keep credentials away from the model?",
-                answer: "Yes, that is one of the reasons to use them. The server holds the credential and exposes operations, so the agent calls something like a query rather than receiving a connection string. The protection is only as good as the operations exposed: a tool that returns the raw secret gives the model the secret.",
+                answer: "Yes, that is one reason to use them. The server holds the credential and exposes operations, so the agent calls a query rather than receiving a connection string. The protection is only as good as the operations exposed: a tool that returns the raw secret gives the model the secret.",
             },
             {
                 id: "agent-leaks-secret",
                 question: "What happens if an agent leaks a secret?",
-                answer: "Treat it as a live disclosure and rotate immediately, because the value may exist in provider logs, in files the agent wrote, and in the session history. This is the argument for short-lived, narrowly scoped credentials: rotation is routine and the exposure window is small.",
+                answer: "Treat it as a live disclosure and rotate immediately: the value may sit in provider logs, in files the agent wrote, and in session history. This is the argument for short-lived, narrowly scoped credentials.",
             },
         ],
         related: [
@@ -467,7 +467,7 @@ export const guidePages: GuidePage[] = [
         question: "How do you review code an AI agent wrote before it lands?",
         navLabel: "Reviewing agent work",
         blurb: "Read the diff, not the summary. Make the agent's work land somewhere that requires a decision to merge.",
-        answer: "Make the agent's work land somewhere that cannot merge itself, then read the diff rather than the agent's description of it. In practice that means a branch per agent, a review of every hunk before merge, and tests that run on the branch. The summary an agent writes is a claim about the change, and the diff is the change.",
+        answer: "Make the agent's work land somewhere that cannot merge itself, then read the diff rather than the agent's description of it. That means a branch per agent, every hunk reviewed before merge, and tests on the branch. The summary is a claim about the change; the diff is the change.",
         facts: [
             "An agent's summary and its diff can disagree, without dishonesty, because the summary is generated from intent rather than from the final state of the files.",
             "The most common surprises in agent diffs are collateral: a reformatted file, a bumped dependency, a deleted test that was failing, a stray debug line.",
@@ -546,12 +546,12 @@ export const guidePages: GuidePage[] = [
             {
                 id: "trust-ai-code",
                 question: "Can you trust code written by an AI agent?",
-                answer: "Treat it the way you would treat a competent contributor who does not know your codebase's history: usually correct in the small, occasionally confident about something wrong, and worth reviewing every time. The practical answer is not trust or distrust, but a workflow where nothing merges without someone reading the diff.",
+                answer: "Treat it like a competent contributor who does not know your codebase's history: usually right in the small, occasionally confident about something wrong, worth reviewing every time. The answer is not trust or distrust, but a workflow where nothing merges unread.",
             },
             {
                 id: "what-to-look-for",
                 question: "What should you look for when reviewing AI-generated code?",
-                answer: "Start with the list of changed files, because unexpected filenames are the fastest signal. Then check test changes, dependency and lockfile changes, and anything outside the task's stated scope. Collateral edits are the usual problem rather than wrong logic in the part you asked for.",
+                answer: "Start with the list of changed files: unexpected filenames are the fastest signal. Then check test changes, dependency and lockfile changes, and anything outside the task's stated scope. Collateral edits are the usual problem, not wrong logic where you asked.",
             },
             {
                 id: "should-agents-commit",
@@ -581,7 +581,7 @@ export const guidePages: GuidePage[] = [
         question: "Where does your code go when you use a cloud coding agent?",
         navLabel: "Where your code goes",
         blurb: "Two questions decide it: whose machine holds the checkout, and whose account holds the keys.",
-        answer: "It depends on where the agent runs, and there are two separate questions. First, whose machine holds the checkout while the agent works. Second, whose account holds the credentials it uses. A cloud agent service clones your repository onto its infrastructure and holds tokens on your behalf. A locally run agent keeps both on your machine and sends only the text of the conversation to the model provider.",
+        answer: "It depends on where the agent runs, and there are two questions: whose machine holds the checkout, and whose account holds the credentials. A cloud service clones your repository onto its infrastructure and holds tokens for you. A local agent keeps both on your machine and sends only the conversation to the model provider.",
         facts: [
             "Every approach sends something to a model provider, because the model is remote unless you are running a local one. What differs is whether that is only conversation text or also a full checkout.",
             "A local agent CLI sends the file contents it decides to read, along with your instructions, and keeps the repository and credentials on your machine.",
@@ -620,13 +620,13 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Ask the two questions separately. Whose machine holds the checkout, and whose account holds the credentials. Most of what people mean by privacy here is answered by those two rather than by any policy document.",
             "If the answer has to be your own machine for both, a locally run agent is the baseline, and a container per agent on hardware you own is the version of that which also survives you closing the laptop.",
-            "That is what intentic does. The sandbox runs on your machine, the repository and the credentials stay inside it, and the platform stores your identity and the sandbox's address, with no ability to read your code or command your agents. The whole thing is MIT licensed, so the claim is checkable rather than promised.",
+            "That is what intentic does. The sandbox runs on your machine, the repository and credentials stay inside it, and the platform stores only your identity and the sandbox's address. It is MIT licensed, so the claim is checkable rather than promised.",
         ],
         sections: [
             {
                 heading: "Two questions, not one",
                 body: [
-                    "Where the checkout lives and where the keys live are separate decisions, and conflating them is how people end up surprised. An agent running on your laptop with a production token has kept your code local and handed out significant access. A hosted agent with a read-only token has done the reverse.",
+                    "Where the checkout lives and where the keys live are separate decisions, and conflating them is how people get surprised. An agent on your laptop with a production token has kept your code local and handed out real access. A hosted agent with a read-only token has done the reverse.",
                     "Answer both explicitly for whatever you are evaluating, because a vendor page usually addresses one of them clearly and the other in passing.",
                 ],
             },
@@ -649,12 +649,12 @@ export const guidePages: GuidePage[] = [
             {
                 id: "does-my-code-get-uploaded",
                 question: "Does my code get uploaded when I use an AI coding agent?",
-                answer: "With a locally run agent, the files it reads are sent to the model provider as conversation content, and the repository itself stays on your machine. With a hosted agent service, the repository is cloned onto the vendor's infrastructure as well. Both send something; only one sends a full copy.",
+                answer: "With a local agent, the files it reads go to the model provider as conversation content, and the repository stays on your machine. With a hosted service, the repository is cloned onto the vendor's infrastructure too. Both send something; only one sends a full copy.",
             },
             {
                 id: "is-my-code-used-for-training",
                 question: "Is my code used to train the model?",
-                answer: "It depends on the provider and the plan. Business and enterprise tiers commonly exclude submitted content from training by default, while consumer tiers often allow it with an opt-out. The specific policy for your plan is the only reliable answer, and it is worth reading rather than assuming.",
+                answer: "It depends on the provider and the plan. Business and enterprise tiers commonly exclude submitted content from training by default; consumer tiers often allow it with an opt-out. The policy for your plan is the only reliable answer, and it is worth reading.",
             },
             {
                 id: "self-hosted-means-private",
@@ -664,7 +664,7 @@ export const guidePages: GuidePage[] = [
             {
                 id: "safest-setup",
                 question: "What is the most private way to use a coding agent?",
-                answer: "A local model on your own hardware, with the agent running locally too, sends nothing anywhere. The realistic compromise most people take is a local or self-hosted agent with a hosted model on a plan that excludes training, which keeps the repository and the credentials on hardware you control.",
+                answer: "A local model on your own hardware, with the agent local too, sends nothing anywhere. The realistic compromise is a self-hosted agent with a hosted model on a plan that excludes training, which keeps the repository and credentials on hardware you control.",
             },
         ],
         related: [

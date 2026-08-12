@@ -75,9 +75,7 @@ const contentsOf = (label: string): string[] => {
 >
     <h2>The mental model</h2>
     <p>
-        One idea holds the whole product together: <strong>a specialized agent is a purpose-built sandbox.</strong> Not a prompt or a
-        markdown file. It is a real container, on a machine you control, with the libraries, dev-tools, system access, and curated context a
-        specific job needs. You drive it from any browser; it runs where you started it.
+        One idea holds the whole product together: <strong>a specialized agent is a purpose-built sandbox.</strong> Not a prompt or a markdown file. It is a real container with the libraries, dev-tools, system access and curated context a specific job needs. You drive it from any browser; it runs where you started it.
     </p>
     {/* The whole product in one look, before the prose names its parts: a reader who scrolls past everything
         else should still leave knowing where their code sits and what the platform can reach. */}
@@ -88,9 +86,7 @@ const contentsOf = (label: string): string[] => {
     <ul>
         <li><strong>The platform</strong>: a thin hub that stores your identity and your sandbox's URL. It sits off the command path and can't reach in.</li>
         <li>
-            <strong>Your sandbox</strong>: one container per agent, on your hardware, reached by your browser over a private Cloudflare
-            tunnel. The agent, repos, credentials, and capabilities live here, along with any tool it runs: a database client, a headless
-            browser, even a deployment engine.
+            <strong>Your sandbox</strong>: one container per agent, reached by your browser over a private Cloudflare tunnel. The agent, repos, credentials and capabilities live here, along with any tool it runs: a database client, a headless browser, a deployment engine.
         </li>
     </ul>
     <p>

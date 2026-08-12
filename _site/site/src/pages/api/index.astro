@@ -79,8 +79,7 @@ const agentPoints = [
 >
     <h2>The whole lifecycle</h2>
     <p>
-        Seven steps take an extension from an empty directory to a payout that renews, and not all are yours: Discover and
-        Install happen on the other side of the listing. What you publish is only ever met as what somebody else installs.
+        Seven steps take an extension from an empty directory to a payout, and not all are yours: Discover and Install happen on the other side of the listing. What you publish is only ever met as what somebody else installs.
     </p>
     <div class="docs-embed mt-6">
         {/* The wave, on wide screens; every chip is a link to the page that owns its step. */}
@@ -189,9 +188,7 @@ const agentPoints = [
         exporting an <code>activate()</code> function.
     </p>
     <p>
-        Usually that directory is a git repository, because a repository is how an extension travels to somebody else's sandbox. It doesn't
-        have to be: a directory inside your own sandbox is already an extension, which is what makes "ask the agent to build me one" a
-        reasonable sentence.
+        Usually that directory is a git repository, because that is how an extension travels to somebody else's sandbox. It need not be: a directory inside your own sandbox is already an extension, which is what makes "ask the agent to build me one" a reasonable sentence.
     </p>
     <DocsCodeBlock code={manifest} lang="json" title="intentic-extension.json" />
     <p>
@@ -202,8 +199,7 @@ const agentPoints = [
 
     <h2>It extends the agent, not just the editor</h2>
     <p>
-        This is the part that has no equivalent in a normal editor's plugin model, and it's the reason to build one. A sandbox is a whole
-        machine: an agent, its tools, its credentials, its image. An extension can reach all of it.
+        This has no equivalent in an editor's plugin model, and it is the reason to build one. A sandbox is a whole machine: an agent, its tools, its credentials, its image. An extension can reach all of it.
     </p>
 
     <h3>The UI half</h3>
@@ -227,10 +223,7 @@ const agentPoints = [
     </table>
     <h3>The backend half</h3>
     <p>
-        An extension can also ship a <strong>backend</strong>: a manifest <code>server</code> entry naming a bundle of real server code. It
-        runs beside the daemon, serves the extension's own route namespace behind the daemon's ordinary auth, and reaches the daemon's own
-        routes only through a second declared allowlist. That is what lets an extension be a whole product: a client for somebody else's
-        API, work that outlives the browser tab, while its reach stays a list the owner read and approved.
+        An extension can also ship a <strong>backend</strong>: a manifest <code>server</code> entry naming a bundle of real server code. It runs beside the daemon, serves the extension's own route namespace behind the daemon's ordinary auth, and reaches the daemon's routes only through a second declared allowlist. That is what lets an extension be a whole product, while its reach stays a list the owner read and approved.
     </p>
 
     <h2>One format, any subset</h2>
@@ -249,10 +242,7 @@ const agentPoints = [
         </tbody>
     </table>
     <p>
-        One envelope because the things it groups succeed or fail together. A user installs a <em>product</em>: "deployments", "knowledge",
-        "Reddit research": not a skill here, a view there and a background process somewhere third. One install is one identity, one trust
-        decision, one on/off switch that unwires all of it, one row a marketplace can list and attribute. Split those across four package
-        kinds and every one of those sentences needs four answers.
+        One envelope because the things it groups succeed or fail together. A user installs a <em>product</em>: "deployments", "knowledge", "Reddit research", not a skill here and a view there. One install is one identity, one trust decision, one switch that unwires all of it, one row a marketplace can list. Split that across four package kinds and every one of those sentences needs four answers.
     </p>
     <p>
         The grouping never taxes the small case: a manifest with one section filled in is complete, installs the same way, and shows the
@@ -262,24 +252,16 @@ const agentPoints = [
         doesn't fork it.
     </p>
     <p>
-        The one deliberate limit: an extension contributes <em>cards and code</em>, never <em>privilege</em>. The handlers that grant real
-        power stays in the core. Examples include running the sandbox privileged, joining a private network and installing other extensions. A manifest
-        that tries to name one fails to parse. Shared surfaces stay core too: the model picker, the terminal, the chat are things an
-        extension asks the shell for, so every extension offers the same, current list instead of five worse copies of it.
+        The one deliberate limit: an extension contributes <em>cards and code</em>, never <em>privilege</em>. The handlers that grant real power stay in the core: running the sandbox privileged, joining a private network, installing other extensions. A manifest naming one fails to parse. Shared surfaces stay core too, so the model picker, terminal and chat are things an extension asks the shell for, and every extension offers the same current list rather than five worse copies.
     </p>
 
     <h2>What bounds an extension</h2>
     <p>
-        Extension code runs in somebody's browser and somebody's sandbox. Official discovery adds exact-sha security review, while the
-        install makes declared host integrations legible before approval. These are layered controls, not runtime isolation, and all of them
-        constrain what you design as an author:
+        Extension code runs in somebody's browser and somebody's sandbox. Official discovery adds exact-sha security review, and the install makes declared host integrations legible before approval. These are layered controls, not runtime isolation, and they constrain what you design:
     </p>
     <ul>
         <li>
-            <strong>Code that comes from elsewhere is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a
-            branch. The code you approved is the code that runs, and an update is an explicit, visible act, never something that happens
-            under you. An extension you wrote in your own sandbox is pinned to nothing, for the same reason your own repositories aren't:
-            there is no upstream that could change it behind your back, only files you can read.
+            <strong>Code that comes from elsewhere is pinned to a commit.</strong> Installing takes a full 40-character commit sha, not a branch. The code you approved is the code that runs, and an update is an explicit act, never something that happens under you. An extension you wrote in your own sandbox is pinned to nothing, for the same reason your own repositories are not: there is no upstream to change it behind your back.
         </li>
         <li>
             <strong>The manifest is the host-integration surface.</strong> The install dialog shows exactly the declared contributions. Afterwards
@@ -292,16 +274,11 @@ const agentPoints = [
             this is not a claim that arbitrary browser or process code is confined to that list.
         </li>
         <li>
-            <strong>Official listings pass two automated security checks.</strong> Trivy checks the exact source for known dependency flaws,
-            committed secrets and dangerous deployment configuration. An intentic agent then reads the complete tree without running author
-            code, including browser egress, server/process/agent/bin/build surfaces, dependencies and source versus shipped artifacts. A
-            finding, blocked or uninspectable audit fails closed, and both run identities are recorded against the repository, commit and
-            optional subdirectory.
+            <strong>Official listings pass two automated security checks.</strong> Trivy checks the exact source for known dependency flaws, committed secrets and dangerous deployment configuration. An intentic agent then reads the whole tree without running author code: browser egress, server/process/agent/bin/build surfaces, dependencies, and source against shipped artifacts. A finding or an uninspectable audit fails closed, and both run identities are recorded against the repository and commit.
         </li>
     </ul>
     <p>
-        The extension API injects transport auth and secret settings round-trip as "still set" rather than their value. That reduces routine
-        credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the exact source is audited.
+        The extension API injects transport auth, and secret settings round-trip as "still set" rather than their value. That reduces routine credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the source is audited.
     </p>
     <p>
         <a href="/api/verify/">Verification &amp; trust</a> explains what those mechanics guarantee and what <strong>listed</strong>,{" "}
@@ -311,9 +288,7 @@ const agentPoints = [
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Most of the product you already use is extensions: over twenty-five of them. Activity, Automations, Memory, Knowledge, Deployments,
-        Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, the Google Workspace
-        connection, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
+        Most of the product you already use is extensions: over twenty-five. Activity, Automations, Memory, Knowledge, Deployments, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, Google Workspace, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
         compiles against, and a lint rule fails the build if one of them reaches into app internals instead.
     </p>
     <p>

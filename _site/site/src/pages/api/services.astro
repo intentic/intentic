@@ -43,10 +43,7 @@ content-type: application/json
 >
     <h2>What a service is for</h2>
     <p>
-        Most tools should be free extensions. A <strong>service</strong> is for cases where every run costs <em>you</em> real money, such as
-        a paid data API, heavy compute or a licensed corpus. Giving it away per run would mean paying to be used. Services are priced in
-        credits, per run, and the member's agent offers them in chat with the price shown before anything is spent. What that looks like
-        from the member's seat is shown on <a href="/earn/">Earn</a>. This page covers the provider's side.
+        Most tools should be free extensions. A <strong>service</strong> is for cases where every run costs <em>you</em> real money: a paid data API, heavy compute, a licensed corpus. Giving it away per run would mean paying to be used. Services are priced in credits per run, and the member's agent offers them in chat with the price shown before anything is spent. What that looks like from the member's seat is on <a href="/earn/">Earn</a>. This page covers the provider's side.
     </p>
 
     <h2>The shape of a run</h2>
@@ -61,9 +58,7 @@ content-type: application/json
     <h2>Verify the signature</h2>
     <p>
         What you get instead of issuing API keys: every forwarded call carries <code>x-intentic-timestamp</code> and{" "}
-        <code>x-intentic-signature</code>, an HMAC over <code>{"{timestamp}.{body}"}</code> with the secret you were issued at onboarding.
-        It uses the same scheme as Stripe webhooks. Verify it and drop everything else, and nobody can run up your upstream bill but the
-        platform. The timestamp check makes a replayed capture die of old age.
+        <code>x-intentic-signature</code>, an HMAC over <code>{"{timestamp}.{body}"}</code> with the secret you were issued at onboarding, using the same scheme as Stripe webhooks. Verify it and drop everything else, and nobody but the platform can run up your upstream bill. The timestamp check makes a replayed capture die of old age.
     </p>
     <DocsCodeBlock code={verify} lang="typescript" title="The whole verification" />
 
@@ -87,9 +82,7 @@ content-type: application/json
     <h2>Admission &amp; the watch</h2>
     <p>
         Extensions pass an automated code audit because their code runs in somebody's browser and sandbox. A service has nothing to put
-        through that pipeline (no code of yours ships to anyone), so the gate is a different kind: <strong>admission is curated</strong>.
-        In v1 every row in the catalog is created by the platform after a human review of who you are, what the listing claims, and whether
-        the price fits the shape. There is no form that puts an endpoint in front of members' agents unreviewed.
+        through that pipeline (no code of yours ships to anyone), so the gate is a different kind: <strong>admission is curated</strong>. Every row in the catalog is created by the platform after a human review of who you are, what the listing claims and whether the price fits. There is no form that puts an endpoint in front of members' agents unreviewed.
     </p>
     <p>After admission, the watch is behavioral, because with a service, behavior is the artifact:</p>
     <ul>
