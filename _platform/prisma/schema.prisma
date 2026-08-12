@@ -33,6 +33,8 @@ model User {
     donations        Donation[]
     creditSpends     CreditSpend[]
     serviceRuns      ServiceRun[]
+    publisherClaims  PublisherClaim[]
+    payoutAccount    PayoutAccount?
 
     @@map("user")
 }
@@ -340,6 +342,51 @@ model ServiceRun {
     @@index([userId])
     @@index([createdAt])
     @@map("service_run")
+}
+
+/* WHO A PUBLISHER NAME BELONGS TO — the join the pool has never had. Earnings accrue against the manifest's
+ * `publisher.name`, which is a string a listing declares, not a person the platform can pay. This row is what
+ * turns one into the other: an account proved control of a source repository the official registry lists under
+ * that publisher, so money owed to the name is money owed to this user.
+ *
+ * `publisher` is the unique key, not (publisher, userId): the name is first-come and singular, exactly as the
+ * registry treats it, so a second claimant collides with the holder instead of quietly earning beside them.
+ * `repo` records WHICH repository carried the proof — a claim nobody can retrace is not evidence, and when a
+ * slug is disputed this is the line that settles it. */
+model PublisherClaim {
+    id        String   @id @default(cuid())
+    publisher String   @unique
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    repo      String
+    createdAt DateTime @default(now())
+
+    // The creator surface lists a caller's claims; the unique above is on publisher and can't serve that.
+    @@index([userId])
+    @@map("publisher_claim")
+}
+
+/* WHERE A CREATOR'S MONEY GOES. One per account rather than one per publisher: a person holding three listings
+ * is still one payee with one set of tax details, and splitting the destination per listing would multiply the
+ * onboarding without buying anything.
+ *
+ * The platform stores an account REFERENCE and three answers it needs to render honestly — never bank details,
+ * never tax forms, which is the whole reason payouts ride a Connect account instead of a form here. `payoutsEnabled`
+ * is the only field the settlement job may read as permission to send money; `detailsSubmitted` separates "still
+ * filling it in" from "finished but held", and `disabledReason` is why a finished account still cannot be paid,
+ * so the creator reads a cause rather than a silence. */
+model PayoutAccount {
+    id               String   @id @default(cuid())
+    userId           String   @unique
+    user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    stripeAccountId  String   @unique
+    payoutsEnabled   Boolean  @default(false)
+    detailsSubmitted Boolean  @default(false)
+    disabledReason   String?
+    createdAt        DateTime @default(now())
+    updatedAt        DateTime @updatedAt
+
+    @@map("payout_account")
 }
 
 model SandboxMember {

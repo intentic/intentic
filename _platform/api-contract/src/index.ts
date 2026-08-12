@@ -4,13 +4,17 @@ import { z } from "zod";
 import {
     CfTokenSchema,
     CfZonesSchema,
+    ClaimChallengeSchema,
     CloudCredentialsSchema,
     CloudOptionsSchema,
+    CreatorStateSchema,
     DaemonUrlSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
     MembershipStateSchema,
+    PublisherClaimSchema,
+    PublisherSlugSchema,
     SandboxSummarySchema,
     SetupCodeSchema,
     SetupCodeTargetSchema,
@@ -148,6 +152,29 @@ export const poolContract = {
     portal: oc.route({ method: "POST", path: "/pool/portal" }).output(z.object({ url: z.url() })),
 };
 
+/* THE CREATOR'S SIDE of the same pool: proving a publisher name is yours, and connecting somewhere to be paid.
+ * The membership routes above are how money comes IN; these are the two things that had to exist before any of
+ * it could go OUT, because earnings accrue against a name from a manifest and a name cannot hold a bank
+ * account.
+ *
+ * `challenge` is a READ — it computes what this account would have to publish to prove one name, and changes
+ * nothing; `claim` is the verification, and refuses unless the proof is actually readable in a repository the
+ * registry lists under that name. `connectPayouts` answers a Stripe-hosted URL like checkout and portal do,
+ * for the same reason: the platform hosts no payment UI and collects no bank or tax detail of its own.
+ * All four refuse (NOT_FOUND) on a platform whose pool is off. */
+export const creatorContract = {
+    status: oc.route({ method: "GET", path: "/creator/status" }).output(CreatorStateSchema),
+    challenge: oc
+        .route({ method: "POST", path: "/creator/claim/challenge" })
+        .input(z.object({ publisher: PublisherSlugSchema }))
+        .output(ClaimChallengeSchema),
+    claim: oc
+        .route({ method: "POST", path: "/creator/claim" })
+        .input(z.object({ publisher: PublisherSlugSchema }))
+        .output(PublisherClaimSchema),
+    connectPayouts: oc.route({ method: "POST", path: "/creator/payouts/connect" }).output(z.object({ url: z.url() })),
+};
+
 // Aggregated contract router — consumed by the oRPC client (ContractRouterClient<typeof apiContract>)
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
@@ -156,4 +183,5 @@ export const apiContract = {
     invite: inviteContract,
     desktop: desktopContract,
     pool: poolContract,
+    creator: creatorContract,
 };

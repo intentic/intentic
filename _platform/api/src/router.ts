@@ -1,3 +1,4 @@
+import { creatorRoutes } from "./creator/creator.orpc.js";
 import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
@@ -12,4 +13,5 @@ export const router = {
     invite: inviteRoutes,
     desktop: desktopRoutes,
     pool: poolRoutes(),
+    creator: creatorRoutes(),
 };

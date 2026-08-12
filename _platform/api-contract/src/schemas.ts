@@ -699,3 +699,63 @@ export const DeploymentSchema = z.object({
     komodoDeploymentUrl: z.string().optional(),
 });
 export type Deployment = z.infer<typeof DeploymentSchema>;
+
+/* THE CREATOR'S SIDE OF THE POOL: which publisher names this account has proved are its own, and whether money
+ * owed to them can actually be sent. Earnings have always been computable per listing; what this state adds is
+ * a payee — so every field here exists to answer one of two questions a creator asks, "is this name mine" and
+ * "will I be paid".
+ *
+ * `payouts` is present whenever the pool is on, connected or not: "you have not started" is an answer the
+ * screen must render, not an absence it has to infer. */
+/* A publisher name as the manifest spells it — the same shape the extension manifest enforces, so a claim can
+ * never be filed against a string that could not be a publisher in the first place. Mirrored rather than
+ * imported because the manifest lives in the sandbox packages and this contract is the platform's own. */
+export const PublisherSlugSchema = z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .max(64);
+
+export const PublisherClaimSchema = z.object({
+    publisher: z.string(),
+    // The repository that carried the proof — shown back so a creator can see WHICH of their repositories the
+    // platform accepted, and so a disputed name has something to point at.
+    repo: z.string(),
+    claimedAt: z.iso.datetime(),
+});
+export type PublisherClaim = z.infer<typeof PublisherClaimSchema>;
+
+export const PayoutStateSchema = z.object({
+    connected: z.boolean(),
+    payoutsEnabled: z.boolean(),
+    detailsSubmitted: z.boolean(),
+    // Why a finished account still cannot be paid, when Stripe names a cause — a creator reading "not ready"
+    // with no reason has nothing to act on.
+    disabledReason: z.string().optional(),
+});
+export type PayoutState = z.infer<typeof PayoutStateSchema>;
+
+export const CreatorStateSchema = z.object({
+    enabled: z.boolean(),
+    claims: z.array(PublisherClaimSchema),
+    payouts: PayoutStateSchema.optional(),
+});
+export type CreatorState = z.infer<typeof CreatorStateSchema>;
+
+/* What a claimant must do, computed for one publisher name. `repos` is every repository the registry lists
+ * under it — the claim is provable from ANY of them, which is why they are all named rather than one being
+ * picked for the creator. Empty means the name has no github-sourced listing to prove against, and the screen
+ * says that instead of offering an impossible instruction.
+ *
+ * `token` is stable for this account and this name: a creator can read it today, push the file tomorrow, and
+ * finish the claim without the platform having remembered anything in between. */
+export const ClaimChallengeSchema = z.object({
+    publisher: z.string(),
+    repos: z.array(z.string()),
+    path: z.string(),
+    token: z.string(),
+    // Set when the name is already claimed — by this account (so the screen shows it as done) or by another
+    // (so it says so plainly rather than letting someone push a file that can never verify).
+    claimedByYou: z.boolean(),
+    claimedByOther: z.boolean(),
+});
+export type ClaimChallenge = z.infer<typeof ClaimChallengeSchema>;

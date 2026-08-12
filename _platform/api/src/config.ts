@@ -139,6 +139,11 @@ const configSchema = z.object({
             // Seed the self-contained demo service (a canned research answerer the platform itself hosts) so
             // the catalog is demonstrable without a provider. POOL_DEMO_SERVICE.
             demoService: z.stringbool().default(false),
+            // The registry whose listings decide which repositories back a publisher name — the authority a
+            // publisher claim is checked against (creator/creator-claim.ts). The official registry by default;
+            // a platform running its own points this at that repository's marketplace file, and claims are then
+            // proved against the listings it actually serves. POOL_REGISTRY_URL.
+            registryUrl: z.url().default(`https://raw.githubusercontent.com/intentic/registry/HEAD/.claude-plugin/marketplace.json`),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`

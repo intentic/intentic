@@ -1,11 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-/* A thin typed client for the four Stripe operations the creator pool needs — checkout, portal, one
- * subscription read, and webhook signature verification. Hand-rolled over fetch rather than the Stripe SDK,
- * the stripe-api.ts precedent in the deploy engine: the platform's CLAUDE.md model is "as few dependencies as
- * the job allows", and the job here is four endpoints with stable shapes. Injectable fetch for tests, like
- * the trial pool's upstream. */
+/* A thin typed client for the Stripe operations the creator pool needs — money IN (checkout, portal, one
+ * subscription read), money OUT (a creator's connected account, its hosted onboarding, its payout readiness),
+ * and webhook signature verification. Hand-rolled over fetch rather than the Stripe SDK, the stripe-api.ts
+ * precedent in the deploy engine: the platform's CLAUDE.md model is "as few dependencies as the job allows",
+ * and the job here is a handful of endpoints with stable shapes. Injectable fetch for tests, like the trial
+ * pool's upstream. */
 
 const API_BASE = `https://api.stripe.com/v1`;
 
@@ -20,6 +21,17 @@ const post = async (fetchFn: typeof fetch, secretKey: string, path: string, para
     });
     if (!response.ok) {
         throw new Error(`Stripe POST ${path} failed (HTTP ${response.status}): ${await response.text()}`);
+    }
+    return response.json();
+};
+
+const get = async (fetchFn: typeof fetch, secretKey: string, path: string): Promise<unknown> => {
+    const response = await fetchFn(`${API_BASE}${path}`, {
+        headers: { authorization: `Bearer ${secretKey}` },
+        signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+        throw new Error(`Stripe GET ${path} failed (HTTP ${response.status}): ${await response.text()}`);
     }
     return response.json();
 };
@@ -62,6 +74,45 @@ const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
 export const subscriptionFromEvent = (raw: unknown, now: () => Date = () => new Date()): StripeSubscription | undefined =>
     SubscriptionSchema.safeParse(raw).success ? toSubscription(raw, now) : undefined;
 
+/* A CREATOR'S CONNECTED ACCOUNT, as the platform needs to read it. Stripe holds the bank details, the identity
+ * documents and the tax forms; what comes back here is only the three answers a payout decision and an honest
+ * screen are made of.
+ *
+ * `payouts_enabled` is the ONLY field that may be read as permission to send money. `details_submitted`
+ * separates a half-finished onboarding from a finished one, and `requirements.disabled_reason` is why a
+ * finished account still cannot be paid — without it the creator sees a silent "not yet" and has nothing to
+ * act on. Every field is optional in the parse: an account object is large and Stripe grows it, so a missing
+ * one must read as "not enabled yet", never as a parse failure that breaks the screen. */
+const AccountSchema = z.object({
+    id: z.string(),
+    payouts_enabled: z.boolean().optional(),
+    details_submitted: z.boolean().optional(),
+    requirements: z.object({ disabled_reason: z.string().nullable().optional() }).optional(),
+});
+
+export interface ConnectAccount {
+    readonly id: string;
+    readonly payoutsEnabled: boolean;
+    readonly detailsSubmitted: boolean;
+    // Absent when nothing is holding the account back.
+    readonly disabledReason?: string;
+}
+
+const toAccount = (raw: unknown): ConnectAccount => {
+    const parsed = AccountSchema.parse(raw);
+    const disabledReason = parsed.requirements?.disabled_reason;
+    return {
+        id: parsed.id,
+        payoutsEnabled: parsed.payouts_enabled ?? false,
+        detailsSubmitted: parsed.details_submitted ?? false,
+        ...(typeof disabledReason === `string` && disabledReason !== `` ? { disabledReason } : {}),
+    };
+};
+
+// A connected account as `account.updated` carries it, or undefined for an object of some other shape — the
+// webhook treats that as "not for us", exactly as it does for a subscription it cannot read.
+export const accountFromEvent = (raw: unknown): ConnectAccount | undefined => (AccountSchema.safeParse(raw).success ? toAccount(raw) : undefined);
+
 export interface StripeGateway {
     // A subscription-mode Checkout Session; the answer is the URL to send the browser to.
     // `clientReferenceId` is the platform's user id — it comes back on checkout.session.completed and is the
@@ -78,6 +129,17 @@ export interface StripeGateway {
     readonly portalSession: (customerId: string, returnUrl: string) => Promise<{ url: string }>;
     // One subscription, read fresh — the webhook handler pulls this after checkout completes.
     readonly subscription: (id: string) => Promise<StripeSubscription>;
+    /* A creator's connected account, requesting only the `transfers` capability: the platform sends money to
+     * this account and never charges through it, and asking for less is what keeps the creator's onboarding to
+     * the questions their own payouts actually require. Express, so Stripe hosts the identity, bank and tax
+     * collection — the platform stores an id and three booleans, and never sees the rest. */
+    readonly createAccount: (opts: { readonly email: string }) => Promise<ConnectAccount>;
+    /* The hosted onboarding URL. Single-use and short-lived by Stripe's design, so it is minted per visit and
+     * never stored; `refreshUrl` is where Stripe sends a claimant whose link went stale (straight back to mint
+     * another), `returnUrl` where it sends them when they are done. */
+    readonly accountLink: (opts: { readonly accountId: string; readonly refreshUrl: string; readonly returnUrl: string }) => Promise<{ url: string }>;
+    // One connected account, read fresh — what an unfinished onboarding is re-checked against.
+    readonly account: (id: string) => Promise<ConnectAccount>;
 }
 
 export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
@@ -95,16 +157,25 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
         ),
     portalSession: async (customerId, returnUrl) =>
         SessionSchema.parse(await post(fetchFn, secretKey, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
-    subscription: async (id) => {
-        const response = await fetchFn(`${API_BASE}/subscriptions/${id}`, {
-            headers: { authorization: `Bearer ${secretKey}` },
-            signal: AbortSignal.timeout(30_000),
-        });
-        if (!response.ok) {
-            throw new Error(`Stripe GET /subscriptions failed (HTTP ${response.status}): ${await response.text()}`);
-        }
-        return toSubscription(await response.json(), now);
-    },
+    subscription: async (id) => toSubscription(await get(fetchFn, secretKey, `/subscriptions/${id}`), now),
+    createAccount: async ({ email }) =>
+        toAccount(
+            await post(fetchFn, secretKey, `/accounts`, {
+                type: `express`,
+                email,
+                "capabilities[transfers][requested]": `true`,
+            }),
+        ),
+    accountLink: async ({ accountId, refreshUrl, returnUrl }) =>
+        SessionSchema.parse(
+            await post(fetchFn, secretKey, `/account_links`, {
+                account: accountId,
+                refresh_url: refreshUrl,
+                return_url: returnUrl,
+                type: `account_onboarding`,
+            }),
+        ),
+    account: async (id) => toAccount(await get(fetchFn, secretKey, `/accounts/${id}`)),
 });
 
 // How far a webhook's timestamp may sit from now — Stripe's own recommended replay window.

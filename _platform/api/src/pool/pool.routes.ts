@@ -9,7 +9,8 @@ import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
 import { DEMO_SLUG, demoAnswer } from "./pool-demo.js";
 import { applySubscription, isPremium, poolEnabled, premiumOf } from "./pool-membership.js";
 import { forwardToService, verifyServiceSignature } from "./pool-services.js";
-import { type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
+import { applyAccountEvent } from "../creator/creator-payouts.js";
+import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
 import { computeMonth, type DonationAggregate, type ServiceAggregate } from "./pool-share.js";
 
 /* THE CREATOR POOL's sandbox-facing and public routes. The browser-facing half (membership state, checkout,
@@ -336,6 +337,14 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             const subscription = subscriptionFromEvent(data.object, now);
             if (subscription !== undefined) {
                 await applySubscription(prisma, subscription);
+            }
+        } else if (type === `account.updated`) {
+            // A creator's payout readiness changing — the fast path that keeps the settings screen right
+            // without anyone looking at it. The creator surface also reads through to Stripe while an account
+            // is unfinished, so neither this nor that is the only way the answer becomes true.
+            const account = accountFromEvent(data.object);
+            if (account !== undefined) {
+                await applyAccountEvent(prisma, account);
             }
         }
         return c.json({ received: true });
