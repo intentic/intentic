@@ -21,4 +21,9 @@
 // every route regardless). Surfaced when the drafts queue moved out of the app: approve/reject are
 // maintainer-and-up, and no extension could say so. Additive. The surface guard grew a `sandboxApi` member
 // list with this release, so additions below the top-level grain are recorded from here on.
-export const extensionApiVersion = "2.3.0";
+// 2.4.0 gives the manifest an authoring schema: `$schema` is a declared field, and every contribution point now
+// carries the sentence that explains it, generated out to intentic-extension.schema.json. An editor pointed at
+// that URL completes the fields, shows what each one does, and marks a key nothing declares — which used to be
+// the one class of mistake nothing caught, because zod strips what it does not know rather than refusing it.
+// Additive: a manifest that names no schema is unchanged.
+export const extensionApiVersion = "2.4.0";

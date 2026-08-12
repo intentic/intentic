@@ -1,0 +1,1389 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "$schema": {
+            "description": "The authoring schema, for editor completion and validation. Nothing at runtime reads it.",
+            "type": "string"
+        },
+        "publisher": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Your own semver — display and identity only. The installed code's identity is the pinned commit sha."
+        },
+        "category": {
+            "description": "Which section of the Extensions tab this sits under — a grouping by what it is FOR, which cannot be derived from what it contributes. A section this app has never heard of lands in “Other” rather than failing to install.",
+            "type": "string",
+            "minLength": 1
+        },
+        "logo": {
+            "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+            "type": "string"
+        },
+        "icon": {
+            "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+            "type": "string"
+        },
+        "engines": {
+            "type": "object",
+            "properties": {
+                "intentic": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "intentic"
+            ],
+            "description": "A semver range over the host's extension API version, checked before your code is activated.",
+            "additionalProperties": false
+        },
+        "entry": {
+            "description": "Repo-relative path of your prebuilt single-file ESM bundle, built with `vue` and `@intentic/extension-api` as externals. Absent ⇒ an extension with no UI.",
+            "type": "string",
+            "minLength": 1
+        },
+        "server": {
+            "description": "Repo-relative path of your prebuilt single-file node ESM server bundle, exporting `activateServer`. Served under your own route namespace, which the daemon proxies. Nothing is provided at runtime but node builtins, so bundle everything else in. Absent ⇒ no backend.",
+            "type": "string",
+            "minLength": 1
+        },
+        "permissions": {
+            "description": "How far this extension may reach into the daemon, as \"<METHOD> <path-glob>\" entries where `*` matches one path segment — e.g. \"GET /panels\", \"POST /panels/*/start\". The install dialog shows these, the host refuses anything undeclared, and the usage ledger records which were actually earned.",
+            "type": "object",
+            "properties": {
+                "sandbox": {
+                    "description": "Daemon routes your UI half may call. Your own backend namespace needs no entry — its backend is your own code.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "daemon": {
+                    "description": "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals — the UI as the owner's session, the backend as a minted per-extension token — so a grant to one must never quietly widen the other.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "contributes": {
+            "type": "object",
+            "properties": {
+                "views": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                            },
+                            "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The name shown on the tile or tab. The manifest's value wins over the one passed at registration."
+                            },
+                            "surface": {
+                                "type": "string",
+                                "enum": [
+                                    "rail",
+                                    "directory",
+                                    "sandbox"
+                                ],
+                                "description": "Where it appears. `rail` is a tile in the global left rail; `directory` is a panel opened from a repo in the Workspace tree; `sandbox` is a tab on the Sandbox hub, for a view whose subject is the box rather than the work."
+                            },
+                            "badge": {
+                                "description": "Allow this view to put a count on its tile. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "label",
+                            "surface"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Sidebar elements this extension may register at runtime. Each entry reserves an id and a surface; the extension supplies the component with api.views.register, and the host refuses any registration this list does not cover."
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Workspace-root-relative, forward-slash, matched by prefix — so one entry covers an exact file (`.intentic/automations.json`), a directory (`.intentic/drafts/`, with the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`). Not a glob."
+                            },
+                            "invalidates": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "description": "The query keys this path makes stale — the first element of your own api.sandbox.key(...) keys. Keep both this and the path as narrow as the view actually needs: a broad prefix costs every connected browser a refetch on every matching write."
+                            }
+                        },
+                        "required": [
+                            "path",
+                            "invalidates"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Which workspace files back your views, so the daemon's file watcher can tell the browser they went stale instead of you polling for it. The agent edits the workspace out of band from every HTTP route, and this push is the only thing that can notice."
+                },
+                "viewers": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                            },
+                            "extensions": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "pattern": "^[a-z0-9]+$"
+                                },
+                                "description": "Bare file extensions, no dot — e.g. [\"docx\", \"xlsx\"]."
+                            },
+                            "fetch": {
+                                "type": "string",
+                                "enum": [
+                                    "text",
+                                    "blob",
+                                    "url"
+                                ],
+                                "description": "How much of the file the host hands you. `text` for a format that is text (svg, a subtitle track). `blob` for one that must be parsed end to end before any of it shows (a .docx, a spreadsheet) — bounded by the daemon's raw-read cap. `url` for anything range-read rather than parsed (audio, video): your component gets a streaming URL to point an element at, never the bytes."
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "extensions",
+                            "fetch"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "File formats this extension can render. The host resolves an opened file to your viewer by its extension, fetches the content, and renders your component with it — you keep none of the fetch lifecycle and none of the daemon credentials."
+                },
+                "documents": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                            },
+                            "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The family's name, shown in the install dialog beside your other contributions. Per-row wording stays with the provider, which is the only thing that knows what it found."
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "label"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Per-directory documents this extension can offer. Your provider marks the rows in the Workspace tree it has something to say about, and the host opens your component as a tab."
+                },
+                "commands": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$"
+                            },
+                            "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "What the command palette shows. The manifest's value wins over the one passed at registration."
+                            },
+                            "icon": {
+                                "description": "A name from the host's icon set, drawn beside the title.",
+                                "type": "string"
+                            },
+                            "keybinding": {
+                                "description": "A global keyboard shortcut, e.g. \"Mod+Shift+K\" — `Mod` is ⌘ on Apple and Ctrl elsewhere. Declared here because a global shortcut is consequential: the owner approves it at install, and the host binds only what was approved.",
+                                "type": "string",
+                                "pattern": "^\\S+$"
+                            }
+                        },
+                        "required": [
+                            "command",
+                            "title"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Commands this extension may register handlers for, surfaced in the command palette. Title, icon and shortcut all come from here rather than from the registration call, because this is what the owner approved at install."
+                },
+                "settings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-zA-Z0-9-]*$"
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "boolean",
+                                    "string",
+                                    "number",
+                                    "enum"
+                                ],
+                                "description": "Which control the Settings page draws. `enum` reads its choices from `enum`."
+                            },
+                            "title": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "description": {
+                                "description": "The line under the control.",
+                                "type": "string"
+                            },
+                            "default": {
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    }
+                                ]
+                            },
+                            "enum": {
+                                "description": "The choices, for type \"enum\". Meaningless otherwise.",
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "secret": {
+                                "description": "Mask the value in the UI and strip it from reads — a set secret round-trips as “still set”, never as its value.",
+                                "type": "boolean"
+                            },
+                            "env": {
+                                "description": "Inject the stored value into the agent's shell environment under this name, every turn. How a credential you hold reaches the agent's command-line tools.",
+                                "type": "string",
+                                "pattern": "^[A-Z][A-Z0-9_]*$"
+                            }
+                        },
+                        "required": [
+                            "key",
+                            "type",
+                            "title"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Typed settings the host renders into the Settings page for you and persists daemon-side. You never draw the form or store the value; you read it back with api.settings.get."
+                },
+                "processes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9-]*$"
+                            },
+                            "command": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "cwd": {
+                                "description": "Relative to the extension checkout. Absent ⇒ the checkout root.",
+                                "type": "string"
+                            },
+                            "port": {
+                                "description": "Assign a free port and inject it as PORT.",
+                                "type": "string",
+                                "const": "auto"
+                            },
+                            "preview": {
+                                "description": "Expose the port on a tunnelled preview hostname.",
+                                "type": "boolean"
+                            },
+                            "autoStart": {
+                                "description": "Launch it on install and on daemon boot, rather than waiting to be started.",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "command"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Long-lived background processes the daemon runs for this extension — a gateway holding a connection the daemon must not, a dev server. Managed the same way panel dev servers are, and startable and stoppable from the Extensions tab."
+                },
+                "agent": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "description": "Relative to the extension checkout. Absent ⇒ the checkout root.",
+                            "type": "string"
+                        }
+                    },
+                    "description": "Declare that this checkout is also a Claude Code plugin, so the agent picks up its skills, agents, hooks, commands and MCP servers each turn. The daemon hands the directory to the plugin loader and never parses what is in it.",
+                    "additionalProperties": false
+                },
+                "environment": {
+                    "type": "object",
+                    "properties": {
+                        "fragment": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Checkout-relative path to a file holding ONLY RUN and ENV instructions. FROM and privileged directives are rejected — those stay daemon-owned."
+                        }
+                    },
+                    "required": [
+                        "fragment"
+                    ],
+                    "description": "A Dockerfile fragment baked into the sandbox image so your tools are actually installed at runtime — a whisper binary, a psql client. The owner approves the composed overlay and rebuilds out of band, so this does not take effect immediately.",
+                    "additionalProperties": false
+                },
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                    },
+                                    "catalog": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "logo": {
+                                                "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+                                                "type": "string"
+                                            },
+                                            "icon": {
+                                                "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`."
+                                            },
+                                            "category": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "hint": {
+                                                "description": "The paragraph, shown under the add form and searched from the catalog — so the words that identify this card to someone hunting for it (\"webauthn\", \"socket mode\") belong here even when the tile cannot show them.",
+                                                "type": "string"
+                                            },
+                                            "guide": {
+                                                "description": "The walkthrough the install dialog renders for getting the credential this card asks for.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "urlFromField": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "linkLabel": {
+                                                        "type": "string"
+                                                    },
+                                                    "scopes": {
+                                                        "type": "string"
+                                                    },
+                                                    "steps": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "description",
+                                            "category"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "fields": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "key": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "label": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "placeholder": {
+                                                    "type": "string"
+                                                },
+                                                "secret": {
+                                                    "description": "Mask it, and never echo it back.",
+                                                    "type": "boolean"
+                                                },
+                                                "optional": {
+                                                    "type": "boolean"
+                                                },
+                                                "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "boolean": {
+                                                    "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
+                                                    "type": "boolean"
+                                                },
+                                                "hint": {
+                                                    "description": "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "type": "string"
+                                                },
+                                                "rebuild": {
+                                                    "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label — two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+                                                    "type": "boolean"
+                                                },
+                                                "default": {
+                                                    "type": "string"
+                                                },
+                                                "options": {
+                                                    "description": "Turns the field into a select.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "value",
+                                                            "label"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    }
+                                                },
+                                                "when": {
+                                                    "description": "Only show this field when another field currently holds that value.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "key": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "key",
+                                                        "value"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "value": {
+                                                    "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
+                                                    "type": "string"
+                                                },
+                                                "totp": {
+                                                    "description": "This field holds a TOTP seed — the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "label"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "kind": {
+                                        "type": "string",
+                                        "const": "cli"
+                                    },
+                                    "env": {
+                                        "type": "object",
+                                        "propertyNames": {
+                                            "type": "string",
+                                            "pattern": "^[A-Z][A-Z0-9_]*$"
+                                        },
+                                        "additionalProperties": {
+                                            "type": "string"
+                                        },
+                                        "description": "The environment the agent's shell gets, as value templates over the fields — `${field}` substitutes, `${field:uri}` percent-encodes. Each name is suffixed per instance."
+                                    },
+                                    "skill": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Checkout-relative SKILL.md teaching the agent this tool. `${id}` in it is replaced with the instance name at apply time."
+                                    },
+                                    "fragment": {
+                                        "description": "A Dockerfile fragment holding the client binary this tool needs (psql, mysql, whisper).",
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "catalog",
+                                    "fields",
+                                    "kind",
+                                    "env",
+                                    "skill"
+                                ],
+                                "additionalProperties": false
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                    },
+                                    "catalog": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "logo": {
+                                                "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+                                                "type": "string"
+                                            },
+                                            "icon": {
+                                                "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`."
+                                            },
+                                            "category": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "hint": {
+                                                "description": "The paragraph, shown under the add form and searched from the catalog — so the words that identify this card to someone hunting for it (\"webauthn\", \"socket mode\") belong here even when the tile cannot show them.",
+                                                "type": "string"
+                                            },
+                                            "guide": {
+                                                "description": "The walkthrough the install dialog renders for getting the credential this card asks for.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "urlFromField": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "linkLabel": {
+                                                        "type": "string"
+                                                    },
+                                                    "scopes": {
+                                                        "type": "string"
+                                                    },
+                                                    "steps": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "description",
+                                            "category"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "fields": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "key": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "label": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "placeholder": {
+                                                    "type": "string"
+                                                },
+                                                "secret": {
+                                                    "description": "Mask it, and never echo it back.",
+                                                    "type": "boolean"
+                                                },
+                                                "optional": {
+                                                    "type": "boolean"
+                                                },
+                                                "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "boolean": {
+                                                    "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
+                                                    "type": "boolean"
+                                                },
+                                                "hint": {
+                                                    "description": "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "type": "string"
+                                                },
+                                                "rebuild": {
+                                                    "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label — two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+                                                    "type": "boolean"
+                                                },
+                                                "default": {
+                                                    "type": "string"
+                                                },
+                                                "options": {
+                                                    "description": "Turns the field into a select.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "value",
+                                                            "label"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    }
+                                                },
+                                                "when": {
+                                                    "description": "Only show this field when another field currently holds that value.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "key": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "key",
+                                                        "value"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "value": {
+                                                    "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
+                                                    "type": "string"
+                                                },
+                                                "totp": {
+                                                    "description": "This field holds a TOTP seed — the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "label"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "kind": {
+                                        "type": "string",
+                                        "const": "browser"
+                                    },
+                                    "loginUrl": {
+                                        "description": "What the sign-in window opens; the profile it persists IS the credential. Optional so one card can be the generic one that asks for the URL on its form instead — but a card must either pin this or declare a field that supplies it, or the window opens on nothing.",
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    "homeUrl": {
+                                        "description": "Where that same profile opens once it HAS a session — the owner's own hands on the connected browser. Separate from loginUrl because for some platforms the login lives on another site entirely (YouTube signs in at accounts.google.com).",
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    "skill": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Checkout-relative SKILL.md teaching the agent this site's actions."
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "catalog",
+                                    "fields",
+                                    "kind",
+                                    "skill"
+                                ],
+                                "additionalProperties": false
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                    },
+                                    "catalog": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "logo": {
+                                                "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+                                                "type": "string"
+                                            },
+                                            "icon": {
+                                                "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`."
+                                            },
+                                            "category": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "hint": {
+                                                "description": "The paragraph, shown under the add form and searched from the catalog — so the words that identify this card to someone hunting for it (\"webauthn\", \"socket mode\") belong here even when the tile cannot show them.",
+                                                "type": "string"
+                                            },
+                                            "guide": {
+                                                "description": "The walkthrough the install dialog renders for getting the credential this card asks for.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "urlFromField": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "linkLabel": {
+                                                        "type": "string"
+                                                    },
+                                                    "scopes": {
+                                                        "type": "string"
+                                                    },
+                                                    "steps": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "description",
+                                            "category"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "fields": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "key": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "label": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "placeholder": {
+                                                    "type": "string"
+                                                },
+                                                "secret": {
+                                                    "description": "Mask it, and never echo it back.",
+                                                    "type": "boolean"
+                                                },
+                                                "optional": {
+                                                    "type": "boolean"
+                                                },
+                                                "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "boolean": {
+                                                    "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
+                                                    "type": "boolean"
+                                                },
+                                                "hint": {
+                                                    "description": "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "type": "string"
+                                                },
+                                                "rebuild": {
+                                                    "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label — two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+                                                    "type": "boolean"
+                                                },
+                                                "default": {
+                                                    "type": "string"
+                                                },
+                                                "options": {
+                                                    "description": "Turns the field into a select.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "value",
+                                                            "label"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    }
+                                                },
+                                                "when": {
+                                                    "description": "Only show this field when another field currently holds that value.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "key": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "key",
+                                                        "value"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "value": {
+                                                    "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
+                                                    "type": "string"
+                                                },
+                                                "totp": {
+                                                    "description": "This field holds a TOTP seed — the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "label"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "kind": {
+                                        "type": "string",
+                                        "const": "host"
+                                    },
+                                    "skill": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Checkout-relative SKILL.md teaching the agent that machine's shell."
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "catalog",
+                                    "fields",
+                                    "kind",
+                                    "skill"
+                                ],
+                                "additionalProperties": false
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                    },
+                                    "catalog": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "logo": {
+                                                "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+                                                "type": "string"
+                                            },
+                                            "icon": {
+                                                "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request — what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "ONE LINE — aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`."
+                                            },
+                                            "category": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "hint": {
+                                                "description": "The paragraph, shown under the add form and searched from the catalog — so the words that identify this card to someone hunting for it (\"webauthn\", \"socket mode\") belong here even when the tile cannot show them.",
+                                                "type": "string"
+                                            },
+                                            "guide": {
+                                                "description": "The walkthrough the install dialog renders for getting the credential this card asks for.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "urlFromField": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "linkLabel": {
+                                                        "type": "string"
+                                                    },
+                                                    "scopes": {
+                                                        "type": "string"
+                                                    },
+                                                    "steps": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "description",
+                                            "category"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "fields": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "key": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "label": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "placeholder": {
+                                                    "type": "string"
+                                                },
+                                                "secret": {
+                                                    "description": "Mask it, and never echo it back.",
+                                                    "type": "boolean"
+                                                },
+                                                "optional": {
+                                                    "type": "boolean"
+                                                },
+                                                "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "boolean": {
+                                                    "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
+                                                    "type": "boolean"
+                                                },
+                                                "hint": {
+                                                    "description": "A line under this control, for what the label alone cannot say — a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "type": "string"
+                                                },
+                                                "rebuild": {
+                                                    "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label — two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+                                                    "type": "boolean"
+                                                },
+                                                "default": {
+                                                    "type": "string"
+                                                },
+                                                "options": {
+                                                    "description": "Turns the field into a select.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "value",
+                                                            "label"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    }
+                                                },
+                                                "when": {
+                                                    "description": "Only show this field when another field currently holds that value.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "key": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "key",
+                                                        "value"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "value": {
+                                                    "description": "A fixed value baked into the config rather than asked for — how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
+                                                    "type": "string"
+                                                },
+                                                "totp": {
+                                                    "description": "This field holds a TOTP seed — the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "label"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "kind": {
+                                        "type": "string",
+                                        "const": "agent"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "catalog",
+                                    "fields",
+                                    "kind"
+                                ],
+                                "additionalProperties": false
+                            }
+                        ]
+                    },
+                    "description": "Capability cards this pack adds to the \"+\" grid — a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these four kinds."
+                },
+                "listener": {
+                    "type": "object",
+                    "properties": {
+                        "provider": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]*$",
+                            "description": "The slug this source's automation triggers fire on."
+                        },
+                        "events": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9_]*$"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "required": [
+                                    "type",
+                                    "label"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "description": "The event types this source can fire, with the wording the automation editor offers them under. The daemon accepts no others."
+                        },
+                        "automation": {
+                            "type": "object",
+                            "properties": {
+                                "label": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "mentionLabel": {
+                                    "description": "Only for a source whose message events distinguish being addressed. Absent ⇒ the editor offers no mention-only filter, rather than inventing semantics you did not promise.",
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "channel": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "placeholder": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "hint": {
+                                            "description": "The sentence under the input, for a filter whose empty case is easy to get wrong.",
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    },
+                                    "required": [
+                                        "label",
+                                        "placeholder"
+                                    ],
+                                    "description": "The primary narrowing filter — a channel, a room, a repo.",
+                                    "additionalProperties": false
+                                },
+                                "branchField": {
+                                    "description": "A second narrowing axis, for a source whose events carry one — a pipeline's git ref, so a trigger can say \"the branch that ships\" rather than \"every agent's every failure\".",
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "placeholder": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "hint": {
+                                            "description": "The sentence under the input, for a filter whose empty case is easy to get wrong.",
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    },
+                                    "required": [
+                                        "label",
+                                        "placeholder"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "starterPrompt": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "The first prompt a new automation on this source is prefilled with. You own the payload vocabulary, so you own the prompt that explains it."
+                                }
+                            },
+                            "required": [
+                                "label",
+                                "channel",
+                                "starterPrompt"
+                            ],
+                            "description": "How the generic automation editor presents this source: its name, its filters, and the prompt it starts people on.",
+                            "additionalProperties": false
+                        }
+                    },
+                    "required": [
+                        "provider",
+                        "events",
+                        "automation"
+                    ],
+                    "description": "A realtime event source this extension supplies, so automations can trigger on it. One declaration feeds both halves: the daemon accepts these event types and serves this provider's control surface, and the automation editor derives its source picker, filters and starter prompt from it — so a newly installed listener is configurable without a matching app release.",
+                    "additionalProperties": false
+                },
+                "automationTemplates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+                                "description": "Prefills the automation name, and is what \"does one of these exist already\" is asked by — so spell it as an id, not as prose."
+                            },
+                            "title": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "logo": {
+                                "description": "A simple-icons slug for the card.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "icon": {
+                                "description": "A name from the host's icon set, drawn when no simple-icons slug fits.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "requires": {
+                                "description": "Capability providers that make this template work — any one connected is enough (fixing CI rides github or gitlab). Omitted ⇒ nothing to connect, so it is always offered.",
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                }
+                            },
+                            "trigger": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                            "schedule",
+                                            "event",
+                                            "listener",
+                                            "workspace"
+                                        ]
+                                    },
+                                    "cron": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "provider": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "eventType": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "event": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "required": [
+                                    "kind"
+                                ],
+                                "description": "What wakes it. Checked against the real trigger schema when the daemon builds the catalogue, so a template can never offer one that would be refused.",
+                                "additionalProperties": false
+                            },
+                            "guard": {
+                                "description": "A condition that must hold before the turn runs — what makes a template safe to leave switched on.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "holdForSeconds": {
+                                "description": "Wait this long and coalesce repeats, rather than firing on every event.",
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                            },
+                            "prompt": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The turn this starts. You own the trigger's payload vocabulary, so you own the prompt that reads it."
+                            },
+                            "note": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "setup": {
+                                "description": "What the user must do themselves before this can work.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "description": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "offer": {
+                                "description": "Absent ⇒ it waits in the gallery, where you go once you know what you want. `create` puts a card on the page that makes it, switched off, in one click. `configure` puts one there that opens the dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never think to go looking for — mark everything as offered and you have rebuilt the gallery with extra steps.",
+                                "type": "string",
+                                "enum": [
+                                    "create",
+                                    "configure"
+                                ]
+                            },
+                            "chore": {
+                                "description": "Whether what this makes watches THIS codebase rather than the outside world. Declared rather than read off the trigger — a nightly dependency sweep and a nightly Stripe poll are both schedules.",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "title",
+                            "trigger",
+                            "prompt"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "Starting points this pack offers in the automation composer — a trigger, a prompt written for that trigger's payload, and whatever guard makes it safe to leave on. Declared by whoever knows the service rather than by the composer, so they appear when your pack is installed and disappear with it. Pure prefill: creating one makes an ordinary automation."
+                },
+                "bin": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A checkout-relative directory of executables the daemon puts on the agent's PATH every turn — how you ship the agent a command-line tool. The files are the approved code themselves: they ride the pinned checkout, and the daemon only adds the directory to PATH."
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "required": [
+        "publisher",
+        "name",
+        "version",
+        "engines"
+    ],
+    "additionalProperties": false,
+    "$id": "https://intentic.dev/intentic-extension.schema.json",
+    "title": "intentic extension manifest",
+    "description": "What an intentic extension declares: who it is, which host it needs, what code it ships, and what it contributes."
+}

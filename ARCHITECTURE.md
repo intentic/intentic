@@ -453,7 +453,8 @@ dependency edges into `@intentic/*` all go through `sandbox-contract` (and one t
 ### Extension system
 
 The app is a **lean core + an extension system**, the same bet VSCode makes. An extension is a package
-with an `intentic-extension.json` manifest at its root ([manifest.ts](_sandbox/extension-api/src/manifest.ts));
+with an `intentic-extension.json` manifest at its root ([manifest.ts](_sandbox/extension-manifest/src/manifest.ts),
+one file per contribution point under [points/](_sandbox/extension-manifest/src/points));
 identity is derived, never declared (`extensionIdOf = ${publisher}.${name}`). The manifest is the
 **approval + gating surface**: the install dialog shows exactly the declared contribution points, and the
 host refuses any runtime registration the approved manifest never declared. Contribution points cover both
@@ -638,7 +639,7 @@ manifest that grants itself privilege, so **no handler is contributable, ever**.
 instead is a **card**: the data that varies between two cards served by the *same* handler.
 
 Four kinds are card-driven, and the restriction is the `CapabilityContributionSchema` discriminated union
-([manifest.ts](_sandbox/extension-api/src/manifest.ts)) rather than prose — a manifest naming any other kind
+([capabilities.ts](_sandbox/extension-manifest/src/points/capabilities.ts)) rather than prose — a manifest naming any other kind
 fails to parse:
 
 | Contributable kind | What the card carries | Who ships the first-party ones |

@@ -27,6 +27,9 @@ forbidden — the contract imported the manifest schema from here, so depending 
   `processes`, `agent`, `environment`, `capabilities`, `listener`, `automationTemplates`, `bin`, plus the
   `permissions.sandbox` route allowlist. That list is not prose to be kept in sync by hand —
   `surface-guard.test.ts` reads it back out of this file and fails when it stops matching the schema.
+  Every one of those points carries its own description, generated out to
+  [an authoring schema](https://intentic.dev/intentic-extension.schema.json); point a manifest's `$schema` at
+  it and an editor completes the fields, explains what each does, and marks a key nothing declares.
   A `listener` owns both halves of its public vocabulary: labelled event types for daemon validation and the
   source/filter/starter wording a generic automation editor renders. Installing a listener therefore adds a
   configurable automation source without an app release or a second provider table.

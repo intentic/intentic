@@ -18,6 +18,10 @@ _sandbox/sandbox/operator-templates
 # 30 MB change set that was too big to hand back to the main tree.
 **/*.generated.ts
 docs/architecture/index.json
+# The extension manifest's authoring schema, in both the copy that ships in the package and the copy the site
+# serves — written by `pnpm --filter @intentic/extension-manifest schema` and checked byte-for-byte against a
+# fresh generation, so a reformat here is a diff that check would then fail on.
+**/intentic-extension.schema.json
 
 # Local tooling config, not project source.
 .claude

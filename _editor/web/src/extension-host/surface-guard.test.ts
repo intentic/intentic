@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { extensionApiVersion } from "@intentic/extension-api";
-import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
 
 /* THE SDK'S SURFACE, BOUND TO THE VERSION IT PROMISES.
@@ -77,9 +77,12 @@ const nestedMembers = (block: string): string[] => {
 
 const liveSurface = (): RecordedSurface => ({
     manifest: Object.keys(ExtensionManifestSchema.shape).toSorted(),
-    contributes: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape).toSorted(),
+    // Off the registry rather than by drilling into the assembled schema: the points ARE the list this records,
+    // and asking them directly means a point that fails to reach `contributes` shows up here as a missing entry
+    // instead of being invisible on both sides at once.
+    contributes: CONTRIBUTION_POINTS.map((point) => point.name).toSorted(),
     api: apiMembers(),
-    listener: Object.keys(ExtensionManifestSchema.shape.contributes.unwrap().shape.listener.unwrap().shape).toSorted(),
+    listener: Object.keys(ListenerContributionSchema.shape).toSorted(),
     sandboxApi: nestedMembers(`sandbox`),
 });
 

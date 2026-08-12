@@ -1,4 +1,5 @@
 {
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
     "publisher": "intentic",
     "name": "automations",
     "version": "1.0.0",
