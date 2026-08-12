@@ -5,11 +5,11 @@
 #
 #   merge-image-manifests.sh <image> <tag>...
 #
-# ARM64_REF pins the arm64 half to ONE fixed tag for every requested tag. The release is why it exists: its
-# arm64 half is built by the release workflow's sandbox-arm64 job under the version tag alone (that job runs
-# before "stable" is decided), so `stable`'s merge names `<version>-arm64` rather than a `stable-arm64`
-# nothing pushed. Missing halves fail loudly — a silently amd64-only `stable` would strand every arm sandbox
-# on its next update.
+# ARM64_REF / AMD64_REF pin a half to ONE fixed tag for every requested tag. The release is why they exist:
+# both halves are built by the release workflow's per-arch jobs under the version tag alone (those jobs run
+# before "beta"/"stable" are decided), so a moving tag's merge names `<version>-amd64` + `<version>-arm64`
+# rather than a `beta-amd64` nothing pushed. Missing halves fail loudly — a silently amd64-only `stable`
+# would strand every arm sandbox on its next update.
 set -euo pipefail
 # The merge runs seconds behind the pushes it stitches, so it sits in the same GHCR rate-limit window they do
 # — and it is pure manifest writes, which is exactly what gets refused. registry-retry.sh says the rest.
@@ -26,7 +26,7 @@ for registry in $REGISTRIES; do
     for tag in "$@"; do
         registry_retry docker buildx imagetools create \
             -t "$registry/$IMAGE_NAME:$tag" \
-            "$registry/$IMAGE_NAME:$tag-amd64" \
+            "$registry/$IMAGE_NAME:${AMD64_REF:-$tag-amd64}" \
             "$registry/$IMAGE_NAME:${ARM64_REF:-$tag-arm64}"
     done
 done

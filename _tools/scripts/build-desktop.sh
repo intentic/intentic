@@ -23,25 +23,32 @@
 # Release — the download surface the site and the updater both point at.
 set -euo pipefail
 
-VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>]}"
+VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>|--assemble <windows-dir>]}"
 . "$(dirname "$0")/repo-root.sh"
 . "$(dirname "$0")/desktop-artifacts.sh"
-# Two verification jobs each want ONE side of this build, and the release wants both. One build script either
-# way, so the artifacts a CI job verifies are produced by exactly the path that produces the released ones.
+# Two verification jobs each want ONE side of this build, the release's linux-build job wants the Linux side,
+# and the publish wants the assembled whole. One build script either way, so the artifacts a CI job verifies
+# are produced by exactly the path that produces the released ones.
 #
-#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify,
-#                   which exercises the Linux bundles on a real host and has no use for an installer it cannot
-#                   run.
+#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify
+#                   and the release's linux-build job, which exercise the Linux bundles on a real host and
+#                   have no use for an installer they cannot run.
 #   --windows-only  skips the Linux bundles. For the job that hands the NSIS installer to the Windows runner:
 #                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
 #   --windows-prebuilt <dir>
-#                   builds Linux and stages the already-tested NSIS candidate from this directory. The release
-#                   uses it so Windows approves the bytes publish-github.sh actually attaches.
+#                   builds Linux and stages the already-tested NSIS candidate from this directory, so Windows
+#                   approves the bytes publish-github.sh actually attaches.
+#   --assemble <windows-dir>
+#                   builds NOTHING: the Linux bundles are already in dist-bin (the release's linux-build job
+#                   built, verified and shipped them as an artifact), and the NSIS candidate is staged from
+#                   this directory. What remains is the release-set work only the final job can do — the
+#                   updater manifest, the checksums, and the archive verification over the complete set.
 #
-# Neither writes latest.json — a manifest naming a platform whose installer the run did not produce would
-# advertise an update that 404s, and that is true in both directions.
+# Only a run that ends holding BOTH platforms writes latest.json — a manifest naming a platform whose
+# installer the run did not produce would advertise an update that 404s, and that is true in both directions.
 LINUX_ONLY=0
 WINDOWS_ONLY=0
+ASSEMBLE=0
 WINDOWS_PREBUILT=""
 case "${2:-}" in
     --linux-only) LINUX_ONLY=1 ;;
@@ -49,9 +56,13 @@ case "${2:-}" in
     --windows-prebuilt)
         WINDOWS_PREBUILT="${3:?usage: build-desktop.sh <version> --windows-prebuilt <dir>}"
         ;;
+    --assemble)
+        ASSEMBLE=1
+        WINDOWS_PREBUILT="${3:?usage: build-desktop.sh <version> --assemble <windows-dir>}"
+        ;;
     "") ;;
     *)
-        echo "error: unknown flag '${2}' (expected --linux-only, --windows-only, or --windows-prebuilt <dir>)" >&2
+        echo "error: unknown flag '${2}' (expected --linux-only, --windows-only, --windows-prebuilt <dir>, or --assemble <windows-dir>)" >&2
         exit 2
         ;;
 esac
@@ -79,6 +90,23 @@ DOWNLOADS="https://github.com/intentic/intentic/releases/download/v${VERSION}"
 
 echo "==> desktop release build v${VERSION}"
 
+# The assemble path builds nothing, so it wants none of the toolchain below — it validates that the
+# linux-build job's artifact is actually in place (by exact versioned name, same reasoning as the Windows
+# candidate check above: a name that does not match means two jobs disagree about what is being released),
+# stages the Windows candidate, and falls through to the manifest + checksums + verification tail.
+if [ "$ASSEMBLE" -eq 1 ]; then
+    for name in "$APPIMAGE_NAME" "$DEB_NAME" "$RPM_NAME"; do
+        if [ ! -f "$ROOT/_editor/desktop-app/dist-bin/$name" ]; then
+            echo "error: no $name in dist-bin — the linux-build artifact is missing, or was built at a different version" >&2
+            exit 2
+        fi
+    done
+    # Actions artifacts do not preserve file modes, and the verification at the end of this script EXECUTES
+    # the AppImage (--appimage-extract, its runtime's own self-extract). Harmless to users — the download
+    # surfaces chmod what they fetch — fatal to the verifier without this.
+    chmod +x "$ROOT/_editor/desktop-app/dist-bin/$APPIMAGE_NAME"
+fi
+
 # --- toolchain: the FALLBACK path (idempotent; runs as root) ---
 # In CI none of this executes — _tools/ci-desktop bakes every tool below into the image the desktop jobs run in,
 # because installing them per job cost 2m53s (apt) + 41s (rustup) in release job 15686372011 and repeated in
@@ -95,10 +123,11 @@ echo "==> desktop release build v${VERSION}"
 # p7zip-full/rpm are not build inputs — they are what verify-desktop-bundle.sh (run at the end of this
 # script) uses to read back the rpm and the NSIS installer it just produced. Installed here so the verification
 # is unconditional: a verifier that skips when its tool is absent reports "verified" for a bundle nobody opened.
-if ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&1 ||
-    ! command -v file >/dev/null 2>&1 ||
-    ! command -v 7z >/dev/null 2>&1 || ! command -v rpm2archive >/dev/null 2>&1 ||
-    ! dpkg -s libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
+if [ "$ASSEMBLE" -eq 0 ] &&
+    { ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&1 ||
+        ! command -v file >/dev/null 2>&1 ||
+        ! command -v 7z >/dev/null 2>&1 || ! command -v rpm2archive >/dev/null 2>&1 ||
+        ! dpkg -s libwebkit2gtk-4.1-dev >/dev/null 2>&1; }; then
     echo "==> installing system build deps"
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
@@ -114,7 +143,7 @@ if [ -f "${CARGO_HOME:-$HOME/.cargo}/env" ]; then
     # shellcheck disable=SC1091
     source "${CARGO_HOME:-$HOME/.cargo}/env"
 fi
-if ! command -v cargo >/dev/null 2>&1; then
+if [ "$ASSEMBLE" -eq 0 ] && ! command -v cargo >/dev/null 2>&1; then
     echo "==> installing rust"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
     # shellcheck disable=SC1091
@@ -128,16 +157,21 @@ if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
     fi
 fi
 
-rm -rf "$OUT"
+# Assembling starts from the artifacts already in $OUT, so it is the one mode that must NOT empty it.
+if [ "$ASSEMBLE" -eq 0 ]; then
+    rm -rf "$OUT"
+fi
 mkdir -p "$OUT"
 cd "$APP"
 
-# The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
-# this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
-# bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and
-# switched off in the config below for both passes; an empty beforeBuildCommand is how tauri is told to skip it.
-echo "==> building the launcher UI"
-pnpm --filter @intentic/desktop-app build
+if [ "$ASSEMBLE" -eq 0 ]; then
+    # The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
+    # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
+    # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and
+    # switched off in the config below for both passes; an empty beforeBuildCommand is how tauri is told to skip it.
+    echo "==> building the launcher UI"
+    pnpm --filter @intentic/desktop-app build
+fi
 
 # A configured pubkey + createUpdaterArtifacts makes `tauri build` demand the private key — so when the CI
 # variable is absent, updater artifacts must be switched off for the build to succeed at all.
@@ -161,9 +195,11 @@ export NO_STRIP=true
 TARGET_DIR="${CARGO_TARGET_DIR:-$TAURI_DIR/target}"
 LINUX_BUNDLES="$TARGET_DIR/release/bundle"
 WIN_BUNDLES="$TARGET_DIR/x86_64-pc-windows-msvc/release/bundle"
-rm -rf "$LINUX_BUNDLES" "$WIN_BUNDLES"
+if [ "$ASSEMBLE" -eq 0 ]; then
+    rm -rf "$LINUX_BUNDLES" "$WIN_BUNDLES"
+fi
 
-if [ "$WINDOWS_ONLY" -eq 0 ]; then
+if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
     echo "==> building Linux bundles (deb, rpm, appimage)"
     pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm,appimage
 fi
@@ -177,7 +213,7 @@ fi
 # The bundlers each spell their own output differently and none of them agrees with the others, so the names
 # are imposed here rather than inherited — which is also what makes every downstream consumer able to ask for
 # an artifact by KIND and get one answer.
-if [ "$WINDOWS_ONLY" -eq 0 ]; then
+if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
     cp "$LINUX_BUNDLES"/appimage/*.AppImage "$OUT/$APPIMAGE_NAME"
     cp "$LINUX_BUNDLES"/deb/*.deb "$OUT/$DEB_NAME"
     cp "$LINUX_BUNDLES"/rpm/*.rpm "$OUT/$RPM_NAME"

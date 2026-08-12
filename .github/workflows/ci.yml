@@ -10,11 +10,12 @@
 # and the host Docker socket — are in docs/ci-runner.md.
 #
 # FIRST RUN: ci-base is the one image with a bootstrap problem, because the jobs that could build it all run
-# INSIDE it. On a repository that has never published it, push it once by hand before the first pipeline:
+# INSIDE it — including `changes`, the job whose probe would otherwise notice it missing. On a repository that
+# has never published it, push it once by hand before the first pipeline:
 #   docker build -t ghcr.io/intentic/ci-base:latest _tools/ci-base && docker push ghcr.io/intentic/ci-base:latest
-# ci-desktop needs no such step and never did — its build job runs on the host runner. The `changes` job
-# probes for both tags and builds either one that is absent, so a missing image costs one pipeline, not a
-# maintainer. Nothing else here may assume an image is present merely because its Dockerfile did not change.
+# ci-desktop needs no such step and never did — its build job runs on the host runner, and the `changes` probe
+# builds it when its tag is absent, so a missing ci-desktop costs one pipeline, not a maintainer. Nothing else
+# here may assume an image is present merely because its Dockerfile did not change.
 name: CI
 
 on:
@@ -87,6 +88,26 @@ jobs:
     # there — having read the diff first.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, intentic]
+    # IN THE CONTAINER like every job that only reads the checkout, and that placement is worth ~4.5 minutes
+    # per pipeline. This used to be a host job, and a host job on these runners must first chown the whole
+    # persistent workspace back from the container jobs (which run as root) before checkout can write
+    # `.git/index.lock` — a ~110k-inode reclaim that measured 4+ minutes on every single pipeline. Inside the
+    # container the checkout runs as root like everything else and there is nothing to reclaim. The two jobs
+    # that genuinely must run on the host — ci-base and ci-desktop, which docker-build the CI images — carry
+    # the reclaim step themselves, and they run only when their own Dockerfiles change.
+    #
+    # The cost is one more pull of an image the runner already has, and one sharper bootstrap edge: on a
+    # repository that has never published ci-base, this job cannot start at all — which the header's FIRST RUN
+    # hand-push already covers, and which the `missing` probe below could never fix anyway (the probe needs
+    # this job running to say the image is absent).
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        # The docker socket is what `docker manifest inspect` (the `missing` probe below) talks through.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     # Every job in this file carries a timeout, because the Actions default is 360 MINUTES. There are six
     # runner processes on one host, so an unbounded hang is a sixth of the fleet parked for six hours. The
     # heavy jobs get 60; the two that only read the checkout get 15.
@@ -99,30 +120,6 @@ jobs:
       images: ${{ steps.filter.outputs.images }}
       platform: ${{ steps.filter.outputs.platform }}
     steps:
-      # THE ONE THING A HOST JOB MUST DO BEFORE IT CHECKS OUT. Every other job on these runners runs in a
-      # container as root, and all of them share ONE persistent workspace per runner — so a container job's
-      # checkout leaves a root-owned tree, and the next job that runs on the host as the runner user cannot
-      # write `.git/index.lock`. Checkout fails, then fails a second time trying to delete the tree it also
-      # cannot write, and the job dies before it can compute a single output. Four of the six workspaces sat in
-      # that state, which made this job a 4-in-6 coin flip — and losing it does not go red downstream, it makes
-      # every image and desktop job SKIP, so a pipeline publishes nothing and still reads as green.
-      #
-      # The runner user is in the docker group, so a throwaway root container hands the tree back without sudo.
-      # ~110k inodes, seconds warm, and this job is off the critical path — preflight runs beside it. This
-      # cannot be a composite action in .github/actions: those are read out of the workspace, which is the very
-      # thing this step exists to make readable.
-      - name: Reclaim the workspace from the container jobs
-        shell: bash
-        run: |
-          set -euo pipefail
-          [ -d "$GITHUB_WORKSPACE" ] || exit 0
-          # Whichever CI image the runner already has, so this needs no registry credential and no third-party
-          # image. Neither one present means no container job ever ran here, so nothing can be root-owned.
-          img=$(docker image ls -q ghcr.io/intentic/ci-base:latest)
-          [ -n "$img" ] || img=$(docker image ls -q ghcr.io/intentic/ci-desktop:latest)
-          [ -n "$img" ] || exit 0
-          docker run --rm --entrypoint chown -v "$GITHUB_WORKSPACE:/w" "$img" -R "$(id -u):$(id -g)" /w
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: a pull request's base.sha can sit arbitrarily far back and the diff below needs it
@@ -259,13 +256,23 @@ jobs:
       contents: read
       packages: write
     steps:
-      # Runs on the host, so it needs the workspace back from the container jobs before checkout — see the
-      # step of the same name in `changes` for why.
+      # THE ONE THING A HOST JOB MUST DO BEFORE IT CHECKS OUT. Every container job on these runners runs as
+      # root, and all of them share ONE persistent workspace per runner — so a container job's checkout leaves
+      # a root-owned tree, and a job that runs on the host as the runner user cannot write `.git/index.lock`.
+      # Checkout fails, then fails a second time trying to delete the tree it also cannot write. This job and
+      # ci-desktop are the only Linux jobs left on the host (docker-building the CI images is why), so they are
+      # the only two that pay the reclaim — and only when their own Dockerfiles change, not per pipeline.
+      #
+      # The runner user is in the docker group, so a throwaway root container hands the tree back without sudo.
+      # This cannot be a composite action in .github/actions: those are read out of the workspace, which is the
+      # very thing this step exists to make readable.
       - name: Reclaim the workspace from the container jobs
         shell: bash
         run: |
           set -euo pipefail
           [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          # Whichever CI image the runner already has, so this needs no registry credential and no third-party
+          # image. Neither one present means no container job ever ran here, so nothing can be root-owned.
           img=$(docker image ls -q ghcr.io/intentic/ci-base:latest)
           [ -n "$img" ] || img=$(docker image ls -q ghcr.io/intentic/ci-desktop:latest)
           [ -n "$img" ] || exit 0
@@ -321,7 +328,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      # As in ci-base: a host job, so the workspace comes back before checkout.
+      # As in ci-base: a host job, so the workspace comes back before checkout — see there for why.
       - name: Reclaim the workspace from the container jobs
         shell: bash
         run: |
@@ -368,11 +375,20 @@ jobs:
   # The two desktop packages are subtracted rather than left to fall in with the rest: the launcher UI is the
   # desktop group's leaf, desktop-check owns it, and leaving it here would mean a vue-tsc error in a Tauri
   # window still held up the sandbox images and the npm release — the same coupling one scope down.
+  #
+  # The platform web app is subtracted for the same reason at a bigger price tag. share-view declares it as a
+  # devDependency (it compiles web's SOURCE into its own bundle via an alias), and that one edge pulled web's
+  # 248-file test suite into this closure: ~13 of this job's 20 minutes, spent re-running the exact suite
+  # verify-platform was executing beside it — and this job is the gate for `images` and the entire release
+  # chain. The subtraction removes only web's OWN tasks from the target set; web#build still runs here as
+  # share-view's `^build` dependency, which is what keeps a web source change invalidating share-view.
+  # verify-platform owns web's tests; a web break still blocks the platform deploy, the artifact it can
+  # actually break.
   verify-core:
     needs: preflight
     uses: ./.github/workflows/verify.yml
     with:
-      filters: "--filter=@intentic/*... --filter=intentic... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke"
+      filters: "--filter=@intentic/*... --filter=intentic... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic-app/web"
     secrets: inherit
 
   # The hosted platform — api, web, prisma, api-contract, capability-catalog, e2e — and their closure, which

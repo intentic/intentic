@@ -132,6 +132,130 @@ jobs:
       - run: bash _tools/scripts/prepare-image-trees.sh
       - run: TAGS="${{ needs.plan.outputs.version }}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
 
+  # The amd64 halves of the released images, on the fleet, while Windows verifies — the exact counterpart of
+  # sandbox-arm64, and the ~11 minutes that used to run INSIDE the publish job's publishCmd, serialized after
+  # everything was already verified. Version tags only, never `beta`: the moving tags are manifest-stitched by
+  # release-images.sh in the publish job, after windows-verify has passed, so an aborted release orphans at
+  # most version-tagged halves and no lane tag ever moves early.
+  images-amd64:
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      # ci-base, same as ci.yml's `images` job: prepare-image-trees.sh compiles the payload job-side off the
+      # warm /ci-cache stores, and the Dockerfiles are pure COPYs.
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same iq-models cache the ci.yml image jobs share — the models are arch-neutral bytes.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/prepare-image-trees.sh
+      - run: TAGS="${{ needs.plan.outputs.version }}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: TAGS="${{ needs.plan.outputs.version }}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+
+  # The release's Linux-side artifacts, while Windows verifies: the Linux desktop bundles — installed and
+  # launched on a bare Debian HERE, before they are uploaded — and the cross-compiled machine agents. These
+  # used to be built inside the publish job's prepareCmd, serialized behind windows-verify; building them in
+  # parallel and shipping the bytes forward as an artifact is the windows-build pattern applied to everything
+  # else the release attaches. publish stages these EXACT bytes, so what was install-verified is what ships.
+  #
+  # A hard `needs` edge of publish, which is what makes the install verification a gate that cannot be outrun
+  # (the 2026-08-03 lesson, previously enforced by running it inside prepareCmd): a failure here means the
+  # publish job never starts, so there is no tag, no Release, and no npm publish.
+  linux-build:
+    needs: plan
+    if: ${{ needs.plan.outputs.version != '' }}
+    runs-on: [self-hosted, intentic, desktop]
+    container:
+      image: ghcr.io/intentic/ci-desktop:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        # verify-desktop-install.sh runs the smoke container through the host daemon.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CARGO_HOME: /ci-cache/cargo
+      # The same target dir the publish job used when it built these bundles itself, so the warm release-profile
+      # cache carries straight over; still its own directory for the lock-and-fingerprint reasons ci.yml's
+      # desktop jobs spell out.
+      CARGO_TARGET_DIR: /ci-cache/desktop-target
+      # For build-ic.sh's windows-x64 target (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared.
+      XWIN_CACHE_DIR: /ci-cache/xwin
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # Baked into the launcher UI at build time — released installers only, same as windows-build.
+      POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # Build BEFORE stamping (release-prepare.sh's old rule #1, now living here): versions sit only in
+      # package.json, but package.json is a turbo hash input — stamping first invalidates the whole closure
+      # and forces a rebuild of what verify-core just built. Building first replays verify's cache instead.
+      - name: Build the published closure
+        shell: bash
+        run: |
+          source _tools/scripts/packages.sh
+          filters=()
+          for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
+          pnpm turbo run build "${filters[@]}"
+      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/build-agent-binaries.sh _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
+      # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
+      - run: bash _tools/scripts/build-agent-binaries.sh _computers/host intentic-host linux-x64 linux-arm64 windows-x64
+      # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
+      # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
+      # image, with no Apple SDK anywhere in it (build-ic.sh header).
+      - run: bash _tools/scripts/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      - run: bash _tools/scripts/build-desktop.sh "${{ needs.plan.outputs.version }}" --linux-only
+      # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
+      # AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open intentic:// at it.
+      - run: bash _tools/scripts/verify-desktop-install.sh
+      # Several paths, deliberately: an upload of several paths is rooted at their COMMON ANCESTOR — the repo
+      # root here — so the artifact stores each dist-bin under its repo-relative path, and the publish job's
+      # download reconstructs the exact tree publish-github.sh and the attestation read. (ci.yml's Windows
+      # upload wants the opposite, a flat directory; that is why it stages first and this does not.)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-release-artifacts
+          path: |
+            _sandbox/sync/dist-bin
+            _computers/host/dist-bin
+            _sandbox/ic/dist-bin
+            _editor/desktop-app/dist-bin
+          if-no-files-found: error
+          retention-days: 7
+
   # A real interactive Windows session installs the candidate, handles a cold and warm OS deep link, proves the
   # WebView loaded local content, and uninstalls while the tray process is still alive.
   windows-verify:
@@ -168,15 +292,19 @@ jobs:
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
         if: always()
 
-  # semantic-release recomputes the plan as a safety check. release-prepare.sh refuses if it differs, builds the
-  # other release assets, and asks build-desktop.sh to combine Linux bundles with this tested NSIS candidate.
-  # sandbox-arm64 gates it too: release-images.sh merges that job's `<version>-arm64` into the version+stable
-  # manifests, and publishing without it would fail there — after the GitHub release already went out.
+  # semantic-release recomputes the plan as a safety check. release-prepare.sh refuses if it differs, then
+  # ASSEMBLES rather than builds: every artifact arrives from the parallel jobs above, already verified —
+  # the NSIS candidate Windows executed, the Linux bundles a bare Debian installed, the agents, the image
+  # halves. What runs here is only what no earlier job could: the tag, the Release + uploads, the manifest
+  # stitching (release-images.sh needs both halves, so sandbox-arm64 and images-amd64 both gate it — merging
+  # without one would fail after the GitHub release already went out), and the attestations.
   publish:
-    needs: [plan, windows-verify, sandbox-arm64]
-    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' }}
+    needs: [plan, windows-verify, sandbox-arm64, images-amd64, linux-build]
+    if: ${{ needs.windows-verify.result == 'success' && needs.sandbox-arm64.result == 'success' && needs.images-amd64.result == 'success' && needs.linux-build.result == 'success' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
+      # Still ci-desktop rather than ci-base: the assemble step re-runs verify-desktop-bundle.sh over the
+      # complete release set, and the 7z/rpm tooling that reads the installers back is baked into this image.
       image: ghcr.io/intentic/ci-desktop:latest
       volumes:
         - /ci-cache:/ci-cache
@@ -184,7 +312,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 120
+    # Was 120 when this job built installers and images itself; now it stages, uploads and stitches. The
+    # uploads are the slow part and they have never neared this.
+    timeout-minutes: 60
     permissions:
       contents: write
       packages: write
@@ -193,14 +323,10 @@ jobs:
       # the upload rather than at a permissions check, which is a confusing way to learn this is missing.
       attestations: write
     env:
-      CARGO_HOME: /ci-cache/cargo
-      CARGO_TARGET_DIR: /ci-cache/desktop-target
-      XWIN_CACHE_DIR: /ci-cache/xwin
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Not for signing — that happened where the installers were built. The assemble step reads it as the
+      # switch that says "this release is signed", requiring both .sig files and writing latest.json.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      # As in the Windows candidate job above: the Linux bundles built here carry the key too, so all four
-      # released installers report the same way.
-      POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:
@@ -213,17 +339,18 @@ jobs:
         with:
           name: windows-release-candidate
           path: windows-release-candidate
+      # Into the workspace root: the artifact stores each dist-bin under its repo-relative path (see the
+      # upload in linux-build), so this reconstructs the tree exactly where release-prepare.sh,
+      # publish-github.sh and the attestation expect it.
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: linux-release-artifacts
+          path: ${{ github.workspace }}
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            .image-out/iq-models
-            .image-out/.iq-models-complete
-          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm exec semantic-release
 
       # --- provenance -------------------------------------------------------------------------------------

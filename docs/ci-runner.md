@@ -256,17 +256,19 @@ container:
 Mounting the host socket is what makes a **dind service unnecessary**, along with its TLS certificate dance.
 The runner user must be in the `docker` group.
 
-### The three host jobs, and the ownership hazard they carry
+### The two host jobs, and the ownership hazard they carry
 
-`changes`, `ci-base` and `ci-desktop` are the exceptions — they run on the host as the runner user, because the
-first has to decide whether the images exist and the other two build them. All of these jobs, container and
-host alike, share **one persistent workspace per runner**, so the container jobs' checkout leaves a root-owned
-tree behind and the next host job cannot write `.git`. Checkout dies on `index.lock: Permission denied`, then
-dies again trying to delete a tree it also cannot write.
+`ci-base` and `ci-desktop` are the exceptions — they run on the host as the runner user, because docker-building
+the CI images is the one thing that cannot happen inside them. All jobs, container and host alike, share
+**one persistent workspace per runner**, so the container jobs' checkout leaves a root-owned tree behind and
+the next host job cannot write `.git`. Checkout dies on `index.lock: Permission denied`, then dies again
+trying to delete a tree it also cannot write.
 
-It does not announce itself. A failed `changes` makes every image and desktop job **skip**, which reads as a
-green pipeline that published nothing — and it is per-workspace and permanent, so it presents as a coin flip
-across the fleet rather than as a break. Four of the six workspaces were in that state at once.
+It does not announce itself. When `changes` was still a host job this made it a per-workspace coin flip — four
+of the six workspaces were in that state at once, and a failed `changes` makes every image and desktop job
+**skip**, which reads as a green pipeline that published nothing. That is why `changes` now runs in the
+container like everything else (the chown it needed first measured 4+ minutes on every pipeline), leaving the
+hazard to the two jobs that only run when their own Dockerfiles change.
 
 Each host job therefore opens with a `Reclaim the workspace from the container jobs` step that chowns the tree
 back through a throwaway root container (the runner user is in the `docker` group, so this needs no sudo).

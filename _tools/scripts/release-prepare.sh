@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# semantic-release prepareCmd: build the release closure, stamp versions, cross-compile the machine agents and
-# the desktop installers, then stage them for the release. Two ordering rules keep this fast:
-#   1. Build BEFORE stamping. Versions live only in package.json (read at runtime, never compiled into dist),
-#      but package.json is a turbo hash input — stamping first invalidates the whole closure and forces the
-#      release to rebuild what release:verify just built. Building first replays verify's cache instead.
-#   2. Build ONLY the release closure (PUB + sync's binary input), not the whole monorepo — web/api/site are
-#      not release artifacts and verify already gated them. The sandbox image builds its own tree in Docker.
+# semantic-release prepareCmd: assert that every release artifact this run is about to publish EXISTS and is
+# the one that was verified, then assemble the release set (updater manifest, checksums, archive verification).
+#
+# NOTHING IS BUILT HERE ANY MORE. The artifacts arrive from the release workflow's parallel jobs, every one of
+# them built from this same commit with the same set-versions stamp, and every one of them a hard `needs` edge
+# of the publish job — so a failure in any of them means this command never runs:
+#   windows-build   the NSIS installer (executed on a real Windows machine by windows-verify before publish)
+#   linux-build     the Linux bundles (installed + launched on a bare Debian there, before they were uploaded),
+#                   plus the cross-compiled machine agents (intentic-sync, intentic-host, ic)
+#   sandbox-arm64 / images-amd64   the container images, under version tags release-images.sh later stitches
+# Building serially here is what this replaces: ~11 minutes of installers + binaries inside the one job that
+# holds the release lock, after everything was already verified. Staging the SAME bytes the verifiers approved
+# is also the stronger claim — a rebuild, however identical its inputs, is a different file than the one that
+# was tested (the reasoning windows-build's candidate established; this extends it to every artifact).
+#
+# A failure here aborts semantic-release before it tags, so there is no tag, no Release, and no npm publish.
 #   bash _tools/scripts/release-prepare.sh 1.135.0
 set -euo pipefail
 VERSION="${1:?usage: release-prepare.sh <version>}"
@@ -13,55 +22,42 @@ VERSION="${1:?usage: release-prepare.sh <version>}"
 : "${PLANNED_RELEASE_VERSION:?PLANNED_RELEASE_VERSION is required}"
 : "${PREBUILT_WINDOWS_DESKTOP_DIR:?PREBUILT_WINDOWS_DESKTOP_DIR is required}"
 if [ "$VERSION" != "$PLANNED_RELEASE_VERSION" ]; then
-  echo "error: semantic-release selected $VERSION after Windows verified $PLANNED_RELEASE_VERSION" >&2
+  echo "error: semantic-release selected $VERSION after the candidates were built at $PLANNED_RELEASE_VERSION" >&2
   exit 1
 fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$(repo_root)"
 
-# Fail before anything builds if PUB has drifted from the dependency graph — a listed package depending on an
-# unlisted one publishes an unresolvable specifier, and finding that out mid-publish is a half-shipped release.
+# Fail before anything publishes if PUB has drifted from the dependency graph — a listed package depending on
+# an unlisted one publishes an unresolvable specifier, and finding that out mid-publish is a half-shipped
+# release. (preflight runs the same check per pipeline; this copy is what guards a by-hand release.)
 node "$DIR/verify-publish-set.mjs" "${PUB[@]}"
 
-filters=()
-for d in "${PUB[@]}"; do
-  filters+=("--filter=./$d")
+# The machine agents from linux-build's artifact: present and stamped at THIS version, checked by asking a
+# binary rather than trusting a directory listing — an artifact from a stale or differently-versioned run
+# would ship agents that report the wrong version forever. The chmod is not cosmetic: Actions artifacts do
+# not preserve file modes, so the downloaded binaries arrive non-executable — harmless to the Release (the
+# install one-liners chmod what they download), fatal to this probe without it.
+for probe in _sandbox/sync/dist-bin/intentic-sync-linux-amd64 _computers/host/dist-bin/intentic-host-linux-amd64 _sandbox/ic/dist-bin/ic-linux-amd64; do
+  if [ ! -f "$probe" ]; then
+    echo "error: $probe is missing — the linux-build artifact did not arrive" >&2
+    exit 1
+  fi
+  chmod +x "$probe"
 done
-pnpm turbo run build "${filters[@]}"
+reported="$(_sandbox/sync/dist-bin/intentic-sync-linux-amd64 version 2>/dev/null || true)"
+if [ "$reported" != "$VERSION" ]; then
+  echo "error: the staged intentic-sync reports '${reported}', not ${VERSION} — the linux-build artifact was built at a different version" >&2
+  exit 1
+fi
 
-bash "$DIR/set-versions.sh" "$VERSION"
-bash "$DIR/build-agent-binaries.sh" _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
-# The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
-bash "$DIR/build-agent-binaries.sh" _computers/host intentic-host linux-x64 linux-arm64 windows-x64
-# The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims cover
-# Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into the release
-# image, with no Apple SDK anywhere in it (build-ic.sh header).
-bash "$DIR/build-ic.sh" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
-# The desktop app: installers rather than a bun binary, but it stages into _editor/desktop-app/dist-bin all the same,
-# so the export below ships it verbatim.
-bash "$DIR/build-desktop.sh" "$VERSION" --windows-prebuilt "$PREBUILT_WINDOWS_DESKTOP_DIR"
+# Assemble the desktop release set: validate the staged Linux bundles by exact versioned name, stage the
+# Windows candidate the Windows runner approved, write latest.json + SHA256SUMS, and re-run the archive
+# verification over the complete set.
+bash "$DIR/build-desktop.sh" "$VERSION" --assemble "$PREBUILT_WINDOWS_DESKTOP_DIR"
 
-# …and prove those exact bytes install and run before anything publishes them. build-desktop.sh ends with
-# verify-desktop-bundle.sh (tier 1: the bundled scripts are present and byte-identical); this is tier 2, which
-# installs the .deb and the AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open
-# intentic:// at it.
-#
-# It runs HERE, in prepareCmd, rather than being left to the desktop-verify job, because that job is not a gate
-# and cannot become one: it builds its own artifacts on its own rules, and `release` reaches its `needs` the
-# moment verify-core goes green. On 2026-08-03 that gap shipped: desktop-verify failed at 12:34:10 with `the setup
-# link opened the Sandbox Manager (waited 45s)` and `the original instance died while handling the link`,
-# release started at 12:34:12, and forty minutes later the installers with that bug were on the GitHub Release.
-# Verifying the release's OWN output is the only version of this check that cannot be outrun — a failure here
-# aborts semantic-release before it tags, so there is no tag, no Release, and no npm publish.
-#
-# The Linux packages run here; the NSIS installer was already installed, launched, deep-linked and uninstalled
-# on the Windows runner before this prepare command was allowed to start. build-desktop.sh staged that exact
-# tested file rather than cross-building a replacement, then re-ran the archive verification over the complete
-# release set.
-bash "$DIR/verify-desktop-install.sh"
-
-# This script ENDS HERE, with the artifacts built, verified and unpublished. Nothing below the prepare step
+# This script ENDS HERE, with the artifacts staged, verified and unpublished. Nothing below the prepare step
 # belongs in it: semantic-release creates and pushes the `v<version>` tag itself the moment prepare returns, so
 # a script that also tagged would hand it a tag that already exists — which is exactly what happened, `fatal:
 # tag 'v1.2.0' already exists`, on every release that ever cut a version. publish-github.sh moved to publishCmd
