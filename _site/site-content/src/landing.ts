@@ -122,12 +122,15 @@ export const landingContent: LandingContent = {
         // headline owns the working stance — you hand over the work, the agent does it, nothing lands
         // without you — and says it in words nobody has to translate.
         headlineLines: ["You delegate. They work.", "You approve."],
-        // Two facts, twelve words. Scale is the reason to want it and persistence is the reason to
-        // believe it, so those are the two the subhead buys. Ownership is deliberately NOT here: it
-        // answers an objection rather than creating a want, so it earns its keep in the chip, the
-        // ownership band and the FAQ instead of the one line everybody reads. "Close the browser",
-        // not "log off": nothing is ended for the runs to continue.
-        subhead: "Ten agents at once. They keep working after you close the browser.",
+        // One claim, five words, and the board underneath is the proof. Visibility is what the
+        // headline leaves out: "You approve" is a gate at the end, this is the whole run, watched
+        // while it happens and interruptible mid-thought. Scale is deliberately no longer SAID here
+        // — the shot below shows a full board, and "ten agents at once" was the most crowded
+        // sentence in the category. Ownership stays out for the old reason (it answers a fear
+        // instead of creating a want) and persistence moves down to the meta description and the
+        // bands, because framing it as the reader walking away argued against the co-piloted stance
+        // the headline just set.
+        subhead: "Nothing happens out of sight.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",

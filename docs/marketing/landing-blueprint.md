@@ -39,9 +39,10 @@ line it replaced and the reason). This was a re-center, not a re-cut.
 line is now `You delegate. They work. / You approve.` Both of the old nouns charged the reader a
 translation — "workstation" reads as a desktop PC, and "a window for you" made the buyer a spectator
 of a product whose whole stance is that the human approves the plan and reads every diff. The
-claim itself did not move: the hero subhead now carries the ownership and persistence the old
-headline gestured at, and the headline carries the stance. Nothing else on the page changed, and the
-retired-framing list in messaging.md holds the full reason.
+claim itself did not move: the headline carries the stance and the subhead carries what it leaves
+out. Nothing else on the page changed, and the retired-framing list in messaging.md holds the full
+reason. (What the subhead carries changed later the same day — see the hero in the section list: it
+is visibility now, not scale and persistence.)
 
 **Re-cut around the verbs 2026-08-09 (recorded decision, supersedes the loop/extend split).** The
 middle of the page — the four-beat `#loop` and the six-row `#extend` bento — is now one band: a
@@ -112,11 +113,19 @@ down from fourteen. Section ids in parens; copy per section in `landing.ts`, exc
 is in `about.ts` because `/about/` shares it.
 
 1. **Hero (`#hero`)** — the brand line, kept verbatim ("You delegate. They work. You approve.")
-   + a subhead that carries what the line leaves out: ten agents on hardware you own, running on
-   subscriptions you already pay for, still working after you close the browser. Between them the
-   two hold the whole claim — control in the headline, ownership and persistence under it. CTAs,
-   chips, the real fleet board cropped to two lanes, and the play button into the live demo.
-   (P1, P2, P6)
+   + the subhead `Nothing happens out of sight.` (recorded decision 2026-08-12, replaces
+   "Ten agents at once. They keep working after you close the browser."). The headline owns the
+   stance and the subhead owns **visibility**: "You approve" is a gate at the end of a run, the
+   subhead claims the whole of it — watched while it happens, interruptible mid-thought — and the
+   board cropped underneath is the proof, on sight, in the same screenful. **Scale is now shown, not
+   said**: the shot is a full board, and "ten agents at once" had become the most crowded sentence in
+   the category, so it bought nothing a competitor wasn't also saying. **Persistence moved down** to
+   the meta description, `#ownership` and the FAQ: every phrasing of it above the fold sold the
+   reader's *absence* ("close the browser", "come back to the diffs"), which argues against the
+   co-piloted stance the headline sets one line earlier, and it is the trope every agent product
+   is running at once. Ownership stays out of both lines for the standing reason (it answers a fear,
+   it does not create a want). CTAs, chips, the real fleet board cropped to two lanes, and the play
+   button into the live demo. (P1, P2, P6)
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,
