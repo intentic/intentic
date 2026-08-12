@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
 import { effectiveAutoLand, formatElapsed } from "../composables/agents/agentStatus";
+import { formatCredits } from "../composables/membership/creditMeter";
 import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
 import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
@@ -41,7 +42,8 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
 }>();
 
-const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, declineBrowserHelp, awaitingDecision } = usePaneView();
+const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, decideServiceOffer, declineBrowserHelp, awaitingDecision } =
+    usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
 // /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
@@ -1079,6 +1081,65 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         >Open the browser</ChatDecisionButton
                     >
                     <ChatDecisionButton tone="secondary" icon="times" @click="declineBrowserHelp(message)">Can't help now</ChatDecisionButton>
+                </div>
+            </div>
+
+            <!-- A priced service run asking for the owner's click — the product's spend gate. Every number on
+                 it is the platform's (relayed through the daemon's offer card, never typed by the model); the
+                 agent's own words are the one `why` line. The click here is the ONLY way the run can happen:
+                 the agent's command sits parked on the daemon until this card settles it. -->
+            <div v-if="message.serviceOffer" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="star" class="text-sm text-primary-500" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">Run {{ message.serviceOffer.offer.name }}?</span>
+                    <span v-if="message.serviceOffer.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
+                    <span v-else-if="message.serviceOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
+                    <span v-else-if="message.serviceOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span class="text-xs text-content/85">{{ message.serviceOffer.offer.description }}</span>
+                    <span class="font-mono text-2xs text-subtle"
+                        >{{ message.serviceOffer.offer.slug }} · by {{ message.serviceOffer.offer.publisher }}</span
+                    >
+                    <span v-if="message.serviceOffer.offer.why" class="text-2xs text-subtle"
+                        >The agent's case: {{ message.serviceOffer.offer.why }}</span
+                    >
+                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.serviceOffer.offer.request"
+                        >Request: {{ message.serviceOffer.offer.request }}</span
+                    >
+                    <span class="pt-1 font-mono text-xs text-content">
+                        {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits per run<template
+                            v-if="message.serviceOffer.offer.credits"
+                        >
+                            · {{ formatCredits(message.serviceOffer.offer.credits.remaining) }} of
+                            {{ formatCredits(message.serviceOffer.offer.credits.allowance) }} left today</template
+                        >
+                    </span>
+                </div>
+
+                <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the
+                     two ways it ended free — a refunded no-answer, a refusal that raced the allowance. -->
+                <div v-if="message.serviceOffer.receipt" class="border-t border-line px-3.5 py-2.5">
+                    <span v-if="message.serviceOffer.receipt.outcome === 'ok'" class="font-mono text-2xs text-muted"
+                        >Served · {{ formatCredits(message.serviceOffer.receipt.credits) }} credits<template
+                            v-if="message.serviceOffer.receipt.remaining !== undefined"
+                        >
+                            · {{ formatCredits(message.serviceOffer.receipt.remaining) }} left today</template
+                        ></span
+                    >
+                    <span v-else-if="message.serviceOffer.receipt.outcome === 'refunded'" class="text-2xs text-muted"
+                        >The service didn't answer — refunded, nothing charged.</span
+                    >
+                    <span v-else class="text-2xs text-muted">The platform refused the run after all — nothing charged.</span>
+                </div>
+
+                <div v-if="message.serviceOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <ChatDecisionButton tone="primary" icon="check" @click="decideServiceOffer(message, true)"
+                        >Run — {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
+                    >
+                    <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
+                    <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip — free</ChatDecisionButton>
                 </div>
             </div>
 

@@ -244,7 +244,7 @@ const reply = async (request: Request): Promise<Response> => {
         run.resolve(parsed.data.requestId, parsed.data);
     }
     // The card that was parked belongs to the agent whose attention flag raised it: answering clears it.
-    patchAgent(AWAITING_AGENT_ID, { attention: { plan: false, question: false, permission: false, conflict: false } });
+    patchAgent(AWAITING_AGENT_ID, { attention: { plan: false, question: false, permission: false, service: false, conflict: false } });
     return json({ ok: true });
 };
 
@@ -257,10 +257,18 @@ const reply = async (request: Request): Promise<Response> => {
 const land = (id: string): Response => {
     const result = landAgentDelta(id);
     if (!result.landed) {
-        patchAgent(id, { status: `conflict`, updatedAt: Date.now(), attention: { plan: false, question: false, permission: false, conflict: true } });
+        patchAgent(id, {
+            status: `conflict`,
+            updatedAt: Date.now(),
+            attention: { plan: false, question: false, permission: false, service: false, conflict: true },
+        });
         return json(result);
     }
-    patchAgent(id, { status: `landed`, updatedAt: Date.now(), attention: { plan: false, question: false, permission: false, conflict: false } });
+    patchAgent(id, {
+        status: `landed`,
+        updatedAt: Date.now(),
+        attention: { plan: false, question: false, permission: false, service: false, conflict: false },
+    });
     const paths = landedPaths(id);
     for (const listener of listeners) {
         listener({ kind: `workspaceChanged`, paths });

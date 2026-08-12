@@ -331,6 +331,25 @@ export function turnRunOf(conversationId: string): TurnRun | undefined {
     return runs.get(conversationId);
 }
 
+// The one conversation with a LIVE run, when exactly one exists — how a caller that knows it was spawned by
+// "the" running turn but not which conversation (an agent CLI under a harness that stamps no conversation id
+// into its shell) finds the chat its card belongs in. Two live runs are an honest "don't know": guessing
+// would park a card in somebody else's conversation, so the caller refuses instead.
+export function soleLiveConversation(): string | undefined {
+    sweep();
+    let found: string | undefined;
+    for (const [conversationId, run] of runs) {
+        if (run.done) {
+            continue;
+        }
+        if (found !== undefined) {
+            return undefined;
+        }
+        found = conversationId;
+    }
+    return found;
+}
+
 export const turnRunMetrics = (): Readonly<Record<string, number>> => {
     sweep();
     let live = 0;

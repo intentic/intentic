@@ -23,6 +23,11 @@ export interface RelayedAnswer {
     readonly status: number;
     readonly body: string;
     readonly contentType: string;
+    // The platform's advisory credits header on a served run (x-intentic-credits-remaining) — what the CLI's
+    // receipt line and the offer card's receipt render. Absent when the platform sent none (a refusal, the
+    // catalog). Its presence is also the one honest "this run was CHARGED" signal: the platform sets it
+    // exactly when a forward served, so the receipt reads it rather than re-deriving spend from status codes.
+    readonly remaining?: string;
 }
 
 // The daemon's own sentence for a sandbox with no platform — the one answer that can't be relayed.
@@ -54,13 +59,15 @@ const relay = (config: Config, method: "GET" | "POST", path: string, payload?: s
                 response.on("data", (chunk: Buffer) => {
                     raw += chunk.toString();
                 });
-                response.on("end", () =>
+                response.on("end", () => {
+                    const remaining = response.headers["x-intentic-credits-remaining"];
                     resolve({
                         status: response.statusCode ?? 502,
                         body: raw,
                         contentType: response.headers["content-type"] ?? "application/json",
-                    }),
-                );
+                        ...(typeof remaining === "string" ? { remaining } : {}),
+                    });
+                });
             },
         );
         req.on("error", () =>

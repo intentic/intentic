@@ -57,8 +57,9 @@ const agentReach = (method: string, path: string): boolean =>
     path.startsWith("/vpn/") ||
     (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
     // The premium-services surface the `services` CLI drives: the priced catalog, and one metered run. The
-    // spend is bounded by the owner's daily allowance platform-side, and the skill's etiquette (offer with
-    // the price, run only after the owner agrees in chat) is the consent story; nothing here reads a secret.
+    // spend is bounded by the owner's daily allowance platform-side, and the run itself parks on an
+    // owner-approval card before anything is forwarded (platform/service-offer.ts) — the consent is enforced
+    // at the route, not asked of the model; nothing here reads a secret.
     (method === "GET" && path === "/pool/services") ||
     (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path));
 

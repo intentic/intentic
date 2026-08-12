@@ -8,6 +8,7 @@ import {
     type PermissionStatus,
     type PlanStatus,
     type QuestionStatus,
+    type ServiceOfferStatus,
 } from "./transcript";
 
 /* One agent frame applied to the transcript — as a PURE function.
@@ -328,6 +329,8 @@ const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => 
 };
 const browserHelpStatusOf = (reply: AgentReply | undefined): BrowserHelpStatus =>
     reply?.kind !== `browser_help` ? `cancelled` : reply.helped ? `helped` : `declined`;
+const serviceOfferStatusOf = (reply: AgentReply | undefined): ServiceOfferStatus =>
+    reply?.kind !== `service_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
 
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
@@ -350,6 +353,9 @@ const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resol
         }
         if (message.browserHelp?.requestId === event.requestId) {
             return { ...message, browserHelp: { ...message.browserHelp, status: browserHelpStatusOf(event.reply) } };
+        }
+        if (message.serviceOffer?.requestId === event.requestId) {
+            return { ...message, serviceOffer: { ...message.serviceOffer, status: serviceOfferStatusOf(event.reply) } };
         }
         return message;
     }),
@@ -501,6 +507,38 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, browserHelp: { ...ask, status: `pending` } }));
             return step({ ...attached, bubbleId: null });
         }
+        case `service_offer`: {
+            // Same flow as the other cards. The asking `services run` sits inside a tool call of this same
+            // turn, so the run's answer lands in that tool's own output — the card carries the decision and,
+            // via the receipt frame below, how the spend ended.
+            const opened = withBubble(flushPending(state));
+            const attached = mapMessage(opened.state, opened.id, (message) => ({
+                ...message,
+                serviceOffer: { requestId: event.requestId, offer: event.offer, status: `pending` },
+            }));
+            return step({ ...attached, bubbleId: null });
+        }
+        case `service_receipt`:
+            // The approved run's outcome, patched onto the card the requestId names: served-and-charged,
+            // refunded (the service failed to answer — nothing charged), or refused after the click.
+            return step({
+                ...state,
+                messages: state.messages.map((message): ChatMessage =>
+                    message.serviceOffer?.requestId === event.requestId
+                        ? {
+                              ...message,
+                              serviceOffer: {
+                                  ...message.serviceOffer,
+                                  receipt: {
+                                      outcome: event.outcome,
+                                      credits: event.credits,
+                                      ...(event.remaining !== undefined ? { remaining: event.remaining } : {}),
+                                  },
+                              },
+                          }
+                        : message,
+                ),
+            });
         case `resolved`:
             // The card above was released, and the frame says how. The surface that ANSWERED already froze its
             // own card (decidePlan / answerQuestion / decidePermission), so this is a no-op there; it earns its

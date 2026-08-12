@@ -109,7 +109,7 @@ const seed = (): void =>
             provider: `claude`,
             harness: `native`,
             updatedAt: 10_000 - at,
-            attention: { plan: false, question: false, permission: false, conflict: false },
+            attention: { plan: false, question: false, permission: false, service: false, conflict: false },
         })),
         100,
     );

@@ -53,7 +53,7 @@ const RUN_REF = 180;
 const RUN_PAD = 10;
 // The same round trip as ordered steps, for phone widths where the wave would set its labels at a few pixels.
 const runSteps = [
-    "The <strong>member</strong> approves a priced run in chat — nothing is spent yet.",
+    "The <strong>member</strong> clicks approve on the run's card in chat — their agent cannot spend without that click.",
     "The <strong>platform</strong> charges the member's credits and forwards one <strong>signed</strong> call to your endpoint.",
     "You <strong>verify the signature</strong> and answer — JSON in, JSON out, up to a minute, no streaming.",
     "The platform <strong>relays your answer back verbatim</strong>, and you're paid.",
@@ -257,8 +257,9 @@ const runSteps = [
         </tbody>
     </table>
     <p>
-        Throughout, the member keeps their guard: the agent only <em>discovers</em> and offers, and nothing is spent until the owner says
-        yes to a priced run. Discovery is the agent's job, admission is the platform's, spending stays the member's.
+        Throughout, the member keeps their guard: the agent only <em>discovers</em> and offers, and nothing is spent until the owner clicks
+        approve on the run's card — a gate the member's own sandbox enforces, not an etiquette the model is trusted with. Discovery is the
+        agent's job, admission is the platform's, spending stays the member's.
     </p>
 
     <h2>Getting onboarded, honestly</h2>

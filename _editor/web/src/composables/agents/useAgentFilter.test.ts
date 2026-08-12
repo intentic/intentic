@@ -58,7 +58,7 @@ import { useChat } from "../chat/useChat";
 import { useAgentFilter } from "./useAgentFilter";
 import { type FleetAgent, resetAgents, setAgents, useAgents } from "./useAgents";
 
-const none = { plan: false, question: false, permission: false, conflict: false };
+const none = { plan: false, question: false, permission: false, service: false, conflict: false };
 const agent = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
     id,
     status: `idle`,

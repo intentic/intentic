@@ -63,12 +63,12 @@ const spendCards = [
         unit: "shown before you agree",
         note: `Each service publishes what a run costs. The demo research run is ${n(demoServiceCredits)} credits, so a day's allowance is ${n(demoRunsPerDay)} of them.`,
         steps: [
-            "Your agent finds one that fits and quotes the price and what is left today.",
-            "You say yes in chat. One yes, one run.",
+            "Your agent finds one that fits and asks — a card in chat shows the price and what is left today.",
+            "You click Run. One click, one run — the agent cannot spend without it.",
             "The platform makes the call for you: the provider never learns who you are, and you never hold its key.",
         ],
         guarantee: "If the service does not answer, your credits come straight back. A failed run costs nothing.",
-        cadence: "Every repeat needs its own yes. Nothing loops without asking you again.",
+        cadence: "Every repeat raises its own card. Nothing can loop without asking you again.",
         meter: meterBars(demoRunsPerDay, 0.45),
         meterLabel: `A day's credits: ${n(demoRunsPerDay)} demo runs`,
     },
@@ -94,9 +94,10 @@ const spendRules = [
 
 /* ── THE CHAT, DRAWN ─────────────────────────────────────────────────────────────────────────────────────
  * The service lane demonstrated rather than described: a service is not a store you browse, it arrives as an
- * offer in the middle of real work, and the exchange IS the product's safety story. Price and balance come before
- * the yes, one yes for one run, a receipt after. The bubbles below picture the agent's published etiquette
- * (the sandbox's own services skill) rather than invent a nicer flow than ships.
+ * offer in the middle of real work, and the exchange IS the product's safety story. The offer is a CARD the
+ * product raises — every number on it comes from the platform, and the Run button is the only thing that can
+ * release the spend (the agent's own call sits parked on it). The bubbles below picture that shipped card,
+ * buttons and all, rather than invent a nicer flow.
  *
  * The service and its price are FICTIONAL on purpose. It is a named example, not the demo service, because a real
  * provider sets its own price and pinning the figure to any real number would let this page pass one service's
@@ -115,10 +116,12 @@ const chat = [
             pitch: "Audiences, posting windows and past results for your product.",
             price: `${n(SERVICE_CREDITS)} credits per run`,
             balance: `${n(chatBalance)} left today`,
-            ask: "Want me to run it?",
+            // The card's two buttons, drawn as shipped: the click IS the consent, so the figure shows a
+            // click rather than a typed "go ahead" the product no longer accepts as one.
+            run: `Run — ${n(SERVICE_CREDITS)} credits`,
+            skip: "Skip — free",
         },
     },
-    { role: "you", text: "Go ahead." },
     {
         role: "agent",
         text: "Three communities stand out, each with a matching posting window. The full report is in research/launch-plan.md.",
@@ -355,7 +358,7 @@ const rules = [
                             What a run looks like in chat.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Services are not a store you browse. They arrive as an offer in the middle of real work, and the offer follows the agent's standing etiquette rather than its goodwill: name the service, quote the price and today's balance, wait for the yes. One yes covers one run, and a run that fails to answer refunds itself.
+                            Services are not a store you browse. They arrive as an offer in the middle of real work — a card the product raises, with the price and today's balance on it straight from the platform, never retyped by the model. Your click is the only thing that releases the spend: the agent's own call sits parked until you press Run, one click covers one run, and a run that fails to answer refunds itself.
                         </p>
                         <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
                             The service here is invented. Each real one publishes its own price, shown like this before every run, and
@@ -402,7 +405,12 @@ const rules = [
                                                         <p class="mt-2.5 font-mono text-xs text-content">
                                                             {message.offer.price} <span class="text-subtle">· {message.offer.balance}</span>
                                                         </p>
-                                                        <p class="mt-2.5 text-sm text-content">{message.offer.ask}</p>
+                                                        {/* The card's own buttons — the click is the consent, so the figure draws the
+                                                            control rather than a typed yes the product no longer treats as one. */}
+                                                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                                                            <span class="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white">{message.offer.run}</span>
+                                                            <span class="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-muted">{message.offer.skip}</span>
+                                                        </div>
                                                     </div>
                                                 )}
                                                 {message.receipt && (

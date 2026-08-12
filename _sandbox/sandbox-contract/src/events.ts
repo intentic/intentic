@@ -54,6 +54,29 @@ export const PermissionAskSchema = z.object({
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
+/* ONE PRICED SERVICE RUN, OFFERED — the card the daemon raises when the agent asks to run a premium service
+ * (platform/service-offer.ts). Everything with a number on it is the PLATFORM's answer, relayed verbatim from
+ * the catalog it serves the daemon: the model that asked contributes `request` (the JSON it wants sent) and
+ * `why` (its one line of rationale), and nothing else — which is what makes the price on the card impossible
+ * to misquote, and the click on it the only way the run can happen. */
+export const ServiceOfferSchema = z.object({
+    // The service, as the platform lists it: `<slug>` is what the run names, the rest is the catalog row.
+    slug: z.string(),
+    name: z.string(),
+    publisher: z.string(),
+    description: z.string(),
+    creditsPerRun: z.number(),
+    // The owner's meter as the platform stated it with the catalog — what "N left today" renders from. Absent
+    // when the platform sent none (it answers a meter only to a member, and membership was already checked
+    // before this card went up, so in practice it is present; the field stays honest about the wire).
+    credits: z.object({ allowance: z.number(), remaining: z.number(), resetsAt: z.string() }).optional(),
+    // The request body the agent wants forwarded, verbatim — shown so the owner can see what leaves.
+    request: z.string(),
+    // The agent's one-line case for spending — the only prose on the card that is the model's.
+    why: z.string().optional(),
+});
+export type ServiceOffer = z.infer<typeof ServiceOfferSchema>;
+
 // One provider-advertised slash command — an ACP agent's available_commands entry, or a Claude Code session's
 // supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
 // `hint` is the argument placeholder the popover shows after the name.
@@ -488,6 +511,23 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         session: z.string(),
         account: z.string(),
         message: z.string(),
+    }),
+    /* A premium service run awaiting the owner's click. Raised OUTSIDE the turn generator — the daemon's
+     * services route parks the agent's own `services run` call and pushes this frame into the live run
+     * (platform/service-offer.ts) — so unlike the four cards above it is not journalled for restore: its
+     * waiter is the CLI's held connection, which dies with the daemon, and a restored card would offer
+     * buttons nothing is waiting behind. Settles through the same `POST /agent/reply` as every other card. */
+    z.object({ kind: z.literal("service_offer"), requestId: z.string(), offer: ServiceOfferSchema }),
+    /* How an approved run ended, pushed after the platform answered so the card can settle as a receipt
+     * rather than a promise: `ok` served and charged, `refunded` failed to answer and charged nothing,
+     * `refused` the platform said no after the click (a raced-out allowance). `remaining` is the meter after,
+     * when the platform stated one. Skip needs no receipt — nothing happened, and `resolved` already says so. */
+    z.object({
+        kind: z.literal("service_receipt"),
+        requestId: z.string(),
+        outcome: z.enum(["ok", "refunded", "refused"]),
+        credits: z.number(),
+        remaining: z.number().optional(),
     }),
     // The card above named by `requestId` is released — the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its

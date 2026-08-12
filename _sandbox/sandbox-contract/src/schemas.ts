@@ -702,6 +702,9 @@ export const AgentAttentionSchema = z.object({
     plan: z.boolean(),
     question: z.boolean(),
     permission: z.boolean(),
+    // A priced service run parked on the owner's click (platform/service-offer.ts) — the one card where
+    // waiting costs the agent its whole call, so the lane says "spend approval" rather than a generic pause.
+    service: z.boolean(),
     conflict: z.boolean(),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
@@ -1262,6 +1265,14 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         requestId: z.string().min(1),
         helped: z.boolean(),
         note: z.string().optional(),
+    }),
+    // A premium service run's yes or no. The click is the ONLY way the spend can happen — the daemon holds the
+    // agent's run request parked until this settles it (platform/service-offer.ts) — so `approve` carries no
+    // qualifiers: one true releases exactly one run, and anything else charges nothing.
+    z.object({
+        kind: z.literal("service_offer"),
+        requestId: z.string().min(1),
+        approve: z.boolean(),
     }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;

@@ -323,7 +323,7 @@ const fleet = computed<FleetAgent[]>(() => {
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 updatedAt: 0,
-                attention: { plan: false, question: false, permission: false, conflict: false },
+                attention: { plan: false, question: false, permission: false, service: false, conflict: false },
                 open: true,
                 unread: false,
                 unsent: conversation.unsent.value,

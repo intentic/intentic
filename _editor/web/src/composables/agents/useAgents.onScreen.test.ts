@@ -43,7 +43,7 @@ const worked = (id: string): AgentSummary => ({
     harness: `native`,
     updatedAt: 2_000,
     seenAt: 1_000,
-    attention: { plan: false, question: false, permission: false, conflict: false },
+    attention: { plan: false, question: false, permission: false, service: false, conflict: false },
 });
 
 const seen = (id: string): [string, RequestInit] => [`/agents/${id}/seen`, { method: `POST` }];

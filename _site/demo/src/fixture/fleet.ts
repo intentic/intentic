@@ -23,7 +23,7 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 
 const minutes = (count: number): number => count * 60_000;
 
-const NO_ATTENTION = { plan: false, question: false, permission: false, conflict: false } as const;
+const NO_ATTENTION = { plan: false, question: false, permission: false, service: false, conflict: false } as const;
 
 export const fleetRoster = (now: number): AgentSummary[] => [
     {

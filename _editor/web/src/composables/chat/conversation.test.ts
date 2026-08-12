@@ -1035,6 +1035,72 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
+    /* THE SPEND CARD. Approving does NOT predict the outcome — the receipt is its own frame, from the platform's
+     * answer — and a skip leaves the turn running: the agent was told to continue without the service, which is
+     * work, not an ending. Both clicks travel the same /agent/reply side channel as every other card. */
+    it(`parks the turn on a spend card; the click approves it and the receipt patches on when the run answers`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = {
+            slug: `acme-research`,
+            name: `Acme Research`,
+            publisher: `acme`,
+            description: `Deep research runs.`,
+            creditsPerRun: 40,
+            credits: { allowance: 1000, remaining: 960, resetsAt: `2026-08-13T00:00:00Z` },
+            request: `{"query":"communities"}`,
+            why: `a deep pass beats my free scan here`,
+        };
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `service_offer`, requestId: `s1`, offer }], { stayOpen: true }));
+
+        const turn = conversation.send(`research it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        const card = (): ChatMessage => conversation.messages.value.find((message) => message.serviceOffer !== undefined)!;
+        expect(card().serviceOffer).toMatchObject({ requestId: `s1`, status: `pending`, offer: { creditsPerRun: 40 } });
+
+        await conversation.decideServiceOffer(card(), true);
+        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        expect(card().serviceOffer).toMatchObject({ status: `approved` });
+        // Approving is not an ending: the agent's command is still running the service.
+        expect(conversation.streaming.value).toBe(true);
+        await conversation.stop();
+        await turn;
+    });
+
+    it(`skipping a spend card charges nothing and leaves the turn running`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { slug: `s`, name: `S`, publisher: `p`, description: `d`, creditsPerRun: 10, request: `{}` };
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `service_offer`, requestId: `s1`, offer }], { stayOpen: true }));
+
+        const turn = conversation.send(`try it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const card = (): ChatMessage => conversation.messages.value.find((message) => message.serviceOffer !== undefined)!;
+        await conversation.decideServiceOffer(card(), false);
+
+        expect(card().serviceOffer).toMatchObject({ status: `skipped` });
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
+        expect(conversation.streaming.value).toBe(true);
+        await conversation.stop();
+        await turn;
+    });
+
+    it(`a replayed spend card freezes from the resolved frame and wears its receipt`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { slug: `s`, name: `S`, publisher: `p`, description: `d`, creditsPerRun: 40, request: `{}` };
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `service_offer`, requestId: `s1`, offer },
+                { kind: `resolved`, requestId: `s1`, reply: { kind: `service_offer`, requestId: `s1`, approve: true } },
+                { kind: `service_receipt`, requestId: `s1`, outcome: `ok`, credits: 40, remaining: 920 },
+            ]),
+        );
+
+        await conversation.send(`research it`, settings);
+
+        const card = conversation.messages.value.find((message) => message.serviceOffer !== undefined)!;
+        expect(card.serviceOffer).toMatchObject({ status: `approved`, receipt: { outcome: `ok`, credits: 40, remaining: 920 } });
+    });
+
     it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

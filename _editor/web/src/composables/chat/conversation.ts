@@ -1290,6 +1290,26 @@ export class Conversation {
         void this.drainQueue();
     }
 
+    /* The spend decision — the click that is the ONLY way a priced service run can happen (the daemon holds
+     * the agent's request parked until this settles it; platform/service-offer.ts). Approve releases exactly
+     * one run; skip charges nothing and tells the agent to carry on without it. The receipt that follows an
+     * approval arrives as its own frame and patches the card — nothing here predicts how the run will end. */
+    async decideServiceOffer(message: ChatMessage, approve: boolean): Promise<void> {
+        const offer = message.serviceOffer;
+        if (offer?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message.id,
+            { kind: `service_offer`, requestId: offer.requestId, approve },
+            `Could not record your decision — the offer may have expired.`,
+            { serviceOffer: { ...offer, status: approve ? `approved` : `skipped` } },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* Declines a pending browser-help card from the CHAT side — "can't help now", which un-parks the agent to
      * carry on without the owner's hands. The other half of this card's life happens on /browsers (the banner
      * over the live stage is where "hand back" lives, beside Take control); when the user resolves it THERE,

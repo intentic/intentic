@@ -1,6 +1,7 @@
 import type {
     AskQuestion,
     PermissionAsk,
+    ServiceOffer,
     SubagentKind,
     SubagentStatus,
     TodoItem,
@@ -69,6 +70,21 @@ export interface BrowserHelpRequest {
     readonly account: string;
     readonly message: string;
     readonly status: BrowserHelpStatus;
+}
+
+// A priced service run awaiting the owner's click — the daemon's spend gate (platform/service-offer.ts).
+// 'pending' shows Run/Skip with the platform's own numbers; 'approved'/'skipped' freeze the decision.
+// 'cancelled' is nobody answering — the turn stopped under the card, the asking command died, or the offer
+// expired — every one of which charged nothing.
+export type ServiceOfferStatus = "pending" | "approved" | "skipped" | "cancelled";
+
+export interface ServiceOfferRequest {
+    readonly requestId: string;
+    readonly offer: ServiceOffer;
+    readonly status: ServiceOfferStatus;
+    // How an approved run ended (the service_receipt frame): served and charged, refunded in full because the
+    // service failed to answer, or refused by the platform after the click (a raced-out allowance).
+    readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };
 }
 
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
@@ -226,6 +242,8 @@ export interface ChatMessage {
     readonly permission?: PermissionRequest;
     // Set when this turn's browser asked for the owner's hands; carries how the request ended.
     readonly browserHelp?: BrowserHelpRequest;
+    // Set when this turn asked to run a priced service; carries the decision and, once run, the receipt.
+    readonly serviceOffer?: ServiceOfferRequest;
     // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
     // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably
     // (mapTool rewrites by id), so it's readonly to the element level like `attachments`.
@@ -241,7 +259,7 @@ export interface ChatMessage {
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = ["plan", "question", "permission", "browserHelp"] as const;
+export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "serviceOffer"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
@@ -260,6 +278,7 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
         ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
         ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
         ...(message.browserHelp?.status === `pending` ? { browserHelp: { ...message.browserHelp, status: `cancelled` } } : {}),
+        ...(message.serviceOffer?.status === `pending` ? { serviceOffer: { ...message.serviceOffer, status: `cancelled` } } : {}),
     };
 };
 

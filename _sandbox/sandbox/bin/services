@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-// The in-sandbox premium-services command — how an agent discovers the platform's metered services, quotes
-// their credit prices in chat, and (after the owner agrees) runs one.
+// The in-sandbox premium-services command — how an agent discovers the platform's metered services and asks
+// to run one. The ASK is the whole of it: `run` parks on the daemon while an approval card goes up in the
+// owner's chat (platform/service-offer.ts), with the price and today's balance drawn from the platform's own
+// catalog, and the request is forwarded only when the owner clicks yes. The agent never quotes a number the
+// card doesn't already show, and cannot spend without the click — the consent step is plumbing, not etiquette.
 //
 // It owns NO economics: both calls relay through the daemon to the platform, which holds the member gate,
 // the daily credit meter, the spend-before-call-refund-on-failure discipline, and the signed forward to the
@@ -8,22 +11,33 @@
 // `run` prints the provider's JSON to stdout alone so it composes into pipes, with the credits line on
 // stderr where it can't corrupt the data.
 //
+// node:http rather than fetch, deliberately: a parked `run` holds its connection for as long as the owner
+// takes to answer (bounded by the daemon's own deadline), and undici's default header timeout would kill the
+// wait at five minutes with the card still up.
+//
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
 // two /pool/services routes (and its /vpn + /otp reach), never to anything credential-shaped.
 
 import { readFileSync } from "node:fs";
+import { request } from "node:http";
 
 const TOKEN_PATH = "/run/intentic/agent.token";
-const base = `http://127.0.0.1:${process.env.SANDBOX_PORT ?? "8787"}`;
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
+// WHOSE chat the approval card belongs in. The daemon falls back to the sole live turn when it is unset.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
 
 const USAGE = `services — the platform's premium services, priced in the owner's membership credits
 
-  services list                     what exists, what a run costs, and what's left today
-  services run <slug> [json]        one metered run; the request body is the JSON argument or stdin
+  services list                             what exists, what a run costs, and what's left today
+  services run <slug> [json] [--why "..."]  ask for one metered run; the request body is the JSON
+                                            argument or stdin, --why is your one-line case for it
 
-The price is visible before every run and nothing is charged when a service fails to answer.
-ETIQUETTE FOR AGENTS: quote the price and remaining credits when offering a service, run only after the
-owner agrees in chat, and never loop runs without asking again.`;
+\`run\` raises an approval card in the owner's chat — price and remaining credits on it, straight from the
+platform — and waits. The owner's click is the only thing that releases the spend: a skip or an expired
+offer charges nothing and answers with a sentence to act on. One click covers one run; ask again to repeat.
+Nothing is charged when a service fails to answer.`;
 
 const die = (message) => {
     process.stderr.write(`${message}\n`);
@@ -40,14 +54,33 @@ const token = () => {
     }
 };
 
-const call = async (method, path, body) => {
-    const response = await fetch(`${base}${path}`, {
-        method,
-        headers: { "x-intentic-agent": token(), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
-        ...(body !== undefined ? { body } : {}),
+// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
+// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
+const call = (method, path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () =>
+                resolve({
+                    status: response.statusCode ?? 502,
+                    text: raw,
+                    remaining: response.headers["x-intentic-credits-remaining"] ?? null,
+                }),
+            );
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
     });
-    return { status: response.status, text: await response.text(), remaining: response.headers.get("x-intentic-credits-remaining") };
-};
 
 // The platform's refusals arrive as {error: {message}} or {error: string} — surface the sentence, which is
 // already written for the person reading the chat.
@@ -73,7 +106,9 @@ const list = async () => {
         return;
     }
     for (const service of services) {
-        process.stdout.write(`${service.slug} — ${service.name}: ${service.description} (${service.creditsPerRun} credits/run, by ${service.publisher})\n`);
+        process.stdout.write(
+            `${service.slug} — ${service.name}: ${service.description} (${service.creditsPerRun} credits/run, by ${service.publisher})\n`,
+        );
     }
     if (credits !== undefined) {
         process.stdout.write(`\nCredits: ${credits.remaining} of ${credits.allowance} left today (resets ${credits.resetsAt}).\n`);
@@ -90,7 +125,19 @@ const readStdin = async () => {
     return raw;
 };
 
-const run = async (slug, inline) => {
+const run = async (args) => {
+    // `--why` can sit anywhere after `run`; what remains is `<slug> [json]` in order.
+    const rest = [];
+    let why;
+    for (let i = 0; i < args.length; i += 1) {
+        if (args[i] === "--why") {
+            why = args[i + 1] ?? "";
+            i += 1;
+        } else {
+            rest.push(args[i]);
+        }
+    }
+    const [slug, inline] = rest;
     if (slug === undefined) {
         return die(USAGE);
     }
@@ -100,7 +147,8 @@ const run = async (slug, inline) => {
     } catch {
         return die(`services: the request body must be JSON, got: ${body.slice(0, 120)}`);
     }
-    const { status, text, remaining } = await call("POST", `/pool/services/${encodeURIComponent(slug)}/run`, body);
+    const query = why !== undefined && why !== "" ? `?why=${encodeURIComponent(why)}` : "";
+    const { status, text, remaining } = await call("POST", `/pool/services/${encodeURIComponent(slug)}/run${query}`, body);
     if (status < 200 || status >= 300) {
         return die(`services: ${refusalOf(text)}`);
     }
@@ -116,7 +164,7 @@ const main = async () => {
         return list();
     }
     if (command === "run") {
-        return run(rest[0], rest[1]);
+        return run(rest);
     }
     return die(USAGE);
 };
