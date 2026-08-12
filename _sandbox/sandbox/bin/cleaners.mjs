@@ -324,17 +324,24 @@ const SECRET_PATTERNS = [
  * any name, and it needs no upkeep when a connector adds a field. The name patterns STAY as the backstop, for
  * the credentials this sandbox does not store — one the agent minted mid-turn, one echoed by a remote command.
  *
- * Read straight off disk rather than passed in: the two files below are readable by anything running in this
- * container (daemon and agent are both root), so routing them through an env var or argv would add a copy in
- * /proc without adding a boundary. Cached per (path, mtime) — this runs once per Bash command.
+ * A KNOWN value is masked TO ITS REFERENCE — `{{secret:name}}`, the same token the daemon's exits resolve
+ * back to the value (src/secrets/secret-registry.ts is the naming's home; the vault's `<id>/<field>` and the
+ * env/generated KEY are reproduced here because this filter runs without the daemon). The shape patterns
+ * above keep the anonymous mask: they GUESS, and a guess must not mint a reference that resolves.
+ *
+ * Read straight off disk rather than passed in: the three files below are readable by anything running in
+ * this container (daemon and agent are both root), so routing them through an env var or argv would add a
+ * copy in /proc without adding a boundary. Cached per (path, mtime) — this runs once per Bash command.
  *
  * A MULTI-LINE value (an ssh private key, a WireGuard conf) can never match a line-at-a-time replace, so each
- * of its lines is registered as its own target. Short fragments are dropped: a PEM's `-----BEGIN` header is
- * not the secret, and masking an 8-character line would blank ordinary output. */
+ * of its lines is registered as its own target — to the anonymous mask, not the reference: a reference stands
+ * for the WHOLE value, and stamping it per line would make the masked block resolve to N copies of the key.
+ * Short fragments are dropped: a PEM's `-----BEGIN` header is not the secret, and masking an 8-character line
+ * would blank ordinary output. */
 const SECRET_VALUE_MIN = 12;
 const secretValueCache = new Map();
 
-const readIfChanged = (path) => {
+const readIfChanged = (path, name) => {
     try {
         const { mtimeMs, size } = statSync(path);
         const stamp = `${mtimeMs}:${size}`;
@@ -342,7 +349,7 @@ const readIfChanged = (path) => {
         if (cached?.stamp === stamp) {
             return cached.values;
         }
-        const values = harvest(readFileSync(path, "utf8"), path);
+        const values = harvest(readFileSync(path, "utf8"), path, name);
         secretValueCache.set(path, { stamp, values });
         return values;
     } catch {
@@ -351,40 +358,66 @@ const readIfChanged = (path) => {
     }
 };
 
-// Every string worth masking out of one of the two files. The vault is {id: {field: value}}; the .env is
-// KEY=value lines. Both are read for VALUES only — a key name is not a secret and masking it would blank prose.
-const harvest = (text, path) => {
-    const out = [];
-    if (path.endsWith(".json")) {
-        for (const entry of Object.values(JSON.parse(text))) {
+// Every {target, replacement} worth masking out of one of the three files. The vault is {id: {field: value}}
+// (named `<id>/<field>`); .env is KEY=value lines and .secrets.json a flat {KEY: value} (named KEY). Read for
+// VALUES only — a key name is not a secret and masking it would blank prose.
+const harvest = (text, path, name) => {
+    const named = [];
+    if (path.endsWith("capability-secrets.json")) {
+        for (const [id, entry] of Object.entries(JSON.parse(text))) {
             if (entry !== null && typeof entry === "object") {
-                out.push(...Object.values(entry).filter((value) => typeof value === "string"));
+                for (const [field, value] of Object.entries(entry)) {
+                    if (typeof value === "string") {
+                        named.push([name(id, field), value]);
+                    }
+                }
+            }
+        }
+    } else if (path.endsWith(".json")) {
+        for (const [key, value] of Object.entries(JSON.parse(text))) {
+            if (typeof value === "string") {
+                named.push([name(key), value]);
             }
         }
     } else {
         for (const line of text.split("\n")) {
-            const match = /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.*)$/.exec(line);
+            const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
             if (match !== null) {
-                out.push((match[1] ?? "").trim().replace(/^(["'])([\s\S]*)\1$/, "$2"));
+                named.push([name(match[1]), (match[2] ?? "").trim().replace(/^(["'])([\s\S]*)\1$/, "$2")]);
+            }
+        }
+    }
+    const byTarget = new Map();
+    for (const [reference, value] of named) {
+        const whole = value.trim();
+        if (whole.length >= SECRET_VALUE_MIN && !byTarget.has(whole)) {
+            byTarget.set(whole, { target: whole, replacement: `{{secret:${reference}}}` });
+        }
+        if (value.includes("\n")) {
+            for (const line of value.split("\n")) {
+                const trimmed = line.trim();
+                if (trimmed.length >= SECRET_VALUE_MIN && !byTarget.has(trimmed)) {
+                    byTarget.set(trimmed, { target: trimmed, replacement: "***" });
+                }
             }
         }
     }
     // Longest first, so a value that contains another is masked whole rather than leaving its tail behind.
-    return [...new Set(out.flatMap((value) => value.split("\n")).map((value) => value.trim()))]
-        .filter((value) => value.length >= SECRET_VALUE_MIN)
-        .toSorted((a, b) => b.length - a.length);
+    return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
 };
 
-/* Where the two stores live, from the same environment the daemon set for this turn. AGENT_AUTH_DIR is the
+/* Where the three stores live, from the same environment the daemon set for this turn. AGENT_AUTH_DIR is the
  * provider-credential root (off /work); unset — a dev daemon — puts it under .intentic/auth, which is where
  * composition.ts falls back to as well. */
 export const secretValues = (env = process.env) => {
     const authRoot =
         env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/auth");
+    const repo = join(env.WORKSPACE_ROOT ?? "/work", "desired-state");
     return [
-        ...readIfChanged(join(authRoot, "capability-secrets.json")),
-        ...readIfChanged(join(env.WORKSPACE_ROOT ?? "/work", "desired-state", ".env")),
-    ].toSorted((a, b) => b.length - a.length);
+        ...readIfChanged(join(authRoot, "capability-secrets.json"), (id, field) => `${id}/${field}`),
+        ...readIfChanged(join(repo, ".env"), (key) => key),
+        ...readIfChanged(join(repo, ".secrets.json"), (key) => key),
+    ].toSorted((a, b) => b.target.length - a.target.length);
 };
 
 /* The same masking over a whole body, for the two paths that emit output WITHOUT running the pipeline: the
@@ -399,9 +432,9 @@ export const redactText = (text, values = []) =>
 
 const redactLine = (line, values = []) => {
     let masked = line;
-    for (const value of values) {
-        if (masked.includes(value)) {
-            masked = masked.split(value).join("***");
+    for (const { target, replacement } of values) {
+        if (masked.includes(target)) {
+            masked = masked.split(target).join(replacement);
         }
     }
     return SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), masked);

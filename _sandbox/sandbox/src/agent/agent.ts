@@ -37,6 +37,7 @@ import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { redactionHooks } from "./agent-redaction.js";
+import { type SecretAccess, secretCommandHooks } from "./agent-secrets.js";
 import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
@@ -199,9 +200,12 @@ export interface AgentRequest {
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
-    // Every credential value this sandbox stores, masked out of EVERY tool result before the model sees it —
-    // the Bash filter covers only the terminal lane (agent/agent-redaction.ts). Absent ⇒ no hook is wired.
-    readonly secretValues?: () => Promise<readonly string[]>;
+    /* Every named credential this sandbox stores, and the ledger their uses feed — the one object behind all
+     * three secret seams: the read path masks each value to its `{{secret:name}}` reference in every tool
+     * result (agent/agent-redaction.ts), the shell exit resolves references back to values as a command runs
+     * (agent/agent-secrets.ts), and the browser exit types one into a focused field
+     * (browser/secrets-tools.ts). Absent ⇒ none of the three is wired. */
+    readonly secrets?: SecretAccess;
     /* THE HARNESS'S OWN DELEGATION CEILINGS, each raised or lowered by the matching sandbox setting: how many
      * subagents may run at once, how many one conversation may spawn in total, and how deep they may nest.
      * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands — which turn-plan relies on,
@@ -537,11 +541,19 @@ const baseOptions = (
                   signal: request.signal,
               })
             : {},
-        tmuxEnabled ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId) : {},
-        /* Every stored credential blanked out of every tool RESULT. The Bash filter masks the terminal lane and
-         * only that one, so which of Read/Grep/an MCP call fetched a secret decided whether the model saw it —
-         * this makes the answer the same for all of them (agent/agent-redaction.ts). */
-        request.secretValues !== undefined ? redactionHooks(request.secretValues) : {},
+        /* The tmux wrapper also carries the shell secret exit — `{{secret:name}}` resolved into the line the
+         * pane executes, inside the same rewrite so the two compose in a known order. Without tmux the exit
+         * still exists, as its own matcher (a reference passed through literally would land in a config as
+         * text). */
+        tmuxEnabled
+            ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId, request.secrets)
+            : request.secrets !== undefined
+              ? secretCommandHooks(request.secrets)
+              : {},
+        /* Every stored credential masked to its reference in every tool RESULT. The Bash filter masks the
+         * terminal lane and only that one, so which of Read/Grep/an MCP call fetched a secret decided whether
+         * the model saw it — this makes the answer the same for all of them (agent/agent-redaction.ts). */
+        request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
         installSteeringHooks(request.dependencyInstallAllowed === true),
         // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
         // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what

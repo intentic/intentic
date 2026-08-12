@@ -76,6 +76,21 @@ const PUBLIC_GUIDANCE =
     "deleting it stops. Everywhere else `public/` INSIDE a repo (a Vite or Next assets folder) is ordinary " +
     "project content and none of this applies.";
 
+/* The secret reference language (secrets/secret-registry.ts and the seams around it). One stable paragraph,
+ * because every half of the machinery is invisible until named: the agent SEES `{{secret:name}}` tokens the
+ * masking minted and has to know they are usable rather than damage; the write path exists only if the agent
+ * knows to write the token; and the one rule the machinery cannot enforce — keep references, not values, in
+ * files at rest — is a convention that holds only for agents that were told. Names are not listed here (they
+ * change mid-turn; a failed resolution lists them), only the language. */
+const SECRETS_GUIDANCE =
+    "Stored secrets never appear in what you read: anywhere a stored value would show, you see its reference " +
+    "`{{secret:name}}` instead. The same token is how you USE one — write `{{secret:name}}` inside a shell " +
+    "command (a curl body, an env assignment, a config payload) and the real value is substituted at execution; " +
+    "the transcript and permission cards keep the token. To put one into a web form, focus the field with the " +
+    "browser tools and call `mcp__secrets__type_secret`. A name that does not exist fails the command and lists " +
+    "the names that do. In files you write, keep the reference — never a raw value, and never ask the user to " +
+    "paste one into chat.";
+
 // The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
 // and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
 // anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
@@ -187,6 +202,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
     CHECKLIST_GUIDANCE,
     REFERENCE_GUIDANCE,
     PUBLIC_GUIDANCE,
+    SECRETS_GUIDANCE,
     // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent —
     // a core image without the browser pack): advertising a browser that isn't there sends the model hunting
     // for tools it cannot load, or installing its own.

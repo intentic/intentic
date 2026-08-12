@@ -83,6 +83,20 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
     ]);
 });
 
+test("secrets.inventory joins the use ledger: env keys by name, a capability by any of its fields", async () => {
+    const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
+    const svc = services({ workspace: secretsWorkspace(), capabilities: memoryCapabilitiesStore([github]) });
+    await svc.secretUses.record({ name: "EXTRA_TOKEN", lane: "shell", detail: "curl https://api", at: 10 });
+    await svc.secretUses.record({ name: "github/token", lane: "shell", detail: "gh api /user", at: 20 });
+    const { entries } = await clientFor(createApp(svc)).secrets.inventory();
+    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+    expect(byKey.get("EXTRA_TOKEN")?.lastUse).toEqual({ at: 10, lane: "shell", detail: "curl https://api" });
+    // The capability's row is keyed by the id alone, so its fields' uses fold onto it.
+    expect(byKey.get("github")?.lastUse).toEqual({ at: 20, lane: "shell", detail: "gh api /user" });
+    // Never used ⇒ no lastUse at all, rather than a zero that renders as 1970.
+    expect(byKey.get("HOST_SSH_KEY")?.lastUse).toBeUndefined();
+});
+
 test("secrets.inventory answers pre-scaffold with capability/provider entries only", async () => {
     const client = clientFor(createApp(services()));
     const { entries } = await client.secrets.inventory();

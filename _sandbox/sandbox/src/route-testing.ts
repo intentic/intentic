@@ -40,6 +40,7 @@ import { createPerfTracker } from "./platform/perf.js";
 import { spokenLinesOf } from "./sessions/transcript-search.js";
 import type { ThreadSession, ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
+import type { SecretUse } from "./secrets/secret-uses.js";
 
 import { unstubbed } from "@intentic/testing";
 import { noIsolation, testConfig } from "./testing.js";
@@ -371,6 +372,18 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         info: undefined,
         tools: [],
         capabilities: memoryCapabilitiesStore(),
+        // Nothing stored and nothing spent — the state of a sandbox before its first secret. In-memory rather
+        // than unstubbed because the inventory route reads both on every call.
+        secretRegistry: async () => [],
+        secretUses: (() => {
+            const uses: SecretUse[] = [];
+            return {
+                record: async (use: SecretUse) => {
+                    uses.push(use);
+                },
+                all: async () => uses,
+            };
+        })(),
         // Nothing declined by default: every route suite wants the catalog answering as it does on a sandbox
         // nobody has said no on yet.
         capabilityDismissals: memoryDismissalsStore(),

@@ -54,7 +54,8 @@ import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
 import { contributionRegistry } from "./capabilities/contributions.js";
 import { fileSecretVault } from "./capabilities/secret-vault.js";
-import { secretValuesOf } from "./secrets/secret-values.js";
+import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
+import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
@@ -299,9 +300,13 @@ export interface Services {
     // A boot step (main.ts), and an invariant rather than a one-time conversion — the manifest is a file the
     // agent may edit, so a real value can arrive in it at any time (capabilities/capabilities-store.ts).
     readonly vaultManifestSecrets: () => Promise<readonly string[]>;
-    // Every credential value this sandbox stores — the capability vault plus the DevOps .env — which the agent's
-    // PostToolUse masking blanks out of EVERY tool result, not just the terminal's (agent/agent-redaction.ts).
-    readonly secretValues: () => Promise<readonly string[]>;
+    // Every credential this sandbox stores under its stable name — the capability vault, the DevOps .env and
+    // the deploy engine's generated values — read by the agent's masking (values → `{{secret:name}}`) and by
+    // the two exits that resolve the same reference back (secrets/secret-registry.ts).
+    readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
+    // The use ledger those exits feed — one row per resolved reference or typed field, joined onto the
+    // secrets inventory as each entry's "last used" (secrets/secret-uses.ts).
+    readonly secretUses: SecretUsesStore;
     // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
@@ -932,7 +937,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
-        secretValues: secretValuesOf(secretVault, () => workspace.repos["desired-state"]),
+        secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
+        secretUses: fileSecretUses(statePath(workspace.root, ".intentic/secret-uses.json")),
         trial,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
         personas,

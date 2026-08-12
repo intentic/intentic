@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { envLine } from "@intentic/sandbox-run/quote";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
+import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -57,8 +58,27 @@ export const envKeys = (content: string): string[] => Object.keys(parseEnv(conte
 
 export type SecretsRoutesDeps = Pick<
     Services,
-    "auth" | "capabilities" | "claudeStore" | "cliProxy" | "config" | "files" | "intentic" | "logger" | "openCode" | "workspace"
+    "auth" | "capabilities" | "claudeStore" | "cliProxy" | "config" | "files" | "intentic" | "logger" | "openCode" | "secretUses" | "workspace"
 >;
+
+/* The use ledger's newest row for one inventory entry. Env/generated entries are keyed by the exact name a
+ * reference carries; a capability entry is ONE row for a vault that may hold several named fields
+ * (`reddit/password`, `reddit/totp`), so any of its fields' uses counts as the entry's. */
+export const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByName: ReadonlyMap<string, SecretUse>): SecretUse | undefined => {
+    if (entry.kind === "provider") {
+        return undefined;
+    }
+    if (entry.kind !== "capability") {
+        return lastByName.get(entry.key);
+    }
+    let newest: SecretUse | undefined;
+    for (const [name, use] of lastByName) {
+        if (name.startsWith(`${entry.key}/`) && (newest === undefined || use.at > newest.at)) {
+            newest = use;
+        }
+    }
+    return newest;
+};
 
 // User-supplied secrets → desired-state/.env (gitignored, on the file denylist, mode 0600). Written
 // straight from the browser to the daemon (never the platform); `apply` reloads .env each run so a freshly set
@@ -122,13 +142,14 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async () => {
-            const [repoEntries, capabilities, connectors, claudeAccounts, translatorAccounts, grokConnected] = await Promise.all([
+            const [repoEntries, capabilities, connectors, claudeAccounts, translatorAccounts, grokConnected, uses] = await Promise.all([
                 existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
                 services.capabilities.list(),
                 contributionRegistry(services),
                 services.claudeStore.list(),
                 services.cliProxy.accounts(),
                 services.openCode.connected("xai"),
+                services.secretUses.all().catch(() => [] as const),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
                 .filter((capability) => secretField(capability, connectors) !== undefined)
@@ -149,7 +170,16 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                 ...translatorAccounts.gemini.map((a) => providerAccountEntry("gemini", "Gemini", a.name, a.label, `${STATE_DIR}/auth/cliproxy`)),
                 ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", `${STATE_DIR}/auth/opencode`)] : []),
             ];
-            return { entries: [...repoEntries, ...capabilityEntries, ...providerEntries] };
+            // The use ledger's newest row per entry, joined in — the inventory is where "when did the agent
+            // last spend this" is answered, so the ledger never needs its own surface.
+            const lastByName = lastUseByName(uses);
+            const withUse = (entry: SecretInventoryEntry): SecretInventoryEntry => {
+                const use = lastUseFor(entry, lastByName);
+                return use === undefined
+                    ? entry
+                    : { ...entry, lastUse: { at: use.at, lane: use.lane, ...(use.detail !== undefined ? { detail: use.detail } : {}) } };
+            };
+            return { entries: [...repoEntries, ...capabilityEntries, ...providerEntries].map(withUse) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
             await ensureOwner(context.headers);

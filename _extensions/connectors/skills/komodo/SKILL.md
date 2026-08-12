@@ -44,6 +44,18 @@ Say what you are about to do before running one, and report the result. Each ret
 - Run a build: `komodo execute/RunBuild '{"build":"<NAME>"}'`
 - Run a procedure / action: `komodo execute/RunProcedure '{"procedure":"<NAME>"}'` · `komodo execute/RunAction '{"action":"<NAME>"}'`
 
+## Secrets in stack configs
+
+When a config needs a stored secret (an env var in a stack's `environment`, a registry password), write its
+`{{secret:name}}` reference straight into the command's JSON — the sandbox substitutes the real value as the
+command runs, and you never see it:
+
+- Set a stack env var: `komodo write/UpdateStack '{"id":"<NAME>","config":{"environment":"API_KEY={{secret:MY_API_KEY}}"}}'` then `execute/DeployStack`
+- Better for values many stacks share — put it in Komodo's OWN variable store once, then plain `[[MY_API_KEY]]`
+  in any environment (Komodo interpolates and redacts it on its side, no reference needed again):
+  `komodo write/CreateVariable '{"name":"MY_API_KEY","is_secret":true}'` then
+  `komodo write/UpdateVariableValue '{"name":"MY_API_KEY","value":"{{secret:MY_API_KEY}}"}'`
+
 Notes: every `<NAME>` may also be the resource id — Komodo accepts either. List items are
 `{id, type, name, tags, info}`, so the per-resource detail lives under `.info`; a *list* item's `info` and the
 same resource's `GetX` `.config` are different shapes, and only `GetX` carries the compose text. The `write/*`

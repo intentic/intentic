@@ -52,6 +52,12 @@ reports the profile.
   git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
   execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
   where the permission cards are never raised at all.
+- Let the agent USE a stored secret without ever holding it (src/secrets). Every credential the sandbox stores
+  — a connector's token, the DevOps `.env`, the deploy engine's generated values — is masked out of everything
+  the agent reads as a stable `{{secret:name}}` reference rather than a blank, and the same token resolves back
+  to the real value only at the exits: spliced into a shell command as it runs (a Komodo config payload, a curl
+  body) or typed into a focused browser field (`type_secret`). Files at rest keep the reference; every
+  resolution lands on a use ledger the Secrets view shows as each entry's "last used".
 - Decide who a session IS and what it may do, once per turn and above the choice of runtime (src/personas). A
   persona card names the connected accounts a session may speak through, which shelves of its toolbox are open
   — files, shell, web, browser, connectors, computers, MCP connections, delegation, changing the sandbox — and
@@ -166,6 +172,13 @@ reports the profile.
   (`email-codes.ts`); opening a NEW account is gated on the identity card's own switch
   ([src/capabilities/open-account.ts](src/capabilities/open-account.ts)); and anything only a person can clear
   parks on a help request the owner answers over the live view.
+- [src/secrets/secret-registry.ts](src/secrets/secret-registry.ts) — every stored credential under its stable
+  name, and the `{{secret:name}}` reference language built on it: masking rewrites values to references in
+  every tool result ([src/agent/agent-redaction.ts](src/agent/agent-redaction.ts)) and in the terminal lane
+  (`bin/cleaners.mjs`), and the two exits resolve them back — the shell rewrite inside the tmux wrapper
+  ([src/agent/agent-secrets.ts](src/agent/agent-secrets.ts)) and the browser's `type_secret`
+  ([src/browser/secrets-tools.ts](src/browser/secrets-tools.ts)) — each use landing on the ledger
+  (`src/secrets/secret-uses.ts`) the inventory joins as "last used".
 - [src/personas/personas.ts](src/personas/personas.ts) — who a turn is and what it may do, resolved in one
   function whose header carries the reasoning for why accounts default to nothing and powers default to
   everything. Identities count as accounts there — an unattended wake that names no persona loses them first. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the

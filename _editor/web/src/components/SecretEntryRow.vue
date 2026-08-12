@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { BrandMark, CopyButton, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../pages/sandbox/secretRows";
 import { reveal, useSecrets } from "../composables/secrets/useSecrets";
@@ -210,6 +211,16 @@ const ACTION = `rounded p-1.5 transition-colors hover:text-content disabled:opac
                 <template v-if="row.entry.kind === `generated`">generated for you · </template>lives in
                 <span class="font-mono text-subtle">{{ row.entry.storedAt }}</span>
                 <template v-if="row.entry.ci !== undefined"> · CI {{ row.entry.ci.synced ? `synced` : `out of date` }}</template>
+            </p>
+            <!-- The use ledger's newest row: when the agent last actually spent this — put into a command, or
+                 typed into a page — and where it went. Absent for a secret that has only ever sat here. -->
+            <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
+                used by the agent {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
+                <template v-if="row.entry.lastUse.detail">
+                    ·
+                    <span v-if="row.entry.lastUse.lane === `browser`">typed on {{ row.entry.lastUse.detail }}</span>
+                    <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
+                </template>
             </p>
             <Notice v-if="error" :of="error" class="mt-2" />
 

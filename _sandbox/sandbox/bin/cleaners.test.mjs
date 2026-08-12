@@ -223,7 +223,9 @@ const maskedWith = (values, lines) => cleanLines(lines, { command: "cat config",
 
 /* THE NAME HEURISTIC'S FLOOR, and what value-masking is for. Every field name below is one the capability
  * union itself declares secret, and none of them says token/secret/password/api-key — so the pattern half
- * cannot see them, however it is extended. Measured against the six declared shapes, five went through. */
+ * cannot see them, however it is extended. Measured against the six declared shapes, five went through.
+ * A KNOWN value masks to its `{{secret:name}}` reference — the token the daemon's exits resolve back — where
+ * the guessing patterns above keep the anonymous mask. */
 test("redact: field names the pattern list cannot know leak without the values, and are masked with them", () => {
     const lines = [
         `"presharedKey": "K7mNp2qR8tVw3xYz5aBc"`,
@@ -233,20 +235,34 @@ test("redact: field names the pattern list cannot know leak without the values, 
     ];
     // Without the values, the names carry no signal and the lines pass through whole.
     expect(maskedWith([], lines)).toEqual(lines);
-    const values = ["K7mNp2qR8tVw3xYz5aBc", "JBSWY3DPEHPK3PXPABCDEF", "Q8rTv2WxYz5aBc7dEf9g", "wg-conf-body-8xY3zQ1mNp"];
-    expect(maskedWith(values, lines)).toEqual([`"presharedKey": "***"`, `"seed": "***"`, `"pat": "***"`, `"config": "***"`]);
+    const values = [
+        { target: "K7mNp2qR8tVw3xYz5aBc", replacement: "{{secret:vpnbox/presharedKey}}" },
+        { target: "JBSWY3DPEHPK3PXPABCDEF", replacement: "{{secret:otp/seed}}" },
+        { target: "Q8rTv2WxYz5aBc7dEf9g", replacement: "{{secret:forge/pat}}" },
+        { target: "wg-conf-body-8xY3zQ1mNp", replacement: "{{secret:vpnbox/config}}" },
+    ];
+    expect(maskedWith(values, lines)).toEqual([
+        `"presharedKey": "{{secret:vpnbox/presharedKey}}"`,
+        `"seed": "{{secret:otp/seed}}"`,
+        `"pat": "{{secret:forge/pat}}"`,
+        `"config": "{{secret:vpnbox/config}}"`,
+    ]);
 });
 
 test("redact: a value is masked wherever it appears, not only beside a name", () => {
-    const values = ["K7mNp2qR8tVw3xYz5aBc"];
-    expect(maskedWith(values, ["curl -H 'X-Custom: K7mNp2qR8tVw3xYz5aBc' https://api"])).toEqual(["curl -H 'X-Custom: ***' https://api"]);
+    const values = [{ target: "K7mNp2qR8tVw3xYz5aBc", replacement: "{{secret:vpnbox/presharedKey}}" }];
+    expect(maskedWith(values, ["curl -H 'X-Custom: K7mNp2qR8tVw3xYz5aBc' https://api"])).toEqual([
+        "curl -H 'X-Custom: {{secret:vpnbox/presharedKey}}' https://api",
+    ]);
     // Twice on one line, and mid-word, because a credential pasted into a URL is still the credential.
-    expect(maskedWith(values, ["a=K7mNp2qR8tVw3xYz5aBc&b=K7mNp2qR8tVw3xYz5aBc"])).toEqual(["a=***&b=***"]);
+    expect(maskedWith(values, ["a=K7mNp2qR8tVw3xYz5aBc&b=K7mNp2qR8tVw3xYz5aBc"])).toEqual([
+        "a={{secret:vpnbox/presharedKey}}&b={{secret:vpnbox/presharedKey}}",
+    ]);
 });
 
 test("redact: ordinary output is untouched by value masking", () => {
     const lines = ["Compiled 42 modules in 1.2s", "ordinary prose about a token", "path/to/file.ts:12"];
-    expect(maskedWith(["K7mNp2qR8tVw3xYz5aBc"], lines)).toEqual(lines);
+    expect(maskedWith([{ target: "K7mNp2qR8tVw3xYz5aBc", replacement: "{{secret:vpnbox/presharedKey}}" }], lines)).toEqual(lines);
 });
 
 test("redact: a quoted value is masked whole, and the quotes survive so the line still parses", () => {

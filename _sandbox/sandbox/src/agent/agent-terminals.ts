@@ -6,6 +6,7 @@ import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
 import { AGENT_SESSION_ENV } from "../platform/container-owner.js";
 import { WORKLOAD_ENV } from "../platform/leftovers.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
+import { resolveCommandSecrets, type SecretAccess } from "./agent-secrets.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -119,6 +120,13 @@ export const bashTmuxHooks = (
      * (platform/reaper.ts). Charset-guarded like the delegation id — it lands unquoted-adjacent in the shell
      * line every Bash command flows through. */
     owner?: string,
+    /* The turn's secret registry, when it has one. Resolution rides INSIDE this rewrite rather than as its own
+     * PreToolUse matcher because two rewriters of one command must compose in a KNOWN order — hook order across
+     * separate matchers is the SDK's — and the order matters twice: the reference must be resolved before the
+     * command is quoted into the wrapper, and the `-c` copy (what the cleaners and the use ledger read) must
+     * keep the agent's reference-form line. The no-tmux configuration gets the standalone hook instead
+     * (agent-secrets.ts secretCommandHooks). */
+    secrets?: SecretAccess,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -158,6 +166,25 @@ export const bashTmuxHooks = (
                          * lands unquoted in the shell line every Bash command flows through. */
                         const delegation = isDelegationCommand(redirected) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id);
                         const command = delegation ? stampDelegationTitle(redirected, input.tool_use_id) : redirected;
+                        /* The secret exit (agent-secrets.ts): `{{secret:name}}` becomes the stored value in the
+                         * line the pane EXECUTES — while `-c` below keeps the reference-form `command`, so the
+                         * cleaners, the ledger and the pane's window all speak the agent's own words. The
+                         * resolved value does land in the pane's command line and its logs, which the owner can
+                         * open — the owner's own secret, behind the same door as the Secrets view's reveal. */
+                        let executed = command;
+                        if (secrets !== undefined) {
+                            const resolved = await resolveCommandSecrets(command, secrets);
+                            if ("refusal" in resolved) {
+                                return {
+                                    hookSpecificOutput: {
+                                        hookEventName: "PreToolUse",
+                                        permissionDecision: "deny",
+                                        permissionDecisionReason: resolved.refusal,
+                                    },
+                                };
+                            }
+                            executed = resolved.command;
+                        }
                         /* WHATEVER THIS COMMAND FORKS IS BORN KNOWING IT CAME FROM A CONVERSATION. An env prefix
                          * on the command itself, like the delegation id above and for the same reason: it rides
                          * inside the namespace hop, on the process tree, so a server the agent starts — and the
@@ -174,8 +201,8 @@ export const bashTmuxHooks = (
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(command)}`
-                                : `${stamp}${POLITE_PREFIX}bash -c ${shellQuote(command)}`;
+                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(executed)}`
+                                : `${stamp}${POLITE_PREFIX}bash -c ${shellQuote(executed)}`;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

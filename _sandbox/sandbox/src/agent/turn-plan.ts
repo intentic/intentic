@@ -14,6 +14,8 @@ import {
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { accountsServer } from "../browser/accounts-tools.js";
+import { secretsServer } from "../browser/secrets-tools.js";
+import type { SecretAccess } from "./agent-secrets.js";
 import { fetchEmailCode } from "../browser/email-codes.js";
 import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
@@ -637,8 +639,25 @@ export const planHarnessTurn = async (
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
     // targets.
     const dependencyTitle = input.conversationId === undefined ? input.title : services.agents.entry(input.conversationId)?.title;
+    /* The one object behind every secret seam this turn gets: the named registry (masking reads it, the exits
+     * resolve against it) and the use ledger those exits feed. `used` is fire-and-forget by design — a ledger
+     * write must never fail or slow the tool call that spent the secret. */
+    const secretAccess: SecretAccess = {
+        list: services.secretRegistry,
+        used: (use) => {
+            void services.secretUses
+                .record({ ...use, at: Date.now() })
+                .catch((error: unknown) => services.logger.warn({ err: error, secret: use.name }, "secret use record failed"));
+        },
+    };
     const sdkServers = {
         ...browser.servers,
+        /* The browser exit for stored secrets (browser/secrets-tools.ts): type a named value into the focused
+         * field of a live page. Mounted only when the turn drives a browser at all — the tool's scope IS the
+         * turn's browser list. */
+        ...(Object.keys(browser.servers).length > 0
+            ? { secrets: secretsServer({ secrets: secretAccess, browsers: Object.keys(browser.servers) }) }
+            : {}),
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
         // The `wait` tool: park until a child of this turn — a delegated CLI, an Agent-tool subagent — is
@@ -812,9 +831,10 @@ export const planHarnessTurn = async (
             // filter's all-on default) and the holdout control fraction.
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
-            // Every stored credential, masked out of every tool result — unconditional, because unlike the
-            // cleaners this is not a saving that can be traded away (agent/agent-redaction.ts).
-            secretValues: services.secretValues,
+            // Every stored credential masked to its `{{secret:name}}` reference in every tool result, and the
+            // two exits that resolve the same reference back — unconditional, because unlike the cleaners this
+            // is not a saving that can be traded away (agent/agent-redaction.ts, agent/agent-secrets.ts).
+            secrets: secretAccess,
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             /* The delegation ceilings, forwarded ONLY WHERE THE OWNER MOVED ONE. An untouched cap is left for the
              * harness to answer, which is not the same as sending the number the harness would have picked: the

@@ -152,7 +152,7 @@ const credentialValue = async (deps: AccountsDeps, capability: Capability, field
 
 // The focused element, if it can take typed text. Checked before typing a credential so a mis-click sends the
 // password into an error message here rather than into a search box on the wrong part of the page.
-const focusedEditable = async (page: import("playwright").Page): Promise<boolean> =>
+export const focusedEditable = async (page: import("playwright").Page): Promise<boolean> =>
     page
         .evaluate(() => {
             const el = document.activeElement;

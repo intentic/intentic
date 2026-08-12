@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { type NamedSecret, secretReference } from "../secrets/secret-registry.js";
 
 /* MASKING WHAT THE AGENT READS, not only what it runs.
  *
@@ -11,6 +12,12 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
  * This closes it at the seam every lane shares. PostToolUse fires for every tool the model calls and
  * `updatedToolOutput` replaces the result before it is sent, so masking becomes a property of the
  * CONVERSATION rather than of the terminal.
+ *
+ * A value is masked TO ITS REFERENCE — `{{secret:name}}`, the same token the write path resolves back
+ * (agent-secrets.ts) — not to an anonymous blank. The blank destroyed information twice: the model could not
+ * say WHICH credential it was looking at, and a config it read and faithfully rewrote came back with `***`
+ * pasted over the real value — a silent credential loss. With the reference, a read and a rewrite round-trip:
+ * what the model copies is a token the exits reconstitute.
  *
  * ONLY THE VALUES THIS SANDBOX HOLDS, deliberately — not the name heuristics that also run in the terminal
  * lane. Those infer a credential from the identifier beside it, and their whole failure history is on source
@@ -28,18 +35,39 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 // Same floor as the terminal filter's value masking. A shorter string is not distinctive enough to blank on
 // sight — masking an 8-character value would black out ordinary output that merely coincides with it.
 const MIN_LENGTH = 12;
-const MASK = "***";
+const LINE_MASK = "***";
 
-/* A credential can span lines (an ssh private key, a WireGuard conf) and a tool result is JSON, so the whole
- * value rarely survives as one run of text — each line is registered as its own target instead. Longest first,
- * so a value that contains another is masked whole rather than leaving its tail behind. */
-export const maskTargets = (values: readonly string[]): readonly string[] =>
-    [...new Set(values.flatMap((value) => value.split("\n")).map((value) => value.trim()))]
-        .filter((value) => value.length >= MIN_LENGTH)
-        .toSorted((a, b) => b.length - a.length);
+export interface MaskTarget {
+    readonly target: string;
+    readonly replacement: string;
+}
 
-const maskString = (text: string, targets: readonly string[]): string =>
-    targets.reduce((masked, target) => (masked.includes(target) ? masked.split(target).join(MASK) : masked), text);
+/* Each whole value is masked to its `{{secret:name}}` reference. A credential that SPANS lines (an ssh
+ * private key, a WireGuard conf) rarely survives as one run of text inside a JSON tool result, so its lines
+ * are registered as their own targets too — but to the anonymous mask, not the reference: a reference stands
+ * for the WHOLE value, and stamping it on every line would make the masked block resolve to N copies of the
+ * key. Longest first, so a value that contains another is masked whole rather than leaving its tail behind. */
+export const maskTargets = (secrets: readonly NamedSecret[]): readonly MaskTarget[] => {
+    const byTarget = new Map<string, MaskTarget>();
+    for (const { name, value } of secrets) {
+        const whole = value.trim();
+        if (whole.length >= MIN_LENGTH && !byTarget.has(whole)) {
+            byTarget.set(whole, { target: whole, replacement: secretReference(name) });
+        }
+        if (value.includes("\n")) {
+            for (const line of value.split("\n")) {
+                const trimmed = line.trim();
+                if (trimmed.length >= MIN_LENGTH && !byTarget.has(trimmed)) {
+                    byTarget.set(trimmed, { target: trimmed, replacement: LINE_MASK });
+                }
+            }
+        }
+    }
+    return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
+};
+
+const maskString = (text: string, targets: readonly MaskTarget[]): string =>
+    targets.reduce((masked, { target, replacement }) => (masked.includes(target) ? masked.split(target).join(replacement) : masked), text);
 
 /* A tool result is JSON of a shape that belongs to the tool — a string for Bash, `{ file: { content } }` for
  * Read, a content array for an MCP server — so this walks it rather than knowing any of them. Keys are left
@@ -49,7 +77,7 @@ const maskString = (text: string, targets: readonly string[]): string =>
  * without re-comparing a large result — and what keeps the overwhelmingly common case (no credential anywhere
  * in the output) from allocating a copy of it.
  */
-export const maskDeep = (value: unknown, targets: readonly string[]): unknown => {
+export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => {
     if (typeof value === "string") {
         const masked = maskString(value, targets);
         return masked === value ? value : masked;
@@ -66,7 +94,7 @@ export const maskDeep = (value: unknown, targets: readonly string[]): unknown =>
     return value;
 };
 
-export const redactionHooks = (values: () => Promise<readonly string[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     /* No matcher, so every tool — including the ones nobody has written yet. A tool list here would be a list
      * of the tools somebody remembered, which is the exact shape of the gap this exists to close. */
     PostToolUse: [
@@ -79,7 +107,7 @@ export const redactionHooks = (values: () => Promise<readonly string[]>): Partia
                     // Guarded whole: an unreadable vault is a reason to leave a result alone, never to fail the
                     // tool call that produced it.
                     try {
-                        const targets = maskTargets(await values());
+                        const targets = maskTargets(await secrets());
                         if (targets.length === 0) {
                             return {};
                         }

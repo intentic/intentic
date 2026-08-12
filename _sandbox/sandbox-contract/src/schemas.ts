@@ -5891,6 +5891,10 @@ export const SecretInventoryEntrySchema = z.object({
     revealable: z.boolean(),
     // Forgejo Actions replication state, present only after adopt on env|generated entries.
     ci: z.object({ synced: z.boolean(), pushedAt: z.string().optional() }).optional(),
+    /* The newest row of the use ledger that concerns this entry — when the agent last SPENT it, on which lane,
+     * and where it went (the head of the shell command, or the page's host). Names and destinations only,
+     * never values. Absent while a secret has never been used, which most never are. */
+    lastUse: z.object({ at: z.number(), lane: z.enum(["shell", "browser"]), detail: z.string().optional() }).optional(),
 });
 export type SecretInventoryEntry = z.infer<typeof SecretInventoryEntrySchema>;
 export const SecretInventorySchema = z.object({ entries: z.array(SecretInventoryEntrySchema) });

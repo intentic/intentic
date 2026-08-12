@@ -94,6 +94,13 @@ const STATE_FILES = [
      * suggestions they had already dismissed. Holds no credential: it is a card name and a file path. */
     { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry", versioned: true },
 
+    /* The secret use ledger — one row per moment the agent's exits spent a stored secret (a `{{secret:name}}`
+     * reference resolved into a shell command, a value typed into a browser field), joined onto the secrets
+     * inventory as each entry's "last used" (sandbox's secrets/secret-uses.ts). Holds names and destinations,
+     * never values — which is why it may `carry`: like the automations' run ledger, a use history is about the
+     * secrets, and an export that dropped it would arrive claiming none had ever been touched. */
+    { path: ".intentic/secret-uses.json", invalidates: ["secrets"], portability: "carry" },
+
     /* The named personas this sandbox shows the outside world — which connected accounts each one speaks for,
      * what a session wearing it may do, where it works (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
      * its own key because a card and the accounts it names are read together everywhere they are shown: connect
