@@ -36,30 +36,40 @@ content-type: application/x-ndjson
 { "event": "status", "text": "Ranking the 12 that fit…" }
 { "event": "result", "data": { "communities": [ … ], "confidence": 0.82 } }`;
 
-/* THE RUN, DRAWN — geometry for the round-trip figure, computed so the picture cannot show a party or a hop
- * the prose beside it doesn't. Three actors across the width; the call travels right along one row and the
- * answer travels back left along the next; the dashed row underneath is the model's honesty as geometry —
- * "no answer, no charge". The reader's own column (YOU) is the tinted one, the way Earn is on the lifecycle. */
-const RUN = { w: 600, h: 210 };
+/* THE RUN, DRAWN — a time-DOWN sequence, computed so the picture cannot show a party, a hop or an event the
+ * prose beside it doesn't. Three lifelines across the width; time flows down. The request leaves along the
+ * top two rows; then the answer comes back as a STREAM — three return events stacked in time inside the
+ * grouped band, which is the whole point of the picture — and the platform's own receipt settles it. The
+ * dashed green row is the honesty as geometry: no result, no charge. YOU is the tinted lifeline, the way
+ * Earn is on the lifecycle. */
+const RUN = { w: 600, h: 366 };
 const runActors = [
-    { id: "member", label: "MEMBER", sub: "their agent · holds credits", cx: 92 },
+    { id: "member", label: "MEMBER", sub: "their agent · the card", cx: 92 },
     { id: "platform", label: "PLATFORM", sub: "the ledger · the relay", cx: 300 },
     { id: "you", label: "YOU", sub: "one HTTPS endpoint", cx: 508 },
 ];
-const runBox = { w: 132, h: 34, y: 12 };
-const runLane = { y1: 66, y2: 192 };
+const runBox = { w: 132, h: 34, y: 10 };
+const runLife = { y1: 60, y2: 350 };
 const [MX, PX, YX] = runActors.map((a) => a.cx);
-const RUN_FWD = 100;
-const RUN_RET = 140;
-const RUN_REF = 180;
 const RUN_PAD = 10;
-// The same round trip as ordered steps, for phone widths where the wave would set its labels at a few pixels.
+// Time rows, top to bottom: request out (approve, forward), stream back (two status + result), ledger settles.
+const R_APPROVE = 92;
+const R_FORWARD = 128;
+const R_S1 = 194;
+const R_S2 = 222;
+const R_RESULT = 250;
+const R_RECEIPT = 296;
+const R_REFUND = 324;
+// The band that groups the three return events into one stream — what says "these are one answer, over time".
+// Its top strip carries the band title alone; the first return arrow sits below it, so the two never share a row.
+const streamBand = { x: 40, y: 156, w: 512, h: 108 };
+// The same run as ordered steps, for phone widths where the sequence would set its labels at a few pixels.
 const runSteps = [
-    "The <strong>member</strong> clicks approve on the run's card in chat — their agent cannot spend without that click.",
-    "The <strong>platform</strong> charges the member's credits and forwards one <strong>signed</strong> call to your endpoint.",
-    "You <strong>verify the signature</strong> and stream events — <code>status</code> lines while you work, one <code>result</code> that ends the run, up to five minutes.",
-    "The platform <strong>relays every event live</strong> — status lines onto the run's card in the member's chat, the result to their agent — and you're paid.",
-    "No result — a 5xx, a timeout, or a stream that dies early — and the <strong>charge is reversed</strong>. You aren't paid; it cost the member nothing.",
+    "The <strong>member</strong> clicks approve on the run's card — their agent cannot spend without that click.",
+    "The <strong>platform</strong> charges the credits and forwards one <strong>signed</strong> call to your endpoint.",
+    "You <strong>stream events back</strong>: <code>status</code> lines while you work, then one <code>result</code> that ends the run — up to five minutes.",
+    "The platform <strong>relays each event live</strong> — status onto the member's card, the result to their agent.",
+    "The <strong>ledger settles</strong> with a receipt: paid. No result — a 5xx, a timeout, a dead stream — and the <strong>charge is reversed</strong>, costing the member nothing.",
 ];
 ---
 
@@ -98,11 +108,12 @@ const runSteps = [
     </p>
 
     <div class="docs-embed mt-6">
-        {/* The round trip, on wide screens: the call travels right, the answer travels back, and the honest branch drops underneath. */}
+        {/* The run as a sequence, on wide screens: request out along the top, the stream back through the grouped
+            band (the diagram's whole point — one answer arriving as several events over time), then the ledger. */}
         <figure class="relative hidden overflow-hidden rounded-2xl border border-line bg-canvas/60 sm:block">
             <div class="grid-overlay"></div>
             <div
-                class="pointer-events-none absolute top-1/2 left-1/2 h-64 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                class="pointer-events-none absolute top-1/2 left-1/2 h-72 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
                 style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 13%, transparent), transparent 70%)"
                 aria-hidden="true"
             >
@@ -112,7 +123,7 @@ const runSteps = [
                     viewBox={`0 0 ${RUN.w} ${RUN.h}`}
                     class="h-auto w-full text-link"
                     role="img"
-                    aria-label="One paid run: the member approves, the platform charges the member's credits and forwards a signed call, your endpoint verifies it and streams status events ending in one result, and the stream is relayed back live and paid. If no result arrives, the platform reverses the charge."
+                    aria-label="One paid run as a sequence over time: the member approves, the platform charges the credits and forwards a signed call, your endpoint streams status events and then one result, the platform relays each event live to the member's card and agent, and the ledger settles with a receipt. If no result arrives, the charge is reversed and nothing is billed."
                 >
                     <defs>
                         <marker id="run-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -123,39 +134,51 @@ const runSteps = [
                         </marker>
                     </defs>
 
-                    {/* A faint lifeline under each actor, so every arrow end maps to who acts. */}
-                    {runActors.map((a) => <line x1={a.cx} y1={runLane.y1} x2={a.cx} y2={runLane.y2} stroke="var(--color-line)" stroke-width="1" stroke-dasharray="3 5" />)}
+                    {/* Time runs down; each lifeline drops from its actor so every arrow end maps to who acts. */}
+                    <text x="16" y={R_S2} text-anchor="middle" font-size="8" letter-spacing="1.5" transform={`rotate(-90 16 ${R_S2})`} style="fill: var(--color-subtle)">TIME ↓</text>
+                    {runActors.map((a) => <line x1={a.cx} y1={runLife.y1} x2={a.cx} y2={runLife.y2} stroke="var(--color-line)" stroke-width="1" stroke-dasharray="3 5" />)}
 
-                    {/* Forward: the call, charged and signed, travelling right. */}
-                    <path d={`M ${MX + RUN_PAD} ${RUN_FWD} L ${PX - RUN_PAD} ${RUN_FWD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <path d={`M ${PX + RUN_PAD} ${RUN_FWD} L ${YX - RUN_PAD} ${RUN_FWD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <text x={(MX + PX) / 2} y={RUN_FWD - 8} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">approves a priced run</text>
-                    <text x={(PX + YX) / 2} y={RUN_FWD - 8} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">charge · sign · forward</text>
-                    <text x={(PX + YX) / 2} y={RUN_FWD + 13} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">HMAC signature</text>
+                    {/* The request, out: the click, then the charged-and-signed forward. */}
+                    <path d={`M ${MX + RUN_PAD} ${R_APPROVE} L ${PX - RUN_PAD} ${R_APPROVE}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <text x={(MX + PX) / 2} y={R_APPROVE - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">approve — the click</text>
+                    <path d={`M ${PX + RUN_PAD} ${R_FORWARD} L ${YX - RUN_PAD} ${R_FORWARD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <text x={(PX + YX) / 2} y={R_FORWARD - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">charge · sign · forward</text>
+                    <text x={(PX + YX) / 2} y={R_FORWARD + 12} text-anchor="middle" font-size="8" style="fill: var(--color-subtle)">HMAC signature</text>
 
-                    {/* Return: your event stream travelling back, relayed live and paid. */}
-                    <path d={`M ${YX - RUN_PAD} ${RUN_RET} L ${PX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <path d={`M ${PX - RUN_PAD} ${RUN_RET} L ${MX + RUN_PAD} ${RUN_RET}`} fill="none" stroke="currentColor" stroke-opacity="0.7" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <text x={(PX + YX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">your event stream: status … result</text>
-                    <text x={(MX + PX) / 2} y={RUN_RET + 14} text-anchor="middle" font-size="9.5" style="fill: var(--color-muted)">relayed live · paid</text>
-
-                    {/* What you do, on your own lane, between arrival and answer. */}
+                    {/* The stream: three return events grouped into one band, each relayed through the platform (the
+                        dot) on its way to the member. This grouping is what makes "one answer, over time" legible. */}
                     <rect
-                        x={YX - 58}
-                        y={(RUN_FWD + RUN_RET) / 2 - 13}
-                        width="116"
-                        height="26"
-                        rx="8"
-                        fill="color-mix(in srgb, var(--color-primary-500) 12%, var(--color-canvas))"
-                        stroke="color-mix(in srgb, var(--color-primary-500) 45%, transparent)"
+                        x={streamBand.x}
+                        y={streamBand.y}
+                        width={streamBand.w}
+                        height={streamBand.h}
+                        rx="12"
+                        fill="color-mix(in srgb, var(--color-primary-500) 7%, transparent)"
+                        stroke="color-mix(in srgb, var(--color-primary-500) 32%, transparent)"
                         stroke-width="1"
+                        stroke-dasharray="4 4"
                     />
-                    <text x={YX} y={(RUN_FWD + RUN_RET) / 2 + 1} text-anchor="middle" dominant-baseline="central" font-size="9.5" font-weight="600" style="fill: var(--color-link)">verify · stream ≤ 5 min</text>
+                    <text x={streamBand.x + 10} y={streamBand.y + 14} font-size="8.5" font-weight="600" style="fill: var(--color-link)">the stream — relayed live, one event at a time</text>
+                    <text x={streamBand.x + streamBand.w - 10} y={streamBand.y + 14} text-anchor="end" font-size="8" style="fill: var(--color-subtle)">≤ 5 min · 2 MB</text>
 
-                    {/* The honest branch: no result, no charge. Drawn to the member, past the platform that reverses it. */}
-                    <path d={`M ${YX - RUN_PAD} ${RUN_REF} L ${MX + RUN_PAD} ${RUN_REF}`} fill="none" stroke="var(--color-success)" stroke-opacity="0.9" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#run-refund)" />
-                    <circle cx={PX} cy={RUN_REF} r="2.5" fill="var(--color-success)" />
-                    <text x={(MX + YX) / 2} y={RUN_REF - 7} text-anchor="middle" font-size="9" style="fill: var(--color-success)">no result (5xx · timeout · dead stream) → the platform reverses the charge</text>
+                    {[
+                        { y: R_S1, label: "status → card · “Searching 240 communities…”", op: 0.75 },
+                        { y: R_S2, label: "status → card · “Ranking the 12 that fit…”", op: 0.85 },
+                        { y: R_RESULT, label: "result → agent · the answer, ending the run", op: 1 },
+                    ].map((e) => (
+                        <Fragment>
+                            <path d={`M ${YX - RUN_PAD} ${e.y} L ${MX + RUN_PAD} ${e.y}`} fill="none" stroke="currentColor" stroke-opacity={e.op} stroke-width="1.5" marker-end="url(#run-arrow)" />
+                            <circle cx={PX} cy={e.y} r="2.5" fill="currentColor" />
+                            <text x={PX} y={e.y - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">{e.label}</text>
+                        </Fragment>
+                    ))}
+
+                    {/* The ledger settles, after the stream — the platform's OWN line, never the provider's: a paid
+                        receipt, or (dashed) the honest branch where no result arrived and the charge is reversed. */}
+                    <path d={`M ${PX - RUN_PAD} ${R_RECEIPT} L ${MX + RUN_PAD} ${R_RECEIPT}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
+                    <text x={(MX + PX) / 2} y={R_RECEIPT - 7} text-anchor="middle" font-size="9" font-weight="600" style="fill: var(--color-link)">receipt · paid · 60 left today</text>
+                    <path d={`M ${PX - RUN_PAD} ${R_REFUND} L ${MX + RUN_PAD} ${R_REFUND}`} fill="none" stroke="var(--color-success)" stroke-opacity="0.9" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#run-refund)" />
+                    <text x={(MX + PX) / 2} y={R_REFUND - 7} text-anchor="middle" font-size="8.5" style="fill: var(--color-success)">or — no result → refunded · nothing charged</text>
 
                     {/* The three parties, drawn last so they sit above the flow. YOU is tinted: it is the reader. */}
                     {
@@ -200,7 +223,7 @@ const runSteps = [
         </ol>
     </div>
 
-    <DocsCodeBlock code={exchange} lang="http" title="The same round trip, on the wire" />
+    <DocsCodeBlock code={exchange} lang="http" title="One run, on the wire" />
 
     <h2>Verify the signature</h2>
     <p>
