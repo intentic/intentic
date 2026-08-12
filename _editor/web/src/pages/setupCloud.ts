@@ -1,4 +1,4 @@
-import type { CloudCredentials, CloudProvider, CloudSize } from "@intentic-app/api-contract";
+import { ORACLE_CAPACITY_PHRASE, type CloudCredentials, type CloudProvider, type CloudSize } from "@intentic-app/api-contract";
 
 /* The cloud machine choice's own logic — the step-3 alternative for the user (a phone, most often) with no
  * computer to paste the command into: pick a provider, paste a credential, and a machine is created in THEIR
@@ -18,7 +18,18 @@ export interface CloudProviderMeta {
     readonly kind: `token` | `oracle`;
 }
 
+// Oracle leads: the ladder's flagship rung is the machine that costs nothing — a free 12 GB ARM box — and the
+// order here is the order the picker offers. The paid picks follow for readers who want x86 or have an
+// account already.
 export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
+    {
+        id: `oracle`,
+        label: `Oracle — free 12 GB`,
+        blurb: `A 12 GB ARM machine inside Oracle's Always-Free tier — genuinely $0 while you stay within it. Expect ~10–15 minutes if you're new to Oracle (signup asks for a card for identity; nothing here can bill it).`,
+        credentialUrl: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
+        credentialLabel: `Add an API key under Profile → API keys`,
+        kind: `oracle`,
+    },
     {
         id: `hetzner`,
         label: `Hetzner`,
@@ -35,15 +46,29 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
         credentialLabel: `Create a personal access token with write scope`,
         kind: `token`,
     },
-    {
-        id: `oracle`,
-        label: `Oracle (free)`,
-        blurb: `An ARM machine inside Oracle's Always-Free tier, genuinely $0 while you stay within it. Signup asks for a card; free-tier capacity can run short (pick another availability domain and retry).`,
-        credentialUrl: `https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm`,
-        credentialLabel: `Add an API key under Profile → API keys, then paste the config it shows plus the downloaded key`,
-        kind: `oracle`,
-    },
 ];
+
+/* The Oracle walkthrough, click by click — the painful part of the free machine is Oracle's console, so the
+ * wizard holds the reader's hand through it rather than pointing at docs. Data here, rendered by
+ * SetupCloud.vue, so the steps are testable prose rather than template soup. */
+export const ORACLE_STEPS: readonly { readonly text: string; readonly url?: string; readonly urlLabel?: string }[] = [
+    {
+        text: `Sign in to Oracle Cloud (or create a free account — takes ~10 min, asks for a card for identity, stays $0).`,
+        url: `https://www.oracle.com/cloud/free/`,
+        urlLabel: `oracle.com/cloud/free`,
+    },
+    {
+        text: `Open your API keys and press "Add API key" → "Generate API key pair". Download the private key, then press Add.`,
+        url: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
+        urlLabel: `Profile → API keys`,
+    },
+    { text: `Copy the "Configuration file preview" Oracle shows into the first box, and the downloaded key file's contents into the second.` },
+];
+
+// Does this refusal mean "no room right now" rather than "no"? Keyed on the adapter's own phrase (a shared
+// contract constant), because this is the one failure worth retrying without the user changing anything —
+// which is exactly what the keep-trying loop does.
+export const isCapacityMiss = (message: string | undefined): boolean => message !== undefined && message.includes(ORACLE_CAPACITY_PHRASE);
 
 export const cloudProviderMeta = (id: CloudProvider): CloudProviderMeta =>
     CLOUD_PROVIDERS.find((provider) => provider.id === id) ?? CLOUD_PROVIDERS[0]!;

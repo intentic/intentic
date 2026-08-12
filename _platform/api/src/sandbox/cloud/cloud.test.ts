@@ -274,26 +274,63 @@ describe(`oracle`, () => {
         expect(calls.filter((entry) => entry.method !== `GET`).map((entry) => entry.url)).toEqual([expect.stringContaining(`/instances/`)]);
     });
 
-    it(`names the A1 capacity refusal honestly and never launches a non-free shape`, async () => {
+    // The reused-network routes every capacity test shares — only the instance POST (and the domain list the
+    // walk fetches after a first miss) differ per case.
+    const capacityStubs = () => [
+        { match: (method: string, url: string) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
+        {
+            match: (method: string, url: string) => method === `GET` && url.includes(`/vcns?`),
+            respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]),
+        },
+        { match: (method: string, url: string) => method === `GET` && url.includes(`/internetGateways?`), respond: () => json([{ id: `igw1` }]) },
+        {
+            match: (method: string, url: string) => method === `GET` && url.includes(`/routeTables/rt1`),
+            respond: () => json({ routeRules: [{ destination: `0.0.0.0/0` }] }),
+        },
+        { match: (method: string, url: string) => method === `GET` && url.includes(`/subnets?`), respond: () => json([{ id: `sub1` }]) },
+        {
+            match: (method: string, url: string) => method === `GET` && url.includes(`/availabilityDomains/`),
+            respond: () => json([{ name: `ad1` }, { name: `ad2` }, { name: `ad3` }]),
+        },
+    ];
+
+    it(`walks the other availability domains on a capacity miss and launches where there is room`, async () => {
+        const calls = stubFetch([
+            ...capacityStubs(),
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/instances/`),
+                // ad1 (the pick) refuses, ad2 has room — reading the body decides, so the stub is stateless.
+                respond: () => json({ code: `InternalError`, message: `Out of host capacity.` }, 500),
+            },
+        ]);
+        // Re-route the instance POST per body: refuse ad1, accept everything after.
+        const instanceRoute = calls; // recorded calls carry the body the walk sent
+        vi.stubGlobal(`fetch`, ((original) =>
+            (url: URL | string, init?: RequestInit): Promise<Response> => {
+                const body = typeof init?.body === `string` ? (JSON.parse(init.body) as { availabilityDomain?: string }) : {};
+                if (String(url).endsWith(`/instances/`) && body.availabilityDomain !== `ad1`) {
+                    instanceRoute.push({ method: `POST`, url: String(url), body });
+                    return Promise.resolve(json({ id: `vm-ad2` }));
+                }
+                return original(url, init);
+            })(globalThis.fetch as (url: URL | string, init?: RequestInit) => Promise<Response>));
+        const created = await oracleCreate(snippet, pem, { name: `n`, location: `ad1`, size: `VM.Standard.A1.Flex`, userData: `` });
+        expect(created.serverId).toBe(`vm-ad2`);
+        const launched = instanceRoute.filter((entry) => entry.url.endsWith(`/instances/`));
+        const last = launched.at(-1)?.body as { availabilityDomain?: string } | undefined;
+        expect(last?.availabilityDomain).toBe(`ad2`);
+    });
+
+    it(`names the A1 capacity refusal honestly — after every domain — and never launches a non-free shape`, async () => {
         stubFetch([
-            { match: (method, url) => method === `GET` && url.includes(`/images?`), respond: () => json([{ id: `img` }]) },
-            {
-                match: (method, url) => method === `GET` && url.includes(`/vcns?`),
-                respond: () => json([{ id: `vcn1`, lifecycleState: `AVAILABLE`, defaultRouteTableId: `rt1` }]),
-            },
-            { match: (method, url) => method === `GET` && url.includes(`/internetGateways?`), respond: () => json([{ id: `igw1` }]) },
-            {
-                match: (method, url) => method === `GET` && url.includes(`/routeTables/rt1`),
-                respond: () => json({ routeRules: [{ destination: `0.0.0.0/0` }] }),
-            },
-            { match: (method, url) => method === `GET` && url.includes(`/subnets?`), respond: () => json([{ id: `sub1` }]) },
+            ...capacityStubs(),
             {
                 match: (method, url) => method === `POST` && url.endsWith(`/instances/`),
                 respond: () => json({ code: `InternalError`, message: `Out of host capacity.` }, 500),
             },
         ]);
         await expect(oracleCreate(snippet, pem, { name: `n`, location: `ad1`, size: `VM.Standard.A1.Flex`, userData: `` })).rejects.toThrowError(
-            /free-tier ARM capacity/,
+            /free-tier ARM capacity in any availability domain/,
         );
 
         await expect(oracleCreate(snippet, pem, { name: `n`, location: `ad1`, size: `VM.Standard.E4.Flex`, userData: `` })).rejects.toBeInstanceOf(

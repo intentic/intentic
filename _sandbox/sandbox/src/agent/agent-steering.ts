@@ -76,6 +76,10 @@ export function registerTurn(conversationId: string, turn: ActiveTurn): () => vo
     };
 }
 
+// How many turns are in flight right now — the idle-stop verdict reads it (a machine mid-turn is not idle,
+// however long the person who started the turn has been gone).
+export const activeTurnCount = (): number => activeTurns.size;
+
 // Deliver a steering message into the conversation's running turn; false when no steerable turn is live.
 export function steerTurn(conversationId: string, text: string): boolean {
     return activeTurns.get(conversationId)?.steering?.push(text) ?? false;

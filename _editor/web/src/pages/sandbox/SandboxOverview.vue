@@ -33,6 +33,10 @@ const { info, installed, latest, updateAvailable } = useSandboxVersion();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
+// A platform-hosted (starter) sandbox — what the ladder card below keys on: the box is deliberately small,
+// so the honest next rung is a bigger machine that costs nothing, and it deserves saying where the owner
+// already is rather than only on a setup page they finished.
+const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 
 // Inline renaming (owner only), strictly in place: the title box and the action cell already occupy their slots
 // in the header, so entering edit mode reveals affordances without reflowing a single pixel below.
@@ -324,6 +328,19 @@ const save = async (): Promise<void> => {
                     </dd>
                 </div>
             </dl>
+        </Card>
+
+        <!-- THE LADDER'S NEXT RUNG, on hosted sandboxes only (owners — a member can't create sandboxes for the
+             owner). The hosted box is deliberately small; when it starts feeling tight, the honest upgrades
+             already exist as setup lanes, and the best one is free. Points at /setup, where every rung lives. -->
+        <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
+            <p class="text-xs leading-relaxed text-muted">
+                This sandbox is a small starter machine we host for you. When it feels tight, add a bigger home for your work: a
+                <span class="text-content">free 12&nbsp;GB machine</span> on Oracle's Always-Free tier, a machine in your own cloud, or
+                <span class="text-content">your own computer</span> — the only rung with your GPU on it.
+            </p>
+            <RouterLink to="/setup" class="text-xs text-link hover:underline">See the options →</RouterLink>
         </Card>
 
         <!-- A newer sandbox image has shipped: the non-blocking, host-run update prompt (self-hides otherwise). -->

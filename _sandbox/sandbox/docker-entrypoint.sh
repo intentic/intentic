@@ -1,6 +1,61 @@
 #!/bin/sh
 set -e
 
+# THE HOSTED FLAVOR — SANDBOX_VM=1 means this image IS the whole machine (a microVM booting it, one
+# persistent volume at /data), not a container among containers. Everything VM-shaped happens here and runs
+# FIRST: the moment anything below touches /work or /history they must already be the volume, because the
+# machine's root filesystem is rebuilt from the image on every start and only /data survives. The layout
+# mirrors @intentic/sandbox-run/fly (FLY_VOLUME_LAYOUT) — change one, change both.
+if [ "${SANDBOX_VM:-}" = "1" ]; then
+    mkdir -p /data/work /data/history /data/docker
+
+    # The image bakes /work (its WORKDIR) and /history as plain, EMPTY directories (nothing is seeded at
+    # build time — the daemon scaffolds at runtime), so linking them onto the volume loses nothing and keeps
+    # every "/work" in the product literally true on a VM. Idempotent: a restart finds the links and moves on.
+    if [ ! -L /work ]; then
+        rmdir /work 2>/dev/null || rm -rf /work
+        ln -s /data/work /work
+    fi
+    if [ ! -L /history ]; then
+        rmdir /history 2>/dev/null || rm -rf /history
+        ln -s /data/history /history
+    fi
+
+    # The nested Docker Engine's state must outlive the ephemeral rootfs. Merged, never overwritten — the GPU
+    # fragment's nvidia runtime entry (docker.ts's daemon.json stance) would be silently lost to a wholesale
+    # write. No jq dependency games: the image bakes node, and node is already the daemon's runtime.
+    mkdir -p /etc/docker
+    node -e '
+        const fs = require("fs");
+        const path = "/etc/docker/daemon.json";
+        let current = {};
+        try { current = JSON.parse(fs.readFileSync(path, "utf8")); } catch {}
+        fs.writeFileSync(path, JSON.stringify({ ...current, "data-root": "/data/docker" }, null, 4) + "\n");
+    '
+
+    # The platform-managed tunnel ingress dials the docker-network alias (intentic-sandbox-workspace) that a
+    # sidecar resolves over the shared network. On a VM the alias is this machine — pin it to loopback so the
+    # same remote-managed tunnel config serves every flavor.
+    if ! grep -q 'intentic-sandbox-workspace' /etc/hosts 2>/dev/null; then
+        printf '127.0.0.1\tintentic-sandbox-workspace\n' >> /etc/hosts
+    fi
+
+    # cloudflared IS the sidecar here, as a supervised in-box process — there is no second container to run it
+    # in. A restart loop, because the connector must outlive transient edge disconnects the way the sidecar's
+    # `--restart unless-stopped` does; its log lands on the volume so a support question has somewhere to look.
+    # (On user machines the token stays OUTSIDE the sandbox in the sidecar; here it is necessarily inside —
+    # the sandbox README states that trade.)
+    if [ -n "${TUNNEL_TOKEN:-}" ]; then
+        mkdir -p /data/history/logs
+        (
+            while :; do
+                cloudflared tunnel run --token "$TUNNEL_TOKEN" >> /data/history/logs/cloudflared.log 2>&1 || true
+                sleep 2
+            done
+        ) &
+    fi
+fi
+
 # sshd backs the local-sync path: the laptop's Mutagen connects over SSH (through the sandbox's Cloudflare
 # tunnel) and auto-injects its agent, which reads/writes /work. Key-only auth; the owner's public key is
 # enrolled at runtime by the daemon's POST /system/authorized-key (authorized by the owner's Google token).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, priceLabel, sizeLabel } from "./setupCloud";
+import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, isCapacityMiss, priceLabel, sizeLabel } from "./setupCloud";
 
 describe(`cloudCredentials`, () => {
     it(`gates the token providers on a non-empty trimmed token`, () => {
@@ -43,4 +43,17 @@ describe(`labels`, () => {
     it(`describes a size as one picker row`, () => {
         expect(sizeLabel(size)).toBe(`CX22 · 2 vCPU · 4 GB RAM · 40 GB disk · €3.85/mo`);
     });
+});
+
+// The keep-trying offer keys on the adapter's own capacity phrase (a shared contract constant) — only the
+// refusal that time fixes gets a retry loop; everything else stays a verdict.
+it(`recognizes the capacity miss and nothing else`, () => {
+    expect(isCapacityMiss(`Oracle has no free-tier ARM capacity in any availability domain of eu-frankfurt-1 right now`)).toBe(true);
+    expect(isCapacityMiss(`Oracle refused: not authorized`)).toBe(false);
+    expect(isCapacityMiss(undefined)).toBe(false);
+});
+
+// Oracle leads the picker — the free 12 GB machine is the ladder's flagship rung, and the order is the offer.
+it(`offers the free machine first`, () => {
+    expect(CLOUD_PROVIDERS[0]?.id).toBe(`oracle`);
 });

@@ -67,6 +67,11 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
 // the conservative direction, and the shared-sandbox case is rare enough not to warrant guessing.
 export const idleEverywhere = (): boolean => [...entries.values()].every((user) => user.idle);
 
+// How many tabs hold a live /events connection right now. The idle-stop verdict's first question — and
+// deliberately NOT idleEverywhere: a tab that reported itself idle is still a person who left the workspace
+// open and expects it alive when they come back to the window.
+export const connectedCount = (): number => entries.size;
+
 // Immediate snapshot on subscribe, so a fresh /events connection paints the roster without waiting for the
 // next change.
 export const subscribePresence = (listener: (users: PresenceUser[]) => void): (() => void) => {

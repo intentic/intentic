@@ -1,6 +1,6 @@
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { hashKey } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { localPosture } from "../../environments/posture";
 import { removeStoredValue, storeValue } from "../browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "./activeSandbox";
@@ -77,6 +77,7 @@ const localSeed = (): SandboxSummary[] | undefined => {
             role: `owner`,
             providedTunnel: false,
             cloud: null,
+            hosted: null,
         },
     ];
 };
@@ -167,6 +168,45 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
+// The hosted lane's create: the platform mints the row AND its machine in one call — the returned summary
+// carries `hosted`, and the daemon's ordinary announce is what /setup watches next. Same cache dance as create.
+const hostedCreate = async (name: string): Promise<SandboxSummary> => {
+    const sandbox = await apiClient.sandbox.hostedCreate({ name });
+    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => [...live, sandbox]);
+    persistActive(sandbox.id);
+    return sandbox;
+};
+
+/* THE WAKE REFLEX. A hosted sandbox's machine stops itself when nobody was around (the daemon's idle-stop),
+ * so "the active sandbox is hosted and its daemon isn't answering on a network cause" almost always means
+ * "asleep" — and the fix is a platform call this browser can simply make. Fired from the connection state
+ * rather than a screen, so every way of arriving at a sleeping sandbox (switcher, deep link, reload) wakes it
+ * without any surface having to remember to. Throttled per sandbox; wake is idempotent (waking a running
+ * machine is a no-op), so a wake raced with a boot costs nothing. Failures are swallowed: the connection UI
+ * already narrates the outage, and the reflex retries on the next throttle window. */
+const WAKE_THROTTLE_MS = 60_000;
+const wokeAt = new Map<string, number>();
+watch(
+    () => [active.value?.id, active.value?.hosted !== null && active.value?.hosted !== undefined, connection.value] as const,
+    ([id, hosted, state]) => {
+        if (id === undefined || !hosted || state.failure === undefined) {
+            return;
+        }
+        // Network-shaped causes only: a 403 or a missing address is not a sleeping machine, and waking on it
+        // would spin the throttle for nothing.
+        if (state.failure.kind !== `network` && state.failure.kind !== `timeout` && state.failure.kind !== `closed`) {
+            return;
+        }
+        const last = wokeAt.get(id) ?? 0;
+        if (Date.now() - last < WAKE_THROTTLE_MS) {
+            return;
+        }
+        wokeAt.set(id, Date.now());
+        void apiClient.sandbox.wake({ sandboxId: id }).catch(() => undefined);
+    },
+);
+
 // Rename a sandbox and/or set its switcher logo — `image: null` clears it (owner-only; the API enforces).
 // Writing the returned row into the list cache is what repaints the rail chip in the same tick as the hub's
 // own tile.
@@ -226,5 +266,5 @@ const remove = async (id: string): Promise<void> => {
 };
 
 export function useSandbox() {
-    return { sandboxes, activeSandboxId, active, daemonUrl, connection, reachable, list, refresh, select, create, update, attach, remove };
+    return { sandboxes, activeSandboxId, active, daemonUrl, connection, reachable, list, refresh, select, create, hostedCreate, update, attach, remove };
 }

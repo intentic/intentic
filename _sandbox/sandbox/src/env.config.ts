@@ -73,6 +73,12 @@ const configSchema = z.object({
         .string()
         .default("")
         .transform((value) => (value.trim() === "" ? PLATFORM_WEB_ORIGIN : value)),
+    /* The HOSTED lane's economics, daemon-side: minutes of nobody-connected-and-nothing-running before the
+     * daemon exits cleanly so its machine can stop — compute on a platform-run machine bills while this
+     * process lives, and the platform wakes it again on the next visit (system/idle-stop.ts owns the verdict).
+     * 0 (the default) disables: every non-hosted flavor runs always-on, exactly as before. Set by the hosted
+     * provisioner from the platform's config, never by connect flows. */
+    idleStopMinutes: z.coerce.number().int().nonnegative().default(0),
     // Where the platform lives, for the daemon's announce (URL + liveness phone-home). Set by connect.{sh,ps1};
     // a localhost dev platform arrives as host.docker.internal. Empty ⇒ announcing disabled (tests, loopback).
     platform: z

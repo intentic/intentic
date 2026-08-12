@@ -73,6 +73,45 @@ const configSchema = z.object({
             poolSize: z.coerce.number().int().nonnegative().default(1), // INTENTIC_CLOUDFLARE_POOL_SIZE
         })
         .prefault({}),
+    /* THE HOSTED LANE — intentic's OWN Fly.io credential, the THIRD documented exception to the secret-free
+     * model (intenticCloudflare and trial.keys are the others), and the one that changes the trust story the
+     * most: for a HOSTED sandbox the platform creates the machine, keeps the way back in (start/stop/destroy),
+     * and the provider could reach inside it — so a platform breach reaches hosted machines, where every other
+     * lane stays out of reach by construction. ARCHITECTURE.md states this trade in full; every other lane is
+     * unchanged, and a platform with no token here (the default, and the right one for self-hosters) has no
+     * hosted lane at all: the routes 404 and the editor never offers it.
+     *
+     * `flyApiToken` is the switch (org rides along — a token without an org cannot place a machine). The rest
+     * sizes the starter box: deliberately small and cheap, because the lane's job is "signed in → working
+     * sandbox in seconds", and the wizard's ladder (Oracle free tier, your cloud, your machine) is the answer
+     * for power — not a bigger bill here. */
+    hosted: z
+        .object({
+            // Org-scoped Fly API token (fly tokens create -o <org>). HOSTED_FLY_API_TOKEN.
+            flyApiToken: z.string().default(``).meta({ secret: true }),
+            // The Fly organization slug hosted apps are created in. HOSTED_FLY_ORG.
+            flyOrg: z.string().default(``),
+            // Fly region code every v1 machine lands in (geo-pick is a later knob). HOSTED_REGION.
+            region: z.string().default(`iad`),
+            // Fly app names are GLOBALLY unique: <appPrefix>-<sandbox id> keeps ours claimable and lets the
+            // reaper recognize our apps by prefix. HOSTED_APP_PREFIX.
+            appPrefix: z.string().default(`intentic-sbx`),
+            // The image a hosted machine boots — the same public sandbox image every other lane runs.
+            // HOSTED_IMAGE.
+            image: z.string().default(`ghcr.io/intentic/sandbox:stable`),
+            // The starter machine: shared CPUs + memory in MB (Fly guest shape), disk in GB. HOSTED_CPUS,
+            // HOSTED_MEMORY_MB, HOSTED_VOLUME_GB.
+            cpus: z.coerce.number().int().positive().default(4),
+            memoryMb: z.coerce.number().int().positive().default(8192),
+            volumeGb: z.coerce.number().int().positive().default(20),
+            // Hosted sandboxes per user. The free promise is ONE instant box each; more is a product decision,
+            // not a config bump someone makes casually. HOSTED_PER_USER.
+            perUser: z.coerce.number().int().positive().default(1),
+            // Minutes of nobody-watching-nothing-running before the daemon exits and the machine stops —
+            // rides into the box as IDLE_STOP_MINUTES. 0 disables (always-on). HOSTED_IDLE_STOP_MINUTES.
+            idleStopMinutes: z.coerce.number().int().nonnegative().default(20),
+        })
+        .prefault({}),
     /* THE FREE-TRIAL POOL — intentic's OWN model keys, and the SECOND documented exception to the secret-free
      * model above (intenticCloudflare is the first). It is a larger exception than that one and says so here
      * rather than in a commit message: a tunnel token is spent provisioning DNS, while these keys serve model
@@ -209,6 +248,7 @@ export const CONFIG_SECRETS = [
     `google.clientSecret`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
+    `hosted.flyApiToken`,
     `trial.keys`,
 ];
 

@@ -85,6 +85,22 @@ flowchart TB
   either credential, so a platform breach can read the stored URL but **cannot drive any sandbox** —
   the hub's blast radius is bounded to identity + the sandbox URL.
 
+  **The HOSTED lane is the stated exception to that boundary.** A user who chooses "we run it for you"
+  (or lands on it as the zero-command first run) gets a sandbox whose machine the platform creates on
+  intentic's own provider account (Fly, one microVM + one persistent volume per sandbox, each app on its
+  own private network — [_platform/api/src/sandbox/hosted/](_platform/api/src/sandbox/hosted/)) and
+  deliberately keeps the way back into: wake on the next visit, stop, destroy on delete. The command
+  path is unchanged — the browser still drives the daemon directly over the sandbox's tunnel, the
+  platform still never proxies a request or holds a daemon credential — but existence and power are now
+  the platform's, and an operator (or a breach) holding the provider credential could reach inside a
+  hosted machine the way any cloud provider can reach inside a rented VM. Every other lane keeps the
+  full boundary; a self-hosted platform has the lane off unless it configures its own provider token
+  (`hosted` in [config.ts](_platform/api/src/config.ts) — the third documented exception to the
+  platform's secret-free model). The machine also puts itself to sleep when nobody is connected and
+  nothing is running (the daemon's idle-stop, [idle-stop.ts](_sandbox/sandbox/src/system/idle-stop.ts))
+  and the platform wakes it on the next visit — which is what makes a free hosted starter economically
+  honest, at the stated cost that scheduled automations run only while the box is awake.
+
 The lifecycle, from first sign-in to a reconciled deployment the operator can watch:
 
 ```mermaid
@@ -95,6 +111,7 @@ sequenceDiagram
     participant I as Infrastructure
 
     U->>P: Sign in (Google) + open setup
+    Note over U,S: hosted lane: P creates the machine itself (no command) — the daemon's announce takes it from here
     P-->>U: curl one-liner + connection token
     U->>P: store derived sandbox URL (setup.bind: sandbox-<hash(token)>.<zone>)
     U->>S: curl … | sh   (docker run sandbox + its own Cloudflare tunnel)

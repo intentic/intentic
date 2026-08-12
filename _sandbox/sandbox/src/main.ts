@@ -59,6 +59,7 @@ import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainer } from "./platform/container-owner.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/profile.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
+import { startIdleStop } from "./system/idle-stop.js";
 import { startResourceMetrics } from "./platform/resource-metrics.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { turnRunMetrics } from "./agent/turn-runs.js";
@@ -432,6 +433,14 @@ const main = async (): Promise<void> => {
         if (role.container) {
             services.announcer.start();
         }
+    }
+
+    // The hosted flavor's idle-stop (system/idle-stop.ts): after the configured quiet window — nobody
+    // connected, no turn, no live delegate, no terminal saying anything — the daemon takes the graceful exit
+    // so its machine can stop; the platform starts it again on the next visit. 0 (every non-hosted flavor)
+    // means always-on, exactly as before.
+    if (config.idleStopMinutes > 0 && role.container) {
+        shutdown.push(startIdleStop({ minutes: config.idleStopMinutes, logger }));
     }
 
     /* Ask the platform whether this sandbox gets a free trial, and how much of today's allowance is left. The

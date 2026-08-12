@@ -3,11 +3,12 @@ import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/
 import { cmp, Notice, type NoticeModel, NoticeStack, Segmented, useDevice } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
+import Checkbox from "primevue/checkbox";
 import Select from "primevue/select";
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
-import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, sizeLabel } from "./setupCloud";
+import { CLOUD_PROVIDERS, cloudCredentials, cloudProviderMeta, isCapacityMiss, ORACLE_STEPS, sizeLabel } from "./setupCloud";
 
 /* Step 3's cloud machine form (see setupCloud.ts for what this is). The flow is three moves on one card:
  * pick a provider, paste its credential, confirm the region/size the options call preselected — Create. The
@@ -21,7 +22,8 @@ const emit = defineEmits<{ provisioned: [summary: SandboxSummary] }>();
 
 const { mobile } = useDevice();
 
-const provider = ref<CloudProvider>(`hetzner`);
+// Oracle first — the free 12 GB machine is the ladder's flagship rung, and the picker's order says so.
+const provider = ref<CloudProvider>(`oracle`);
 const meta = computed(() => cloudProviderMeta(provider.value));
 // One buffer per field, not per provider: a token pasted for Hetzner is meaningless to DigitalOcean, so a
 // provider switch clears rather than remembers (the same reason the attach lane clears its token on a lane
@@ -95,6 +97,16 @@ const provisioning = ref(false);
 const provisionError = ref<NoticeModel | undefined>(undefined);
 const ready = computed(() => credentials.value !== undefined && options.value !== null && location.value !== undefined && size.value !== undefined);
 
+/* THE KEEP-TRYING LOOP, for exactly one refusal: Oracle's capacity miss (isCapacityMiss — the adapter already
+ * walked every availability domain, so by now it is a matter of WHEN, not where). The credential stays in
+ * this component's memory and nowhere else — the retry lives in the browser precisely so the platform never
+ * has to hold it — which is also why the offer is honest about its one condition: the tab has to stay open. */
+const capacityMiss = ref(false);
+const keepTrying = ref(false);
+const RETRY_EVERY_MS = 2 * 60_000;
+let retryTimer: ReturnType<typeof setInterval> | undefined;
+onUnmounted(() => clearInterval(retryTimer));
+
 const create = async (): Promise<void> => {
     const chosen = credentials.value;
     if (chosen === undefined || location.value === undefined || size.value === undefined || provisioning.value) {
@@ -107,14 +119,30 @@ const create = async (): Promise<void> => {
         // The cloud lane's counterpart of sandbox_command_claimed: a machine now exists that will claim the
         // code on its own — everything after this event is the provider's boot plus Docker's.
         track(`sandbox_cloud_provisioned`, { provider: provider.value, mobile: mobile.value });
+        clearInterval(retryTimer);
+        keepTrying.value = false;
         emit(`provisioned`, summary);
     } catch (err) {
         track(`sandbox_cloud_provision_failed`, { provider: provider.value });
         provisionError.value = noticeFrom(err, `Couldn't create the machine. Try again.`);
+        capacityMiss.value = provider.value === `oracle` && isCapacityMiss(provisionError.value?.title);
+        if (!capacityMiss.value) {
+            // A refusal that retrying can't fix must not be retried into — the loop is for weather only.
+            keepTrying.value = false;
+        }
     } finally {
         provisioning.value = false;
     }
 };
+
+// The loop itself, below `create` so the reference reads downward: toggled on, it re-presses the button every
+// couple of minutes; success (in `create`) and unmount both clear it.
+watch(keepTrying, (on) => {
+    clearInterval(retryTimer);
+    if (on) {
+        retryTimer = setInterval(() => void create(), RETRY_EVERY_MS);
+    }
+});
 </script>
 
 <template>
@@ -143,6 +171,19 @@ const create = async (): Promise<void> => {
             </label>
         </template>
         <template v-else>
+            <!-- The walkthrough, click by click: the painful part of the free machine is Oracle's console,
+                 so the wizard walks it rather than pointing at docs — each step deep-links the exact screen. -->
+            <ol class="flex flex-col gap-1.5 rounded-lg border border-line bg-canvas p-3 text-xs text-muted">
+                <li v-for="(step, index) in ORACLE_STEPS" :key="index" class="flex items-start gap-2">
+                    <span class="mt-px font-mono text-2xs text-subtle">{{ index + 1 }}.</span>
+                    <span class="min-w-0">
+                        {{ step.text }}
+                        <a v-if="step.url" :href="step.url" target="_blank" rel="noopener" class="text-link hover:underline">{{
+                            step.urlLabel
+                        }}</a>
+                    </span>
+                </li>
+            </ol>
             <label class="ui-field">
                 <span class="ui-field-label">Config snippet</span>
                 <textarea
@@ -201,6 +242,16 @@ const create = async (): Promise<void> => {
             </div>
 
             <Notice v-if="provisionError" :of="provisionError" />
+            <!-- The capacity miss's honest offer: the adapter already tried every availability domain, so the
+                 fix is time — and the retry runs HERE, in the tab, because that is where the pasted credential
+                 lives and the only place it should. -->
+            <label v-if="capacityMiss" class="flex items-start gap-2 text-xs text-muted">
+                <Checkbox v-model="keepTrying" binary />
+                <span class="min-w-0">
+                    <span class="text-content">Keep trying while this tab is open</span> — retries every couple of minutes. Your credential stays
+                    in this tab and is never stored.
+                </span>
+            </label>
             <Button
                 label="Create the machine"
                 class="w-full justify-center md:w-auto md:self-start"

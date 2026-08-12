@@ -10,6 +10,7 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     setupCodeClaimedAt: null,
     setupReport: null,
     cloud: null,
+    hosted: null,
     token: `token-${overrides.id}`,
     role: `owner`,
     providedTunnel: false,

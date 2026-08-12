@@ -28,6 +28,17 @@
                 "default": "./dist/index.js"
             }
         },
+        "./fly": {
+            "types": "./dist/fly.d.ts",
+            "import": {
+                "@intentic/src": "./src/fly.ts",
+                "default": "./dist/fly.js"
+            },
+            "require": {
+                "@intentic/src": "./src/fly.ts",
+                "default": "./dist/fly.js"
+            }
+        },
         "./quote": {
             "types": "./dist/quote.d.ts",
             "import": {

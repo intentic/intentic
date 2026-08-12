@@ -60,6 +60,7 @@ export const testConfig: Config = {
     agentAuthDir: "",
     logLevel: "silent",
     logPretty: false,
+    idleStopMinutes: 0,
     zone: "",
     connectToken: "",
     owner: { email: "" },

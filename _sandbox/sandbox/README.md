@@ -198,6 +198,16 @@ exact CLI-version anchor and the locator for a vendored development fallback, no
 - A land's product is **uncommitted** — it patches the main working tree and moves no commit. So every reading taken between two shas (`standing.ts`) is blind to the user discarding it afterwards; `landed-presence.ts` is the one that asks the working tree, and it is what keeps a card from claiming work is in a workspace that no longer holds it.
 - Workflow run artifacts are shared state under `.intentic/workflow-runs/`. The JSON ledger retains every active
   run plus 50 ended runs and removes a run's artifacts when that record is evicted or forgotten.
+- **The hosted flavor** (`SANDBOX_VM=1`) runs this image as a whole microVM the platform created, with one
+  persistent volume standing in for the three docker ones (the entrypoint's VM mode links `/work`, `/history`
+  and dockerd's data-root onto it — layout in `@intentic/sandbox-run/fly`). Two stated deviations from the
+  container flavor: cloudflared runs **inside** the box as a supervised process (there is no sidecar container
+  to hold the tunnel token, so on hosted the token is necessarily within the agent's reach — its scope is this
+  sandbox's own tunnel and nothing else), and the daemon **stops itself when idle** (`IDLE_STOP_MINUTES` →
+  `src/system/idle-stop.ts`: nobody connected, no turn, no live delegate, no terminal output for the window →
+  the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
+  knowing: scheduled automations run only while the box is awake. Nested dockerd needs no privilege directive
+  here — VM root already holds every capability, so the docker capability starts its engine without a rebuild.
 - Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
   purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
   Claude session files; provider-native state that still shares an auth home is never guessed at destructively.

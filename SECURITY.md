@@ -53,7 +53,10 @@ Particularly interesting: **anything that crosses the sandbox boundary the wrong
 remote visitor reach the workspace API, a preview or public-files route that serves a file outside its root, a
 redaction gap that puts a credential into a transcript or a log, or an agent-facing tool that escapes its
 worktree. On the platform side: anything that would let it reach a user's code or credentials, which
-[ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot.
+[ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot — except for **hosted** sandboxes, where the
+platform runs the machine on its own provider account by design; there the interesting findings are the ones
+that cross between hosted tenants (each machine is its own microVM on its own private network), or that let
+anyone other than the platform's own configuration reach the provider credential.
 
 ## What is out of scope
 

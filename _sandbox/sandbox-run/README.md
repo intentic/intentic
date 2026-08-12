@@ -15,7 +15,9 @@ app); this package is why they cannot disagree about what one is.
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — the contract and the emitter; the whole surface.
+- [src/index.ts](src/index.ts) — the contract and the docker-run emitter; the surface every docker-shaped flow uses.
+- [src/fly.ts](src/fly.ts) — the hosted flavor: the same contract emitted as a Fly Machine config (one VM per
+  sandbox, one volume standing in for the three docker ones, cloudflared in-box behind the `SANDBOX_VM` switch).
 - [src/quote.ts](src/quote.ts) — shell quoting, which is the part that is easy to get subtly wrong.
 - [src/quote-contract.integration.test.ts](src/quote-contract.integration.test.ts) — the emitted command run for
   real, because a quoting bug is invisible to a unit test that only compares strings.

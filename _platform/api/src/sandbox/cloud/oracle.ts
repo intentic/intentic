@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { CloudOptions } from "@intentic-app/api-contract";
+import { ORACLE_CAPACITY_PHRASE, type CloudOptions } from "@intentic-app/api-contract";
 import { CloudCredentialError, CloudProviderError, type CloudCreate } from "./common.js";
 import { parseOciConfig, signedHeaders, type OciCredential } from "./oci-sign.js";
 
@@ -15,6 +15,9 @@ import { parseOciConfig, signedHeaders, type OciCredential } from "./oci-sign.js
 
 const FREE_SHAPE = { id: `VM.Standard.A1.Flex`, ocpus: 2, memoryGb: 12, diskGb: 50 } as const;
 const NETWORK_NAME = `intentic`;
+
+// Capacity is weather, not a verdict — see the throw site in `call` and the domain walk in `oracleCreate`.
+class OracleCapacityError extends CloudProviderError {}
 
 const errorSchema = z.object({ code: z.string(), message: z.string() });
 const availabilityDomainsSchema = z.array(z.object({ name: z.string() }));
@@ -47,11 +50,13 @@ const call = async (credential: OciCredential, method: string, url: string, body
         );
     }
     if (failure.success) {
-        // The A1 free tier's famous refusal: no ARM capacity in that availability domain right now. Honest
-        // advice beats a mystery — capacity comes and goes, and another domain often has some.
+        // The A1 free tier's famous refusal: no ARM capacity in that availability domain right now. Its own
+        // error class because `create` reacts to it — trying the OTHER domains before giving up — where every
+        // other refusal propagates as final. The phrase is the contract's (ORACLE_CAPACITY_PHRASE): the
+        // wizard keys its keep-trying offer on it.
         if (/out of host capacity/i.test(failure.data.message)) {
-            throw new CloudProviderError(
-                `Oracle has no free-tier ARM capacity in that availability domain right now (their notorious A1 shortage). Try another availability domain, or retry later — capacity is released continuously.`,
+            throw new OracleCapacityError(
+                `Oracle has ${ORACLE_CAPACITY_PHRASE} in that availability domain right now (their notorious A1 shortage). Capacity is released continuously — retry in a bit.`,
             );
         }
         if (failure.data.code === `LimitExceeded`) {
@@ -168,6 +173,13 @@ const ensureNetwork = async (credential: OciCredential): Promise<{ subnetId: str
 // makes ListImages answer aarch64 builds), the ensured network, and the setup one-liner as user_data. `size`
 // from the wizard is asserted against the pinned free shape rather than trusted — this adapter never launches
 // anything that could bill.
+//
+// CAPACITY IS WALKED, NOT REPORTED: A1 capacity differs per availability domain and shifts by the minute, so
+// a capacity refusal in the picked domain tries every other domain of the region before giving up — the loop
+// a person runs by hand in the console (pick the next domain, press create again), automated. Only the
+// capacity refusal continues the walk; any other refusal is a verdict and propagates from the domain it
+// happened in. The exhausted-everything error carries the contract's capacity phrase, so the wizard can offer
+// to keep retrying — by then it is a matter of WHEN, not where.
 export const oracleCreate = async (config: string, privateKeyPem: string, create: CloudCreate): Promise<{ serverId: string }> => {
     const credential = parseOciConfig(config, privateKeyPem);
     if (create.size !== FREE_SHAPE.id) {
@@ -186,17 +198,44 @@ export const oracleCreate = async (config: string, privateKeyPem: string, create
         throw new CloudProviderError(`Oracle offers no Ubuntu 24.04 image for ${FREE_SHAPE.id} in ${credential.region}.`);
     }
     const { subnetId } = await ensureNetwork(credential);
-    const instance = idSchema.parse(
-        await call(credential, `POST`, `${core}/instances/`, {
-            availabilityDomain: create.location,
-            compartmentId: credential.tenancy,
-            displayName: create.name,
-            shape: FREE_SHAPE.id,
-            shapeConfig: { ocpus: FREE_SHAPE.ocpus, memoryInGBs: FREE_SHAPE.memoryGb },
-            createVnicDetails: { subnetId, assignPublicIp: true },
-            sourceDetails: { sourceType: `image`, imageId: image.id, bootVolumeSizeInGBs: FREE_SHAPE.diskGb },
-            metadata: { user_data: Buffer.from(create.userData).toString(`base64`) },
-        }),
+    const launch = async (availabilityDomain: string): Promise<{ serverId: string }> => {
+        const instance = idSchema.parse(
+            await call(credential, `POST`, `${core}/instances/`, {
+                availabilityDomain,
+                compartmentId: credential.tenancy,
+                displayName: create.name,
+                shape: FREE_SHAPE.id,
+                shapeConfig: { ocpus: FREE_SHAPE.ocpus, memoryInGBs: FREE_SHAPE.memoryGb },
+                createVnicDetails: { subnetId, assignPublicIp: true },
+                sourceDetails: { sourceType: `image`, imageId: image.id, bootVolumeSizeInGBs: FREE_SHAPE.diskGb },
+                metadata: { user_data: Buffer.from(create.userData).toString(`base64`) },
+            }),
+        );
+        return { serverId: instance.id };
+    };
+    // The picked domain first, then the region's others — fetched only on the first capacity miss, so the
+    // happy path pays no extra round-trip.
+    try {
+        return await launch(create.location);
+    } catch (error) {
+        if (!(error instanceof OracleCapacityError)) {
+            throw error;
+        }
+    }
+    const domains = availabilityDomainsSchema.parse(
+        await call(credential, `GET`, `${endpoint(credential, `identity`)}/20160918/availabilityDomains/?compartmentId=${encodeURIComponent(credential.tenancy)}`),
     );
-    return { serverId: instance.id };
+    for (const domain of domains.map((entry) => entry.name).filter((name) => name !== create.location)) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the walk IS sequential: each domain is tried only because the previous had no capacity
+            return await launch(domain);
+        } catch (error) {
+            if (!(error instanceof OracleCapacityError)) {
+                throw error;
+            }
+        }
+    }
+    throw new CloudProviderError(
+        `Oracle has ${ORACLE_CAPACITY_PHRASE} in any availability domain of ${credential.region} right now (their notorious A1 shortage). Capacity is released continuously — keep this page open and it will keep trying, or come back later.`,
+    );
 };

@@ -143,6 +143,11 @@ const cliMissing = async (): Promise<boolean> =>
 // that grants it: SANDBOX_CAPABILITIES gives EVERY sandbox SYS_ADMIN + SYS_PTRACE (turn isolation needs its own
 // mount namespace), and the only other runtime directive an overlay may carry is the vpn's NET_ADMIN.
 //
+// On the HOSTED flavor (SANDBOX_VM=1, a microVM booting this image) root holds the full capability set, so
+// this probe answers true without any directive — which is exactly right: the machine IS privileged, dockerd
+// starts the moment the capability is enabled, and no rebuild is ever asked for. The engine's state survives
+// the VM's ephemeral rootfs because the entrypoint's VM mode points data-root at the volume (daemon.json).
+//
 // Reading SYS_ADMIN instead — which this probe did until it was measured — is true in every sandbox, privileged
 // or not. So "rebuild required" was unreachable: an unprivileged sandbox with the capability added reported
 // `error: dockerd not running`, and apply() spent 30s waiting on a dockerd that had already died. Unprivileged,

@@ -9,6 +9,7 @@ import {
     CloudOptionsSchema,
     CreatorStateSchema,
     DaemonUrlSchema,
+    HostedOfferSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
@@ -77,6 +78,20 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/cloud-provision" })
         .input(z.object({ sandboxId: z.string(), credentials: CloudCredentialsSchema, location: z.string(), size: z.string() }))
         .output(SandboxSummarySchema),
+    /* The HOSTED lane: `hostedOffer` says whether this platform runs sandboxes at all and how many more the
+     * caller may create (the editor's zero-click first run gates on it); `hostedCreate` mints the sandbox row
+     * AND its machine on intentic's own provider in one call — no setup code, no command, the daemon's
+     * ordinary announce is the "it's up" signal; `wake` starts a stopped hosted machine (the idle-stop's
+     * other half) and answers immediately — the browser keeps probing the daemon like it always does. */
+    hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
+    hostedCreate: oc
+        .route({ method: "POST", path: "/sandbox/hosted-create" })
+        .input(z.object({ name: z.string().min(1).max(60) }))
+        .output(SandboxSummarySchema),
+    wake: oc
+        .route({ method: "POST", path: "/sandbox/wake" })
+        .input(sandboxIdInput)
+        .output(z.object({ ok: z.boolean() })),
     setupCode: oc
         .route({ method: "POST", path: "/sandbox/setup-code" })
         .input(z.object({ sandboxId: z.string(), target: SetupCodeTargetSchema }))

@@ -166,6 +166,9 @@ model Sandbox {
     // request-scoped, so the platform keeps no way back into the machine. Plaintext on purpose — nothing here
     // is secret, and the delete dialog reads it to name where the still-billing machine lives.
     cloud              Json?
+    // The hosted lane's machine record, when THIS sandbox is one the platform runs (HostedMachine below) —
+    // null for every other creation path.
+    hosted             HostedMachine?
     members            SandboxMember[]
     createdAt          DateTime        @default(now())
     updatedAt          DateTime        @updatedAt
@@ -189,6 +192,26 @@ model ReservedSandbox {
     createdAt      DateTime @default(now())
 
     @@map("reserved_sandbox")
+}
+
+// A HOSTED sandbox's machine on Fly — the row that inverts the cloud stamp's stance on purpose: `cloud` is
+// display-only residue of a machine the platform can never reach again, while this row is exactly the way
+// back in (start on wake, stop, destroy on delete). One per sandbox, dies with it (the reaper destroys the
+// Fly app whose row is gone). appName is `<prefix>-<sandbox id>` — the reaper's prefix match and the delete
+// dialog's words both read it. Nothing here is a credential: the platform's own Fly token (config) is what
+// acts, these are just addresses.
+model HostedMachine {
+    id        String   @id @default(cuid())
+    sandboxId String   @unique
+    sandbox   Sandbox  @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    appName   String   @unique
+    machineId String
+    volumeId  String
+    region    String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@map("hosted_machine")
 }
 
 // One sign-in, carried from the user's REAL BROWSER into the desktop app's webview (_editor/desktop-app).

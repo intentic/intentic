@@ -137,7 +137,7 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
 
         const summary = await call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl }, { context: context({ prisma }) });
-        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl, lastSeenAt: expect.any(Date) } });
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl, lastSeenAt: expect.any(Date) }, include: { hosted: true } });
         expect(summary).toMatchObject({ id: `s1`, daemonUrl, lastSeenAt: `2026-07-26T10:00:00.000Z` });
     });
 
@@ -160,6 +160,7 @@ describe(`sandbox routes`, () => {
         expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
             data: { daemonUrl: `https://sandbox.example.com`, lastSeenAt: expect.any(Date) },
+            include: { hosted: true },
         });
     });
 
@@ -169,16 +170,16 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
 
         const summary = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) });
-        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` } });
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` }, include: { hosted: true } });
         expect(summary).toMatchObject({ id: `s1`, name: `renamed`, image: logo, role: `owner` });
 
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: logo }, { context: context({ prisma }) });
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: logo } });
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: logo }, include: { hosted: true } });
 
         // `null` is a value, not an omission: it has to reach the row as a write, or removing a logo would be
         // silently ignored the same way an absent field is.
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: null }, { context: context({ prisma }) });
-        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: null } });
+        expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: null }, include: { hosted: true } });
     });
 
     it(`maps a rejected Cloudflare token to BAD_REQUEST on zones`, async () => {
@@ -357,6 +358,7 @@ describe(`sandbox routes`, () => {
         const deleteRow = vi.fn().mockResolvedValue({});
         const provided = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, tunnelToken: `cached-token` }), delete: deleteRow },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
         });
         expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma: provided, config }) })).toEqual({ ok: true });
         expect(cfCalls.some((entry) => entry.startsWith(`DELETE `) && entry.includes(`/cfd_tunnel/t1`))).toBe(true);
@@ -364,7 +366,10 @@ describe(`sandbox routes`, () => {
 
         // Own-Cloudflare sandbox (no cached tunnelToken): the row goes, Cloudflare is never touched.
         cfCalls.length = 0;
-        const own = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: vi.fn().mockResolvedValue({}) } });
+        const own = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: vi.fn().mockResolvedValue({}) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+        });
         expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma: own, config }) })).toEqual({ ok: true });
         expect(cfCalls).toEqual([]);
     });
@@ -372,7 +377,10 @@ describe(`sandbox routes`, () => {
     it(`delete removes the sandbox even when the tunnel still has live connections (1022), leaving it for the reaper`, async () => {
         stubTunnelDeleteFailure(() => cfErr(1022, `This tunnel has active connections. Please stop all cloudflared replicas.`));
         const deleteRow = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow } });
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+        });
         const ctx = context({ prisma, config: providedConfig });
 
         // The row is still removed (UI unblocks); the orphaned tunnel is left for the daily reaper to reap once
@@ -385,7 +393,10 @@ describe(`sandbox routes`, () => {
     it(`delete removes the sandbox even when the tunnel teardown fails outright`, async () => {
         stubTunnelDeleteFailure(() => cfErr(1000, `internal`, 500));
         const deleteRow = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow } });
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+        });
         const ctx = context({ prisma, config: providedConfig });
 
         // A confirmed removal must never be undone by a Cloudflare failure: the row goes regardless, and the
@@ -415,6 +426,7 @@ describe(`sandbox routes`, () => {
                     return Promise.resolve({});
                 }),
             },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
         });
 
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: providedConfig }) });

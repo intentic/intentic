@@ -1,5 +1,6 @@
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
 import { reapStaleTunnels } from "./sandbox/cloudflare.js";
+import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
@@ -76,6 +77,14 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
             logger.info(result, `tunnel reap sweep completed`);
         } catch (error) {
             logger.error({ err: error }, `tunnel reap sweep failed`);
+        }
+        // The hosted lane's reconcile: destroy our-prefix Fly apps whose HostedMachine row is gone (failed
+        // provisions, delete teardowns that lost their race). Self-gated on the hosted config; guarded
+        // separately for the same reason the tunnel reap is.
+        try {
+            await reapHostedOrphans(prisma, config, logger);
+        } catch (error) {
+            logger.error({ err: error }, `hosted reap sweep failed`);
         }
     };
     const tick = (): void => {

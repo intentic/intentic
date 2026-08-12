@@ -423,6 +423,12 @@ export type SetupReport = z.infer<typeof SetupReportSchema>;
 // sandbox/cloud/. Hetzner and DigitalOcean are the paid x86 paths; Oracle is the Always-Free ARM path
 // (A1.Flex inside the user's own free-tier allowance).
 export const CloudProviderSchema = z.enum(["hetzner", "digitalocean", "oracle"]);
+
+// Oracle's famous A1 refusal, as the one phrase BOTH sides agree on: the adapter writes it into every
+// capacity refusal (oracle.ts — including the all-domains-exhausted one), and the wizard reads it to offer
+// its keep-trying-while-this-tab-is-open retry. A shared constant because a copy-edit to the message must not
+// silently turn the retry offer off.
+export const ORACLE_CAPACITY_PHRASE = `no free-tier ARM capacity`;
 export type CloudProvider = z.infer<typeof CloudProviderSchema>;
 
 // Where the cloud lane put a sandbox's machine — the non-secret residue of a provision, stamped on the row.
@@ -434,6 +440,23 @@ export const SandboxCloudSchema = z.object({
     location: z.string(),
 });
 export type SandboxCloud = z.infer<typeof SandboxCloudSchema>;
+
+// The HOSTED lane's machine as the browser sees it — SandboxCloudSchema's counterpart with the opposite
+// stance: the platform created this machine on its OWN provider account and keeps the way back in, so its
+// presence is an affordance, not residue: an unreachable hosted daemon means "call sandbox.wake and keep
+// probing", never "it's gone". Deliberately no live machine state — wake is idempotent (waking a running
+// machine is a no-op), so the browser needs no second source of truth beside the daemon's own answer.
+export const SandboxHostedSchema = z.object({
+    region: z.string(),
+});
+export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
+
+// The hosted lane's offer, read before anything is created: `enabled` mirrors platform config (a platform
+// with no provider token offers no hosted lane — routes 404, editor never mentions it), `remaining` is how
+// many more hosted sandboxes THIS caller may still create under the per-user allowance. What the editor's
+// zero-click first run and the wizard's lead card both gate on.
+export const HostedOfferSchema = z.object({ enabled: z.boolean(), remaining: z.number().int().nonnegative() });
+export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
 export const SandboxSummarySchema = z.object({
     id: z.string(),
@@ -456,6 +479,10 @@ export const SandboxSummarySchema = z.object({
     // (the provider token was request-scoped), so this exists to SAY so — the switcher badge and the delete
     // dialog's "the machine in your <provider> account keeps running — remove it there" warning read it.
     cloud: SandboxCloudSchema.nullable(),
+    // The hosted lane's live machine record (sandbox.hostedCreate) — null for every other creation path. The
+    // opposite of `cloud` above by design: the delete dialog warns the MACHINE dies with the sandbox, and an
+    // unreachable daemon with `state` ≠ started means "wake it", not "it's gone".
+    hosted: SandboxHostedSchema.nullable(),
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 

@@ -347,10 +347,15 @@ const confirmRemove = async (): Promise<void> => {
         <p v-if="pending" class="text-sm text-content">
             {{
                 pending.role === "owner"
-                    ? `Remove "${pending.name}" from your account? Everyone loses access here; the sandbox itself keeps running wherever it is.`
+                    ? pending.hosted !== null
+                        ? `Remove "${pending.name}"? Its hosted machine is destroyed with it — everything on it, including its files, is gone for good.`
+                        : `Remove "${pending.name}" from your account? Everyone loses access here; the sandbox itself keeps running wherever it is.`
                     : `Leave "${pending.name}"? You lose access; the sandbox keeps running.`
             }}
         </p>
+        <!-- The hosted lane is the ONE removal that destroys a machine, because it is the one machine the
+             platform runs — the headline above already says so, and there is deliberately no cleanup command
+             or console pointer to offer: there is nowhere the machine keeps existing. -->
         <!-- A cloud-lane sandbox's machine lives in the OWNER'S provider account, where it keeps running (and
              billing) after this removal — and intentic kept no way back into it (the provision credential was
              request-scoped), so pointing at the provider's console by server name is everything this dialog
@@ -361,7 +366,7 @@ const confirmRemove = async (): Promise<void> => {
                 — and billing you</template
             >. Delete it in the {{ cloudProviderMeta(pending.cloud.provider).label }} console when you're done with it.
         </p>
-        <template v-else-if="pending?.role === 'owner' && cleanupCommand !== undefined">
+        <template v-else-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
             <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
             <Segmented class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
             <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />

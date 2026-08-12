@@ -40,14 +40,28 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 const sandboxes = ref<SandboxSummary[]>([]);
 const list = vi.fn<() => Promise<SandboxSummary[]>>();
 const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
+const hostedCreate = vi.fn<(name: string) => Promise<SandboxSummary>>();
 const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSummary>>();
 vi.mock(`../composables/sandbox/useSandbox`, () => ({
-    useSandbox: () => ({ sandboxes, list, create, update, refresh: vi.fn().mockResolvedValue([]), select: vi.fn(), attach: vi.fn() }),
+    useSandbox: () => ({
+        sandboxes,
+        list,
+        create,
+        hostedCreate,
+        update,
+        refresh: vi.fn().mockResolvedValue([]),
+        select: vi.fn(),
+        attach: vi.fn(),
+        remove: vi.fn().mockResolvedValue(undefined),
+    }),
 }));
 
 // The mint never settles, so step 3 stays locked and these tests stay about step 1 — no command, no highlighter.
+// The hosted offer answers "not on this platform" unless a test says otherwise — the classic lanes' tests must
+// keep describing the world without the hosted rung.
 const setupCode = vi.fn(() => new Promise<never>(() => {}));
-vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode } } }));
+const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
+vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer } } }));
 vi.mock(`../composables/sandbox/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
 vi.mock(`../composables/analytics`, () => ({ track: vi.fn() }));
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
@@ -90,6 +104,8 @@ const sandboxRow = (overrides: Partial<SandboxSummary> = {}): SandboxSummary =>
         token: `tok`,
         role: `owner`,
         providedTunnel: false,
+        cloud: null,
+        hosted: null,
         ...overrides,
     }) as SandboxSummary;
 
@@ -109,8 +125,10 @@ const mount = async (): Promise<HTMLElement> => {
     );
     app.directive(`tooltip`, {});
     app.mount(el);
-    // The mount read (list) and the create it decides on are two awaits deep.
+    // The mount read (list + the hosted offer) and the create it decides on are several awaits deep — a
+    // macrotask flushes the whole chained sequence where a fixed count of ticks kept going stale.
     await vi.waitFor(() => expect(list).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     await nextTick();
     return el;
@@ -138,6 +156,8 @@ const nameRow = (): string => {
 beforeEach(() => {
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
+    hostedCreate.mockReset();
+    hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     create.mockReset().mockImplementation(async (name: string) => {
         const row = sandboxRow({ id: `new`, name });
         sandboxes.value = [...sandboxes.value, row];
@@ -195,4 +215,41 @@ it(`renames the sandbox it created, from the step itself`, async () => {
     await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
     await nextTick();
     expect(nameRow()).toContain(`shop`);
+});
+
+/* THE ZERO-CLICK FIRST RUN. On a platform that hosts, a fresh account's first sandbox is created AND started
+ * without a single choice: the page asks the offer, calls the hosted create, and shows the wait — no command,
+ * no copy button, nothing to paste. The classic tests above run with the offer answering "disabled", which is
+ * every self-hosted platform and every platform from before the lane existed. */
+it(`auto-creates a hosted sandbox on arrival when the platform offers one`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    hostedCreate.mockResolvedValue(sandboxRow({ id: `h1`, name: `workspace`, hosted: { region: `iad` } }));
+    const el = await mount();
+    expect(hostedCreate).toHaveBeenCalledWith(`workspace`);
+    expect(create).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Starting your machine`);
+    // Nothing pasteable on the zero-click path: the wait is the whole step.
+    expect(el.textContent).not.toContain(`Copy`);
+});
+
+// A hosted create refused (allowance spent, capacity weather) must not strand the first run: the page falls
+// back to the classic command lane with the reason on the card.
+it(`falls back to the classic lane when the hosted create is refused`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    hostedCreate.mockRejectedValue(new Error(`no capacity`));
+    await mount();
+    expect(hostedCreate).toHaveBeenCalled();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledWith(`workspace`));
+});
+
+// A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is —
+// the wait card, never a command to run for a machine nobody has to touch.
+it(`resumes a hosted sandbox onto the wait card, not the command lane`, async () => {
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    const el = await mount();
+    expect(create).not.toHaveBeenCalled();
+    expect(hostedCreate).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Starting your machine`);
 });
