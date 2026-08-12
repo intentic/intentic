@@ -30,18 +30,22 @@ git push
     <DocsCodeBlock code={update} lang="bash" title="Release two" />
 
     <h2>When an update re-asks</h2>
-    <p>Two rules decide whether your release is a one-click update or a dialog, and both are worth designing around:</p>
-    <ul>
-        <li>
-            <strong>A release that grows your manifest re-asks.</strong> A new route in <code>permissions.sandbox</code>, a new process, a new
-            PATH entry or a badge you didn't have before turns a one-click update into a dialog that spells out every addition. Approval never
-            transfers to powers the owner didn't approve.
-        </li>
-        <li>
-            <strong>A manifest-identical change is still re-checked.</strong> It points at a new sha, so the registry's security gate reruns
-            before that update appears in official discovery. Same code review bar, every release.
-        </li>
-    </ul>
+    <p>Two rules decide whether your release lands as a one-click update or a dialog, and both are worth designing around:</p>
+    <table>
+        <thead>
+            <tr><th>Your release</th><th>What the owner gets</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Grows the manifest</strong> — a new <code>permissions.sandbox</code> route, process, PATH entry or badge</td>
+                <td>A dialog that spells out every addition. Approval never transfers to powers the owner didn't approve.</td>
+            </tr>
+            <tr>
+                <td><strong>Manifest-identical</strong> — same powers, new code</td>
+                <td>One click, but still re-checked: the security gate reruns on the new sha before the update reaches official discovery.</td>
+            </tr>
+        </tbody>
+    </table>
     <p>
         <strong>Nothing auto-updates by default</strong>, and the one policy that does apply updates unattended requires your listing to be
         human-verified and your powers to have stayed the same. Both are things you earn rather than declare.

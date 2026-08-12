@@ -162,17 +162,29 @@ const sources = `// A repo of its own
     </p>
 
     <h2>Available today, and next</h2>
+    <p>The whole extension route is live today. What works now, by area:</p>
+    <table>
+        <thead>
+            <tr><th>Area</th><th>Working today</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Authoring &amp; install</strong></td>
+                <td>Everything in <a href="/api/build/">Build an extension</a>: authoring, sha-pinned install from any git repo (public or private), the manifest gate, per-extension settings, and the on/off switch.</td>
+            </tr>
+            <tr>
+                <td><strong>Registry</strong></td>
+                <td>The <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browse plus one-click install straight from <strong>Sandbox → Discover</strong> — the official registry or any repo you point it at.</td>
+            </tr>
+            <tr>
+                <td><strong>Updates</strong></td>
+                <td>The <a href="/api/maintain/">update lifecycle</a>: badges, a powers diff, the kept previous version, one-click revert, the health watch, blocked-listing advisories, and per-extension update policies.</td>
+            </tr>
+        </tbody>
+    </table>
     <p>
-        Everything in <a href="/api/build/">Build an extension</a> works now: authoring, sha-pinned install from any git repo public or
-        private, the manifest gate, per-extension settings, and the on/off switch. So does the registry: the{" "}
-        <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browsing plus one-click install straight from{" "}
-        <strong>Sandbox → Discover</strong>, against the official registry or any repo you point it at. The{" "}
-        <a href="/api/maintain/">update lifecycle</a> also works now: the badges, powers diff, kept previous version, one-click revert,
-        health watch, blocked-listing advisories, and the per-extension update policies.
-    </p>
-    <p>
-        Still to come: a typed npm artifact for <code>@intentic/extension-ui</code> so out-of-repo authors get the shell's components with
-        full types.
+        <strong>Still to come:</strong> a typed npm artifact for <code>@intentic/extension-ui</code>, so out-of-repo authors get the shell's
+        components with full types.
     </p>
     <p>
         Building something and want it listed? The <a href="/api/build/">build guide</a> is the whole prerequisite. Add the topic when your
