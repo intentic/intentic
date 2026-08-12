@@ -37,6 +37,17 @@ export interface TrustCard {
 export interface BackgroundItem {
     lead: string;
     body: string;
+    /** What the timeline prints in the margin beside it: a span, a year, or a discipline. */
+    marker: string;
+}
+
+/** One headline figure in the band under the hero. `stat` is filled at build time, never authored. */
+export interface AboutFigure {
+    /** The figure itself, when it is a constant this file may honestly assert. */
+    value?: string;
+    /** Which build-time number this slot wants instead. */
+    stat?: "commits";
+    detail: string;
 }
 
 /** An open-source library that shipped and got used, independently of intentic. */
@@ -63,6 +74,18 @@ export const creatorLinks: AboutLink[] = [
 export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shipping production systems.";
 
 export const creatorBio = "I wanted a real workspace for my agents, on my own hardware. Now it runs on yours too.";
+
+/* The hero, which the landing band deliberately does NOT have.
+ *
+ * A reader arrives here from "More about who builds this →", so the one thing this page cannot do is repeat
+ * the band they just clicked out of. The band leads with the name because it is a panel beside other panels;
+ * the page leads with the claim, and lets the portrait and the byline carry the name. */
+export const aboutHero = {
+    eyebrow: "About the creator",
+    headline: "Built in the open, by one engineer and his agents.",
+    lede: "No investors, no growth team, no telemetry to sell. One person with fifteen years of production systems behind him, a fleet of agents doing the typing, and a commit log where you can watch both of them work.",
+    portraitAlt: `${CREATOR_NAME}, the creator of intentic`,
+};
 
 /* Four cards, and the fourth is the one that makes the other three believable. A trust section with no
  * admission in it reads as marketing; this product is new, and saying so is the position. */
@@ -92,15 +115,28 @@ export const trustCards: TrustCard[] = [
     },
 ];
 
+/* Read top to bottom as a spine rather than five bullets: the marker is what the timeline prints in the
+ * margin, so the eye gets a span before it gets a sentence. Ordered as a career runs — the degree it started
+ * from, the work, the shape of the work, and what all of it left behind — not as a ranked list of claims. */
 export const background: BackgroundItem[] = [
-    { lead: "15+ years", body: "in professional software engineering, from backend and frontend through DevOps and bare metal." },
+    { marker: "Education", lead: "CS degree", body: "from the Polish-Japanese Academy of Information Technology (PJATK), Warsaw." },
     {
-        lead: "Billon",
-        body: "the first company to receive an EU e-money licence using its own distributed ledger technology. Later ran a software house of ~15 people for five years.",
+        marker: "Billon",
+        lead: "Distributed ledger, in production",
+        body: "the first company to receive an EU e-money licence using its own distributed ledger technology.",
     },
-    { lead: "CS degree", body: "from the Polish-Japanese Academy of Information Technology (PJATK), Warsaw." },
-    { lead: "CTO and team lead", body: "shipped the systems, and led the people and habits around them." },
-    { lead: "Specialties", body: "TypeScript, NestJS, P2P protocols, CI/CD, and clean architecture." },
+    { marker: "5 years", lead: "Ran a software house", body: "of around 15 people, shipping client systems end to end." },
+    { marker: "Leadership", lead: "CTO and team lead", body: "shipped the systems, and led the people and habits around them." },
+    { marker: "Specialties", lead: "Backend to bare metal", body: "TypeScript, NestJS, P2P protocols, CI/CD, and clean architecture." },
+];
+
+/* The band under the hero: three figures a reader can go and check, and only one of them is authored here.
+ * The commit split is measured from git at build time and simply does not render when git cannot answer,
+ * which is the same rule every other number on this site follows. */
+export const aboutFigures: AboutFigure[] = [
+    { stat: "commits", detail: "commits written by agents, in public" },
+    { value: "15+ years", detail: "shipping production systems" },
+    { value: "MIT", detail: "the whole engine, no hidden binaries" },
 ];
 
 export const openSource: OpenSourceProject[] = [

@@ -1,5 +1,7 @@
 ---
 import {
+    aboutFigures,
+    aboutHero,
     aboutMeta,
     background,
     CONTACT_EMAIL_PARTS,
@@ -8,16 +10,19 @@ import {
     creatorBio,
     creatorRole,
     openSource,
+    trustCards,
     whyIntentic,
 } from "@intentic-dev/site-content/about";
-import { discordUrl, githubIssuesUrl } from "@intentic-dev/site-content/site";
+import { discordUrl, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { buildProfilePageSchema } from "@intentic-dev/site-content/structured-data";
+import { gitStats, npmDownloads } from "@intentic-dev/astro-integrations";
+import { Image } from "astro:assets";
+import portrait from "../assets/creator.jpg";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "../components/CreatorLinks.astro";
 import DiscordIcon from "../components/DiscordIcon.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
-import TrustCards from "../components/TrustCards.astro";
 import VerifyDownload from "../components/VerifyDownload.astro";
 
 /* Who builds intentic: the depth behind the landing page's `#trust` band.
@@ -28,110 +33,340 @@ import VerifyDownload from "../components/VerifyDownload.astro";
  * where the CV can be specific enough to be checkable.
  *
  * Everything here is already public on github.com/radarsu, linkedin.com/in/radarsu and radarsu.com.
- * Nothing is asserted that a reader cannot go and verify. */
+ * Nothing is asserted that a reader cannot go and verify.
+ *
+ * THE PAGE MUST NOT BE THE BAND AGAIN. A reader arrives from "More about who builds this →", and this used
+ * to answer that click with the same four cards in a worse arrangement: the same name, the same bio, the
+ * same claims, on a narrower page with no hero. So it now opens the way every other top-level page opens
+ * — a full-bleed band with a claim, a face and figures — and everything below it goes somewhere the band
+ * cannot: the commit split at size, the career as a spine, and the libraries with their real download
+ * counts under them. Same facts, none of them arranged the same way twice. */
+
+const stats = gitStats();
+
+/* The strongest number on this page used to be the third of four identical grey boxes. It is the one claim
+ * nobody else in this market can make, so it leads, drawn to scale: the agent share as a filled bar rather
+ * than a sentence about a ratio. Everything falls back to prose when git cannot answer (a shallow clone),
+ * which is `gitStats()`'s own rule, not a special case here. */
+const n = (value: number) => value.toLocaleString(`en-GB`);
+
+/* Downloads are read from the registry at build time and are the whole argument of the open-source section:
+ * "shipped and got used on their own" is a claim, and half a million installs a month is the evidence. A
+ * package the registry cannot answer for keeps its sentence and loses its figure. */
+const downloads = await npmDownloads(openSource.map((project) => project.name));
+const downloadTotal = Object.values(downloads).reduce<number>((sum, value) => sum + (value ?? 0), 0);
+
+/* The claims, restyled for this page: three checkable ones in an even row, and the admission below them.
+ * On the landing they are a 2×2 panel beside the bio, which works there; blown up to a full-width grid here
+ * the fourth card — one short sentence, no link, no figure — became a hole in the middle of the page. It is
+ * not padding, it is the thing that makes the other three believable, so it stays; it just stops pretending
+ * to be a card of equal weight. */
+const claims = trustCards.filter((card) => card.href !== undefined);
+const admission = trustCards.find((card) => card.href === undefined);
+
+const claimIcons = [
+    '<path d="M12 2.5 20 6v5.5c0 4.8-3.4 8.2-8 9.5-4.6-1.3-8-4.7-8-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
+    '<path d="M9.5 17H8A5 5 0 0 1 8 7h1.5"/><path d="M14.5 7H16a5 5 0 0 1 0 10h-1.5"/><path d="M8.5 12h7"/>',
+    '<circle cx="7" cy="5" r="2"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="12" r="2"/><path d="M7 7v10M7 12h8"/>',
+];
 ---
 
 <BaseLayout title={aboutMeta.title} description={aboutMeta.description} extraJsonLd={[buildProfilePageSchema("/about/")]}>
     <Nav />
     <main class="flex-1">
-        <section class="mx-auto max-w-5xl px-6 pt-32 pb-16 max-sm:pt-28">
-            <div class="eyebrow">About the creator</div>
-            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{CREATOR_NAME}</h1>
-            <p class="mt-4 max-w-copy text-lg leading-relaxed text-muted">{creatorRole}</p>
-            <p class="mt-4 max-w-copy text-base leading-relaxed text-subtle">{creatorBio}</p>
-            <CreatorLinks class="mt-8" />
-        </section>
+        {/* 1 · The hero the page never had: same shell as /earn/ and /extensions/, so About stops reading as a
+            documentation sub-page. The right half, empty until now, is where the face goes. */}
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="grid-overlay"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
+                <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:gap-16">
+                    <div>
+                        <div class="eyebrow">{aboutHero.eyebrow}</div>
+                        <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{aboutHero.headline}</h1>
+                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{aboutHero.lede}</p>
 
-        <section class="mx-auto max-w-5xl px-6 pb-16">
-            <TrustCards />
-        </section>
+                        {/* The name, still prominent, but as the signature under the claim rather than as the
+                            headline the reader already read on the landing page. */}
+                        <div class="mt-7 border-l-2 border-primary-600/40 pl-4">
+                            <p class="text-lg font-semibold tracking-tight text-content">{CREATOR_NAME}</p>
+                            <p class="mt-1 max-w-copy text-sm leading-relaxed text-muted">{creatorRole}</p>
+                            <p class="mt-1.5 max-w-copy text-sm leading-relaxed text-subtle italic">&ldquo;{creatorBio}&rdquo;</p>
+                        </div>
 
-        <section class="mx-auto max-w-5xl px-6 pb-16">
-            <VerifyDownload />
-        </section>
+                        <CreatorLinks class="mt-6" />
+                    </div>
 
-        <section class="mx-auto max-w-5xl px-6 pb-16">
-            <div class="grid gap-10 md:grid-cols-2 md:gap-14">
-                <div>
-                    <h2 class="text-lg font-semibold tracking-tight text-content">Background</h2>
-                    <ul class="mt-5 space-y-4">
-                        {
-                            background.map((item) => (
-                                <li class="flex gap-3 text-sm leading-relaxed text-muted">
-                                    <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
-                                    <span>
-                                        <strong class="font-medium text-content">{item.lead}</strong> {item.body}
-                                    </span>
-                                </li>
-                            ))
-                        }
-                    </ul>
-                </div>
-
-                <div>
-                    <h2 class="text-lg font-semibold tracking-tight text-content">Why intentic exists</h2>
-                    {whyIntentic.map((paragraph) => <p class="mt-4 max-w-copy text-sm leading-relaxed text-muted">{paragraph}</p>)}
+                    {/* The shot is a tight crop on a white ground, which on this canvas would read as a
+                        sticker pasted onto the page. So it is framed as a plate and the white is pulled into
+                        the palette rather than left at #fff: a warm wash multiplied over it tints the ground
+                        and the skin the same direction, and a glow behind seats the whole thing in the band.
+                        Cutting the background out was tried and is not available — at this crop there is
+                        barely any background to cut. */}
+                    <figure class="relative mx-auto w-full max-w-[17rem] lg:mx-0 lg:justify-self-end">
+                        <div
+                            class="pointer-events-none absolute -inset-8 rounded-full blur-xl"
+                            style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 26%, transparent), transparent 70%)"
+                            aria-hidden="true"
+                        >
+                        </div>
+                        <div class="relative overflow-hidden rounded-2xl border border-line-strong shadow-2xl shadow-black/60">
+                            <Image
+                                src={portrait}
+                                alt={aboutHero.portraitAlt}
+                                widths={[230, 460]}
+                                sizes="(min-width: 64rem) 272px, 17rem"
+                                loading="eager"
+                                fetchpriority="high"
+                                decoding="async"
+                                class="w-full saturate-[0.9] contrast-[1.02]"
+                            />
+                            <div class="absolute inset-0 bg-primary-500/12 mix-blend-multiply" aria-hidden="true"></div>
+                            {/* An inner hairline, so the plate has an edge of its own against the frame. */}
+                            <div class="absolute inset-0 rounded-2xl ring-1 ring-black/20 ring-inset" aria-hidden="true"></div>
+                        </div>
+                    </figure>
                 </div>
             </div>
         </section>
 
-        <section class="mx-auto max-w-5xl px-6 pb-16">
-            <h2 class="text-lg font-semibold tracking-tight text-content">Open source, before this</h2>
-            <p class="mt-3 max-w-copy text-sm leading-relaxed text-muted">
-                Libraries that shipped and got used on their own, before intentic: the easiest thing here to check.
-            </p>
-            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        {/* 2 · The figures, in the site's own band shape (the gallery uses the same strip). The commit split
+            is measured, so the bar is drawn from the ratio rather than styled to a nice width. */}
+        <section class="border-b border-line bg-overlay/15" aria-label="Checkable figures">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-10 gap-y-6 px-6 py-6">
                 {
-                    openSource.map((project) => (
+                    aboutFigures.map((figure) =>
+                        figure.stat === "commits" ? (
+                            stats !== null && (
+                                <div class="min-w-[13rem] flex-1">
+                                    <p class="font-mono text-xl font-semibold tracking-tight text-content">
+                                        {n(stats.agent)} <span class="text-sm font-normal text-subtle">of {n(stats.total)}</span>
+                                    </p>
+                                    <div class="mt-2 h-1.5 w-full max-w-[16rem] overflow-hidden rounded-full bg-overlay">
+                                        <div class="h-full rounded-full bg-primary-500" style={`width: ${stats.share}%`}></div>
+                                    </div>
+                                    <p class="mt-2 text-2xs text-subtle">
+                                        {figure.detail} · since {stats.since}
+                                    </p>
+                                </div>
+                            )
+                        ) : (
+                            <div class="min-w-[10rem] flex-1">
+                                <p class="font-mono text-xl font-semibold tracking-tight text-content">{figure.value}</p>
+                                <p class="mt-2 text-2xs text-subtle">{figure.detail}</p>
+                            </div>
+                        ),
+                    )
+                }
+                <a href={`${githubUrl}/commits/main`} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">
+                    Read the commit log →
+                </a>
+            </div>
+        </section>
+
+        {/* 3 · The three checkable claims, even-height, with the admission carrying the row underneath. */}
+        <section class="mx-auto max-w-7xl px-6 py-16 lg:py-20" aria-labelledby="claims-heading">
+            <div class="eyebrow text-link">Why trust any of this</div>
+            <h2 id="claims-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                Three things you can check without asking me.
+            </h2>
+            <div class="mt-10 grid gap-6 md:grid-cols-3">
+                {
+                    claims.map((card, i) => (
                         <a
-                            href={project.href}
-                            target="_blank"
-                            rel="noopener"
-                            class="card group p-5 transition-colors hover:border-primary-600/40"
+                            href={card.href}
+                            target={card.href?.startsWith("http") ? "_blank" : undefined}
+                            rel={card.href?.startsWith("http") ? "noopener" : undefined}
+                            class="card group relative flex flex-col gap-3 overflow-hidden p-6 transition-colors hover:border-primary-600/40"
                         >
-                            <h3 class="font-mono text-sm text-content group-hover:text-link">{project.name}</h3>
-                            <p class="mt-2 text-sm leading-relaxed text-muted">{project.body}</p>
+                            <div
+                                class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary-500/60 to-transparent"
+                                aria-hidden="true"
+                            />
+                            <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-600/30 bg-primary-600/10 text-link">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    class="h-4.5 w-4.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.75"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                    set:html={claimIcons[i] ?? ""}
+                                />
+                            </span>
+                            <h3 class="text-base font-semibold tracking-tight text-content group-hover:text-link">{card.title}</h3>
+                            <p class="text-sm leading-relaxed text-muted">{card.body}</p>
+                            <span class="mt-auto pt-2 text-sm font-medium text-link">{card.linkLabel} →</span>
                         </a>
                     ))
                 }
             </div>
+
+            {
+                admission && (
+                    <p class="mt-6 border-t border-line pt-4 text-sm leading-relaxed text-subtle">
+                        <strong class="font-medium text-content">{admission.title}.</strong> {admission.body} Everything above is a link out to
+                        something you can read without taking my word for any of it.
+                    </p>
+                )
+            }
         </section>
 
-        <section class="mx-auto max-w-5xl px-6 pb-24">
-            <div class="card flex flex-wrap items-center justify-between gap-x-8 gap-y-4 p-6">
-                <div>
-                    <h2 class="text-lg font-semibold tracking-tight text-content">Get in touch</h2>
-                    {/* No `\S+@\S+` exists anywhere in this markup: the address ships as separate spans and the
-                        script below assembles it. A human reads it either way: with JavaScript off it stays
-                        legible, just not clickable, while a harvester matching a plain address pattern finds
-                        nothing to take. The parts are also why the mailto is built rather than written. */}
-                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">
-                        Reach me at
-                        <span
-                            id="contact-email"
-                            class="font-mono text-content"
-                            data-user={CONTACT_EMAIL_PARTS.user}
-                            data-domain={CONTACT_EMAIL_PARTS.domain}
+        <section class="mx-auto max-w-7xl px-6 pb-16 lg:pb-20">
+            <VerifyDownload />
+        </section>
+
+        {/* 4 · The career as a spine rather than five dots, with the reason the product exists pinned beside
+            it: the CV answers "can he build it", the panel answers "why did he". */}
+        <section class="border-t border-line" aria-labelledby="background-heading">
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <div class="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-16">
+                    <div>
+                        <div class="eyebrow text-link">Background</div>
+                        <h2 id="background-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                            Fifteen years before the first line of this.
+                        </h2>
+
+                        <ol class="mt-9 border-l border-line">
+                            {
+                                background.map((item) => (
+                                    <li class="relative pb-8 pl-7 last:pb-0">
+                                        <span class="absolute top-1.5 -left-[4.5px] h-2 w-2 rounded-full bg-primary-500 ring-4 ring-canvas" />
+                                        <p class="font-mono text-2xs tracking-wide text-link uppercase">{item.marker}</p>
+                                        <p class="mt-1.5 text-base font-medium tracking-tight text-content">{item.lead}</p>
+                                        <p class="mt-1 max-w-copy text-sm leading-relaxed text-muted">{item.body}</p>
+                                    </li>
+                                ))
+                            }
+                        </ol>
+                    </div>
+
+                    {/* Pinned, because the spine beside it is five items tall and a short panel parked at the
+                        top of that would leave exactly the dead half-page this rebuild set out to remove. */}
+                    <div class="relative overflow-hidden rounded-2xl border border-line bg-card/60 p-7 lg:sticky lg:top-28 lg:self-start sm:p-8">
+                        <div
+                            class="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full"
+                            style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 14%, transparent), transparent 70%)"
+                            aria-hidden="true"
                         >
-                            {CONTACT_EMAIL_PARTS.user} [at] {CONTACT_EMAIL_PARTS.domain.replace(".", " [dot] ")}
-                        </span>
-                        , in the community server, or open a public issue.
-                    </p>
-                </div>
-                {/* Three channels, one card, in order of how much they ask of the reader: Discord is a message,
-                    an issue is a written-up case, the address is for the thing that belongs to nobody else. */}
-                <div class="flex flex-wrap gap-3">
-                    <a href={discordUrl} target="_blank" rel="noopener" class="btn btn-secondary inline-flex items-center gap-2">
-                        <DiscordIcon size={15} />
-                        Join the Discord
-                    </a>
-                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+                        </div>
+                        <div class="relative">
+                            <div class="eyebrow">Why intentic exists</div>
+                            <svg
+                                class="mt-5 h-6 w-6 text-primary-500/50"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden="true"
+                            >
+                                <path d="M9.5 5C6.5 6.6 4.5 9.6 4.5 13v6h6v-6H8c0-2.2 1-3.9 3-5zm9 0c-3 1.6-5 4.6-5 8v6h6v-6H17c0-2.2 1-3.9 3-5z"></path>
+                            </svg>
+                            {
+                                whyIntentic.map((paragraph) => (
+                                    <p class="mt-4 max-w-copy text-base leading-relaxed text-muted first:mt-5">{paragraph}</p>
+                                ))
+                            }
+                        </div>
+                    </div>
                 </div>
             </div>
+        </section>
 
-            <p class="mt-6 text-xs leading-relaxed text-subtle">
-                Also at <span class="font-mono">@{CREATOR_HANDLE}</span> on GitHub and LinkedIn.
-            </p>
+        {/* 5 · The libraries, with the evidence under them. The names were always here; the counts are what
+            turn "got used on their own" from a sentence into something a reader can weigh. */}
+        <section class="border-t border-line" aria-labelledby="open-source-heading">
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <div class="eyebrow text-link">Open source, before this</div>
+                <h2 id="open-source-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                    Libraries that shipped and got used on their own.
+                </h2>
+                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    {
+                        downloadTotal > 0
+                            ? `The easiest thing here to check: roughly ${n(Math.round(downloadTotal / 1000))},000 installs a month, counted by npm rather than by me.`
+                            : "The easiest thing here to check: they predate intentic, and they are still installed by people who have never heard of it."
+                    }
+                </p>
+
+                <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {
+                        openSource.map((project) => (
+                            <a
+                                href={project.href}
+                                target="_blank"
+                                rel="noopener"
+                                class="card group relative flex flex-col overflow-hidden p-5 transition-colors hover:border-primary-600/40"
+                            >
+                                <h3 class="font-mono text-sm text-content group-hover:text-link">{project.name}</h3>
+                                <p class="mt-2 flex-1 text-sm leading-relaxed text-muted">{project.body}</p>
+                                {downloads[project.name] !== null && downloads[project.name] !== undefined && (
+                                    <p class="mt-4 border-t border-line pt-3">
+                                        <span class="font-mono text-lg font-semibold tracking-tight text-content">
+                                            {n(downloads[project.name] ?? 0)}
+                                        </span>
+                                        <span class="mt-0.5 block text-2xs text-subtle">downloads a month</span>
+                                    </p>
+                                )}
+                            </a>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
+        {/* 6 · Contact, then the same closing band every other top-level page ends on. */}
+        <section class="border-t border-line">
+            <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
+                <div class="card flex flex-wrap items-center justify-between gap-x-8 gap-y-4 p-6 sm:p-7">
+                    <div>
+                        <h2 class="text-lg font-semibold tracking-tight text-content">Get in touch</h2>
+                        {/* No `\S+@\S+` exists anywhere in this markup: the address ships as separate spans and the
+                            script below assembles it. A human reads it either way: with JavaScript off it stays
+                            legible, just not clickable, while a harvester matching a plain address pattern finds
+                            nothing to take. The parts are also why the mailto is built rather than written. */}
+                        <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">
+                            Reach me at
+                            <span
+                                id="contact-email"
+                                class="font-mono text-content"
+                                data-user={CONTACT_EMAIL_PARTS.user}
+                                data-domain={CONTACT_EMAIL_PARTS.domain}
+                            >
+                                {CONTACT_EMAIL_PARTS.user} [at] {CONTACT_EMAIL_PARTS.domain.replace(".", " [dot] ")}
+                            </span>
+                            , in the community server, or open a public issue.
+                        </p>
+                    </div>
+                    {/* Three channels, one card, in order of how much they ask of the reader: Discord is a message,
+                        an issue is a written-up case, the address is for the thing that belongs to nobody else. */}
+                    <div class="flex flex-wrap gap-3">
+                        <a href={discordUrl} target="_blank" rel="noopener" class="btn btn-secondary inline-flex items-center gap-2">
+                            <DiscordIcon size={15} />
+                            Join the Discord
+                        </a>
+                        <a href={githubIssuesUrl} target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
+                    </div>
+                </div>
+
+                <p class="mt-6 text-xs leading-relaxed text-subtle">
+                    Also at <span class="font-mono">@{CREATOR_HANDLE}</span> on GitHub and LinkedIn.
+                </p>
+            </div>
+        </section>
+
+        <section class="border-t border-line">
+            <div class="mx-auto max-w-7xl px-6 py-14 text-center">
+                <h2 class="text-xl font-semibold tracking-tight text-content">Run it on your own machine.</h2>
+                <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">
+                    Nothing above has to be taken on faith. The engine is MIT, the commit log is public, and the sandbox runs on hardware you
+                    own.
+                </p>
+                <div class="mt-6 flex flex-wrap justify-center gap-3">
+                    <a class="btn btn-primary" href="/download/">Get started free</a>
+                    <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">Read the source</a>
+                </div>
+            </div>
         </section>
     </main>
 
