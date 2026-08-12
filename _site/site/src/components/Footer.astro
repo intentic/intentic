@@ -58,15 +58,6 @@ const columns: { label: string; links: { href: string; label: string; external?:
         ],
     },
     {
-        // The hub first: it is the page that reframes the question, and the comparisons below it are the long
-        // tail a search engine wants as its own links.
-        label: "Compare",
-        links: [
-            { href: compareHref(""), label: "Where intentic sits" },
-            ...comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
-        ],
-    },
-    {
         label: "Resources",
         links: [
             { href: APP_URL, label: "Open the app", external: true },
@@ -88,6 +79,23 @@ const columns: { label: string; links: { href: string; label: string; external?:
     },
 ];
 
+/* The comparison shelf, as a BAND rather than a sixth column.
+ *
+ * Every other column is a handful of unlike things a reader picks between. This is twelve of one thing, and
+ * as a column it stood four rows below its tallest neighbour and seven below its shortest, so the footer
+ * ended on a single ragged spike with a hole beside it. Eleven rows of "vs X" are also not read the way a
+ * column is read: nobody scans them top to bottom, they look for one name, and a wrapped line is the faster
+ * shape for that.
+ *
+ * No link is dropped in the move. A sitewide link to every comparison page is the reason this shelf is in
+ * the footer at all rather than the top bar (see nav.ts), and a band keeps all twelve while costing two
+ * lines instead of twelve rows.
+ */
+const compareLinks = [
+    { href: compareHref(""), label: "Where intentic sits" },
+    ...comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })),
+];
+
 const legalLinks = [
     { href: "/privacy/", label: "Privacy Policy" },
     { href: "/terms/", label: "Terms of Service" },
@@ -95,11 +103,13 @@ const legalLinks = [
 ---
 
 <footer class="mt-auto border-t border-line pt-12 pb-10">
-    {/* Seven cells: the brand plus six columns. All seven only go on one row at xl, where 80rem leaves each
-        column wide enough for labels like "Earn & the creator pool" to stay on one line. Between lg and xl
-        there is not room for seven, so it breaks to four and three rather than squeezing every column until
-        half the labels wrap. */}
-    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 lg:grid-cols-4 lg:gap-8 xl:grid-cols-7 xl:gap-6">
+    {/* Six cells: the brand plus five columns, none taller than eight rows. The long tail that used to be a
+        sixth column is the band below.
+
+        One row of six only from xl, where 80rem gives each column ~178px and labels like "Earn & the creator
+        pool" stay on one line. Below that the six split three and three rather than squeezing to 136px, which
+        is the width that had five labels wrapping. Two even rows beat one row of ragged ones. */}
+    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 xl:grid-cols-6 xl:gap-8">
         <div class="col-span-2 sm:col-span-1">
             <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} class="h-6 w-auto" />
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
@@ -127,6 +137,25 @@ const legalLinks = [
                 </div>
             ))
         }
+    </div>
+
+    {/* The comparison band. Label on the left at lg so the row reads as one sentence of links rather than a
+        headed block, and stacked below it on a phone where a 5rem label would leave the links a gutter. */}
+    <div class="mx-auto mt-12 max-w-7xl border-t border-line px-6 pt-7">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-baseline lg:gap-8">
+            <h3 class="eyebrow shrink-0">Compare</h3>
+            <ul class="flex flex-wrap gap-x-5 gap-y-2">
+                {
+                    compareLinks.map((link) => (
+                        <li>
+                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
+                                {link.label}
+                            </a>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
     </div>
 
     {/* The legal bar sets its links in 12px type, which leaves a hit box a fingertip cannot land on: the one
