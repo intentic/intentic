@@ -66,10 +66,22 @@ const render = (source: string): HTMLElement => {
 
 // A diagram is a queued dynamic import followed by an awaited render, so the DOM settles some way after mount
 // rather than synchronously.
+//
+// The budget bounds a HANG; it does not measure that latency, which is why it sits far above the ~0.4s the
+// first diagram costs on an idle machine. Almost all of that 0.4s is mermaid's megabyte of grammars arriving
+// on this test's own clock — the second diagram, drawn once the module is in the registry, costs a tenth of
+// it. `vi.waitFor` defaults to 1s, so the first test was the only budget in this package still sized for an
+// idle machine while vitest.config.ts had already raised every other one for exactly this reason: a full run
+// loads 242 files at once, and an import with every core busy costs roughly ten times its idle self. It duly
+// passed alone and lost the race in the suite. Kept under `testTimeout` so a genuine hang still fails on the
+// assertion below, which names the selector that never arrived, rather than as a bare test timeout.
 const settled = (host: HTMLElement, selector: string): Promise<void> =>
-    vi.waitFor(() => {
-        expect(host.querySelector(selector)).not.toBeNull();
-    });
+    vi.waitFor(
+        () => {
+            expect(host.querySelector(selector)).not.toBeNull();
+        },
+        { timeout: 10_000 },
+    );
 
 describe(`<Markdown> with a mermaid fence`, () => {
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
