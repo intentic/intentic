@@ -22,8 +22,18 @@ Two searches from 2026-08-12 set the stakes:
   in none of them. Every one is a guide rather than a product page, which is the shape of the whole
   category.
 
-The five guides now live under `/guides/` are the on-site half of this. This page is the off-site half:
-being *named in someone else's* answer to the same question.
+The five guides under `/guides/` are the on-site half of this. This page is the off-site half: being
+*named in someone else's* answer to the same question.
+
+> **Live and verified 2026-08-12.** All five slugs and the index return **200**, and the deployed sitemap is
+> up from 54 to 60 URLs with every guide listed — so this channel is unblocked and the outreach below can go.
+> (They were 404 earlier the same day, unmerged on an agent branch; shipped since.) The page the outreach
+> links, [`/guides/run-multiple-coding-agents-in-parallel/`](https://intentic.dev/guides/run-multiple-coding-agents-in-parallel/),
+> checks out against what this page claims for it: it opens with a direct answer, recommends **git worktrees
+> first**, tables five approaches with an honest "breaks when" column for each — including the one for
+> containers ("The work is a one-line fix. The setup cost is real and a worktree would have done") — and
+> reaches intentic only as the second step, in one paragraph. That is why it is safe to send to a writer:
+> it reads as a peer's write-up because it argues against itself where the argument deserves it.
 
 ## The floor is different here, and lower
 
@@ -67,6 +77,58 @@ being useful about that problem.
   gets an author to blacklist a domain, and one blacklist costs more than nine mentions gain.
 - **Ask for nothing.** "Thought this might be useful for the isolation section" outperforms "would you
   consider adding us", and it survives being forwarded.
+
+## Two of the nine are competitors, and the ranking should say so
+
+Added 2026-08-12. Targets 1 and 2 are not neutral editorial — they are vendor content marketing, and the
+table above ranks them first without saying so:
+
+- **aq.dev** is published by **AgentQueue / BetterLeap, Inc.** ("© 2026 BetterLeap, Inc.", by "the AQ team"),
+  and AQ is one of the eight tools the article names. It is a competitor's own guide.
+- **codeagentswarm.com** is likewise a product site publishing a roundup that its own product sits in.
+
+Asking a competitor to add you to their comparison converts at roughly zero, and the ask itself tells them
+what to defend against. Both stay on the list as *intelligence* — they show which queries the category is
+being won on, and what shape of answer wins — but they should be worked last, if at all. **The yield is in
+targets 3 and 5–9: individual engineers writing under their own names**, who reply to their own mentions and
+have no product to protect.
+
+## The messages, ready to send
+
+Gated on the guides shipping (see the blocker at the top). Each is short on purpose — the opener is the
+whole pitch, and every one leads with a specific thing that page actually says.
+
+**The shared middle**, reused in all of them, adjusted only in length:
+
+> Disclosure first: I build one of these, so treat this as interested rather than neutral.
+>
+> The thing that surprised me is that worktree isolation solves the git half and none of the runtime half.
+> Two agents get their own branches and still share one port, one dev database and one `node_modules`, so
+> the failure that actually costs you an afternoon is a migration race that never shows up in a diff, because
+> the code was clean. The dividing line I ended up with is whether the agent needs to change the environment
+> rather than the code — an `apt install`, a pinned runtime, a service the others are not running. Below that
+> line a port offset and a schema per agent is genuinely enough; above it, a container per agent is the only
+> thing that holds.
+
+**Openers, per target:**
+
+- **agentsroom.dev (#3)** — "Your 'without losing track' framing is the part most of these pieces skip: the
+  hard bit at 3–8 agents is not starting them, it is knowing which one is blocked on you. One thing I would
+  add under it —"
+- **runfreetools (#5)** — "Your piece lists the tools; the thing readers hit next is the runtime collision
+  underneath all of them —"
+- **vibecoding.app (#6)** — "Agentmaxxing holds right up until the agents need to *run* what they built —"
+- **zenvanriel.com (#7)** — "You stop at worktrees, which is the right first recommendation. The failure
+  after it is the one worth a paragraph —"
+- **shreyshahh (#8)** — "'Without breaking everything' is exactly the isolation argument, and there is a
+  second half to it that bit me —"
+- **codex.danielvaughan.com (#9)** — "Codex-specific, so worth saying: the parallel-instance problem is
+  identical to the Claude Code one, and the fix is not Codex-specific either —"
+
+**Close, identical everywhere** — no ask, and it survives being forwarded:
+
+> Wrote the long version up here if it is useful for that section: `<guide URL>`. Not asking for anything,
+> it just seemed like the paragraph your piece stops one step short of.
 
 ## What makes a mention stick
 

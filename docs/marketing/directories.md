@@ -55,7 +55,7 @@ Ordered by what a listing is worth, not by how easy it is. "Gate" is what stops 
 | [GitHub Marketplace](https://github.com/marketplace?type=actions) | Not a listing but a working piece of the product where CI users browse: the `intentic/gate-action` action (built in `_sandbox/gate-action`, synced by `action-publish.yml`) — every workflow that adopts it carries the name in a public repo | Public `intentic/gate-action` repo + `GATE_ACTION_TOKEN` secret + first release; then the one-time Marketplace publish in the UI (developer agreement, categories: Continuous integration / Code review) | Built, awaiting owner setup |
 | [AlternativeTo](https://alternativeto.net) | The highest-authority alternatives site; owns the "alternative to Cursor / Claude Code" result | Account **and** a browser that clears its Cloudflare check — automation is blocked outright | Blocked |
 | [OpenAlternative](https://openalternative.co) | Open-source-only directory that already has "AI Agent Platforms", plus Claude Code, Codex and Cursor alternative pages — exact-fit taxonomy | Account (email magic link, Google or GitHub) | Blocked |
-| [Hacker News](https://news.ycombinator.com) (Show HN) | The largest single traffic event available, and a permanently indexed page | Account; one shot, so timing matters | Draft below, needs an account |
+| [Hacker News](https://news.ycombinator.com) (Show HN) | The largest single traffic event available, and a permanently indexed page | Account; one shot, so timing matters | **Held by owner 2026-08-12** — draft below, do not post |
 | [Dev Hunt](https://devhunt.org) | Dev-tools-only launchpad, weekly leaderboard | Account | Blocked |
 | [StackShare](https://stackshare.io) | Tool profile that developers cite in stack decisions | Account; rate-limits automation | Blocked |
 | [Crunchbase](https://www.crunchbase.com) | Entity record — what disambiguates the name from "Intent" | Account | Blocked |
@@ -77,7 +77,16 @@ Ordered by what a listing is worth, not by how easy it is. "Gate" is what stops 
   change and a taste call — it is not worth it for a DR-40-ish listing, so it stays a decision rather than a task.
 - **G2 before reviews is an empty shelf.** Worth doing after there are users who would write one.
 
-## Show HN — prepared, not sent
+## Show HN — prepared, held by owner decision 2026-08-12
+
+**Held, deliberately, not blocked.** Asked on 2026-08-12 whether to open an account now so it could age, the
+owner chose to hold HN entirely for now. Do not post it, and do not open the account as a side effect of some
+other task — the single shot is being kept in reserve until there is more to point at than a one-week-old repo
+at 8 stars.
+
+Two facts to re-check when it is picked back up: there is **no Hacker News account on any identity in the
+roster** (verified 2026-08-12), and the rule below requires the account to pre-date the posting day — so
+un-holding this costs a lead time of at least a day, not an afternoon.
 
 One shot, so it goes out deliberately: a weekday, 08:00–10:00 US Eastern, from an account that exists before
 the day it posts. Title, at 77 of the 80 characters HN allows:

@@ -71,8 +71,10 @@ The three that deserve real preparation:
 **awesome-claude-code (51.9k stars — the single biggest prize).** Rules are strict and enforced by a bot:
 submit through the web issue form only (`gh` CLI is explicitly rejected), one resource per submission,
 description written as a description and not a pitch, no emoji, one line. Best-fit section is **Alternative
-Clients**; **Agent Orchestration** is the fallback. Eligible from **2026-08-18** — put it in the calendar,
-because an early submission is auto-closed and repeated attempts risk an interaction ban.
+Clients**, and there is **no usable fallback** — Agent Orchestration was the assumed second choice and it is
+wrong, because that section holds prompt methodologies rather than applications (verified 2026-08-12; see the
+prepared submission under [Remaining order](#remaining-order)). Eligible from **2026-08-18** — put it in the
+calendar, because an early submission is auto-closed and repeated attempts risk an interaction ban.
 
 **awesome-selfhosted (311k stars — the biggest self-hosting audience on GitHub).** The submission is a PR
 adding one YAML file to `awesome-selfhosted-data`, not an edit to the README. Requirements: actively
@@ -163,7 +165,7 @@ moved.
 | Piebald-AI/awesome-gemini-cli | [#87](https://github.com/Piebald-AI/awesome-gemini-cli/pull/87) | Agent Orchestration & CLI Tools | **merged** |
 | debarshibasak/awesome-paas | [#69](https://github.com/debarshibasak/awesome-paas/pull/69) | Cloud IDE or Developer Workspaces | **merged** |
 | awesome-opencode | [#580](https://github.com/awesome-opencode/awesome-opencode/pull/580) | `data/projects/intentic.yaml` | open, CI awaiting maintainer approval |
-| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, **merge conflict** — needs a rebase; own CI green |
+| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, clean — conflict resolved 2026-08-12 |
 | punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical | open, clean |
 | steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants | open, CI awaiting approval |
 | jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean — template check green |
@@ -229,16 +231,51 @@ Codex list a legitimate target rather than a stretch.
 
 ## Remaining order
 
-1. **Now** — rebase `ikaijua/Awesome-AITools` [#782](https://github.com/ikaijua/Awesome-AITools/pull/782); the
-   AI Coding table moved under it and it currently cannot merge. Rebase with an ordinary commit, never a
-   branch delete (rule 1). The row itself is correct — right table, neighbour format, stars badge, `Free` —
-   and the list's own checks (`link-check`, `auto-response`) are green, so the conflict is the only blocker.
-   Two things worth fixing in the same pass: the PR body is prose where that list asks for the seven-field
-   [recommendation template](https://github.com/ikaijua/Awesome-AITools/issues/233) (Tool Name & URL, Core
-   Features, Key Differentiators, Target Users, Getting Started, Pricing, Other), and the row's engine list
-   reads "Claude Code, Codex, OpenCode and Gemini CLI" without the native-versus-ACP distinction below.
-2. **2026-08-18** — awesome-claude-code, through the issue form, exactly to its style rules. This is the one
-   worth writing the description for twice.
+1. ~~**Now** — rebase `ikaijua/Awesome-AITools` [#782](https://github.com/ikaijua/Awesome-AITools/pull/782).~~
+   **Done 2026-08-12.** `upstream/main` was 57 commits ahead and the AI Coding table had moved, so the README
+   conflict was resolved by taking upstream's file whole and re-inserting the single row — an ordinary merge
+   commit, no force-push, no branch delete (rule 1). The diff against `main` is back to exactly one file and
+   one added line. The row's engine list now reads "Claude Code, Codex, Grok and Kimi Code natively, plus
+   OpenCode and Gemini CLI over ACP", and the body was rewritten into the seven-field
+   [recommendation template](https://github.com/ikaijua/Awesome-AITools/issues/233). State went
+   `dirty` → `mergeable: true`.
+2. **2026-08-18** — awesome-claude-code, through the issue form, exactly to its style rules. **Prepared below;
+   it is a copy-paste job on the day, not a writing job.**
+
+### awesome-claude-code — the submission, ready to paste on 2026-08-18
+
+Submit at [the issue form](https://github.com/hesreallyhim/awesome-claude-code/issues/new?template=recommend-resource.yml).
+Web UI only — the CONTRIBUTING explicitly rejects `gh`, and opening a PR instead risks an interaction ban.
+**Do not submit before 2026-08-18**: the gate is 14 days since the first commit on the default branch (repo
+created 2026-08-04) *or* 100 stars, we have 8, and an early submission is auto-closed by a bot.
+
+| Field | Value |
+| --- | --- |
+| Display Name | `intentic` |
+| Category | **Alternative Clients** |
+| Link | `https://github.com/intentic/intentic` |
+| Author Name | `radarsu` |
+| Author Link | `https://github.com/radarsu` |
+
+Description — 445 characters, inside the 10–500 limit, third person throughout, no emoji, no second person,
+descriptive rather than promotional as the form demands:
+
+> Self-hosted workspace that runs several Claude Code sessions at once on hardware the user owns. Each
+> conversation gets its own Docker sandbox and a git worktree of every repo in the workspace, rebased before
+> every turn, so parallel sessions cannot overwrite each other. A board shows which agents are working and
+> which are waiting on input, and changes reach the main tree only through per-hunk diff review. Codex, Grok
+> and Kimi Code run alongside Claude Code.
+
+Checklist: tick the first five, and **leave the sixth unchecked** — it is a trap box that reads "By checking
+this box, I admit that I am not reading any of these statements."
+
+On the "specific to Claude Code" checkbox: **Alternative Clients** is the right home and the checkbox is
+honest there. That section already carries multi-provider clients — CloudCLI is described in the list itself as
+"a web and mobile PWA for driving Claude Code (and Cursor/Codex/Gemini) from any device", and Nimbalyst as a
+workspace "for building with Claude Code (and Codex)". Both are our shape exactly. **Agent Orchestration is the
+wrong fallback** and the earlier note recommending it should be ignored: on inspection that section is
+methodologies and prompt frameworks (AB Method, RIPER, Ralph, gstack), not applications, so an app submitted
+there reads as miscategorised.
 3. **At 1k stars** — promote the steven2358 entry from Discoveries to the main list.
 4. **At 50 stars** — kyrolabs/awesome-ade.
 5. **2026-12-05** — awesome-selfhosted, with the YAML above.
