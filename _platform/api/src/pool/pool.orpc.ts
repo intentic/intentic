@@ -14,7 +14,16 @@ const os = implement(apiContract).$context<OrpcContext>();
 export const poolRoutes = (gateway?: StripeGateway) => ({
     membership: os.pool.membership.handler(async ({ context }): Promise<MembershipState> => {
         const { config, prisma } = context;
-        const disabled: MembershipState = { enabled: false, member: false, priceUsd: config.pool.priceUsd, creatorShare: config.pool.creatorShare };
+        // The published figures ride on every answer, including the disabled one: they describe the offer,
+        // not the caller, and the card that renders the offer is talking to someone who has not bought it.
+        const disabled: MembershipState = {
+            enabled: false,
+            member: false,
+            priceUsd: config.pool.priceUsd,
+            creatorShare: config.pool.creatorShare,
+            dailyCredits: config.pool.dailyCredits,
+            donationCredits: config.pool.donationCredits,
+        };
         if (!poolEnabled(config)) {
             return disabled;
         }
@@ -30,6 +39,8 @@ export const poolRoutes = (gateway?: StripeGateway) => ({
             ...(membership !== null ? { status: membership.status, renewsAt: membership.currentPeriodEnd.toISOString() } : {}),
             priceUsd: config.pool.priceUsd,
             creatorShare: config.pool.creatorShare,
+            dailyCredits: config.pool.dailyCredits,
+            donationCredits: config.pool.donationCredits,
             // Only a member has a meter — the card shows the allowance beside the membership it belongs to.
             ...(member ? { credits: await creditStatus(prisma, config, context.user.id, new Date()) } : {}),
         };

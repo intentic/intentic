@@ -329,6 +329,12 @@ export type User = z.infer<typeof UserSchema>;
 // premium answer, `status` is Stripe's word for the state (shown only when it isn't "active" — past_due is
 // worth a sentence), `renewsAt` is display. Price and share ride along so the card and the transparency page
 // can never disagree with the platform about the number on the button.
+//
+// THE PUBLISHED FIGURES ARE FOR EVERYONE, member or not. `dailyCredits` and `donationCredits` are what the
+// membership actually buys, and the person deciding whether to buy it is precisely the one who does not have
+// it yet — withholding them until after checkout left the offer describing itself as "premium extensions"
+// and nothing else. They also spare the card from retyping numbers the platform already owns: what a day's
+// credits come to in installs is arithmetic, done where they are rendered.
 export const MembershipStateSchema = z.object({
     enabled: z.boolean(),
     member: z.boolean(),
@@ -336,6 +342,9 @@ export const MembershipStateSchema = z.object({
     renewsAt: z.iso.datetime().optional(),
     priceUsd: z.number(),
     creatorShare: z.number(),
+    // A member's daily credit allowance, and what installing a premium extension donates to its creator.
+    dailyCredits: z.number(),
+    donationCredits: z.number(),
     // The daily credit meter for metered service runs — present exactly when the caller is a member,
     // because only a member has one. `resetsAt` is the next UTC midnight, rendered locally by the card.
     credits: z
