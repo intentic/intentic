@@ -53,6 +53,20 @@ export const providerReady = (provider: AgentProvider): boolean => {
     return accountsOf(provider).length > 0 || isAcp(provider) || isEndpoint(provider);
 };
 
+/* Whether a provider can serve THIS conversation — `providerReady` narrowed by the one axis it ignores.
+ *
+ * Grok is the only provider whose credential depends on the harness: its native runtime takes an xAI account,
+ * and routed under Claude Code it rides the translator's SuperGrok subscription. So "you hold a SuperGrok
+ * subscription" and "this native-Grok chat can send" are different answers, and any surface that offers to
+ * SWITCH a conversation onto a provider needs the second one — a press that re-points the chat and leaves the
+ * connect gate standing exactly where it was is the one press a user cannot learn anything from. */
+export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
+    if (provider === `grok`) {
+        return harness === `claude-code` ? translatorAccounts.value.grok.length > 0 : accountsOf(provider).length > 0;
+    }
+    return providerReady(provider);
+};
+
 export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({
     ready: providerReady(provider),
     access: accessFor(provider),
@@ -78,9 +92,14 @@ export const accessBadge = (provider: AgentProvider): string | undefined => {
     return KIND_BADGE[state.access.kind](state.access.requirement);
 };
 
-// The connect gate's one-line pitch, and the label on the button that resolves it. Grok is the one provider whose
-// requirement depends on the harness: its native runtime takes an xAI account, but routed under Claude Code it
-// rides the same SuperGrok subscription the translator holds.
+/* The connect gate's one-line pitch, and the NAME of the button that resolves it. Grok is the one provider whose
+ * requirement depends on the harness: its native runtime takes an xAI account, but routed under Claude Code it
+ * rides the same SuperGrok subscription the translator holds.
+ *
+ * `action` is what a control SAYS ABOUT ITSELF rather than what it prints: in the gate it is the chip's hover
+ * and its accessible name, because the chip's visible label is the provider's bare name and the row it sits in
+ * is what makes that a connect offer — context a screen reader reading one button does not get, and a button
+ * reading "Connect SuperGrok subscription" in a pane this narrow would have taken the row two lines to say. */
 export const connectPitch = (provider: AgentProvider, harness: AgentHarness): { copy: string; action: string } | undefined => {
     const access = accessFor(provider);
     if (access === undefined) {

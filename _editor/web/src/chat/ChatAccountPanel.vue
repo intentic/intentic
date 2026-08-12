@@ -3,7 +3,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { connectPitch, freeOffer } from "../composables/chat/access";
+import { connectPitch, freeOffer, providerReadyOn } from "../composables/chat/access";
 import { providerTabs } from "../composables/chat/providerCatalog";
 import { useChat, usePaneView } from "../composables/chat/useChat";
 
@@ -28,24 +28,45 @@ const router = useRouter();
 
 const pitch = computed(() => connectPitch(provider.value, harness.value));
 const free = computed(() => freeOffer());
-// The second row is everything the headline isn't. Derived from the same tab list rather than a second literal,
-// so it keeps the tabs' order and inherits a provider added there.
-const otherTabs = computed(() => providerTabs.filter((tab) => tab.value !== free.value?.provider));
-/* The second row's connect line. Suppressed for exactly one case — the pane already points at the free channel,
- * whose headline button IS that action — because two buttons for one handshake is how a user ends up wondering
- * which of them is the real one. Every other case keeps the button the panel has always shown, including a
- * provider that is connected but not on THIS conversation's harness. */
-const otherPitch = computed(() => (provider.value === free.value?.provider ? undefined : pitch.value));
 
-/* Point the chat at a provider AND open its card, for the two buttons whose whole purpose is the handshake.
- * The chips in the second row deliberately do not do this: a provider that is already connected only needs
- * selecting (the gate then disappears on its own, which is the fastest path there is), and one that isn't
- * raises the connect line below — so a chip always visibly does something without ever navigating a user away
- * from a chat they could have started by staying put. */
+/* The second row is everything the headline isn't, each chip carrying the two things its press turns on:
+ * whether THIS chat could already send on that subscription, and the sentence saying what pressing will do.
+ * Derived from the same tab list rather than a second literal, so it keeps the tabs' order and inherits a
+ * provider added there.
+ *
+ * `ready` is asked of the provider AND the harness, not of the provider alone, because they disagree for Grok —
+ * a SuperGrok subscription runs it under Claude Code and not natively. A chip promising a subscription is
+ * connected, pressed, and leaving this gate exactly as it was is worse than no chip at all. */
+const subscriptions = computed(() =>
+    providerTabs
+        .filter((tab) => tab.value !== free.value?.provider)
+        .map(({ value, label }) => {
+            const ready = providerReadyOn(value, harness.value);
+            return {
+                value,
+                label,
+                ready,
+                hint: ready ? `Connected — switch this chat to ${label}` : (connectPitch(value, harness.value)?.action ?? `Connect`),
+            };
+        }),
+);
+
+/* Point the chat at a provider AND open its card — the free headline's button, and every chip that isn't
+ * connected yet. */
 const connect = (target: AgentProvider) => {
     selectProvider(target);
     router.push({ path: `/sandbox/agent`, query: { connect: target } });
 };
+
+/* ONE PRESS, whichever kind of chip it is. A subscription you already hold only needs selecting — the gate then
+ * disappears on its own, which is the fastest path there is — and one you don't hold goes straight to where it
+ * gets connected. It used to take two: the chip selected, and a separate button underneath then repeated the
+ * provider you had just pressed and did the actual work. Nothing announced that the chip was step one, so the
+ * row read as a set of buttons that do nothing.
+ *
+ * Which of the two a press will do is not left to be discovered: the connected chips carry a dot, and every
+ * chip says it outright on hover and to a screen reader. */
+const pick = (target: AgentProvider, ready: boolean) => (ready ? selectProvider(target) : connect(target));
 </script>
 
 <template>
@@ -60,9 +81,12 @@ const connect = (target: AgentProvider) => {
         <Icon name="spinner" spin />Checking your AI accounts…
     </div>
     <div v-else-if="!connected" class="flex flex-col items-center gap-3 rounded-2xl border border-line bg-overlay/40 px-4 py-7 text-center">
-        <Icon name="sparkles" class="text-xl text-link" />
         <!-- THE HEADLINE: the one way in that costs nothing. Absent only when there is no free channel left to
-             offer, and then the panel is exactly what it always was — the selected provider's own pitch. -->
+             offer, and then the panel is exactly what it always was — the selected provider's own pitch.
+             ONE SPARKLE, and it sits on the button. There was a second one floating above the headline, two
+             lines from the identical glyph inside the primary action — decoration that reads as a state marker
+             at a glance and then turns out to mean nothing. The one on the button is the one that earns its
+             place: it marks the ACTION as the free way in, which is the single thing this panel is arguing. -->
         <template v-if="free">
             <p class="text-sm font-medium text-body">{{ free.headline }}</p>
             <p class="text-xs text-muted">{{ free.copy }}</p>
@@ -78,31 +102,27 @@ const connect = (target: AgentProvider) => {
              whole answer when that provider is already connected. -->
         <div class="flex w-full flex-col items-center gap-1.5 border-t border-line pt-3">
             <p v-if="free" class="text-2xs text-muted">Have a subscription?</p>
-            <!-- Wraps rather than overflowing: the gate sits in a narrow side panel, where five tabs never fit on one row. -->
+            <!-- Wraps rather than overflowing: the gate sits in a narrow side panel, where five tabs never fit on one row.
+                 THE DOT IS THE ROW'S WHOLE POINT once the chips also connect: four identical names read as
+                 "pick one to go and buy", when one of them may be a subscription the user already holds and one
+                 press from clearing this gate. It marks the chips that only need selecting — so a dotless chip
+                 is the one that will take you off to connect it, which is what its hover and its accessible
+                 name say in words for anyone the colour and the 6px circle don't reach. -->
             <div class="flex flex-wrap items-center justify-center gap-1">
                 <button
-                    v-for="tab in otherTabs"
+                    v-for="tab in subscriptions"
                     :key="tab.value"
                     type="button"
-                    class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-2xs font-medium"
+                    class="composer-ghost h-7 shrink-0 gap-1.5 whitespace-nowrap px-2.5 text-2xs font-medium"
                     :class="{ 'composer-active': provider === tab.value }"
-                    @click="selectProvider(tab.value)"
+                    @click="pick(tab.value, tab.ready)"
                     :aria-pressed="provider === tab.value"
+                    :aria-label="`${tab.label} — ${tab.hint}`"
+                    v-tooltip.top="tab.hint"
                 >
-                    {{ tab.label }}
+                    <span v-if="tab.ready" class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>{{ tab.label }}
                 </button>
             </div>
-            <!-- Named for the provider the chips just selected, so the second row is never a set of buttons that
-                 appear to do nothing. A link rather than a filled button: the free channel above owns the one
-                 filled button on this panel, and two of them would make the panel ask twice. -->
-            <button
-                v-if="otherPitch"
-                type="button"
-                class="inline-flex items-center gap-1 text-2xs font-medium text-link hover:underline"
-                @click="connect(provider)"
-            >
-                <Icon name="link" />{{ otherPitch.action }}
-            </button>
         </div>
     </div>
 </template>

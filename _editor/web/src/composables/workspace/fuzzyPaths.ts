@@ -46,7 +46,16 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
 // The query's best matches over the workspace paths: score desc, then path asc for determinism, capped at limit.
 export const rankPaths = (query: string, paths: readonly string[], limit: number): string[] => {
     const scored: { path: string; score: number }[] = [];
+    /* ONE ROW PER PATH, whatever the candidate list handed over. A repeated path scores the same twice and so
+     * lands twice, adjacent — and the second one is not merely noise, it takes the slot the query's next-best
+     * match should have had, under a cap that is usually binding. The tree this reads today holds each path
+     * once, but that is a property of today's caller rather than of the argument. */
+    const seen = new Set<string>();
     for (const path of paths) {
+        if (seen.has(path)) {
+            continue;
+        }
+        seen.add(path);
         const score = fuzzyScore(query, path);
         if (score !== undefined) {
             scored.push({ path, score });
