@@ -325,15 +325,20 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
     expect(cards[1]?.textContent).toContain(`no limits`);
 });
 
-/* THE FREE LANE'S PRICE IS ON ITS CARD. "Free" alone, in the place a reader looks for the cost, is the
- * version of this that has to be corrected later — so when the platform meters hours, the badge carries the
- * ceiling and the note carries the collection. */
-it(`states the hour ceiling and the expiry on the hosted card when they apply`, async () => {
+/* THE FREE LANE'S PRICE IS ON ITS CARD, AND SO IS WHAT HAPPENS AFTER IT. "Free" alone, in the place a reader
+ * looks for the cost, is the version of this that has to be corrected later — and so is a ceiling with no
+ * answer to "and then?", which is the question a price is read to settle.
+ * The sentences that go with it are NOT on the card: three rungs of small print, side by side, is not a
+ * picker. They follow the selection, one rung's worth at a time. */
+it(`states the hour ceiling and what follows it on the hosted card, with the small print under the row`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
-    expect(hosted?.textContent).toContain(`40h a month`);
-    expect(hosted?.textContent).toContain(`we remove it`);
+    expect(hosted?.textContent).toContain(`40h a month, then membership`);
+    expect(hosted?.textContent).not.toContain(`we remove it`);
+    // …and the chosen rung is the hosted one here, so its small print is what the row is followed by.
+    expect(el.textContent).toContain(`we remove it`);
+    expect(el.textContent).toContain(`don't back it up`);
 });
 
 // A member has no ceiling, so a member is shown none — the absence of the block is the whole contract.

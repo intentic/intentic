@@ -35,6 +35,7 @@ import { bashCommand, psCommand, scriptSource } from "../environments/scriptComm
 import SetupCloud from "./SetupCloud.vue";
 import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
+import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import { cloudProviderMeta } from "./setupCloud";
 import type { ComposeArgs } from "./setupCompose";
@@ -403,14 +404,23 @@ const onProvisioned = (summary: SandboxSummary): void => {
  * exactly like the pill for the lane that would delete it.
  *
  * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge — a
- * layout that can be READ before it is clicked. `meta` is the badge, `note` the one-liner under the title.
- * The order is the ladder's: instant and small, then your own hardware, then a machine you rent. */
+ * layout that can be READ before it is clicked. The order is the ladder's: instant and small, then your own
+ * hardware, then a machine you rent.
+ *
+ * READ, THOUGH — NOT STUDIED. The first version of these cards put the whole trade on every card at once:
+ * three paragraphs, side by side, above the one command the reader came here to run. Three columns of prose
+ * is not a picker; nobody compares three paragraphs, they skim the titles and pick, which means the paragraphs
+ * cost attention and bought nothing. So a card is now a big icon, a name, a price and three or four words —
+ * and the sentences that genuinely change a decision (this disk is not backed up; this one expires) follow the
+ * SELECTION, one line under the row, where there is exactly one of them to read. `meta` is the badge, `note`
+ * the few words under it, `detail` the line that appears once this rung is the answer. */
 interface MachineOption {
     readonly value: "hosted" | "mine" | "cloud";
     readonly icon: IconName;
     readonly title: string;
     readonly meta: string;
     readonly note: string;
+    readonly detail: string;
 }
 const ladderOptions = computed<readonly MachineOption[]>(() => [
     ...(hostedOffered.value
@@ -419,11 +429,19 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   value: `hosted` as const,
                   icon: `bolt` as const,
                   title: `We host it`,
-                  // The badge carries the hour ceiling when there is one, because "Free" alone in the place a
-                  // reader looks for the cost would be the version of this card that has to be corrected
-                  // later. Members and ceiling-less platforms send no hours at all and read the old way.
-                  meta: hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month`,
-                  /* The durability sentence is here, on the card, rather than only in the terms: this is the
+                  /* The badge carries the hour ceiling when there is one, because "Free" alone in the place a
+                   * reader looks for the cost is the version of this card that has to be corrected later —
+                   * AND IT SAYS WHAT HAPPENS AFTER THE HOURS, for the same reason. "40h a month" answers
+                   * "how much do I get" and leaves "and then?" hanging, which is precisely the question a
+                   * price is read to settle; the honest answer is that a membership lifts the limit (and the
+                   * two rungs beside this one never had it). Members and ceiling-less platforms send no hours
+                   * at all and read the old way. */
+                  meta:
+                      hostedHours.value === null
+                          ? `Free · ready in seconds`
+                          : `Free · ${hostedHours.value.allowance}h a month, then membership`,
+                  note: `Nothing to install`,
+                  /* The durability sentence is here, under the row, rather than only in the terms: this is the
                    * moment someone chooses a disk that is ours, and "we don't back it up" is the one fact
                    * about that disk which changes what a reasonable person does next. It names the remedy in
                    * the same breath, because a warning with no next step just makes the safe choice look
@@ -433,16 +451,15 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    *
                    * The collection sentence earns its place the same way: a free machine left unopened is
                    * eventually removed, and someone deciding where their work will live is owed that before
-                   * they choose rather than in the email that warns them. Both facts name their remedy —
-                   * opening it, and the two rungs below where neither applies. */
-                  note:
+                   * they commit rather than in the email that warns them. */
+                  detail:
                       hostedHours.value === null
-                          ? `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
-                          : `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back — you get ${hostedHours.value.allowance} hours of it a month, and if you don't open it for a few weeks we remove it. We don't back it up either, so turn on desktop sync or keep your work in a git remote.`,
+                          ? `A small private machine, running now. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
+                          : `A small private machine, running now. It sleeps while you're away and wakes when you come back. You get ${hostedHours.value.allowance} hours a month and a membership lifts that; if you don't open it for a few weeks we remove it. We don't back it up either, so turn on desktop sync or keep your work in a git remote.`,
               },
           ]
         : []),
-    /* The two rungs where the machine is the READER'S. Both notes now end on what that actually wins them
+    /* The two rungs where the machine is the READER'S. Both details end on what that actually wins them
      * against the rung above — no hour limit, and nothing that expires — because those are the differences a
      * person weighing "instant" against "one pasted command" cannot otherwise see, and they are exactly the
      * differences that matter after week three. Said as a property of the lane rather than as a nudge: the
@@ -455,7 +472,8 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   icon: `desktop` as const,
                   title: `A computer I have`,
                   meta: `Most power · no limits`,
-                  note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command. No hour limit, nothing expires, and no membership needed to keep it.`,
+                  note: `One pasted command`,
+                  detail: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. No hour limit, nothing expires, and no membership needed to keep it.`,
               },
           ]
         : []),
@@ -466,25 +484,20 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   icon: `cloud` as const,
                   title: `A new cloud machine`,
                   meta: `From free · 12 GB`,
-                  note: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere. Bigger than the machine we host, with no hour limit and nothing that expires.`,
+                  note: `In your own cloud account`,
+                  detail: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere. Bigger than the machine we host, with no hour limit and nothing that expires.`,
               },
           ]
         : []),
 ]);
+/* The chosen rung's sentences, under the row. One rung's worth of prose on screen instead of three, and it
+ * is the rung the reader has actually landed on — which is also when "we don't back this up" stops being
+ * one option's small print and becomes a fact about where their work is about to live. */
+const ladderDetail = computed(() => ladderOptions.value.find((option) => option.value === machine.value)?.detail ?? ``);
 /* Shown once there is a CHOICE to make. A picker over one rung is not a picker — it is a card describing the
  * only thing on offer, which is what the step under it already does — and while the offers are still being
  * read there is nothing honest to draw at all. */
 const ladderShown = computed(() => !desktop.value && ladderOptions.value.length > 1);
-
-/* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
- * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
- * beside it. They were chips — a bordered pill that filled in when pressed — which is a toggle BUTTON, and it
- * dressed three quiet options as the loudest thing on a card whose subject is a command. The tick is the
- * state; it needs no box around the box.
- *
- * The shared min-width is what survives from the chips, and it is the reason the group reads as a group: every
- * caption starts in the same column at any width where the names fit on their caption's line. */
-const optionLabel = `shrink-0 text-content md:min-w-[11.5rem]`;
 
 /* The label column of step 1's two facts. A fixed width is what makes "Name" and "Address" one grid rather
  * than two sentences that happen to be stacked — and the width is the reason the VALUES line up, which is the
@@ -680,6 +693,30 @@ const waitedMs = computed(() => (armedAt.value === undefined ? 0 : now.value - a
 // groping for. The fuses stay for machines running an ic too old to report.
 const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value);
 const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
+/* WHICH READER THE CORRECTION IS ADDRESSED TO (SetupNudge renders the prose). The decision lives here because
+ * the state does: a created cloud machine that never claimed sends you to the provider's boot log; a phone
+ * that mailed itself the link needs the mail opened on the other computer, not a terminal; and in the app the
+ * button IS the path, so "paste this somewhere" would contradict the step above it. */
+const nudgeVariant = computed(() => {
+    if (cloudMachine.value !== null) {
+        return `cloud` as const;
+    }
+    if (mobile.value && emailed.value) {
+        return `emailed` as const;
+    }
+    if (commandVisible.value) {
+        return `terminal` as const;
+    }
+    if (mobile.value) {
+        return `phone` as const;
+    }
+    return launched.value ? (`app` as const) : (`button` as const);
+});
+// Copying again is only an answer for the reader who has a command and hasn't run it — never for a phone whose
+// clipboard was never the blocked step, and never for a machine that will fetch the command itself.
+const nudgeCopyable = computed(
+    () => commandVisible.value && runTab.value !== `compose` && !(mobile.value && emailed.value) && cloudMachine.value === null,
+);
 const slowBuild = computed(
     () =>
         report.value === null &&
@@ -1988,14 +2025,22 @@ watch(commandReady, (ready) => {
                          your computer" over a chooser that also offers a machine you never touch), and the
                          chooser says what this card is about better than a title could. Same bare-section
                          shape as the sandbox card above it, for the same reason. -->
-                    <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
-                        <!-- THE LADDER — first, because everything under it is the answer to it: how much
-                             machine, whose, at what cost. One CARD per rung rather than a row of pills, laid
-                             out in columns so all three are read at a glance: this is the decision the rest of
-                             onboarding hangs off, and a pill shows only its label, so what each rung gives you
-                             and asks of you stayed invisible until after you had picked. Hidden in the desktop
-                             app, where "this computer" is the whole point of being in the app. -->
-                        <div v-if="ladderShown" class="grid gap-2 sm:grid-cols-3">
+                    <!-- THE LADDER — ITS OWN ROW, OUTSIDE EVERY CARD. It answers "which machine", and what
+                         follows is the consequence of that answer: nesting it inside the run card put a
+                         three-column picker inside a bordered surface inside a column, and the choice read as
+                         a detail of the step it actually decides. Out here it is the row the page turns on,
+                         and each rung is its own card — which is also what stopped the rungs from needing a
+                         card around them to look like objects.
+                         Hidden in the desktop app, where "this computer" is the whole point of being in it. -->
+                    <div v-if="created && lane === `provision` && ladderShown" class="flex flex-col gap-2">
+                        <!-- One column per rung, so two rungs are two halves rather than two thirds of a row
+                             with a hole where the third would be. -->
+                        <div
+                            class="grid gap-2"
+                            :class="ladderOptions.length === 2 ? `sm:grid-cols-2` : `sm:grid-cols-3`"
+                            role="radiogroup"
+                            aria-label="Where the sandbox runs"
+                        >
                             <button
                                 v-for="option in ladderOptions"
                                 :key="option.value"
@@ -2003,37 +2048,41 @@ watch(commandReady, (ready) => {
                                 role="radio"
                                 :aria-checked="machine === option.value"
                                 :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
-                                class="flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                class="flex cursor-pointer flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                                 :class="
                                     machine === option.value
                                         ? `border-link bg-overlay`
-                                        : `border-line bg-canvas hover:border-line-strong hover:bg-overlay/40`
+                                        : `border-line bg-card hover:border-line-strong hover:bg-overlay/40`
                                 "
                                 @click="chooseMachine(option.value)"
                             >
-                                <span class="flex items-center gap-2">
-                                    <Icon
-                                        :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
-                                        :spin="hostedBusy && option.value === `hosted`"
-                                        class="shrink-0"
-                                        :class="machine === option.value ? `text-link` : `text-muted`"
-                                    />
-                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
-                                </span>
+                                <!-- The icon carries the card now that the prose is gone: at 2xl it is the
+                                     thing the eye lands on, and three glyphs are told apart in the time it
+                                     takes to read one title. -->
+                                <Icon
+                                    :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
+                                    :spin="hostedBusy && option.value === `hosted`"
+                                    class="mb-1 shrink-0 text-2xl"
+                                    :class="machine === option.value ? `text-link` : `text-muted`"
+                                />
+                                <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
                                 <span class="text-2xs text-muted">{{ option.meta }}</span>
-                                <!-- The trade, in the reader's terms. This is what the card comment above has
-                                     always described and what the badge alone cannot carry: the badge is a
-                                     price, the note is what you are buying with it — the hour ceiling and the
-                                     expiry on the free rung, and what the two rungs below win in exchange for
-                                     a pasted command. Rendering it is the difference between a picker that
-                                     can be READ before it is clicked and three labels. -->
+                                <!-- Three or four words: what this rung asks of you, or where it puts the
+                                     machine. The sentences that used to sit here are under the row now, for
+                                     the rung that was actually chosen. -->
                                 <span class="text-2xs leading-snug text-subtle">{{ option.note }}</span>
                                 <!-- The allowance is spent, and saying so beats hiding a rung the reader was
                                      offered on their first sandbox. -->
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>
                             </button>
                         </div>
+                        <!-- The chosen rung's small print, and only its. Quiet, because it is read once, at the
+                             moment it becomes true — and it is the one place the free machine's "we don't back
+                             this up" is stated where somebody is deciding where their work will live. -->
+                        <p v-if="ladderDetail" class="px-1 text-2xs leading-snug text-subtle">{{ ladderDetail }}</p>
+                    </div>
 
+                    <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
                         <!-- Whatever went wrong on THIS step, said on this step. The page-level notice belongs to
                              the sandbox card above and is cleared by every create, which is how a failed hosted
                              attempt used to bounce the reader into another lane with the reason already erased. -->
@@ -2269,38 +2318,21 @@ watch(commandReady, (ready) => {
                                     </template>
                                 </div>
 
-                                <!-- EVERY OPTION THAT REWRITES THE COMMAND, AS ONE GROUP OF CHIPS UNDER IT. These are the
-                                 one thing that does not belong in the reference panel — a checkbox whose reason is a
-                                 hover (or a column) away is a checkbox nobody ticks — and each chip's pressed state
-                                 is visibly answered by the command one row up.
-                                 Desktop sync joined them: as a ToggleSwitch above the command it was the loudest
-                                 control on a step whose subject is a command, and three lines tall for an option two
-                                 of its peers state in one. It is the same kind of thing they are — something that
-                                 changes what this command does — so it now reads as one, and the folder it mirrors
-                                 to is the caption rather than a sentence of its own.
-                                 Sync outlives the command in the APP, where it rides the desktop handoff too — so it
-                                 stays on screen there with the command folded away. On a phone it does not: nothing
-                                 is enrolled from here, and the machine that opens the emailed link asks again. Only
-                                 the compose tab drops it outright, because that file declares its own env. -->
-                                <!-- The <label> stops at the option's NAME rather than wrapping the whole row: a
-                                 label toggles on any click inside it, and these captions carry a folder path
-                                 and a `sudo` mention — text people select and read. Clicking a row's name still
-                                 hits a 200px target; selecting its caption no longer rewrites the command. -->
-                                <div v-if="!composeShown && (commandVisible || desktop)" class="flex flex-col gap-1.5 text-2xs text-muted">
-                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <label class="flex cursor-pointer items-center gap-2">
-                                            <Checkbox v-model="syncEnabled" :binary="true" size="small" />
-                                            <span :class="optionLabel">Also sync a local folder</span>
-                                        </label>
-                                        <!-- On, the folder IS the news; off, the reason is. Saying both at once was one
-                                         clause of each, and the clause that mattered was never the one being read. -->
-                                        <span class="min-w-0">
-                                            <template v-if="syncEnabled && syncDir !== ``"
-                                                >Mirrors to <code class="break-words">{{ syncDir }}</code></template
-                                            >
-                                            <template v-else>Edit this sandbox's files in your own editor.</template>
-                                        </span>
-                                    </div>
+                                <!-- THE TWO SWITCHES THAT REWRITE THE COMMAND, ON ONE ROW UNDER IT: the decision on
+                                 the left, the default on the right. They belong here rather than in the reference
+                                 column — a checkbox whose effect is a column away is a checkbox nobody connects to
+                                 anything — and each one's state is answered by the command one row up.
+                                 They are weighted differently on purpose. `sudo` is a real choice about the reader's
+                                 machine and reads at full contrast; desktop sync is on unless somebody objects, so
+                                 it sits at the far edge, dimmed, where a default belongs. Given equal weight they
+                                 read as two questions to answer before pasting, which is two more than there are. -->
+                                <!-- The <label> stops at each option's NAME rather than wrapping the row: a label
+                                 toggles on any click inside it, and these captions carry a folder path and a
+                                 `sudo` mention — text people select and read. -->
+                                <div
+                                    v-if="!composeShown && (commandVisible || desktop)"
+                                    class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-2xs text-muted"
+                                >
                                     <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
                              there is no switch here and the Docker prerequisite is left to the panel, which
                              names the reboot a first Windows install may want. And only while the command is on
@@ -2312,12 +2344,36 @@ watch(commandReady, (ready) => {
                                     >
                                         <label class="flex cursor-pointer items-center gap-2">
                                             <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                            <span :class="optionLabel">I already have Docker</span>
+                                            <span class="shrink-0 text-content">I already have Docker</span>
                                         </label>
                                         <span class="min-w-0">
                                             <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
                                             <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
                                         </span>
+                                    </div>
+
+                                    <!-- DESKTOP SYNC, PUSHED RIGHT AND HELD QUIET. It is on by default and almost
+                                         nobody turns it off, so it is a switch to notice rather than a decision to
+                                         make — and at full contrast, beside a command, it read as one more thing
+                                         standing between the reader and the paste. Dimmed until pointed at, and
+                                         `ml-auto` so it sits at the far edge whether or not the `sudo` switch above
+                                         is on screen (it isn't, outside production).
+                                         Still HERE rather than in the reference column, because it rewrites the
+                                         command one row up: a switch whose effect is a column away is a switch
+                                         nobody connects to anything. Sync outlives the command in the APP, where it
+                                         rides the desktop handoff too, so it stays with the command folded away.
+                                         Only the compose tab drops it outright — that file declares its own env. -->
+                                    <div class="ml-auto flex min-w-0 items-center gap-2 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                                        <!-- The <label> stops at the option's NAME: a label toggles on any click
+                                             inside it, and the folder beside it is a path people select and read. -->
+                                        <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                                            <Checkbox v-model="syncEnabled" :binary="true" size="small" />
+                                            <span>Also sync a local folder</span>
+                                        </label>
+                                        <!-- On, the folder IS the news; off, there is none — the label already says
+                                             what the switch does, and a sales line for the default option was the
+                                             loudest thing in the quietest row. -->
+                                        <code v-if="syncEnabled && syncDir !== ``" class="min-w-0 truncate">{{ syncDir }}</code>
                                     </div>
                                 </div>
 
@@ -2437,69 +2493,21 @@ watch(commandReady, (ready) => {
                                 <p class="pl-6 text-2xs opacity-90">Fix the above, then run the same command again. It stays valid.</p>
                             </div>
 
-                            <!-- The correction, on a timer, because the mistake this card exists to prevent is SILENT:
-                         somebody who has not understood that the command runs elsewhere never does anything the
-                         page can react to, so elapsed time is the only trigger there is. -->
-                            <div v-if="nudging" :class="cmp.alertWarning('flex flex-col gap-2')">
-                                <p class="flex items-start gap-2">
-                                    <Icon name="clock" class="mt-0.5 shrink-0" />
-                                    <!-- The correction only holds where the command is the path. In the app the button
-                                         IS the path, so the same sentence would send someone to a terminal the step
-                                         above just told them they don't need. -->
-                                    <!-- A phone that has already sent itself the link does not need to be told
-                                         where the command runs — it needs the one thing it hasn't done, which is
-                                         open the mail on the other machine. Telling that reader to find a
-                                         terminal is the same wrong advice this screen used to give by default. -->
-                                    <!-- A created cloud machine that has not claimed after its long fuse is the one
-                                         state where the provider's console is the next place to look — the boot log
-                                         there says what the first boot actually did. -->
-                                    <span v-if="cloudMachine" class="min-w-0">
-                                        <span class="font-medium">Still building.</span> Check
-                                        <span class="font-mono">{{ cloudMachine.serverName }}</span> in your {{ cloudProviderLabel }} console. Its
-                                        boot log is <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh
-                                        sandbox here is always safe.
-                                    </span>
-                                    <span v-else-if="mobile && emailed" class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host
-                                        your sandbox. The command is waiting there.
-                                    </span>
-                                    <span v-else-if="commandVisible" class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will
-                                        run your sandbox.
-                                    </span>
-                                    <!-- A phone with the command still folded away has not been told anything wrong
-                                         yet — it simply hasn't taken the one step the card offers. -->
-                                    <span v-else-if="mobile" class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that
-                                        will host your sandbox.
-                                    </span>
-                                    <span v-else-if="launched" class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing,
-                                        and any error it hit.
-                                    </span>
-                                    <span v-else class="min-w-0">
-                                        <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
-                                    </span>
-                                </p>
-                                <!-- After three minutes, stop assuming it was never run and start helping the person
-                             whose terminal answered back. Both readings get an action they can take. -->
-                                <p v-if="stalled && commandVisible && !cloudMachine" class="pl-6 text-2xs opacity-90">
-                                    Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
-                                </p>
-                                <!-- `cta`, because in this banner copying again IS the way out — the quiet chip
-                                     that suits a copy-beside-content read as the dimmest thing in the loudest
-                                     box on the card. self-start, or the column flex stretches it edge to edge.
-                                     Except on a phone that has mailed itself the link, where copying again is
-                                     not the way out of anything: the clipboard was never the blocked step. -->
-                                <CopyButton
-                                    v-if="commandVisible && runTab !== `compose` && !(mobile && emailed) && !cloudMachine"
-                                    class="ml-6 self-start"
-                                    :text="selectedCommand"
-                                    label="Copy again"
-                                    :cta="true"
-                                    @copied="onCopied"
-                                />
-                            </div>
+                            <!-- The correction, on a timer — and NOT here on a wide screen, where it rides in the
+                                 reference column instead (see the aside below). At the foot of this card it was
+                                 the furthest thing on the page from the command it corrects: three tabs, a code
+                                 block, two switches and a wait line above it, on a card long enough to scroll. -->
+                            <SetupNudge
+                                v-if="nudging"
+                                class="xl:hidden"
+                                :variant="nudgeVariant"
+                                :cloud-name="cloudMachine?.serverName ?? ``"
+                                :cloud-provider="cloudProviderLabel"
+                                :stalled="stalled"
+                                :command="selectedCommand"
+                                :copyable="nudgeCopyable"
+                                @copied="onCopied"
+                            />
 
                             <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
                          command ran, so the terminal is where the answer is. Much longer fuse — the first image
@@ -2535,10 +2543,26 @@ watch(commandReady, (ready) => {
                      The width is measured, not picked: 22rem is what the longest cleanup one-liner (the sh
                      one, 44 mono characters at text-2xs) needs to sit on a single line inside the card's
                      padding. At 18rem it wrapped into three lines — the undo read as a paragraph. -->
-                <aside v-if="created && lane === `provision` && machine !== `hosted`" class="hidden xl:sticky xl:top-8 xl:block xl:w-88 xl:shrink-0">
+                <aside
+                    v-if="created && lane === `provision` && machine !== `hosted`"
+                    class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
+                >
                     <div class="rounded-2xl border border-line bg-card p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" />
                     </div>
+                    <!-- …and the correction as the second card in this column, once the wait has gone on long
+                         enough to be a misunderstanding rather than a wait. It belongs beside the command, and
+                         this column is the only place on a wide screen that is beside anything. -->
+                    <SetupNudge
+                        v-if="nudging"
+                        :variant="nudgeVariant"
+                        :cloud-name="cloudMachine?.serverName ?? ``"
+                        :cloud-provider="cloudProviderLabel"
+                        :stalled="stalled"
+                        :command="selectedCommand"
+                        :copyable="nudgeCopyable"
+                        @copied="onCopied"
+                    />
                 </aside>
             </div>
         </div>
