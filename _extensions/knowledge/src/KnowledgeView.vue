@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Notice, noticeOf, Picker, SearchBar, type PickerOptions, useNarrow } from "@intentic/extension-ui";
+import {
+    Button,
+    cmp,
+    FilterBar,
+    Icon,
+    InfoHint,
+    Notice,
+    noticeOf,
+    Picker,
+    type NoticeModel,
+    type PickerOptions,
+    useNarrow,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
 import NoteIndex from "./NoteIndex.vue";
@@ -99,15 +111,29 @@ watch(q, () => (linkedTo.value = undefined));
 
 const linkedToTitle = computed(() => hits.value.find((hit) => hit.path === linkedTo.value)?.title ?? linkedTo.value);
 
-/* The one-line report on what is unfinished. Ordered by what a reader can actually act on: an unwritten note is
- * an invitation, a drifting word is a decision to make, an orphan is knowledge that has fallen out of reach. */
-const health = computed(() => {
+/* THE TWO STANDING FACTS THIS SECTION REPORTS ARE <Notice>S, not strips of its own. Both were hand-rolled
+ * bordered rows — one for "the list is aimed at a note's neighbours", one for "the vault has loose ends" — and
+ * a hand-rolled strip is the first thing to disagree with the app about tone, weight and where the way out
+ * sits. `info` is the tone for a fact the reader may want and never has to act on, which is what both are. */
+const linkedNotice = computed<NoticeModel | undefined>(() =>
+    linkedTo.value === undefined
+        ? undefined
+        : { tone: `info`, title: `Everything linking to “${linkedToTitle.value}”`, action: { label: `Show everything`, run: clearFilters } },
+);
+
+/* The one-line report on what is unfinished, and only when there IS something. Ordered by what a reader can
+ * actually act on: an unwritten note is an invitation, a drifting word is a decision to make, an orphan is
+ * knowledge that has fallen out of reach.
+ *
+ * NO ACTION, deliberately: nothing here is fixed by a button, and offering one would promise it is. The cause
+ * line names the command that lists them instead. */
+const health = computed<NoticeModel | undefined>(() => {
     const report = overview.value;
     if (report === undefined) {
-        return [];
+        return undefined;
     }
     const drift = report.typeDrift.length + report.relationDrift.length;
-    return [
+    const lines = [
         report.broken.length === 0
             ? undefined
             : `${report.broken.length} ${report.broken.length === 1 ? `link points` : `links point`} at notes nobody has written`,
@@ -119,6 +145,7 @@ const health = computed(() => {
             ? undefined
             : `${report.unreadable.length} ${report.unreadable.length === 1 ? `note has` : `notes have`} a header this reader could not parse`,
     ].filter((line) => line !== undefined);
+    return lines.length === 0 ? undefined : { tone: `info`, title: lines.join(` · `), detail: `The agent's kb check lists them in full.` };
 });
 
 const error = computed(() => overviewError.value ?? searchError.value);
@@ -139,68 +166,60 @@ const startVault = async (): Promise<void> => {
     <div ref="body" class="flex min-h-0 flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
 
-        <!-- The section's one row of chrome: what this is, how to ask it something, and what it amounts to. -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <InfoHint label="Knowledge">
-                <span class="block text-sm font-medium text-content">The knowledge vault</span>
-                <span class="mt-1 block text-xs text-muted">
-                    A folder of markdown notes — <b>{{ overview?.vault ?? `knowledge/` }}</b> in your workspace — where each note is a <i>thing</i>
-                    (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before answering
-                    questions about your world and writes to it when it learns something durable; you read, correct and delete here. Open it in
-                    Obsidian or put it under git — it is only ever markdown.
-                </span>
-            </InfoHint>
-
-            <SearchBar
-                v-model="q"
-                variant="field"
-                class="w-64 max-w-full"
-                placeholder="Search the vault…"
-                aria-label="Search the vault"
-                clearable
-                :busy="isFetching && !isLoading"
-            />
-            <Picker
-                v-if="options.types.length > 0"
-                v-model="typeChoice"
-                :options="pickerOptions(options.types, `Any kind`)"
-                class="w-36 py-1.5 text-xs"
-                aria-label="Kind"
-                header="Kind"
-            />
-            <Picker
-                v-if="options.tags.length > 0"
-                v-model="tagChoice"
-                :options="pickerOptions(options.tags, `Any tag`)"
-                class="w-36 py-1.5 text-xs"
-                aria-label="Tag"
-                header="Tag"
-            />
-
-            <span v-if="overview" class="ml-auto text-2xs text-subtle">
-                {{ overview.noteCount }} {{ overview.noteCount === 1 ? `note` : `notes` }} · {{ overview.linkCount }}
-                {{ overview.linkCount === 1 ? `link` : `links` }} · {{ overview.types.length }} {{ overview.types.length === 1 ? `kind` : `kinds` }}
-            </span>
-        </div>
-
-        <!-- The list has been re-aimed at one note's neighbours rather than at a query; say so, and offer the
-             way back, because nothing the reader typed explains what they are looking at. -->
-        <div v-if="linkedTo" class="flex items-center gap-2 rounded-lg border border-line bg-surface-hover px-3 py-1.5 text-xs">
-            <Icon name="sitemap" class="text-subtle" />
-            <span class="text-muted"
-                >Everything linking to <b class="text-content">{{ linkedToTitle }}</b></span
-            >
-            <button type="button" class="ml-auto text-2xs text-link hover:underline" @click="clearFilters">Show everything</button>
-        </div>
-
-        <div
-            v-if="health.length > 0"
-            class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line px-3 py-1.5 text-2xs text-muted"
+        <!-- The section's one row of chrome, and it is the app's <FilterBar>: free text on the left taking the
+             row's slack, the controls that narrow the same list in their own matched track, and what does not
+             narrow anything sitting chromeless beside them. The field spanning the row is the point — the bar
+             then shares its left and right edges with the two panes under it, instead of huddling in a corner
+             above them. The pickers are `ghost` because the track is already the box. -->
+        <FilterBar
+            v-model="q"
+            placeholder="Search the vault…"
+            aria-label="Search the vault"
+            clearable
+            :count="hits.length"
+            :busy="isFetching && !isLoading"
         >
-            <Icon name="info-circle" class="shrink-0 text-subtle" />
-            <span v-for="line in health" :key="line">{{ line }}</span>
-            <span class="ml-auto text-subtle">the agent's <b>kb check</b> lists them in full</span>
-        </div>
+            <template v-if="options.types.length > 0 || options.tags.length > 0" #controls>
+                <Picker
+                    v-if="options.types.length > 0"
+                    v-model="typeChoice"
+                    variant="ghost"
+                    :options="pickerOptions(options.types, `Any kind`)"
+                    class="max-w-32"
+                    aria-label="Kind"
+                    header="Kind"
+                />
+                <Picker
+                    v-if="options.tags.length > 0"
+                    v-model="tagChoice"
+                    variant="ghost"
+                    :options="pickerOptions(options.tags, `Any tag`)"
+                    class="max-w-32"
+                    aria-label="Tag"
+                    header="Tag"
+                />
+            </template>
+            <template #actions>
+                <span v-if="overview" class="text-2xs text-subtle">
+                    {{ overview.noteCount }} {{ overview.noteCount === 1 ? `note` : `notes` }} · {{ overview.linkCount }}
+                    {{ overview.linkCount === 1 ? `link` : `links` }} · {{ overview.types.length }}
+                    {{ overview.types.length === 1 ? `kind` : `kinds` }}
+                </span>
+                <InfoHint label="Knowledge">
+                    <span class="block text-sm font-medium text-content">The knowledge vault</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        A folder of markdown notes — <b>{{ overview?.vault ?? `knowledge/` }}</b> in your workspace — where each note is a
+                        <i>thing</i>
+                        (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before
+                        answering questions about your world and writes to it when it learns something durable; you read, correct and delete here.
+                        Open it in Obsidian or put it under git — it is only ever markdown.
+                    </span>
+                </InfoHint>
+            </template>
+        </FilterBar>
+
+        <Notice v-if="linkedNotice" :of="linkedNotice" />
+        <Notice v-if="health" :of="health" />
 
         <!-- Bounded, so the two panes scroll inside their own frames and the chrome above stays put. Unbounded,
              the hub page would scroll them together and reaching the end of a long note would take the way to
@@ -219,14 +238,14 @@ const startVault = async (): Promise<void> => {
             <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
         </div>
 
-        <div v-else class="flex max-h-panel-lg min-h-0 gap-3" :class="stacked ? `flex-col` : undefined">
+        <div v-else class="flex max-h-panel-lg min-h-0 gap-4" :class="stacked ? `flex-col` : undefined">
             <!-- In a narrow body the index folds above the note instead of beside it: a 16rem column next to a
                  note leaves neither of them readable, and hiding the note behind a list would put two clicks
-                 between the reader and the thing they came for. -->
-            <div
-                class="shrink-0 overflow-hidden rounded-lg border border-line"
-                :class="stacked ? `max-h-56` : `flex max-h-full w-64 min-w-0 flex-col`"
-            >
+                 between the reader and the thing they came for.
+                 UNFRAMED, which is the shared rail's rule and not this section's preference: an index is chrome
+                 pointing AT something, so a box around it makes it compete with the note it points at. The
+                 gutter is what separates the two, at the same 1rem every split screen in the app uses. -->
+            <div class="flex min-w-0 shrink-0 flex-col" :class="stacked ? `max-h-56` : `max-h-full w-64`">
                 <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
             </div>
 
@@ -241,10 +260,9 @@ const startVault = async (): Promise<void> => {
                 @forgotten="selected = undefined"
             />
 
-            <section
-                v-else
-                class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-10 text-center"
-            >
+            <!-- The same dashed placeholder the empty vault above uses, from the same helper — it was spelled
+                 out by hand here, two elements away from the call that produces it. -->
+            <section v-else :class="cmp.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
                 <Icon name="sitemap" class="text-base text-subtle" />
                 <p class="text-sm text-muted">Pick a note to read it.</p>
                 <p class="max-w-xs text-xs text-subtle">Follow its links to move through the vault the way the agent does.</p>

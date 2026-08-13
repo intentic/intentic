@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Icon, type NavGroup, NavRail, Row, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { SearchHit } from "./contract";
 import { folderOf, toneOfType } from "./knowledgeNote";
@@ -13,8 +13,16 @@ import { freshness } from "./noteTime";
  * outage, here is the sentence in each" back to six titles. The reason a row matched is the most useful thing
  * on it, so it is the thing under the title.
  *
- * One row is one note and the whole row is the target, because these rows are aimed at with a thumb as often as
- * with a mouse. */
+ * THE COLUMN IS <NavRail> AND THE ROW IS <Row>, because this is the app's index column and it was the fourth
+ * hand-rolled copy of it — after the activity sources, the memory index and the documentation contents, which
+ * is the exact set those two components were extracted from. What the hand-roll had drifted on is what a reader
+ * sees: its own selection tint rather than the app's, its own scroller, and a border the shared rail
+ * deliberately does not draw (an index is chrome pointing AT something, and boxing it makes it compete with the
+ * thing it points at).
+ *
+ * ONE UNLABELLED GROUP. The rail can section its rows and this list must not: hits arrive ranked by how well
+ * they answer the query, and cutting them into headed groups would reorder the answer into something the
+ * search did not say. */
 
 const { hits, selected } = defineProps<{
     hits: readonly SearchHit[];
@@ -30,7 +38,17 @@ const emit = defineEmits<{ pick: [path: string] }>();
 // is "everything" and the row needs no explanation at all.
 const WHY: Record<string, string> = { title: ``, alias: `also called`, tag: `tagged`, type: `kind`, field: ``, body: ``, all: `` };
 
-const rows = computed(() =>
+interface NoteRow {
+    readonly path: string;
+    readonly title: string;
+    readonly type: string | undefined;
+    readonly evidence: string;
+    readonly modifiedAt: number;
+    readonly why: string;
+    readonly variant: StatusVariant;
+}
+
+const rows = computed<NoteRow[]>(() =>
     hits.map((hit) => {
         // The folder is only worth the line when it says something the badge does not. `kb new` files a note
         // under its own kind, so for most of the vault the folder IS the kind — printed here it read as the
@@ -40,54 +58,67 @@ const rows = computed(() =>
             path: hit.path,
             title: hit.title,
             type: hit.type,
-            snippet: hit.snippet,
+            evidence: hit.snippet ?? (folder === hit.type ? undefined : folder) ?? hit.path,
             modifiedAt: hit.modifiedAt,
-            folder: folder === hit.type ? undefined : folder,
             why: WHY[hit.matched] ?? hit.matched,
             variant: toneOfType(hit.type) as StatusVariant,
         };
     }),
 );
+
+// Empty rather than one empty group: the rail draws #empty only when it has no groups at all, and a headed
+// group with nothing under it is a heading pointing at a blank.
+const groups = computed<NavGroup<NoteRow>[]>(() => (rows.value.length === 0 ? [] : [{ key: `hits`, items: rows.value }]));
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-col">
-        <p v-if="isLoading && rows.length === 0" class="px-3 py-4 text-xs text-subtle">Looking…</p>
-
-        <p v-else-if="rows.length === 0 && filtered" class="px-3 py-4 text-xs text-muted">
-            Nothing in the vault matches. The agent's <b>kb</b> command searches the same notes — and a link to a note nobody has written yet is a
-            perfectly good way to leave a gap for later.
-        </p>
-
-        <p v-else-if="rows.length === 0" class="px-3 py-4 text-xs text-muted">No notes yet.</p>
-
-        <ul v-else class="min-h-0 flex-1 overflow-y-auto">
-            <li v-for="row in rows" :key="row.path">
-                <button
-                    type="button"
-                    class="w-full border-b border-line/60 px-3 py-2 text-left transition-colors hover:bg-surface-hover"
-                    :class="row.path === selected ? `bg-surface-hover` : undefined"
-                    :aria-current="row.path === selected ? `true` : undefined"
-                    @click="emit(`pick`, row.path)"
-                >
-                    <span class="flex items-center gap-1.5">
-                        <span class="min-w-0 flex-1 truncate text-sm text-content">{{ row.title }}</span>
+    <NavRail :groups="groups" aria-label="Notes">
+        <template #row="{ item: row }">
+            <Row :key="row.path" as="button" density="dense" class="rounded-lg" :selected="row.path === selected" @click="emit(`pick`, row.path)">
+                <!-- THE KIND RIDES THE TITLE LINE AND THE TIME RIDES THE TRAILING CELL, which is a width
+                     decision. In a 16rem column both marks in the trailing cluster left a name like "Soft
+                     delete everything" about 100px to live in, and a Row's title WRAPS rather than truncating —
+                     so a third of the list turned into two-line rows and the column stopped being scannable.
+                     The kind is an attribute of the name, so it belongs beside it and truncates with it. -->
+                <template #title>
+                    <span class="flex min-w-0 items-center gap-1.5">
+                        <span class="min-w-0 truncate">{{ row.title }}</span>
                         <StatusBadge v-if="row.type" :variant="row.variant" size="xs" :label="row.type" />
                     </span>
-                    <!-- The evidence: the sentence a body match was found on, the fact a header match was, or
-                         where the note lives when it matched by name and there is nothing to quote. -->
-                    <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-subtle">
+                </template>
+                <!-- The evidence: the sentence a body match was found on, the fact a header match was, or where
+                     the note lives when it matched by name and there is nothing to quote. -->
+                <template #description>
+                    <span class="flex min-w-0 items-baseline gap-1.5">
                         <span v-if="row.why" class="shrink-0 uppercase tracking-wide">{{ row.why }}</span>
-                        <span class="min-w-0 flex-1 truncate">{{ row.snippet ?? row.folder ?? row.path }}</span>
-                        <span class="shrink-0">{{ freshness(row.modifiedAt) }}</span>
+                        <span class="min-w-0 flex-1 truncate">{{ row.evidence }}</span>
                     </span>
-                </button>
-            </li>
-        </ul>
+                </template>
+                <template #meta>
+                    <span>{{ freshness(row.modifiedAt) }}</span>
+                </template>
+            </Row>
+        </template>
 
-        <p v-if="rows.length >= 200" :class="cmp.emptyState(`flex items-center gap-1.5 px-3 py-2 text-2xs`)">
-            <Icon name="info-circle" class="text-subtle" />
-            Showing the first 200 — narrow it with a word, a kind or a tag.
-        </p>
-    </div>
+        <!-- THREE DIFFERENT EMPTINESSES. Answering "nothing matches" to somebody who never typed anything
+             accuses them of a search they did not run, and answering it while the first one is still in flight
+             is wrong for a moment and then wrong-looking after. -->
+        <template #empty>
+            <p v-if="isLoading" class="px-2 py-4 text-xs text-subtle">Looking…</p>
+            <p v-else-if="filtered" class="px-2 py-4 text-xs text-muted">
+                Nothing in the vault matches. The agent's <b>kb</b> command searches the same notes — and a link to a note nobody has written yet is a
+                perfectly good way to leave a gap for later.
+            </p>
+            <p v-else class="px-2 py-4 text-xs text-muted">No notes yet.</p>
+        </template>
+
+        <!-- Below the scroll rather than at the end of it: a row cap that only appears once you have scrolled
+             past two hundred notes is a cap nobody reads. -->
+        <template v-if="rows.length >= 200" #footer>
+            <p class="flex items-center gap-1.5 text-2xs text-subtle">
+                <Icon name="info-circle" class="shrink-0" />
+                Showing the first 200 — narrow it with a word, a kind or a tag.
+            </p>
+        </template>
+    </NavRail>
 </template>
