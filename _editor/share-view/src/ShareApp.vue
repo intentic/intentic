@@ -104,7 +104,7 @@ const toggleThinking = (index: number): void => {
                  approximating it. -->
             <!-- No copy delegation up here: a code block's button lives inside rendered prose, and <Markdown>
                  binds its own — a second listener on this element would copy the same text twice. -->
-            <main class="chat-turns flex flex-1 flex-col gap-3">
+            <main class="chat-turns flex flex-1 flex-col">
                 <template v-for="(message, index) in payload.messages" :key="index">
                     <div v-if="dayMarks.get(index)" class="flex items-center gap-2 py-1 text-2xs text-subtle">
                         <span class="h-px flex-1 bg-line"></span>
@@ -112,7 +112,7 @@ const toggleThinking = (index: number): void => {
                         <span class="h-px flex-1 bg-line"></span>
                     </div>
 
-                    <div v-if="message.role === 'user'" class="flex flex-col items-end gap-1">
+                    <div v-if="message.role === 'user'" class="chat-stack flex flex-col items-end">
                         <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-content">
                             {{ message.text }}
                         </div>
@@ -134,7 +134,7 @@ const toggleThinking = (index: number): void => {
                         <span>{{ message.text }}</span>
                     </div>
 
-                    <div v-else class="flex w-full flex-col gap-1">
+                    <div v-else class="chat-stack flex w-full flex-col">
                         <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">
                             <button
                                 type="button"

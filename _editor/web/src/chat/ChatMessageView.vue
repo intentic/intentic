@@ -668,16 +668,18 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <!-- A folded message keeps the prompt's breathing room (pt-3 pb-2 mirrors .chat-prompt's padding) but not
-         its stickiness — see `defers`. An acknowledgment keeps its alignment too, because it is still the user
-         talking; an errand is the app talking, so it sits at the left edge with the machinery. -->
+    <!-- A folded message keeps the prompt's breathing room (.chat-defers takes the same inset .chat-prompt
+         does) but not its stickiness — see `defers`. An acknowledgment keeps its alignment too, because it is
+         still the user talking; an errand is the app talking, so it sits at the left edge with the machinery. -->
+    <!-- The blocks of one message stack on the transcript's own gap (.chat-stack, see --chat-gap): a turn's
+         calls, its answer and the card it ends on are three events in the column, spaced like any other two. -->
     <div
         ref="row"
-        class="chat-message flex flex-col gap-1"
+        class="chat-message chat-stack flex flex-col"
         :class="{
             'chat-prompt': message.role === 'user' && !defers,
             'items-end': message.role === 'user' && errand === undefined,
-            'pt-3 pb-2': defers,
+            'chat-defers': defers,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
         }"
@@ -769,8 +771,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  takes when nobody is asking — which is none: the label is absolute, so it costs the row no
                  height either way. What the margin buys over the strip below the bubble (where this used to
                  hang) is that the label is INSIDE its own message's band. Under the bubble it sat in the gap
-                 between two turns — the row's own 0.5rem of bottom padding plus the 0.25rem between turns, which
-                 the meta tier fills edge to edge — so it touched the bubble above and the answer below at once,
+                 between two turns — the row's own bottom padding plus the gap between turns, which the meta tier
+                 fills edge to edge — so it touched the bubble above and the answer below at once,
                  reading as plausibly a header for that answer as a footer for the prompt. And it landed in the
                  one corner of the bubble that already carries the clamp fade and the open/close chip.
                  The room is guaranteed, not hoped for: a prompt caps at 85% of the column, so the flank to its

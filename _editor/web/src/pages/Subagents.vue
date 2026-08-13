@@ -443,8 +443,8 @@ watch(messages, () => {
                      fill this pane, a report's paragraphs ran past 200 characters a line on a wide window,
                      which is where the eye loses the start of the next one. -->
                 <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto py-2">
-                    <div class="chat-turns flex flex-col gap-3">
-                        <div v-for="(message, index) in messages" :key="index" class="flex flex-col gap-1">
+                    <div class="chat-turns flex flex-col">
+                        <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
                             <!-- The prompt it was given reads as a prompt: the same right-aligned bubble the
                                  chat gives the user's own words, because from the child's side that is what
                                  it is. -->

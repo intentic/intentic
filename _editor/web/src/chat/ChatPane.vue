@@ -1454,7 +1454,7 @@ watch(
         <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
         <div ref="scroller" class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto" :class="{ 'chat-realize': realizing }">
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-                <div class="chat-turns flex flex-1 flex-col gap-1 pt-4">
+                <div class="chat-turns flex flex-1 flex-col pt-4">
                     <!-- Where a forked chat says so — above the turns it inherited, which without it read as
                          this conversation's own beginning. -->
                     <ChatForkLine />
@@ -1483,7 +1483,7 @@ watch(
                             >
                                 {{ dayMarks.get(turn.id) }}
                             </div>
-                            <section class="group/turn relative flex flex-col gap-1">
+                            <section class="chat-stack group/turn relative flex flex-col">
                                 <!-- v-memo skips the vnode entirely for a row whose inputs are unchanged, which
                                      during a streaming turn is every row but the one being written: `turns` is
                                      rebuilt on each paint, so without it the whole transcript is re-created to

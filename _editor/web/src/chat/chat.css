@@ -43,15 +43,24 @@
    row is on screen for the whole turn, so it must never be skipped.
    `top: -1px` rather than 0 so the row is clipped by a pixel the moment it pins, which is what the
    IntersectionObserver in ChatMessageView watches for (there is no :stuck selector). The pixel is spent out of
-   the padding above the bubble and never shows. */
+   the padding above the bubble and never shows.
+   The band's own inset is the transcript's gap (see --chat-gap), not a second number: in flow it is the air
+   after the turn above and before the answer below, so a value of its own would simply stack on top of the gap
+   and make one boundary in the column wider than the rest for no stated reason. Pinned, the same value is the
+   band's padding, which is what it has to be either way. */
 .chat-prompt {
     position: sticky;
     top: -1px;
     z-index: 5;
-    padding-top: calc(0.75rem + 1px);
-    padding-bottom: 0.5rem;
+    padding-top: calc(var(--chat-gap) + 1px);
+    padding-bottom: var(--chat-gap);
     background: var(--color-card);
     content-visibility: visible;
+}
+/* A folded message (an acknowledgment, an app errand — see `defers` in ChatMessageView) keeps the prompt's
+   breathing room without its stickiness, so it takes the same inset from the same place. */
+.chat-defers {
+    padding-block: var(--chat-gap);
 }
 /* The clip edge, named — and ONLY while the row is actually pinned. That opaque background is a rectangle
    ending at the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph
@@ -203,6 +212,30 @@
     max-width: calc(48rem + 2 * var(--chat-gutter));
     padding-inline: var(--chat-gutter);
     margin-inline: auto;
+}
+/* THE ONE GAP THE WHOLE TRANSCRIPT IS SPACED BY, and the only place it is written down.
+   A transcript is a column of events — a prompt, the calls a turn made, its answer, a question card, a
+   permission ask — and the air between any two of them says the same thing wherever they meet: these are two
+   things, not one. So it is a single number applied at every nesting that stacks them (the column of turns, the
+   messages inside a turn, the blocks inside a message), never a value picked per block. Picked per block, the
+   three nestings drift: the app's column ran at 0.25rem while the shared page and the subagent view — the same
+   column, drawn from the same sheet — ran at 0.75rem, and inside a turn an answer's bubble and a question card
+   under it met at 4px, which at that distance reads as one surface split by a seam rather than as two cards.
+   0.75rem because it has to beat the padding INSIDE the surfaces it separates (a bubble is 0.625rem top and
+   bottom): a gap narrower than a card's own inset reads as part of that card. It is the number the other two
+   columns already stood at, so standardizing on it left them where they were.
+   Inherited from the column rather than restated, so a stack nested at any depth resolves to the same value —
+   and one edit moves the whole transcript, which is the property the per-block values did not have.
+   Only the GAP is set here: the column is borrowed by the subagent view for its reading width alone (a
+   rendered report, not a stack), and `gap` on something that is not a flex container is simply ignored —
+   whereas a display declared here would silently reflow it. Every stack still says it is one in its own
+   markup. */
+.chat-turns {
+    --chat-gap: 0.75rem;
+}
+.chat-turns,
+.chat-stack {
+    gap: var(--chat-gap);
 }
 /* The margin the fork mark stands in (ChatForkCut). It is the column's OWN inset rather than space borrowed
    off the scroller: an absolute element hung outside the column would be clipped in a narrow panel — or drag a
