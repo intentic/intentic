@@ -269,7 +269,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "docker",
         category: "platform",
         logo: "docker",
-        description: "Run containers — its own Docker Engine + Compose.",
+        description: "Run containers — its own Engine + Compose.",
         singleton: true,
         /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
          * families DockerConfigSchema defines — and the `rebuild` chip is what tells them apart on sight,
@@ -349,7 +349,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "vpn",
         category: "servers",
         icon: "shield",
-        description: "Private network — WireGuard, FortiGate or IPsec.",
+        description: "WireGuard, FortiGate or IPsec.",
         fields: [
             // The discriminator: every field below is gated on it, so one card serves all three protocols and
             // the daemon receives exactly one arm of the config union.
@@ -490,7 +490,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Custom MCP server",
         kind: "mcp",
         category: "extend",
-        description: "Connect any remote MCP server by URL and token.",
+        description: "Any remote MCP server, by URL and token.",
         fields: [
             { key: "url", label: "MCP URL", placeholder: "https://example.com/mcp" },
             { key: "token", label: "Token", secret: true, optional: true },
@@ -508,7 +508,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Claude plugin",
         kind: "plugin",
         category: "extend",
-        description: "Install a Claude Code plugin from a git repo.",
+        description: "A Claude Code plugin from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/plugin" },
             { key: "ref", label: "Branch, tag or commit", optional: true },
@@ -531,7 +531,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Extension",
         kind: "extension",
         category: "extend",
-        description: "Install an intentic extension from a git repo.",
+        description: "An intentic extension from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
             // A full sha, not a branch: extension code runs trusted in your browser, so installs pin exactly
@@ -562,7 +562,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         kind: "identity",
         category: "communication",
         icon: "user",
-        description: "One email the sandbox is online — accounts grow from it.",
+        description: "One email — every account grows from it.",
         fields: [
             { key: "email", label: "Email address", placeholder: "you@gmail.com" },
             {

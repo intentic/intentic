@@ -37,7 +37,7 @@
                 "catalog": {
                     "name": "Google Workspace",
                     "logo": "google",
-                    "description": "Gmail, Calendar, Drive, Docs, Sheets and Contacts.",
+                    "description": "Your Google mail, calendar, files and docs.",
                     "category": "communication",
                     "hint": "One connection covers all six. Connect as YOUR ACCOUNT (a personal Gmail address or a single Workspace one) with an OAuth client you make in Google's console, or as a WHOLE COMPANY (a Workspace admin's service account with domain-wide delegation, where each card acts as one named person). The read-only setting is real, not cosmetic: it asks Google for the read-only scopes AND refuses every command that sends, edits, moves or deletes. Add the card again for a second account.",
                     "guide": {

@@ -93,7 +93,9 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
 </script>
 
 <template>
-    <div v-if="compact && rows.length > 0" class="flex items-center gap-1.5 text-2xs text-subtle">
+    <!-- `shrink-0`: the strip sits on one line beside a name that truncates, and squashing fixed-width glyphs to
+         buy that name three more pixels loses the state the glyphs are there to show. -->
+    <div v-if="compact && rows.length > 0" class="flex shrink-0 items-center gap-1.5 text-2xs text-subtle">
         <span v-for="(row, index) in rows" :key="index" v-tooltip.top="row.label" :class="row.warn ? 'text-warning' : ''">
             <Icon :name="row.icon" />
         </span>

@@ -4,6 +4,10 @@
 // cosmetic: that a recommendation arrives with the thing that was READ to make it (a claim nobody can check is
 // one nobody should act on), and that what the scan already knows is filled in — a wrong instance url is one of
 // the two ways connecting a repository host fails silently, and the scan has already answered it.
+//
+// WHERE the evidence has to be legible is the card, not the tile: the grid is a uniform strip of one-line tiles
+// where a recommendation is a glyph carrying its sentence, and opening the card — which is the step before
+// anything is connected — prints the claim and the artifact behind it verbatim, above the form.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { CapabilityRecommendation } from "@intentic-app/api-contract";
@@ -135,7 +139,9 @@ const mount = (): HTMLElement => {
                     h(`a`, slots["default"]?.()),
         }),
     );
-    app.directive(`tooltip`, {});
+    // The real directive puts its sentence in a popover on hover; here it parks it on the element, which is how
+    // a test can ask what a glyph would say without driving a pointer.
+    app.directive(`tooltip`, { mounted: (node: HTMLElement, binding) => (node.dataset[`tooltip`] = String(binding.value)) });
     app.mount(el);
     return el;
 };
@@ -150,9 +156,10 @@ it(`offers the whole set as one thing to do, and says what each one was read off
     const el = mount();
 
     expect(el.textContent).toContain(`2 capabilities your workspace asks for`);
-    // The claim and the artifact behind it, both on the tile — the second is what makes the first checkable.
-    expect(el.textContent).toContain(`your repositories are hosted on your own GitLab`);
-    expect(el.textContent).toContain(`api/.gitlab-ci.yml → git.acme.dev`);
+    // The badged tile still carries both — the claim and the artifact behind it, which is what makes it
+    // checkable — without spending the two lines that would make this tile taller than the ones beside it.
+    const badge = el.querySelector(`[data-tooltip*="your repositories are hosted on your own GitLab"]`);
+    expect(badge?.getAttribute(`data-tooltip`)).toContain(`api/.gitlab-ci.yml → git.acme.dev`);
 
     button(el, `Set them up`).click();
     await nextTick();
@@ -166,6 +173,10 @@ it(`fills in what the scan could read, and leaves the credential to the user`, a
     recommendations.value = [gitlab, docker];
     const el = mount();
     await nextTick();
+
+    // Open, above the form, before anything is connected: the claim and the file it was read from, in full.
+    expect(el.textContent).toContain(`your repositories are hosted on your own GitLab`);
+    expect(el.textContent).toContain(`api/.gitlab-ci.yml → git.acme.dev`);
 
     const inputs = [...el.querySelectorAll(`input`)];
     // The instance the scan identified, not the card's gitlab.com default — the whole point of pre-filling.

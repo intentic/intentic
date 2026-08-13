@@ -101,7 +101,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `GitHub`,
                             logo: `github/f5f5f5`,
-                            description: `Issues, PRs, code search and git on your repos.`,
+                            description: `Issues, PRs, code search and git.`,
                             category: `code`,
                         },
                         fields: [

@@ -14,7 +14,7 @@
                 "kind": "agent",
                 "catalog": {
                     "name": "Pi",
-                    "description": "Run the Pi coding agent as a chat provider over its RPC protocol.",
+                    "description": "Run the Pi coding agent as a chat provider.",
                     "category": "extend",
                     "hint": "The `pi` id is reserved: this card is served over Pi's own RPC protocol (mid-turn steering, effort control, slash commands), not ACP. Connect a subscription by running `pi` in a Terminal once and typing /login, or paste provider API keys into the environment block.",
                     "guide": {

@@ -14,7 +14,7 @@
                 "catalog": {
                     "name": "Windows PC",
                     "icon": "desktop",
-                    "description": "Work on your Windows PC — shell, files, screen.",
+                    "description": "Your Windows PC — shell, files, screen.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"check the logs on my-laptop\"). Adding it hands you a one-liner to run on that machine.",
                     "guide": {
@@ -35,7 +35,7 @@
                 "catalog": {
                     "name": "Linux PC",
                     "logo": "linux",
-                    "description": "Work on your Linux PC — shell, files, desktop.",
+                    "description": "Your Linux PC — shell, files, desktop.",
                     "category": "machines",
                     "hint": "The name is how you and the agent refer to this computer (\"run the tests on my-desktop\"). Adding it hands you a one-liner to run on that machine.",
                     "guide": {

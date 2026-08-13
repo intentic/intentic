@@ -16,7 +16,7 @@
                 "catalog": {
                     "name": "GitHub",
                     "logo": "github",
-                    "description": "Issues, PRs, code search and git on your repos.",
+                    "description": "Issues, PRs, code search and git.",
                     "category": "code",
                     "hint": "Any repo-scoped token is enough: the agent calls the API with curl, and with Git access on, pull and push work over HTTPS. The two extra permissions beside add native ssh://git and CI webhooks on workspace repos — without them both still work, and the card shows you what to add by hand.",
                     "guide": {
@@ -119,7 +119,7 @@
                 "catalog": {
                     "name": "npm",
                     "logo": "npm",
-                    "description": "Publish and manage packages on the npm registry.",
+                    "description": "Publish and manage packages on npm.",
                     "category": "code",
                     "hint": "The agent uses the npm CLI, already signed in. Publishing may ask for a one-time 2FA code: with a TOTP secret stored, the agent mints its own and never sees the secret. Write tokens expire within 90 days — paste a fresh one under Sandbox ▸ Secrets.",
                     "guide": {
@@ -161,7 +161,7 @@
                 "catalog": {
                     "name": "npmjs.com",
                     "logo": "npm",
-                    "description": "Your npm account in a real logged-in browser.",
+                    "description": "Your npm account in a real browser.",
                     "category": "code",
                     "hint": "Use Log in to sign in once. A physical security key cannot reach this browser — sign in with a recovery code instead, then open npm's 2FA settings and `Add Security Key`: the sandbox enrolls its own passkey and answers every later 2FA prompt itself. Pairs with the npm connector — its publishes get their web approvals here."
                 },
@@ -176,7 +176,7 @@
                 "catalog": {
                     "name": "Browser session",
                     "icon": "globe",
-                    "description": "Sign into any site and let the agent act as you there.",
+                    "description": "Sign into any site; the agent acts as you.",
                     "category": "extend",
                     "hint": "The card for sites that have no card — an internal admin panel, a supplier portal, a client's CMS. Every other browser card is this one with the addresses filled in and a site cheatsheet attached, so use those where they exist: they teach the agent the site's own URLs and controls, which this one has to discover by reading the page. Add one session per account, named after the account."
                 },
@@ -209,7 +209,7 @@
                 "catalog": {
                     "name": "Sentry",
                     "logo": "sentry",
-                    "description": "Query issues and traces from your Sentry org.",
+                    "description": "Query issues and traces from Sentry.",
                     "category": "observability",
                     "hint": "Self-hosted: set your instance URL above first. Leave the org blank to let the agent list your orgs.",
                     "guide": {
@@ -294,7 +294,7 @@
                 "catalog": {
                     "name": "Outline",
                     "logo": "outline",
-                    "description": "Docs and knowledge base from your Outline wiki.",
+                    "description": "Docs and knowledge base from Outline.",
                     "category": "business",
                     "hint": "The agent uses the token with curl against the Outline API.",
                     "guide": {

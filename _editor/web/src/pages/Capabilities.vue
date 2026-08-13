@@ -1354,55 +1354,55 @@ const submitLabel = computed(() => {
                                     @click="pick(card.entry)"
                                 >
                                     <BrandMark :size="24" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
-                                    <div class="min-w-0">
-                                        <!-- WRAPPING, because the tile is a third of a pane rather than a third of the
-                                         page now. Without it the badges hold their line and squeeze the name into
-                                         two, which puts the one word a scanner is looking for last.
+                                    <div class="min-w-0 flex-1">
+                                        <!-- ONE LINE, NEVER TWO. A grid row is as tall as its tallest tile, so any line
+                                         a single card can grow is a line every card beside it pays for in white
+                                         space — which is what a catalog of ragged tiles looked like. The name gives
+                                         way (it truncates) rather than the badges, which are a fixed few glyphs
+                                         wide and are the state a scanner is reading down the column.
 
-                                         EVERY BADGE IS A GLYPH, with its sentence in the tooltip: the words spent
-                                         a whole line of a tile that is now two lines tall, and they were the same
-                                         words on every card carrying them — a strip of green ticks reads as a
-                                         column of state faster than "1 connected" repeated down the grid. -->
-                                        <div class="flex flex-wrap items-center gap-x-1.5">
-                                            <span class="text-xs font-semibold text-content">{{ card.entry.name }}</span>
+                                         EVERY BADGE IS A GLYPH, with its sentence in the tooltip: the words were
+                                         the same words on every card carrying them — a strip of green ticks reads
+                                         as a column of state faster than "1 connected" repeated down the grid. -->
+                                        <div class="flex items-center gap-x-1.5">
+                                            <span class="truncate text-xs font-semibold text-content">{{ card.entry.name }}</span>
                                             <!-- The count only once there is more than one to count: a lone tick already
                                              means connected, and "1" beside it is a number nobody needs. -->
                                             <span
                                                 v-if="card.connected > 0"
                                                 v-tooltip.top="`${card.connected} connected`"
-                                                class="inline-flex items-center gap-0.5 text-2xs text-success"
+                                                class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-success"
                                                 :aria-label="`${card.connected} connected`"
                                             >
                                                 <Icon name="check-circle" />
                                                 <template v-if="card.connected > 1">{{ card.connected }}</template>
                                             </span>
-                                            <span v-if="card.recommendation" class="text-2xs text-info" aria-label="Recommended">
+                                            <!-- The scan's finding rides its own badge rather than two lines under the
+                                             description: the claim and the file it was read from are what the
+                                             tooltip says, so a reader can still check it, and a recommended card is
+                                             the same shape as the ones around it. -->
+                                            <span
+                                                v-if="card.recommendation"
+                                                v-tooltip.top="`${card.recommendation.reason} — ${card.recommendation.evidence}`"
+                                                class="shrink-0 text-2xs text-info"
+                                                :aria-label="`Recommended: ${card.recommendation.reason}`"
+                                            >
                                                 <Icon name="sparkles" />
                                             </span>
                                             <span
                                                 v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')"
                                                 v-tooltip.top="`Requires DevOps`"
-                                                class="text-2xs text-muted"
+                                                class="shrink-0 text-2xs text-muted"
                                                 aria-label="Requires DevOps"
                                             >
                                                 <Icon name="lock" />
                                             </span>
                                             <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
                                         </div>
-                                        <!-- CLAMPED, not merely short. Card copy is authored to one line, but a card
+                                        <!-- TRUNCATED, not merely short. Card copy is authored to one line, but a card
                                          derives from any enabled extension's manifest — including one nobody here
-                                         wrote — and a row is as tall as its tallest tile, so one long sentence
-                                         used to inflate the two cards beside it. -->
-                                        <div class="line-clamp-2 text-2xs text-muted">{{ card.entry.description }}</div>
-                                        <!-- Derived from what is checked out in the workspace, so the claim comes
-                                         with the thing that was read to make it rather than being asserted. The
-                                         two lines this costs are spent only on the handful of cards the scan
-                                         actually vouched for — a claim nobody can check is one nobody should act
-                                         on, which is not a thing to hide behind a hover. -->
-                                        <div v-if="card.recommendation" class="text-2xs text-info">{{ card.recommendation.reason }}</div>
-                                        <div v-if="card.recommendation" class="truncate font-mono text-2xs text-subtle">
-                                            {{ card.recommendation.evidence }}
-                                        </div>
+                                         wrote — and that sentence cannot be allowed to set the height of its row. -->
+                                        <div class="truncate text-2xs text-muted">{{ card.entry.description }}</div>
                                     </div>
                                 </button>
                             </div>
