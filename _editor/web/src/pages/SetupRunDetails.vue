@@ -25,12 +25,12 @@ const { cleanup } = defineProps<{ cleanup: string }>();
 
 <template>
     <div class="flex flex-col gap-3">
-        <p class="text-sm font-medium text-content">What this does</p>
+        <p class="text-base font-medium text-content">What this does</p>
         <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote (the container names, "nothing
              deployed", "runs as you, no root") and a reference panel nobody finishes reading answers nothing.
              The line naming the dotfiles it writes is gone outright: where a log lands is not a fact anybody
              is weighing while deciding whether to paste a command. -->
-        <ul class="flex flex-col gap-2 text-2xs text-muted">
+        <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
                 <span class="min-w-0">Starts your sandbox in <span class="text-content">Docker</span></span>
@@ -45,18 +45,30 @@ const { cleanup } = defineProps<{ cleanup: string }>();
              before somebody commits to the command. The Linux vanity URL serves the AppImage, which works
              across distributions without asking the reader to choose a package format here. -->
         <div class="flex flex-col gap-2 border-t border-line pt-3">
-            <p class="text-2xs text-subtle">Or use the desktop app</p>
+            <p class="text-xs text-subtle">Or use the desktop app</p>
             <div class="grid grid-cols-2 gap-2">
-                <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" size="small" severity="secondary">
+                <Button
+                    as="a"
+                    :href="DESKTOP_DOWNLOADS.windows"
+                    label="Windows"
+                    severity="secondary"
+                    class="transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:bg-overlay/60 hover:shadow-sm"
+                >
                     <template #icon><Icon name="download" /></template>
                 </Button>
-                <Button as="a" :href="DESKTOP_DOWNLOADS.linuxAppImage" label="Linux" size="small" severity="secondary">
+                <Button
+                    as="a"
+                    :href="DESKTOP_DOWNLOADS.linuxAppImage"
+                    label="Linux"
+                    severity="secondary"
+                    class="transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:bg-overlay/60 hover:shadow-sm"
+                >
                     <template #icon><Icon name="download" /></template>
                 </Button>
             </div>
         </div>
 
-        <div class="border-t border-line pt-3 text-2xs text-subtle">
+        <div class="border-t border-line pt-3 text-xs leading-relaxed text-subtle">
             <p>Installs Docker if you haven't got it, asking first.</p>
             <a
                 href="https://docs.docker.com/get-docker/"
@@ -72,7 +84,7 @@ const { cleanup } = defineProps<{ cleanup: string }>();
              the install step — true, but it earned that row by being the only place it could go. Here it is
              permanently visible on a wide screen instead of one row among eight, and on a narrow one it is a tap
              away in the same panel as the rest of what running this means. -->
-        <div class="flex flex-col gap-1 border-t border-line pt-3 text-2xs text-muted">
+        <div class="flex flex-col gap-1 border-t border-line pt-3 text-xs text-muted">
             <!-- The copy button rides the label, not the command. Beside the command it took ~25px off the
                  one line that has to survive intact, and a one-liner that wraps stops looking like a thing you
                  run — the docked column is sized (Setup.vue's aside) so the command clears its full width. -->

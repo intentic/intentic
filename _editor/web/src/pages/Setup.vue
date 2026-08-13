@@ -478,7 +478,7 @@ const ladderShown = computed(() => !desktop.value && ladderOptions.value.length 
  * only alignment on the card that carries meaning. Muted and small against a value in content colour:
  * the name used to sit in the step's own heading, in the heading's weight and the heading's colour, where the
  * one word on the card worth changing read as the label in front of it. */
-const factLabel = `w-16 shrink-0 text-xs text-muted`;
+const factLabel = `w-16 shrink-0 text-sm text-muted`;
 
 /* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
  * turn into a text field without moving, which means the idle name already wears the field's height, padding
@@ -486,7 +486,7 @@ const factLabel = `w-16 shrink-0 text-xs text-muted`;
  * would start the name a few pixels right of an address that has none, and the two facts on this card would
  * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
  * first attempt and it hard-codes a spacing token the theme is free to change. */
-const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-sm text-content`;
+const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-base text-content`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
 // chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
@@ -1527,7 +1527,7 @@ watch(commandReady, (ready) => {
                     <h1 class="min-w-0 flex-1 text-xl font-medium md:text-2xl">Set up your workspace</h1>
                     <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
                          work the attach lane doesn't do. -->
-                    <p class="w-full text-sm text-muted">
+                    <p class="w-full text-base text-muted">
                         <template v-if="lane === `attach`"
                             >Point intentic at the sandbox you're already running. One address, and you're in.</template
                         >
@@ -1550,11 +1550,11 @@ watch(commandReady, (ready) => {
                         <!-- WHY YOU ARE HERE, when the page chose this lane rather than the reader. Arriving on
                              "give us your domain" with no explanation reads as a step missing; one sentence
                              naming what this platform does turns it into the flow it actually is. -->
-                        <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
+                        <p v-if="!provisionOffered" class="flex items-start gap-2 text-sm text-muted">
                             <Icon name="info-circle" class="mt-0.5 shrink-0" />
                             <span>This platform doesn't start sandboxes or hand out addresses — it connects to one you're already running.</span>
                         </p>
-                        <p class="text-xs text-muted">
+                        <p class="text-sm text-muted">
                             Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
                             open your workspace. Nothing to install, nothing to provision.
                         </p>
@@ -1585,12 +1585,12 @@ watch(commandReady, (ready) => {
                                     <template #icon><Icon name="link" /></template>
                                 </Button>
                             </div>
-                            <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
-                            <span v-else-if="normalizedDomain" class="text-xs text-muted"
+                            <span v-if="domainProblem" class="text-sm text-warning">{{ domainProblem }}</span>
+                            <span v-else-if="normalizedDomain" class="text-sm text-muted"
                                 >We'll connect to <span>{{ normalizedDomain }}</span
                                 >.</span
                             >
-                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
+                            <span v-else class="text-sm text-muted">The https address your sandbox already answers on (https:// is optional).</span>
                         </label>
 
                         <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
@@ -1606,7 +1606,7 @@ watch(commandReady, (ready) => {
                                 :class="cmp.input('w-full text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
-                            <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
+                            <span class="text-sm text-muted">Just so you can tell it apart in the switcher.</span>
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
@@ -1720,7 +1720,7 @@ watch(commandReady, (ready) => {
                                      ran before was torn down locally; one that was made here and never started is
                                      simply where the user left off — telling them a container was cleared would
                                      be describing a machine that never existed. -->
-                                <p class="text-xs text-muted">
+                                <p class="text-sm leading-relaxed text-muted">
                                     <template v-if="neverStarted">
                                         This one was made last time you were here but never started. Pick up where you left off, or create a new
                                         sandbox instead.
@@ -1730,7 +1730,7 @@ watch(commandReady, (ready) => {
                                         below to start a fresh daemon, or create a new sandbox instead.
                                     </template>
                                 </p>
-                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
+                                <button type="button" :class="cmp.linkButton(`text-sm text-muted underline hover:text-content`)" @click="startFresh">
                                     Not this one? Create a new sandbox instead
                                 </button>
                             </template>
@@ -1841,7 +1841,7 @@ watch(commandReady, (ready) => {
                                     <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                         <Icon name="spinner" spin /> Assigned as your machine starts…
                                     </span>
-                                    <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
+                                    <span v-else :class="`${factSlot} text-sm text-muted`">Assigned when your machine starts</span>
                                 </div>
                             </template>
                             <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a spinner
@@ -1850,7 +1850,7 @@ watch(commandReady, (ready) => {
                             <template v-else-if="addressless">
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span :class="factLabel">Address</span>
-                                    <span :class="`${factSlot} text-xs text-muted`">This platform doesn't set one up</span>
+                                    <span :class="`${factSlot} text-sm text-muted`">This platform doesn't set one up</span>
                                 </div>
                                 <p class="text-xs text-muted">
                                     Sandboxes here are reached at an address you already have. Already running one?
@@ -1884,7 +1884,7 @@ watch(commandReady, (ready) => {
                                          difference between provisioning under their zone and attaching an address
                                          that already answers BEFORE they could tell which link was theirs. Now one
                                          link opens both, each stating what it does rather than what it is called. -->
-                                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="reaching = !reaching">
+                                    <button type="button" :class="cmp.linkButton(`text-sm`)" @click="reaching = !reaching">
                                         {{ reaching ? `Keep this address` : `Use a different address` }}
                                     </button>
                                 </div>
@@ -2047,16 +2047,16 @@ watch(commandReady, (ready) => {
                                         class="shrink-0 text-lg"
                                         :class="machine === option.value ? `text-link` : `text-muted`"
                                     />
-                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
+                                    <span class="min-w-0 text-base font-medium text-content">{{ option.title }}</span>
                                 </span>
-                                <span class="text-2xs text-muted">{{ option.meta }}</span>
+                                <span class="text-xs text-muted">{{ option.meta }}</span>
                                 <!-- Three or four words: what this rung asks of you, or where it puts the
                                      machine. The sentences that used to sit here are under the row now, for
                                      the rung that was actually chosen. -->
-                                <span class="text-2xs leading-snug text-subtle">{{ option.note }}</span>
+                                <span class="text-xs leading-snug text-subtle">{{ option.note }}</span>
                                 <!-- The allowance is spent, and saying so beats hiding a rung the reader was
                                      offered on their first sandbox. -->
-                                <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>
+                                <span v-if="option.value === `hosted` && hostedSpent" class="text-xs text-warning">Already using yours</span>
                             </button>
                         </div>
                     </div>
@@ -2144,7 +2144,7 @@ watch(commandReady, (ready) => {
                                 >
                                     <template #icon><Icon :name="hostedError ? `refresh` : `bolt`" /></template>
                                 </Button>
-                                <p class="text-2xs leading-snug text-subtle">
+                                <p class="text-xs leading-relaxed text-subtle">
                                     <template v-if="hostedSpent">
                                         You already have the free machine your account comes with. Pick another rung above, or delete the sandbox
                                         that's using it.
@@ -2252,7 +2252,7 @@ watch(commandReady, (ready) => {
                              that runs this is by construction not the one reading it.
                              Not on a phone: the line that opened this disclosure already said who copying is for,
                              and repeating it here would be the third sentence in a card about a fourth device. -->
-                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
+                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-sm text-muted">
                                         <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
                                         <span class="min-w-0">
                                             <template v-if="desktop"
@@ -2267,8 +2267,19 @@ watch(commandReady, (ready) => {
                              it copies, was the loose end on this card. Beside the tabs on a desktop, under the
                              command on a phone; either way it is next to what it acts on. -->
                                     <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
-                                        <Segmented v-model="runTab" :options="runTabOptions" :stretch="mobile" />
-                                        <CopyButton v-if="!mobile && runTab !== `compose`" :text="selectedCommand" label="Copy" @copied="onCopied" />
+                                        <Segmented
+                                            v-model="runTab"
+                                            :options="runTabOptions"
+                                            :stretch="mobile"
+                                            class="[&>button]:py-1 [&>button]:text-xs"
+                                        />
+                                        <CopyButton
+                                            v-if="!mobile && runTab !== `compose`"
+                                            :text="selectedCommand"
+                                            label="Copy"
+                                            class="text-xs"
+                                            @copied="onCopied"
+                                        />
                                     </div>
                                     <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                                     <template v-else>
@@ -2337,7 +2348,7 @@ watch(commandReady, (ready) => {
                                  people select and read. -->
                                 <div
                                     v-if="environment.production && commandVisible && runTab === `unix`"
-                                    class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                                    class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"
                                 >
                                     <label class="flex cursor-pointer items-center gap-2">
                                         <Checkbox v-model="hasDocker" :binary="true" size="small" />
@@ -2379,7 +2390,7 @@ watch(commandReady, (ready) => {
                                  report: a spinner beside "here is what broke" is the page contradicting itself. -->
                             <p
                                 v-if="reportFailures === null"
-                                class="flex items-start gap-2 text-xs"
+                                class="flex items-start gap-2 text-sm"
                                 :class="handoff === `claimed` ? `text-content` : `text-muted`"
                             >
                                 <Icon
@@ -2467,7 +2478,7 @@ watch(commandReady, (ready) => {
                             <!-- A claim with no daemon behind it is a genuinely different failure from silence: the
                          command ran, so the terminal is where the answer is. Much longer fuse — the first image
                          pull legitimately takes minutes. -->
-                            <p v-if="slowBuild" class="flex items-start gap-2 text-2xs text-warning">
+                            <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
                                 <!-- Where the answer is depends on what actually ran it — the app streams its own
                                      log, everything else has a terminal. Asking `commandVisible` instead used to
@@ -2486,7 +2497,7 @@ watch(commandReady, (ready) => {
                                 >
                             </p>
                         </div>
-                        <p v-if="status" class="text-2xs text-warning">{{ status }}</p>
+                        <p v-if="status" class="text-xs text-warning">{{ status }}</p>
                     </section>
                 </div>
 
@@ -2496,7 +2507,7 @@ watch(commandReady, (ready) => {
                      content is on the run step's (i) hint there, and the hint's trigger is `xl:hidden` in turn, so
                      exactly one of the two is reachable at any width.
                      The width is measured, not picked: 22rem is what the longest cleanup one-liner (the sh
-                     one, 44 mono characters at text-2xs) needs to sit on a single line inside the card's
+                     one, 44 mono characters at text-xs) needs to sit on a single line inside the card's
                      padding. At 18rem it wrapped into three lines — the undo read as a paragraph. -->
                 <aside
                     v-if="created && lane === `provision` && machine !== `hosted`"

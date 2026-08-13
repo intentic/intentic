@@ -13,7 +13,7 @@ const enabled = defineModel<boolean>({ required: true });
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-0.5 text-2xs text-muted opacity-70 transition-opacity focus-within:opacity-100 hover:opacity-100">
+    <div class="flex min-w-0 flex-col gap-0.5 text-xs text-muted opacity-80 transition-opacity focus-within:opacity-100 hover:opacity-100">
         <!-- The <label> stops at the option's NAME: a label toggles on any click inside it, and the folder
              below it is a path people select and read. -->
         <label class="flex cursor-pointer items-center gap-2">
