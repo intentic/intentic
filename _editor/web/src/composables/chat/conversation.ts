@@ -1362,6 +1362,26 @@ export class Conversation {
         }
     }
 
+    /* The same, for the terminal handover — "can't help now" from chat, which un-parks the agent to carry on
+     * without the owner at the prompt. "Done — hand back" lives on the terminal panel's banner for the reason
+     * the browser's lives over its stage: it belongs beside the thing the owner just acted on, and it is the
+     * answer that only makes sense once they have. */
+    async declineTerminalHelp(message: ChatMessage): Promise<void> {
+        const help = message.terminalHelp;
+        if (help?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message.id,
+            { kind: `terminal_help`, requestId: help.requestId, helped: false },
+            `Could not send that — the turn may have ended.`,
+            { terminalHelp: { ...help, status: `declined` } },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* One folded frame's consequences for the conversation, in the order the frames arrived. Both orderings
      * here matter and neither can be hoisted: `providerRetry` is cleared by any other frame and SET by an
      * effect below, so a batch holding a retry and the frame that answers it would otherwise settle on

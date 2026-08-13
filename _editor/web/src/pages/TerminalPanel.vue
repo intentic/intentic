@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, useDevice } from "@intentic/ui";
+import { clipboardOf, cmp, ConfirmDialog, ContextMenu, Icon, type IconName, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
@@ -17,6 +17,7 @@ import { copySelection, pasteIntoTerminal } from "../composables/terminal/termin
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "../composables/terminal/useTerminal";
 import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
+import { postTurnControl } from "../composables/chat/turnStream";
 
 /* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
  * shared cache (composables/useTerminal): mounting re-appends the active tab's persistent host element,
@@ -90,6 +91,31 @@ watch(
     () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
     () => void tabs.refresh(),
 );
+
+/* THE AGENT IS WAITING FOR YOU AT THIS TERMINAL — the answering end of the terminal handover
+ * (sandbox terminal/terminal-help.ts), and the exact counterpart of the banner over the Browsers stage.
+ *
+ * The ask rides the terminals list, so it needs no state of its own here: whichever session the strip has
+ * ACTIVE is the one whose banner shows, and it comes down when the daemon publishes the cleared flag — the
+ * same push that raised it. That the banner follows the active tab rather than shouting from wherever it was
+ * raised is the whole reason it belongs here: the thing the owner has to answer is the prompt in the pane
+ * directly below it, and an ask floating over a different session's pane would be pointing at nothing.
+ *
+ * An ask on a tab that is NOT active still reaches the owner — the chat card and the phone notification both
+ * carry it, and the card's button focuses this very tab.
+ */
+const help = computed(() => listed.sessions.value.find((session) => session.name === activeName.value)?.help);
+const helpNote = ref(``);
+watch(activeName, () => (helpNote.value = ``));
+const resolveHelp = async (helped: boolean): Promise<void> => {
+    const open = help.value;
+    if (open === undefined) {
+        return;
+    }
+    const note = helpNote.value.trim();
+    await postTurnControl(`/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
+    helpNote.value = ``;
+};
 
 // --- Tab strip: segments, numbering, cosmetics ------------------------------------------------
 const tabByName = computed(() => new Map(order.value.map((tab) => [tab.name, tab])));
@@ -1032,6 +1058,42 @@ const endResize = (event: PointerEvent): void => {
         </div>
         <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            <!-- THE AGENT ASKED FOR HANDS. Between the strip and the pane — directly over the prompt the owner
+                 has to answer — and its buttons settle the parked request; it comes down on the daemon's own
+                 push, the same one that raised it. The mirror of the Browsers banner, deliberately. -->
+            <div v-if="help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
+                <div class="flex items-start gap-2">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
+                    <div class="min-w-0 flex-1 text-xs text-content">
+                        <span class="font-medium">The agent needs your help:</span>
+                        {{ help.message }}
+                        <span class="text-muted"> — type it below, then hand back.</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input
+                        v-model="helpNote"
+                        type="text"
+                        placeholder="Optional note back to the agent"
+                        class="min-w-40 flex-1 rounded border border-line bg-card px-2 py-1 text-xs text-content placeholder:text-subtle"
+                        @keydown.enter="resolveHelp(true)"
+                    />
+                    <button
+                        type="button"
+                        class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                        @click="resolveHelp(true)"
+                    >
+                        Done — hand back
+                    </button>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
+                        @click="resolveHelp(false)"
+                    >
+                        Can't help now
+                    </button>
+                </div>
+            </div>
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
                  the pane (useTerminal's mount builds one .term-cell per split). The right-click is caught here
                  rather than per cell because the cells are built imperatively — the handler reads which session

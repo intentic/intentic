@@ -10,6 +10,7 @@ import {
     type PlanStatus,
     type QuestionStatus,
     type ServiceOfferStatus,
+    type TerminalHelpStatus,
 } from "./transcript";
 
 /* One agent frame applied to the transcript — as a PURE function.
@@ -337,6 +338,8 @@ const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => 
 };
 const browserHelpStatusOf = (reply: AgentReply | undefined): BrowserHelpStatus =>
     reply?.kind !== `browser_help` ? `cancelled` : reply.helped ? `helped` : `declined`;
+const terminalHelpStatusOf = (reply: AgentReply | undefined): TerminalHelpStatus =>
+    reply?.kind !== `terminal_help` ? `cancelled` : reply.helped ? `helped` : `declined`;
 const serviceOfferStatusOf = (reply: AgentReply | undefined): ServiceOfferStatus =>
     reply?.kind !== `service_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
 // A yes settles the DECISION, not the ask: the owner is now setting the capability up, so the card moves to
@@ -365,6 +368,9 @@ const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resol
         }
         if (message.browserHelp?.requestId === event.requestId) {
             return { ...message, browserHelp: { ...message.browserHelp, status: browserHelpStatusOf(event.reply) } };
+        }
+        if (message.terminalHelp?.requestId === event.requestId) {
+            return { ...message, terminalHelp: { ...message.terminalHelp, status: terminalHelpStatusOf(event.reply) } };
         }
         if (message.serviceOffer?.requestId === event.requestId) {
             return { ...message, serviceOffer: { ...message.serviceOffer, status: serviceOfferStatusOf(event.reply) } };
@@ -520,6 +526,14 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const { kind: _kind, ...ask } = event;
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, browserHelp: { ...ask, status: `pending` } }));
+            return step({ ...attached, bubbleId: null });
+        }
+        case `terminal_help`: {
+            // The browser card's twin: its action leads away to the terminal panel, where the waiting prompt
+            // and the hand-back are, and the resolved frame is what usually freezes it here.
+            const { kind: _kind, ...ask } = event;
+            const opened = withBubble(flushPending(state));
+            const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, terminalHelp: { ...ask, status: `pending` } }));
             return step({ ...attached, bubbleId: null });
         }
         case `service_offer`: {

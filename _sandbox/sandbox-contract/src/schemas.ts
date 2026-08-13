@@ -1283,6 +1283,16 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         helped: z.boolean(),
         note: z.string().optional(),
     }),
+    // A terminal help request — the same two answers as the browser's, for a command parked at a prompt only a
+    // person can answer. `helped: true` is "typed it, carry on"; false is "can't right now". `note` rides back
+    // either way, and on `helped` the daemon adds what the pane SAYS to the tool result: the user answering the
+    // prompt is exactly the moment the agent cannot see, and it would otherwise have to ask them how it went.
+    z.object({
+        kind: z.literal("terminal_help"),
+        requestId: z.string().min(1),
+        helped: z.boolean(),
+        note: z.string().optional(),
+    }),
     // A premium service run's yes or no. The click is the ONLY way the spend can happen — the daemon holds the
     // agent's run request parked until this settles it (platform/service-offer.ts) — so `approve` carries no
     // qualifiers: one true releases exactly one run, and anything else charges nothing.
@@ -5590,6 +5600,13 @@ export const TerminalSessionSchema = z.object({
     exitCode: z.number().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
+    // The agent has parked on a command that stopped for a PERSON — an OTP prompt, a security-key touch, a
+    // confirm it cannot answer — and is waiting at this session's live pane. `message` is its own account of
+    // what it needs. The terminal panel renders it as a banner over that session's tab (where the prompt the
+    // user has to answer already is) and its buttons settle the parked card through `POST /agent/reply` with
+    // `requestId`, exactly as the chat card does. The same shape as a browser's `help` below, on purpose: the
+    // two handovers differ in WHERE the person acts, not in what is being asked. Present only while open.
+    help: z.object({ requestId: z.string(), message: z.string(), requestedAt: z.number() }).optional(),
 });
 export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionSchema) });
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;

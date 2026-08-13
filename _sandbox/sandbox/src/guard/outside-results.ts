@@ -52,6 +52,12 @@ export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
     "subagents", // the `wait` park
     "watch", // condition watches
     "deps", // dependency readiness
+    // terminal/terminal-help.ts — the handover park. Internal because the SERVER is the daemon talking about
+    // the turn (an ask raised, an owner's answer), but its hand-back also carries the PANE's recent output,
+    // which is a command's bytes and can be anyone's. That one field wraps itself at the tool, so the
+    // daemon's own sentence and the owner's note stay plain while the screen text carries the envelope —
+    // the "wrap the fields that carry content, not the whole result" rule this module's header states.
+    "terminal",
 ]);
 
 // `mcp__<server>__<tool>` — the SDK's naming for every MCP tool. Anything else is a native tool.

@@ -28,9 +28,9 @@ export type TurnFn = (input: AgentTurn, signal: AbortSignal | undefined) => Asyn
 // Both are fire-and-forget; an observer that throws must never affect the turn, so the pump guards them.
 export interface TurnObserver {
     // The agent has stopped and is waiting for the user: a plan to approve, a question to answer, a tool
-    // permission to grant, or its browser stuck on something only a person can clear. May fire several times
-    // in one turn.
-    readonly awaiting: (kind: "plan" | "question" | "permission" | "browser_help") => void;
+    // permission to grant, or one of its two handovers — a browser stuck on something only a person can clear,
+    // a terminal parked at a prompt only a person can answer. May fire several times in one turn.
+    readonly awaiting: (kind: "plan" | "question" | "permission" | "browser_help" | "terminal_help") => void;
     // The run reached its end, exactly once. `error` is set only for a genuine failure — an abort via
     // /agent/stop settles as a clean "done", because the user who pressed stop knows how it ended.
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
@@ -254,12 +254,18 @@ export function startTurnRun(
                 }
                 // The frames that park the turn on the user. They keep the run's fetch open, so from the
                 // outside it still looks "live" — which is exactly why they need their own signal.
-                if (event.kind === "plan" || event.kind === "question" || event.kind === "permission" || event.kind === "browser_help") {
+                if (
+                    event.kind === "plan" ||
+                    event.kind === "question" ||
+                    event.kind === "permission" ||
+                    event.kind === "browser_help" ||
+                    event.kind === "terminal_help"
+                ) {
                     tell((target) => target.awaiting(event.kind));
                 }
-                // The restorable cards ride the journal entry while they are up (browser_help stays out — see
-                // ParkedCardSchema), and come off it as each resolves: what is in the entry at any instant is
-                // exactly what a boot would have to restore.
+                // The restorable cards ride the journal entry while they are up (the two handover cards stay
+                // out — see ParkedCardSchema), and come off it as each resolves: what is in the entry at any
+                // instant is exactly what a boot would have to restore.
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
                     parked.push(event);
                     journalEntry();

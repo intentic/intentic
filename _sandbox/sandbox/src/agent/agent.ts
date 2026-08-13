@@ -48,6 +48,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { type TurnRuleCommand, turnEndingHooks } from "../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { terminalHelpServer } from "../terminal/terminal-help.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
@@ -910,6 +911,21 @@ export async function* runAgent(
             // The accounts tools get the same two live handles the ask tool does: the stream their help card
             // rides, and the signal that settles a park when the turn dies under it.
             ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
+            /* Handing the TERMINAL to the owner (terminal/terminal-help.ts) — the same handles again, plus the
+             * `shell` handle that names which tmux session this turn's commands run in. Two gates, and both are
+             * about the tool being answerable rather than about taste: an unattended turn would park on a person
+             * who is not there (the `ui` and request_help rule), and without the tmux wrapper the agent's Bash
+             * runs in no pane at all, so there would be nothing for the owner to type into. */
+            ...(request.unattended === true || !tmuxEnabled
+                ? {}
+                : {
+                      terminal: terminalHelpServer({
+                          shell,
+                          ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
+                          signal: request.signal,
+                          push,
+                      }),
+                  }),
             ...request.sdkServers,
             ...mcpServersOf(request.tools ?? []),
         },

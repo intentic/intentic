@@ -548,6 +548,8 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
     // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
     declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
+    // The same for a terminal-help card; "hand back" lives on the terminal panel, over the waiting prompt.
+    declineTerminalHelp: (message: ChatMessage): Promise<void> => conversation.value.declineTerminalHelp(message),
 });
 
 export type ConversationView = ReturnType<typeof conversationView>;

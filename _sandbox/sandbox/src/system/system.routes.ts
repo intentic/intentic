@@ -26,6 +26,7 @@ import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { captureScrollback, isValidSessionName, jobSessionLabel } from "../terminal/terminal-session.js";
+import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/release-notes.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
@@ -397,6 +398,12 @@ export const createSystemRoutes = (services: Services) => {
                         return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key), ...seen }];
                     }
                     if (name.startsWith(AGENT_SESSION_PREFIX)) {
+                        // `help` is the one thing on this row that is not tmux's own account of the session:
+                        // the agent has parked on a prompt in here and is waiting for the owner to type
+                        // (terminal/terminal-help.ts). It rides the list rather than a route of its own for
+                        // the reason the browser's does — the panel already polls this, and the banner belongs
+                        // over the tab it is about.
+                        const help = terminalHelpFor(name);
                         return [
                             {
                                 name,
@@ -404,6 +411,7 @@ export const createSystemRoutes = (services: Services) => {
                                 kind: "agent" as const,
                                 running: live || liveAgentSessions.has(name),
                                 ...seen,
+                                ...(help === undefined ? {} : { help }),
                             },
                         ];
                     }
@@ -479,6 +487,10 @@ export const createSystemRoutes = (services: Services) => {
             }
             // `=` forces an exact target match — a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
             await execFileAsync("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
+            // An agent parked on a prompt in there is waiting on a PERSON, so killing the session is the one
+            // event that would otherwise leave it waiting forever — the banner it was parked on went down with
+            // the tab. Told plainly that the terminal is gone, it can carry on with what it can.
+            settleTerminalHelpFor(input.name);
             // Announced rather than left to the sampler, which would find it within a couple of seconds anyway:
             // this is somebody deliberately destroying a session, and the OTHER tabs (and the other members)
             // should stop showing a tab that no longer exists at the moment it stops existing.

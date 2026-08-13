@@ -74,6 +74,19 @@ export interface BrowserHelpRequest {
     readonly status: BrowserHelpStatus;
 }
 
+// The agent's TERMINAL parked at a prompt only a person can answer (a one-time password, a security-key touch).
+// The same four states as the browser's above, and for the same reasons — including that the answering surface
+// is usually not this card but the terminal panel, where the live prompt is.
+export type TerminalHelpStatus = BrowserHelpStatus;
+
+export interface TerminalHelpRequest {
+    readonly requestId: string;
+    // The tmux session the terminal panel opens on — the agent's own, where the waiting command sits.
+    readonly session: string;
+    readonly message: string;
+    readonly status: TerminalHelpStatus;
+}
+
 // A priced service run awaiting the owner's click — the daemon's spend gate (platform/service-offer.ts).
 // 'pending' shows Run/Skip with the platform's own numbers; 'approved'/'skipped' freeze the decision.
 // 'cancelled' is nobody answering — the turn stopped under the card, the asking command died, or the offer
@@ -275,6 +288,8 @@ export interface ChatMessage {
     readonly permission?: PermissionRequest;
     // Set when this turn's browser asked for the owner's hands; carries how the request ended.
     readonly browserHelp?: BrowserHelpRequest;
+    // Set when this turn's terminal asked for the owner's hands at a waiting prompt; same, one surface along.
+    readonly terminalHelp?: TerminalHelpRequest;
     // Set when this turn asked to run a priced service; carries the decision and, once run, the receipt.
     readonly serviceOffer?: ServiceOfferRequest;
     // Set when this turn asked the owner to connect a missing capability; carries the decision and, once
@@ -295,7 +310,7 @@ export interface ChatMessage {
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "serviceOffer", "capabilityOffer"] as const;
+export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "terminalHelp", "serviceOffer", "capabilityOffer"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
@@ -314,6 +329,7 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
         ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
         ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
         ...(message.browserHelp?.status === `pending` ? { browserHelp: { ...message.browserHelp, status: `cancelled` } } : {}),
+        ...(message.terminalHelp?.status === `pending` ? { terminalHelp: { ...message.terminalHelp, status: `cancelled` } } : {}),
         ...(message.serviceOffer?.status === `pending` ? { serviceOffer: { ...message.serviceOffer, status: `cancelled` } } : {}),
         ...(message.capabilityOffer?.status === `pending` ? { capabilityOffer: { ...message.capabilityOffer, status: `cancelled` } } : {}),
     };

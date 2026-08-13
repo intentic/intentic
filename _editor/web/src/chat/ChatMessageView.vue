@@ -14,7 +14,7 @@ import { effectiveAutoLand, formatElapsed } from "../composables/agents/agentSta
 import { formatCredits } from "../composables/membership/creditMeter";
 import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
-import { type ChatMessage, foldsIntoTurn, type PlanRequest } from "../composables/chat/transcript";
+import { type ChatMessage, foldsIntoTurn, type PlanRequest, type TerminalHelpRequest } from "../composables/chat/transcript";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
@@ -23,6 +23,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
+import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useToolCalls } from "../composables/chat/useToolCalls";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
@@ -52,6 +53,7 @@ const {
     decideServiceOffer,
     decideCapabilityOffer,
     declineBrowserHelp,
+    declineTerminalHelp,
     awaitingDecision,
 } = usePaneView();
 
@@ -59,6 +61,12 @@ const {
 // /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
 const router = useRouter();
 const openHelpBrowser = (session: string): void => void router.push(`/browsers/${session}`);
+
+// The terminal-help card's, the same way — except the terminal is a PANEL under every view rather than a
+// route, so this opens and focuses it on the agent's own session instead of navigating. The title is what the
+// panel says about itself while the tab is on its way (useTerminalPanel), which for a handover is the ask.
+const openHelpTerminal = (help: TerminalHelpRequest): void =>
+    useTerminalPanel().openFocused(help.session, { title: `The agent needs you at this terminal`, detail: help.message });
 
 /* The capability card's Connect is a decision AND a navigation: the reply un-parks the daemon's watch (the
  * agent now waits for the connection to come live), and the setup itself happens on the Capabilities page —
@@ -1133,6 +1141,31 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         >Open the browser</ChatDecisionButton
                     >
                     <ChatDecisionButton tone="secondary" icon="times" @click="declineBrowserHelp(message)">Can't help now</ChatDecisionButton>
+                </div>
+            </div>
+
+            <!-- The agent's terminal needs a person — a command it started is sitting at a prompt it cannot
+                 answer. The browser card's twin, and deliberately identical in shape: the primary action
+                 NAVIGATES (opens the terminal panel on that session, where the live prompt and "hand back"
+                 are), and chat offers only the answer that needs no terminal. -->
+            <div v-if="message.terminalHelp" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="terminal" class="text-sm text-warning" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">The agent's terminal needs you</span>
+                    <span v-if="message.terminalHelp.status === 'helped'" class="text-2xs font-medium text-success">✓ You helped</span>
+                    <span v-else-if="message.terminalHelp.status === 'declined'" class="text-2xs font-medium text-muted">✕ Couldn't help</span>
+                    <span v-else-if="message.terminalHelp.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span class="text-xs text-content/85">{{ message.terminalHelp.message }}</span>
+                </div>
+
+                <div v-if="message.terminalHelp.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)"
+                        >Open the terminal</ChatDecisionButton
+                    >
+                    <ChatDecisionButton tone="secondary" icon="times" @click="declineTerminalHelp(message)">Can't help now</ChatDecisionButton>
                 </div>
             </div>
 

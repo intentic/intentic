@@ -290,6 +290,32 @@ describe(`resolved cards`, () => {
         const { state } = run(before, { kind: `resolved`, requestId: `nobody`, reply: { kind: `plan`, requestId: `nobody`, approve: true } });
         expect(state.messages).toEqual(before.messages);
     });
+
+    /* THE TWO HANDOVERS are the cards whose answering surface is usually NOT this transcript — the owner acts
+     * on /browsers or in the terminal panel — so the resolution frame is the only thing that ever freezes them
+     * here, and getting it wrong leaves a live-looking card with buttons behind an agent that has moved on. */
+    const stuck = (): TurnState =>
+        run(started(), { kind: `terminal_help`, requestId: `t1`, session: `agent-abc12345`, message: `npm wants the one-time password` }).state;
+
+    it(`raises a terminal handover as a pending card carrying the session to open`, () => {
+        const card = stuck().messages[1]!.terminalHelp;
+        expect(card).toMatchObject({ requestId: `t1`, session: `agent-abc12345`, message: `npm wants the one-time password`, status: `pending` });
+        // The frame's discriminator is not part of the card — it named the branch, and rendering it would be noise.
+        expect(card).not.toHaveProperty(`kind`);
+    });
+
+    it(`freezes a terminal handover as helped or declined, and as cancelled when nobody answered`, () => {
+        expect(
+            run(stuck(), { kind: `resolved`, requestId: `t1`, reply: { kind: `terminal_help`, requestId: `t1`, helped: true } }).state.messages[1]!
+                .terminalHelp,
+        ).toMatchObject({ status: `helped` });
+        expect(
+            run(stuck(), { kind: `resolved`, requestId: `t1`, reply: { kind: `terminal_help`, requestId: `t1`, helped: false } }).state.messages[1]!
+                .terminalHelp,
+        ).toMatchObject({ status: `declined` });
+        // The turn dying under it — the owner never decided anything, so it must not read as a decision.
+        expect(run(stuck(), { kind: `resolved`, requestId: `t1` }).state.messages[1]!.terminalHelp).toMatchObject({ status: `cancelled` });
+    });
 });
 
 describe(`turn boundaries`, () => {

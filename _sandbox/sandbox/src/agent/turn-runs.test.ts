@@ -259,8 +259,10 @@ describe(`turn runs`, () => {
         push({ kind: `session`, sessionId: `sess-3` });
         push({ kind: `plan`, requestId: `r-plan`, text: `the plan` });
         push({ kind: `question`, requestId: `r-q`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] });
-        // browser_help parks the turn but is never journalled: its browser session dies with the container.
+        // Both handovers park the turn and neither is ever journalled: the browser one's Chromium and the
+        // terminal one's waiting command both die with the container, so there is nothing to restore them to.
         push({ kind: `browser_help`, requestId: `r-b`, session: `b-1`, account: `acc`, message: `captcha` });
+        push({ kind: `terminal_help`, requestId: `r-t`, session: `agent-t1`, message: `type the one-time password` });
         push({ kind: `resolved`, requestId: `r-plan` });
         push({ kind: `done` });
         close();

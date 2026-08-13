@@ -295,8 +295,9 @@ export type SharePayload = z.infer<typeof SharePayloadSchema>;
 /* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
  * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
  * very same frames instead of ending the turn `interrupted` — the card the user was about to answer survives
- * the restart that killed the process holding it. `browser_help` is deliberately not among them: the browser
- * session its card points at dies with the container, so that park cannot be restored, only reported. */
+ * the restart that killed the process holding it. The two handover cards are deliberately not among them:
+ * `browser_help`'s Chromium and `terminal_help`'s waiting command both die with the container, so those parks
+ * cannot be restored, only reported. */
 const PlanCardSchema = z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() });
 const QuestionCardSchema = z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) });
 const PermissionCardSchema = PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() });
@@ -547,6 +548,17 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         requestId: z.string(),
         session: z.string(),
         account: z.string(),
+        message: z.string(),
+    }),
+    // The agent's TERMINAL needs a person: a command it started is sitting at a prompt it cannot answer (a
+    // one-time password, a security-key touch, a confirm). `session` names the tmux session on the terminal
+    // panel — the card's one action is going THERE, where the live pane and its prompt already are, which is
+    // the same division of labour the browser card has with /browsers. Not journalled for restore, and for the
+    // browser card's reason one door along: the pane holding the prompt belongs to a process the restart kills.
+    z.object({
+        kind: z.literal("terminal_help"),
+        requestId: z.string(),
+        session: z.string(),
         message: z.string(),
     }),
     /* A premium service run awaiting the owner's click. Raised OUTSIDE the turn generator — the daemon's
