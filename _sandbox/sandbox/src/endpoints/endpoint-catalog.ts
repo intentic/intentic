@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { compareUnrankedModelIds, type EndpointConfig, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { localTolerantFetch } from "../platform/local-tls.js";
 import { endpointHeaders, versionedBase } from "./endpoint-config.js";
 
 /* WHAT AN ENDPOINT SERVES — read from the server itself, and from nowhere else.
@@ -66,10 +67,15 @@ const ordered = (models: readonly Model[]): { models: Model[]; default: string }
     return { models: list, default: list[0]?.id ?? "" };
 };
 
-// `fetchImpl` is injectable for the reason every catalog here injects it: the real read reaches whatever URL the
-// test's fixture names, and a test that merely omits a config would otherwise hit a live server on the machine
-// running it.
-export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetch = fetch): EndpointCatalog => {
+/* `fetchImpl` is injectable for the reason every catalog here injects it: the real read reaches whatever URL the
+ * test's fixture names, and a test that merely omits a config would otherwise hit a live server on the machine
+ * running it.
+ *
+ * Its DEFAULT tolerates a self-signed certificate on localhost and nowhere else (../platform/local-tls.ts),
+ * because two of the endpoints this probes are local by construction: a model server on the docker host, and
+ * the free trial pointed at a platform being developed on the same machine. Plain fetch refuses both, and the
+ * refusal arrives here as an empty catalog — indistinguishable from a server that published nothing. */
+export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetch = localTolerantFetch): EndpointCatalog => {
     const cache = new Map<string, { value: { models: Model[]; default: string }; expiresAt: number }>();
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 

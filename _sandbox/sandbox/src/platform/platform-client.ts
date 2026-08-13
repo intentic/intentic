@@ -1,13 +1,11 @@
 import { request } from "node:https";
 import type { Config } from "../env.config.js";
+import { isLocalHost } from "./local-tls.js";
 
 // A single authenticated POST to the platform, authenticated by possession of the connect token (the announce
 // pattern). node:https instead of fetch: undici can't skip TLS verification per-request, and a localhost dev
 // platform arrives as a self-signed cert on host.docker.internal — the process-global escape hatch would also
 // disable verification for Google/Anthropic/OpenAI. Everything else verifies normally.
-
-// Hosts whose TLS is a local self-signed dev cert — mirrors announce.ts / connect.sh's `curl -k` gate.
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
 export interface PlatformResponse {
     readonly status: number;
@@ -30,7 +28,7 @@ export const postToPlatform = (config: Config, path: string, body: unknown): Pro
             {
                 method: "POST",
                 headers: { "content-type": "application/json", "x-intentic-connect": config.connectToken },
-                rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname),
+                rejectUnauthorized: !isLocalHost(url.hostname),
             },
             (response) => {
                 let raw = "";

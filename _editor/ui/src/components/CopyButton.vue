@@ -13,6 +13,7 @@
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { clipboardOf } from "../clipboard.js";
+import { cmp } from "../cmp.js";
 
 const {
     text,
@@ -82,14 +83,7 @@ const copy = async (): Promise<void> => {
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
     </button>
-    <button
-        v-else
-        ref="root"
-        type="button"
-        aria-label="Copy"
-        class="inline-flex shrink-0 items-center justify-center rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
-        @click="copy"
-    >
+    <button v-else ref="root" type="button" aria-label="Copy" :class="cmp.iconButton(`text-subtle`)" @click="copy">
         <Icon class="text-2xs" :name="copied ? 'check' : 'copy'" :class="copied ? 'text-success' : ''" />
     </button>
 </template>

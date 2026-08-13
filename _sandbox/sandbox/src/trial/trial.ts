@@ -1,5 +1,6 @@
 import { request } from "node:https";
 import type { Config } from "../env.config.js";
+import { isLocalHost } from "../platform/local-tls.js";
 
 /* THE FREE TRIAL, AS THE DAEMON SEES IT — is there one, and how much of today's allowance is left.
  *
@@ -31,9 +32,6 @@ export interface TrialService {
     readonly refresh: () => Promise<void>;
 }
 
-// Hosts whose TLS is a local self-signed dev cert — mirrors platform-client.ts.
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
-
 // A single authenticated GET to the platform, authenticated by possession of the connect token like every other
 // sandbox-originated call. node:https for the same reason platform-client.ts uses it: a dev platform arrives as
 // a self-signed cert on host.docker.internal, and undici cannot skip verification for one request only.
@@ -45,7 +43,7 @@ const getJson = (config: Config, path: string): Promise<{ status: number; json: 
             {
                 method: "GET",
                 headers: { "x-intentic-connect": config.connectToken },
-                rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname),
+                rejectUnauthorized: !isLocalHost(url.hostname),
             },
             (response) => {
                 let raw = "";

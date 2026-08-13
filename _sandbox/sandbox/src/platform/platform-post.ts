@@ -1,5 +1,6 @@
 import { request } from "node:https";
 import type { Config } from "../env.config.js";
+import { isLocalHost } from "./local-tls.js";
 
 /* THE DAEMON'S ONE OUTBOUND CHANNEL TO THE PLATFORM, shared by everything that speaks on it: the boot
  * registration (announce.ts) and the reachability report (reach-report.ts). Both authenticate the same way —
@@ -9,10 +10,6 @@ import type { Config } from "../env.config.js";
  *
  * node:https instead of fetch, for the one reason that forced it: undici can't skip TLS verification
  * per-request, and the process-global escape hatch would also disable it for Google/Anthropic/OpenAI calls. */
-
-// Hosts whose TLS is a local self-signed dev cert — the only places certificate verification is skipped
-// (mirrors connect.sh's `curl -k` gate for localhost platforms). Everything else verifies normally.
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
 // What the platform said, or why nothing was said at all. Kept apart because the two mean opposite things to
 // every caller: a status is the platform ANSWERING (and possibly refusing), while an error is the platform
@@ -30,7 +27,7 @@ export const postToPlatform = async (config: Config, path: string, body: unknown
             {
                 method: "POST",
                 headers: { "content-type": "application/json", "x-intentic-connect": config.connectToken },
-                rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname),
+                rejectUnauthorized: !isLocalHost(url.hostname),
             },
             (response) => {
                 response.resume(); // drain: nothing here reads a body, and an undrained socket leaks

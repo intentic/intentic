@@ -1,6 +1,7 @@
 import { request } from "node:https";
 import { ServiceRunReceiptSchema, type ServiceRunReceipt } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
+import { isLocalHost } from "./local-tls.js";
 
 /* THE SERVICES RELAY — the daemon's door onto the platform's metered service runs.
  *
@@ -18,8 +19,6 @@ import type { Config } from "../env.config.js";
  *
  * node:https for the platform-client.ts reason: a dev platform is a self-signed cert on
  * host.docker.internal, and undici cannot skip verification for one request only. */
-
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
 export interface RelayedAnswer {
     readonly status: number;
@@ -54,7 +53,7 @@ const relay = (config: Config, method: "GET" | "POST", path: string, payload?: s
                     "x-intentic-connect": config.connectToken,
                     ...(payload !== undefined ? { "content-type": "application/json" } : {}),
                 },
-                rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname),
+                rejectUnauthorized: !isLocalHost(url.hostname),
             },
             (response) => {
                 let raw = "";
@@ -128,7 +127,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
             {
                 method: "POST",
                 headers: { "x-intentic-connect": config.connectToken, "content-type": "application/json" },
-                rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname),
+                rejectUnauthorized: !isLocalHost(url.hostname),
             },
             (response) => {
                 const contentType = response.headers["content-type"] ?? "application/json";

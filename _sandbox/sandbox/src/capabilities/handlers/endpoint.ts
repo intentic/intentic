@@ -52,7 +52,13 @@ export const endpointHandler: CapabilityHandler = {
     status: async (ctx, id, config) => {
         const catalog = await ctx.endpointModels.models(id, config as EndpointConfig);
         if (catalog.models.length === 0) {
-            return { state: "error", detail: "no models published" };
+            /* NOT an error, which is what this said until the free-trial card started wearing a red badge on a
+             * fresh sandbox. "error" is the loudest word this column has and it accuses the OWNER of having
+             * broken something; an endpoint publishing nothing is far more often a server still coming up, a
+             * model nobody has pulled yet, or — for the trial, which the owner never added and cannot edit — a
+             * decision made at the other end entirely. `pending` says the only thing that is actually known:
+             * there is nothing to route yet, and it is worth a look. */
+            return { state: "pending", detail: "no models yet" };
         }
         return { state: "active", detail: `${catalog.models.length} models` };
     },

@@ -1,5 +1,6 @@
 import { request } from "node:https";
 import type { Config } from "../env.config.js";
+import { isLocalHost } from "./local-tls.js";
 
 /* IS THIS SANDBOX'S OWNER A MEMBER — the daemon's side of the premium gate, asked of the platform's
  * /pool/status with the connect token, the trial-status pattern (one authenticated GET, node:https for the
@@ -9,8 +10,6 @@ import type { Config } from "../env.config.js";
  * that need the answer are rare, human-paced, and worth a fresh read — a cached "no" minutes after someone
  * paid is a support ticket, and a cached "yes" after a lapse is a lie. Fail-closed with the reason: an
  * unreachable platform refuses the enable and says the problem is reach, not money. */
-
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
 export interface PremiumStatus {
     readonly premium: boolean;
@@ -27,7 +26,7 @@ export const premiumStatus = (config: Config): Promise<PremiumStatus> =>
         const url = new URL("/pool/status", config.platform.url);
         const req = request(
             url,
-            { method: "GET", headers: { "x-intentic-connect": config.connectToken }, rejectUnauthorized: !LOCAL_HOSTS.has(url.hostname) },
+            { method: "GET", headers: { "x-intentic-connect": config.connectToken }, rejectUnauthorized: !isLocalHost(url.hostname) },
             (response) => {
                 let raw = "";
                 response.on("data", (chunk: Buffer) => {
