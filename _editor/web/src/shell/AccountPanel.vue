@@ -6,6 +6,7 @@ import { useRouter } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { useAuth } from "../composables/useAuth";
+import { environment } from "../environments/environment";
 import AccountCredits from "./AccountCredits.vue";
 
 /* The rail's bottom account control: an avatar that opens a popover scoped to the account (email + name), the
@@ -48,7 +49,9 @@ const openSettings = (): void => {
 
 const logout = async (): Promise<void> => {
     await signOut();
-    globalThis.location.href = `/login`;
+    // A full navigation, not a router push: the environment's landing may live outside this SPA entirely (the
+    // demo's is the site's homepage).
+    globalThis.location.href = environment.afterSignOut;
 };
 </script>
 

@@ -9,7 +9,9 @@
     auth: { googleClientId: `` },
     // Analytics off by default (empty key). PostHog Cloud US, addressed directly — only dev lands on this
     // default, and there is no nginx there to run the /wire proxy the deployment env points at.
-    analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com` }
+    analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com` },
+    // The app's own sign-in page; every real deployment is served at its root. The demo overrides this.
+    afterSignOut: `/login`
   };
 
   // src/environments/environment.local.ts

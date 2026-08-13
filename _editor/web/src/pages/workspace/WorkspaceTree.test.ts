@@ -33,6 +33,7 @@ const scrolled = vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     return calls;
 });

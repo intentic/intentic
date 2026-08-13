@@ -19,6 +19,7 @@ vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     globalThis.matchMedia ??= ((query: string) => ({
         matches: false,

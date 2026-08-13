@@ -17,6 +17,9 @@
                 api: { url: "https://api.demo.invalid" },
                 auth: { googleClientId: "" },
                 analytics: { posthogKey: "", posthogHost: "https://us.i.posthog.com" },
+                // The site has no /login — that's the app's page, and the demo lives under /demo/. Signing out
+                // of a demo session lands the visitor back on the homepage they pressed play from.
+                afterSignOut: "/",
             };
         </script>
         <!-- Extension bundles resolve these bare specifiers to the app's own instances (see _editor/web/index.html).

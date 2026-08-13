@@ -10,6 +10,9 @@ export type WebEnvironment = {
     // PostHog product analytics (public project key). Empty key = analytics disabled (dev default); the deploy
     // container's envsubst fills $POSTHOG_KEY. See composables/analytics.ts.
     analytics: { posthogKey: string; posthogHost: string };
+    // Where signing out leaves the browser. Ordinarily the app's own /login; the interactive demo is served
+    // under /demo/ on the marketing site, where /login doesn't exist — its sign-out lands on the site homepage.
+    afterSignOut: string;
     // The LOCAL posture: set only by a host application (an editor extension, a CLI preview) that embeds this
     // app over an engine in its local profile — no platform, no sign-in, one loopback daemon. Absent on every
     // hosted deployment. See environments/posture.ts for what setting it changes; `theme` is the host's

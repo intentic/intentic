@@ -26,6 +26,7 @@ vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
 });
 

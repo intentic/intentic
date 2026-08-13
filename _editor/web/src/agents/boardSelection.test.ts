@@ -47,6 +47,7 @@ const { reveals } = vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     const recorded: { card: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {

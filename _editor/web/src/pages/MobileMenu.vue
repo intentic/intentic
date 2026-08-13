@@ -13,6 +13,7 @@ import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { environment } from "../environments/environment";
 import AccountCredits from "../shell/AccountCredits.vue";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
@@ -96,7 +97,9 @@ const addSandbox = (): void => {
 
 const logout = async (): Promise<void> => {
     await signOut();
-    globalThis.location.href = `/login`;
+    // A full navigation, not a router push: the environment's landing may live outside this SPA entirely (the
+    // demo's is the site's homepage).
+    globalThis.location.href = environment.afterSignOut;
 };
 </script>
 

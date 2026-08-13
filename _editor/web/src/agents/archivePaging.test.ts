@@ -45,6 +45,7 @@ vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });

@@ -59,6 +59,7 @@ const { open } = vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     const openWindow = vi.fn(() => null);
     globalThis.window.open = openWindow;

@@ -23,6 +23,7 @@ vi.hoisted(() => {
         api: { url: `http://localhost` },
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
     };
     // jsdom's own object URLs are opaque uuids, so nothing downstream could tell which blob an <img> is
     // showing. Named by byte length instead — that is the assertion each pane is holding ITS OWN side's bytes.

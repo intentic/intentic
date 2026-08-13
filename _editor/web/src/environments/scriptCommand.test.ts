@@ -8,7 +8,7 @@ import type { WebEnvironment } from "./environment";
 const load = async (production: boolean): Promise<typeof import("./scriptCommand")> => {
     vi.resetModules();
     (globalThis as { window?: { env: WebEnvironment } }).window = {
-        env: { production, api: { url: `` }, auth: { googleClientId: `` }, analytics: { posthogKey: ``, posthogHost: `` } },
+        env: { production, api: { url: `` }, auth: { googleClientId: `` }, analytics: { posthogKey: ``, posthogHost: `` }, afterSignOut: `` },
     };
     return import("./scriptCommand");
 };

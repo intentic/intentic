@@ -32,6 +32,8 @@ const envScript = (env: AppEnvironment, nonce: string): string => {
         api: { url: "" },
         auth: { googleClientId: "" },
         analytics: { posthogKey: "", posthogHost: "" },
+        // Inert in the local posture — there is no signed-out state here — but the field is the env's contract.
+        afterSignOut: "/login",
         local,
     };
     // </script> inside a theme string would end the block early; the escape keeps the document intact.
