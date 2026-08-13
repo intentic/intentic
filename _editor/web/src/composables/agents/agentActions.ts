@@ -45,12 +45,18 @@ import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 //
 // Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
 // reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
-export const startAgent = (prompt?: string): void => {
+// `actsAs` pins the fresh chat to a persona before anyone types into it — what the persona rail's rows press
+// (ChatPersonaRail). It rides THIS action rather than the rail setting `actsAs` on a draft it summoned itself,
+// for the reason the note above gives: a surface that assembles its own half of "new agent" is a surface that
+// will one day skip one of the three steps. Undefined is "anyone", which is also a real thing to press.
+export const startAgent = (prompt?: string, actsAs?: string): void => {
     // This workspace has now been delegated to, which is what the desktop's first landing waits for: from here
     // on, opening the app lands on the workspace rather than the board (firstRun.ts). Recorded on the press
     // rather than on the turn completing — the user has seen what the board is for either way.
     markAgentStarted(useSandbox().activeSandboxId.value);
     const conversation = draftConversation();
+    // Before the summons, so every window that receives this tab receives it already pinned.
+    conversation.actsAs.value = actsAs;
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
     if (prompt !== undefined) {

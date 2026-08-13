@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { cmp, ContextMenu, type IconName, SearchBar } from "@intentic/ui";
+import { cmp, ContextMenu, type IconName, SearchBar, Segmented } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
 import { createInlineRename } from "../composables/inlineRename";
+import { type ChatGrouping, useChatGrouping } from "../composables/chat/chatGrouping";
+import ChatPersonaRail from "./ChatPersonaRail.vue";
 import {
     activityIcon,
     activityLine,
@@ -75,6 +77,14 @@ const { conversations, activeId, tabReveal, panes, openBeside, closePane, collap
 const { agentById, fleet, loadArchived, rename } = useAgents();
 
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+/* WHICH LIST THIS IS RIGHT NOW — the open chats in their lanes, or the personas you can talk to
+ * (ChatPersonaRail). Two answers to "what goes in the left column", not two views of one set, so the switch
+ * swaps the whole list rather than regrouping it. */
+const { grouping, set: setGrouping } = useChatGrouping();
+const GROUPINGS: readonly { label: string; value: ChatGrouping; title: string }[] = [
+    { label: `Chats`, value: `lane`, title: `Every conversation this window holds, by what needs you` },
+    { label: `Personas`, value: `persona`, title: `The people this sandbox can be — pick one and talk to them` },
+];
 
 interface OpenChat {
     readonly conversation: Conversation;
@@ -655,7 +665,20 @@ const closeTab = (event: Event, id: string): void => {
              past what is open, the "Not open" group at the foot. -->
         <!-- `Aa` is here as well as on the board because the two fields run ONE filter and one case rule: a
              switch visible on only one of them would be a mode acting where it cannot be seen or undone. -->
+        <!-- WHAT THE COLUMN IS, above the controls that act on it. Two words, so it survives the narrowest this
+             rail is dragged to, and it leads because the field below it belongs to only one of the two lists. -->
+        <Segmented
+            :model-value="grouping"
+            :options="GROUPINGS"
+            size="xs"
+            stretch
+            class="shrink-0"
+            @update:model-value="(next: ChatGrouping) => setGrouping(next)"
+        />
+        <!-- The filter searches MESSAGES, so it belongs to the chats and goes away with them: a box promising
+             to find what you wrote, over a list of people, would answer every query with nothing. -->
         <SearchBar
+            v-if="grouping === `lane`"
             v-model="filterQuery"
             v-model:match-case="matchCase"
             variant="field"
@@ -665,7 +688,11 @@ const closeTab = (event: Event, id: string): void => {
             placeholder="Filter by your messages…"
             class="shrink-0"
         />
-        <div ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
+        <!-- THE PEOPLE, in place of the chats — its own component because it is a different list, not this one
+             regrouped (ChatPersonaRail carries the argument). It emits the same `select` this file does, so the
+             host focuses a chat the same way whichever list raised it. -->
+        <ChatPersonaRail v-if="grouping === `persona`" @select="(id) => emit(`select`, id)" />
+        <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
             <!-- A lane with nothing in it is not drawn at all (occupiedLanes — and see the note there before
                  reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
                  list doesn't reshuffle under the cursor mid-keystroke. -->

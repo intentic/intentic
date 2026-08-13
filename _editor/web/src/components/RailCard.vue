@@ -84,11 +84,17 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
         :class="{ 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed }"
     >
         <span class="flex w-full min-w-0 items-start gap-2">
-            <!-- Sized to the title's first line so a two-line title hangs off the tile, not around it. -->
-            <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
-            <span v-else-if="icon !== undefined" class="flex h-4 shrink-0 items-center">
-                <Icon :name="icon" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
-            </span>
+            <!-- THE LEADING MARK. A caller with a mark of its own passes it here — the persona rail's rows are
+                 people rather than sessions, and a person's mark is their avatar in their own stable colour,
+                 which neither of the two below can be. Everything else falls through to the ladder that was
+                 always here, so no existing card changes.
+                 Sized to the title's first line so a two-line title hangs off the tile, not around it. -->
+            <slot name="lead">
+                <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
+                <span v-else-if="icon !== undefined" class="flex h-4 shrink-0 items-center">
+                    <Icon :name="icon" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
+                </span>
+            </slot>
             <!-- Two lines before the clamp — a card has the width for most titles whole. -->
             <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4" :class="quiet ? 'text-muted' : 'text-content'">
                 <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{

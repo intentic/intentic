@@ -34,7 +34,9 @@ vi.mock("../chat/useChat", () => ({
         conversations: chat.conversations,
         active: { value: { conversationId: undefined } },
     }),
-    draftConversation: () => ({ conversationId: `c1`, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    // `actsAs` is on the stub because startAgent PINS the draft before summoning it — including to `undefined`,
+    // which is how pressing Anyone un-pins a draft that was aimed at a persona a moment ago.
+    draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
 }));
 // The summons channel is the seam startAgent shows the new tab through — a broadcast this suite has no second

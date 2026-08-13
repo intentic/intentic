@@ -512,6 +512,24 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // answer and the same one a real started knowledge base gives.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
+    /* THE CARDS THIS SANDBOX CAN SEND AS — the composer's persona picker, the personas page, and the chat
+     * rail's Personas column all read this one route. Two of them, because one card cannot show what a persona
+     * is FOR: the whole idea is that `reddit-shop` and `reddit-personal` are different someones, and that only
+     * reads with a second name beside the first. `connected` names the accounts actually signed in, so the
+     * support card arrives ready and the personal one arrives marked — which is the ordinary mixed state of a
+     * workspace and the one every surface has a branch for. */
+    [
+        `GET`,
+        `/personas`,
+        () =>
+            json({
+                personas: [
+                    { id: `shop-support`, label: `Shop Support`, capabilities: [`discord`, `gmail-support`] },
+                    { id: `maintainer`, label: `Maintainer`, capabilities: [`github`] },
+                ],
+                connected: [`discord`, `github`],
+            }),
+    ],
     /* Browsing a registry — what the Sandbox screen's Discover row renders. The real route clones a git repo
      * and reads two JSON files out of it; this answers with them already joined. Every registry URL gets the
      * same answer, which is honest enough for a demo: pointing the field at an internal repo is a real feature
