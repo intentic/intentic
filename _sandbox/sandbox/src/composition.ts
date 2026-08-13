@@ -135,7 +135,7 @@ import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.j
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
 import { createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
-import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
+import { createOpenCodeService, OPENCODE_GEMINI_PROVIDER, type OpenCodeService } from "./grok/opencode.js";
 import { createKimiCatalog } from "./kimi/kimi-catalog.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
@@ -448,10 +448,13 @@ export interface Services {
     // Daemon-owned workspace snapshots on /history (outside the agent's reach): auto-captured per turn + on an
     // interval, diffed and restored through the /history routes.
     readonly history: WorkspaceHistory;
-    // The provider adapters — one function shape, three native agent runtimes. streamAgent picks per turn.
+    // The provider adapters — one function shape, four native agent runtimes. streamAgent picks per turn.
     readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly codexAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly grokAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    // Gemini's native runtime: the SAME OpenCode loop grokAgent runs on, bound to a different model backend —
+    // which is why it is built from the same factory rather than being a fourth adapter file.
+    readonly geminiAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
     // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
     readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
@@ -665,9 +668,28 @@ export const createServices = (config: Config, logger: Logger): Services => {
         configPath: cliProxyConfigPath(config),
         usageStore: accountUsage,
     });
+    // Hoisted above the OpenCode service (it is also a row in the provider table below): Gemini's NATIVE runtime
+    // is that same OpenCode loop pointed at the translator, and OpenCode fixes provider config at spawn — so the
+    // model ids have to be readable by the time it boots.
+    const geminiModels = createGeminiCatalog(config, join(authRoot, "gemini", "models.json"));
     // Referenced twice below: as the openCode service field and to build the Grok adapter's runner. Its data dir
     // (OpenCode's XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts.
-    const openCode = createOpenCodeService(authRoot);
+    //
+    // Gemini brings no credential of its own here — the translator holds Google's, exactly as it does for a
+    // Gemini turn on the Claude Code harness. An unbaked translator (the dev profile) leaves the config absent
+    // and the loop serves Grok alone.
+    const openCode = createOpenCodeService(
+        authRoot,
+        config.translator.url === ""
+            ? {}
+            : {
+                  gemini: {
+                      baseUrl: config.translator.url,
+                      token: config.translator.token,
+                      models: async () => (await geminiModels.models()).models.map((model) => model.id),
+                  },
+              },
+    );
     const info =
         config.sandbox.name !== "" && config.sandbox.image !== ""
             ? {
@@ -723,7 +745,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const providerCatalogs = createProviderCatalogs({
         claude: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codex: codexModels,
-        gemini: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
+        gemini: geminiModels,
         kimi: createKimiCatalog(cliProxy),
         openCode,
     });
@@ -993,6 +1015,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agent: runAgent,
         codexAgent: createCodexAgent({ codexHome: codexBase }),
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
+        // One warm OpenCode server serves both, so the runner is the same shape — only the model backend the
+        // prompt names differs (opencode.ts registers it as an OpenAI-compatible provider on the translator).
+        geminiAgent: createGrokAgent(createGrokRunner(openCode), OPENCODE_GEMINI_PROVIDER),
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,
         // Pi sessions sit beside the other AI-provider state under authRoot, so a dev sandbox pointing

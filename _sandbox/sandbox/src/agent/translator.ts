@@ -108,7 +108,29 @@ export const cliProxyManagementUrl = (config: Config): string => `${config.trans
  * It is rendered INTO the file rather than left to the Management API push, because this function runs on every
  * spawn and on every rung of the restart ladder below: entries that lived only in the running proxy's memory
  * would be erased by the first crash-restart, silently taking the user's endpoints out of service. */
-const renderConfig = (opts: { port: number; authDir: string; token: string; compat: string }): string =>
+/* HOW MANY ACCOUNTS ONE REQUEST MAY BE RETRIED ON before the refusal is the answer. CLIProxyAPI's own default
+ * is 0 — meaning the whole fleet, every auth file it holds — and that default is only correct if a refusal is
+ * always ABOUT the account it came from. It is not.
+ *
+ * Google answers a request it will not serve for any reason with `RESOURCE_EXHAUSTED` — "Resource has been
+ * exhausted (e.g. check quota)" — including when what it objects to is the REQUEST. Measured here: a Claude Code
+ * turn carries an identity line Google's Antigravity channel refuses, and every one of 31 connected accounts
+ * refused it identically, in 44–62 upstream calls taking 57–69 SECONDS, while every one of those accounts sat at
+ * ~0% of its weekly allowance. The fleet was not the problem and walking it could not have found an answer.
+ *
+ * So the walk is bounded. The number is a genuine trade and is set where the two failures cost least:
+ *   too low  — a real cooldown gives up while a later account had room, costing one retry the user must ask for.
+ *   too high — a request nothing will serve burns the fleet and a minute of someone's attention, every time.
+ * Five is enough to step over a handful of genuinely cooling credentials (which is what a transient looks like)
+ * and far short of proving the same refusal 31 times. Cheap to revisit: it is one number in one rendered file.
+ *
+ * It does NOT make the daemon's own chain redundant — that steps between MODELS and providers, this bounds one
+ * request inside one of them. */
+const MAX_RETRY_CREDENTIALS = 5;
+
+// Exported for the test alone: the bounded walk above is a behaviour nothing else in this repo can observe (the
+// proxy is a separate binary reading a file), so the rendered file IS the assertable surface.
+export const renderConfig = (opts: { port: number; authDir: string; token: string; compat: string }): string =>
     [
         `host: "127.0.0.1"`,
         `port: ${opts.port}`,
@@ -122,6 +144,7 @@ const renderConfig = (opts: { port: number; authDir: string; token: string; comp
         `  switch-project: true`,
         `  switch-preview-model: true`,
         `  antigravity-credits: false`,
+        `max-retry-credentials: ${MAX_RETRY_CREDENTIALS}`,
         ...(opts.compat === "" ? [] : [opts.compat]),
         ``,
     ].join("\n");

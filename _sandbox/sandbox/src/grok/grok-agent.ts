@@ -16,7 +16,7 @@ import type { OpenCodeService } from "./opencode.js";
  * per-turn key. The turn just resolves a session and streams. Permissions run allow-all because the container
  * is the isolation boundary (same posture as the Claude/Codex paths). */
 
-// The xAI provider id in OpenCode / models.dev.
+// The xAI provider id in OpenCode / models.dev, and the default backend for a turn that names none.
 const XAI = "xai";
 
 // One Grok turn. Injected so tests drive a fake Event stream — no server, no network (the QueryFn/CodexRunner
@@ -26,6 +26,14 @@ export interface GrokTurn {
     readonly sessionId?: string;
     readonly cwd: string;
     readonly model?: string;
+    /* WHICH MODEL BACKEND OpenCode drives for this turn — its provider id, not ours. Absent ⇒ xAI, which is
+     * what every Grok turn means and what this runtime served alone until Gemini arrived.
+     *
+     * It is per-TURN rather than per-runner because there is exactly one warm `opencode serve` per container and
+     * both providers are registered on it (opencode.ts): the server is shared, the backend is a property of the
+     * prompt. The xAI self-heal below is gated on this for the same reason — "Did you mean" is xAI's wording,
+     * and its correction is recorded into xAI's catalog. */
+    readonly provider?: string;
     // The built-in OpenCode agent: "plan" is read-only (proposes), "build" executes.
     readonly agent: "plan" | "build";
     readonly signal: AbortSignal;
@@ -83,7 +91,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 query: { directory: turn.cwd },
                 body: {
                     agent: turn.agent,
-                    ...(modelId !== undefined && modelId !== "" ? { model: { providerID: XAI, modelID: modelId } } : {}),
+                    ...(modelId !== undefined && modelId !== "" ? { model: { providerID: turn.provider ?? XAI, modelID: modelId } } : {}),
                     parts: [{ type: "text", text: turn.prompt }],
                 },
             });
@@ -92,6 +100,11 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         // After a self-heal re-prompt, a lingering session.idle from the FAILED prompt could end the turn before
         // the corrected one streams. While true, ignore idle until the retry's first real event proves it started.
         let awaitingRetryStart = false;
+        /* THE SELF-HEAL IS xAI'S, both halves of it: "Did you mean: …" is xAI's own wording, and the correction is
+         * recorded into xAI's catalog. A Gemini turn that tripped it would rewrite Grok's model list from a
+         * sentence Google never wrote, so the whole mechanism is scoped to the backend it was built for. Gemini's
+         * catalog comes off the translator and needs no rescue: a model it does not serve is not in it. */
+        const selfHeals = (turn.provider ?? XAI) === XAI;
         // Fire the initial prompt. xAI rejects a stale/renamed (or seed) model id by REJECTING promptAsync (a thrown
         // ProviderModelNotFoundError) rather than via a session.error event, so the in-loop self-heal below never
         // sees it — heal it here the same way (record xAI's named models, re-prompt once with a valid one) so a
@@ -101,7 +114,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             await sendPrompt(turn.model);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
+            const suggestions = selfHeals && MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
             if (suggestions[0] === undefined) {
                 throw error;
             }
@@ -145,7 +158,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 // them (fixes the picker + every future turn) and re-prompt this same session once with a valid
                 // one. Model-not-found is rejected before any content streams, so nothing is duplicated. A second
                 // failure (retried already true) falls through and surfaces as a real error.
-                if (event.type === "session.error" && !retried) {
+                if (event.type === "session.error" && !retried && selfHeals) {
                     const message = errorText(event.properties.error);
                     const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
                     if (suggestions[0] !== undefined) {
@@ -356,7 +369,7 @@ async function* streamTurn(
 // No `question` frames — OpenCode's permission channel maps to per-tool approvals, not multiple-choice
 // clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
 // runtime's capability row, which is what the composer says out loud.
-async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): AsyncGenerator<AgentEvent> {
+async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provider: string): AsyncGenerator<AgentEvent> {
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture = yield* streamTurn(
             runner({
@@ -364,6 +377,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 cwd: request.cwd,
                 ...(request.model !== undefined ? { model: request.model } : {}),
+                provider,
                 agent: "plan",
                 signal: request.signal,
             }),
@@ -380,6 +394,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 cwd: request.cwd,
                 ...(request.model !== undefined ? { model: request.model } : {}),
+                provider,
                 agent: "build",
                 signal: request.signal,
             }),
@@ -393,18 +408,19 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
 // is declared as `capabilitiesOf(…).runtime === "opencode"` in the contract's agent-catalog.ts rather than
 // silently dropped here: OpenCode owns its own tools, permissions and reasoning settings, so a request reaching
 // this file carries no permission mode but `plan`, and no effort at all.
-export const createGrokAgent = (runner: GrokRunner) =>
+export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         const prompt = withFileNote(request.prompt, request.attachments ?? []);
         const turn =
             request.permissionMode === "plan"
-                ? runGrokPlanTurn({ ...request, prompt }, runner)
+                ? runGrokPlanTurn({ ...request, prompt }, runner, provider)
                 : streamTurn(
                       runner({
                           prompt,
                           ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
                           cwd: request.cwd,
                           ...(request.model !== undefined ? { model: request.model } : {}),
+                          provider,
                           agent: "build",
                           signal: request.signal,
                       }),

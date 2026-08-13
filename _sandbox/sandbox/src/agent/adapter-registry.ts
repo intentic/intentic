@@ -4,7 +4,7 @@ import { codexReadiness } from "../codex/codex-readiness.js";
 import { OPENCODE_BINARY_MISSING } from "../grok/opencode.js";
 import { onPath } from "../platform/on-path.js";
 import type { AdapterHealth, AgentAdapter } from "./adapter.js";
-import { planAcpTurn, planCodexTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
+import { planAcpTurn, planCodexTurn, planGeminiTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
 
 /* RUNTIME → ADAPTER. The whole dispatch, in one table, so adding a runtime is a row rather than a fifth arm
  * grown onto an if/else chain — and so the question "which runtimes exist" has an answer a reader can see.
@@ -96,6 +96,33 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
+/* Gemini's native runtime — the same OpenCode loop, a different model backend and an entirely different
+ * credential question. It is its own row rather than a second provider on OPENCODE_ADAPTER because health is
+ * keyed by runtime (adapter-health.ts): sharing one entry would let a missing xAI sign-in grey Gemini out of the
+ * picker, and a missing Google account grey out Grok.
+ *
+ * OpenCode stores nothing for Gemini — CLIProxyAPI holds Google's auth files and balances them — so the
+ * credential half asks the translator, exactly as a routed turn does. The binary half is Grok's, unchanged: one
+ * `opencode serve` serves both, so if it is missing neither can run. */
+const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
+    runtime: "opencode-gemini",
+    preflight: (services, input, context) => planGeminiTurn(services, input, context),
+    health: async (services) => {
+        if (services.config.translator.url === "") {
+            return unavailable("This sandbox has no model translator — run one built from the published image to use Gemini.");
+        }
+        const accounts = await attempt(() => services.cliProxy.accounts());
+        if (accounts === undefined) {
+            return unknown();
+        }
+        if (accounts.gemini.length === 0) {
+            return unavailable("Connect your Google account in Sandbox ▸ Agent.");
+        }
+        return (await onPath("opencode")) ? ready() : unavailable(OPENCODE_BINARY_MISSING);
+    },
+    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
+};
+
 const ACP_ADAPTER: AgentAdapter<"acp"> = {
     runtime: "acp",
     preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
@@ -151,7 +178,14 @@ const PI_ADAPTER: AgentAdapter<"pi"> = {
     },
 };
 
-export const ADAPTERS: readonly AgentAdapter[] = [CLAUDE_CODE_ADAPTER, CODEX_ADAPTER, OPENCODE_ADAPTER, ACP_ADAPTER, PI_ADAPTER];
+export const ADAPTERS: readonly AgentAdapter[] = [
+    CLAUDE_CODE_ADAPTER,
+    CODEX_ADAPTER,
+    OPENCODE_ADAPTER,
+    OPENCODE_GEMINI_ADAPTER,
+    ACP_ADAPTER,
+    PI_ADAPTER,
+];
 
 const BY_RUNTIME = new Map(ADAPTERS.map((adapter) => [adapter.runtime, adapter]));
 

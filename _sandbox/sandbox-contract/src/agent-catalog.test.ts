@@ -39,7 +39,7 @@ describe("every provider/harness pair declares what it can do", () => {
 
         // Nothing may be left to inference: a `permissions` a surface can't read, or a runtime nobody serves,
         // is the drift this record exists to end.
-        expect(["claude-code", "codex", "opencode", "acp", "pi"]).toContain(capabilities.runtime);
+        expect(["claude-code", "codex", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "http", "none"]).toContain(capabilities.mcp);
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
@@ -86,14 +86,28 @@ describe("the pi provider", () => {
     });
 });
 
-/* The harness axis is real for exactly two providers. Claude is always its own Claude Code loop, and kimi/gemini
- * have no native runtime at all (Moonshot speaks the Anthropic protocol directly; Google is re-served through
- * the translator), so all three run it whatever the client sent — which is why "is the harness claude-code" was
- * never the question worth asking. */
-test("only codex and grok change runtime with the harness", () => {
+/* The harness axis is real for exactly three providers. Claude is always its own Claude Code loop and Kimi has
+ * no native runtime at all (Moonshot speaks the Anthropic protocol directly), so both run it whatever the client
+ * sent — which is why "is the harness claude-code" was never the question worth asking.
+ *
+ * Gemini joined the list rather than being born on it: it was routed-only until the Claude Code loop's own
+ * identity line — which the CLI bakes in and no option removes — started being refused by Google's Antigravity
+ * channel. A second loop is what gives those accounts a road that carries somebody else's prompt. */
+test("only codex, grok and gemini change runtime with the harness", () => {
     const switched = PROVIDERS.filter((provider) => capabilitiesOf(provider.value, "native") !== capabilitiesOf(provider.value, "claude-code"));
 
-    expect(switched.map((provider) => provider.value)).toEqual(["codex", "grok"]);
+    expect(switched.map((provider) => provider.value)).toEqual(["codex", "grok", "gemini"]);
+});
+
+// Gemini's two loops differ in the loop alone. Same translator, same auth files, same abilities — so anything
+// that reads capabilities to decide what a Gemini turn can DO must get the same answer either way, and only the
+// runtime id (which keys adapter health) may move.
+test("gemini's native runtime differs from its Claude Code one only in the loop that serves it", () => {
+    const native = capabilitiesOf("gemini", "native");
+
+    expect(native.runtime).toBe("opencode-gemini");
+    expect(capabilitiesOf("gemini", "claude-code").runtime).toBe("claude-code");
+    expect({ ...native, runtime: "opencode" }).toEqual(capabilitiesOf("grok", "native"));
 });
 
 test("codex and grok under the Claude Code harness get the full ceiling — it is the same loop", () => {

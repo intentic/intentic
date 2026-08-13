@@ -80,7 +80,7 @@ test("disconnect clears the auth store AND the persisted catalog so connected fl
 test("xaiModels() returns the seed catalog (non-empty, with a default) when not connected — never blank", async () => {
     const xdg = await scratch();
     // No auth ⇒ no token ⇒ discovery is skipped entirely (forbiddenFetch proves it), and the seed floor is served.
-    const service = createOpenCodeService(xdg, forbiddenFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     expect(await service.xaiModels()).toEqual(SEED_CATALOG);
 });
 
@@ -88,7 +88,7 @@ test("xaiModels() skips REST discovery when the token is expired, serving the pe
     const xdg = await scratch();
     // expires is a past ms epoch ⇒ every discovery probe would 401, so we must not even try (forbiddenFetch).
     await writeAuth(xdg, { xai: { type: "oauth", access: "tok", expires: 1 } });
-    const service = createOpenCodeService(xdg, forbiddenFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     await service.recordModels(["grok-4.20-0309-reasoning"]);
     expect(await service.xaiModels()).toEqual({
         models: [{ id: "grok-4.20-0309-reasoning", label: humanizeModelId("grok-4.20-0309-reasoning") }],
@@ -103,7 +103,7 @@ test("xaiModels() discovers live with an unexpired token, then persists the resu
         String(url).endsWith("/v1/models")
             ? new Response(JSON.stringify({ data: [{ id: "grok-4-latest" }] }), { status: 200 })
             : new Response("{}", { status: 404 })) as unknown as typeof fetch;
-    const service = createOpenCodeService(xdg, liveFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: liveFetch });
     expect(await service.xaiModels()).toEqual({ models: [{ id: "grok-4-latest", label: "Grok 4 Latest" }], default: "grok-4-latest" });
     // The live result is persisted so a later expired-token read still serves the real catalog.
     expect(JSON.parse(await readFile(modelsPath(xdg), "utf8"))).toEqual(["grok-4-latest"]);
@@ -111,7 +111,7 @@ test("xaiModels() discovers live with an unexpired token, then persists the resu
 
 test("recordModels persists xAI's named models (chat-only) and xaiModels() serves them next", async () => {
     const xdg = await scratch();
-    const service = createOpenCodeService(xdg, forbiddenFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     // Media ids are dropped; the survivors are persisted and become the catalog + default.
     await service.recordModels(["grok-4", "grok-2-image", "grok-3"]);
     expect(JSON.parse(await readFile(modelsPath(xdg), "utf8"))).toEqual(["grok-4", "grok-3"]);
@@ -126,7 +126,7 @@ test("recordModels persists xAI's named models (chat-only) and xaiModels() serve
 
 test("client() spawns the server with store:false for every known xai model (seed + persisted)", async () => {
     const xdg = await scratch();
-    const service = createOpenCodeService(xdg, forbiddenFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     await service.recordModels(["grok-4-latest"]);
     await service.client();
 
@@ -142,7 +142,7 @@ test("client() spawns the server with store:false for every known xai model (see
 
 test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {
     const xdg = await scratch();
-    const service = createOpenCodeService(xdg, forbiddenFetch);
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     await service.recordModels(["grok-2-image", "grok-imagine-video"]);
     expect(await fileExists(modelsPath(xdg))).toBe(false);
     expect(await service.xaiModels()).toEqual(SEED_CATALOG);

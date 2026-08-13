@@ -825,7 +825,7 @@ test("a routed refusal with an account still holding headroom reads as a cooldow
             kind: "error",
             code: "rate_limit",
             message:
-                "Google refused this turn, but 1 of 31 connected accounts still has headroom for Claude and GPT models — every credential is cooling down rather than spent, so this clears in moments rather than at a reset.",
+                "Google refused this turn, but 1 of 31 connected accounts still has headroom for Claude and GPT models — so this is not a spent allowance and no reset will fix it. Send again; if it keeps refusing, the request is being turned away rather than the quota, and another model or harness will get through.",
         },
         { kind: "done" },
     ]);

@@ -650,9 +650,14 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
     expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
 });
 
-// Gemini is routed-only: Google publishes no Anthropic-protocol endpoint and no Gemini runtime is baked, so a
-// Gemini turn is ALWAYS the Claude Code harness pointed at the translator — with no harness on the turn at all.
-test("agent.run serves a Gemini turn on the translator subscription, withholding the Claude OAuth token", async () => {
+/* Gemini UNDER THE CLAUDE CODE HARNESS: the loop pointed at the translator, which is what every Gemini turn was
+ * until Gemini got a native runtime. It is still a real selection (the picker offers both chips), so it keeps
+ * its coverage — but the harness has to be NAMED now, because `native` no longer resolves here.
+ *
+ * Worth knowing while reading these: this is the path Google refuses in practice. The Claude Code CLI bakes its
+ * own identity line into every request and Antigravity matches on it, so what these tests pin is the routing and
+ * the credential withholding, not that a real turn on it would be answered. */
+test("agent.run serves a Gemini turn under the Claude Code harness on the translator subscription, withholding the Claude OAuth token", async () => {
     let seen: { baseUrl?: string; authToken?: string; model?: string; oauthToken?: string } | undefined;
     const client = clientFor(
         createApp(
@@ -672,7 +677,7 @@ test("agent.run serves a Gemini turn on the translator subscription, withholding
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
     expect(events.some((event) => event.kind === "error")).toBe(false);
     expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
     expect(seen?.authToken).toBe("local-bearer");
@@ -739,7 +744,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                 }),
             ),
         );
-        await runAgentTurn(client, { prompt: "hi", agent: "gemini", model });
+        await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code", model });
         return seen?.model;
     };
     expect(await run("gemini-3-flash")).toBe("gemini-3-flash");
@@ -760,9 +765,53 @@ test("agent.run gates a Gemini turn with no Google account connected as subscrip
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
     expect(agentCalled).toBe(false);
     expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
+});
+
+/* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME — the default flipped when Gemini got one, and
+ * this is the test that says so out loud rather than leaving it to be discovered.
+ *
+ * It matters because `native` is what agent.routes fills in for a turn that omits the field, so this is the
+ * answer for every API caller and every stored conversation that predates the switch. Flipping it is the point:
+ * the Claude Code loop is the road Google refuses, so defaulting to it would default to the broken one.
+ *
+ * Asserted through the RUNNER that was reached — geminiAgent is the OpenCode loop, `agent` is Claude Code — so
+ * this pins the dispatch rather than a message about it. */
+test("agent.run sends a Gemini turn with no harness to the native OpenCode runtime, not the Claude Code loop", async () => {
+    let claudeCodeCalled = false;
+    let nativeCalled = false;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                // The native runtime's credential is the translator's, exactly as the routed one's is — one
+                // connected Google account is all either harness needs.
+                cliProxy: {
+                    accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
+                    connect: async () => ({ url: "", code: "", state: "", flow: "redirect" as const }),
+                    complete: async () => {},
+                    disconnect: async () => {},
+                    models: async () => [],
+                },
+                agent: async function* () {
+                    claudeCodeCalled = true;
+                    yield { kind: "done" };
+                },
+                geminiAgent: async function* () {
+                    nativeCalled = true;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(nativeCalled).toBe(true);
+    expect(claudeCodeCalled).toBe(false);
 });
 
 test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather than refusing it", async () => {

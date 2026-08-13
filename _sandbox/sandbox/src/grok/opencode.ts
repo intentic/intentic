@@ -5,14 +5,26 @@ import { createOpencodeClient, createOpencodeServer, type Event as OpenCodeEvent
 import { noteDelegationSignal } from "../agent/subagents.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
-/* The shared OpenCode runtime for the Grok provider: one warm `opencode serve` per container plus its client.
- * Both the Grok adapter (runs turns) and the Grok auth routes (drive xAI's OAuth) need the same client, so
- * ownership lives here rather than inside the adapter. Single-tenant (one container per project), so one server
- * is enough.
+/* The shared OpenCode runtime: one warm `opencode serve` per container plus its client. Both the adapters that
+ * run turns on it and the Grok auth routes (drive xAI's OAuth) need the same client, so ownership lives here
+ * rather than inside an adapter. Single-tenant (one container per project), so one server is enough.
  *
- * OpenCode is also the credential store — it persists the xAI OAuth tokens and refreshes them itself, so there
- * is no ClaudeStore/CodexStore twin. We pin its data dir to the workspace (XDG_DATA_HOME) so those tokens
- * survive daemon restarts, and `connected()`/`disconnect()` read/clear that store. */
+ * TWO PROVIDERS RIDE IT, and they are credentialed in opposite directions — which is most of what this file's
+ * shape is about:
+ *
+ *   xai    — OpenCode IS the credential store. It persists the xAI OAuth tokens and refreshes them itself, so
+ *            there is no ClaudeStore/CodexStore twin. We pin its data dir (XDG_DATA_HOME) so those tokens
+ *            survive daemon restarts, and `connected()`/`disconnect()` read/clear that store.
+ *   gemini — OpenCode holds NOTHING. The credential is the translator's, exactly as it is for a Gemini turn on
+ *            the Claude Code harness: the provider is declared as an OpenAI-compatible endpoint pointed at the
+ *            loopback translator with its local bearer, and CLIProxyAPI supplies the real Google auth and
+ *            balances the account fleet behind it. So `connected("gemini")` is a question for the translator,
+ *            not for auth.json, and nothing here can answer it — planGeminiTurn asks the right thing.
+ *
+ * Gemini is here at all because the Claude Code loop cannot reach Google any more: that CLI bakes its own
+ * "You are a Claude agent, built on Anthropic's Claude Agent SDK." into every request, and Google's Antigravity
+ * channel refuses on that exact sentence (as a quota error, which sent the translator through all 31 accounts
+ * before failing). Under this loop the request carries OpenCode's prompt instead. */
 export interface OpenCodeService {
     // Ensure the server is up and return its client (lazy: the first turn or auth call boots it).
     readonly client: () => Promise<OpencodeClient>;
@@ -161,7 +173,33 @@ const watchSessionEvents = (client: OpencodeClient): void => {
     })();
 };
 
-export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
+/* What a Gemini turn on this runtime needs declared at server spawn. Absent ⇒ no Gemini provider is registered
+ * and only Grok rides the loop, which is the dev profile (no translator baked) and every test that does not care.
+ *
+ * `models` is a thunk because the ids come off the Gemini catalog, which is built AFTER this service in the
+ * composition order — and because OpenCode fixes provider config at spawn, so the list is read once, lazily, by
+ * the boot that actually needs it rather than eagerly at construction. */
+export interface OpenCodeGeminiConfig {
+    // The translator's base URL — its OpenAI-compatible surface is at `${baseUrl}/v1`.
+    readonly baseUrl: string;
+    readonly token: string;
+    readonly models: () => Promise<readonly string[]>;
+}
+
+// OpenCode's id for the Gemini-through-the-translator provider. Not "google": that name is taken by OpenCode's
+// own Google provider (a Generative-Language API key), and a turn landing on THAT would ask the user for a key
+// they were never asked for and bypass the account fleet entirely.
+export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
+
+/* An options BAG rather than more positionals: the second parameter used to be the test's fetch injection, and
+ * adding real configuration behind it would have put a production concern after a test seam — the shape where
+ * the next parameter goes in the wrong slot. Both are optional and both are named. */
+export const createOpenCodeService = (
+    xdgDataHome: string,
+    options: { readonly gemini?: OpenCodeGeminiConfig; readonly fetchImpl?: typeof fetch } = {},
+): OpenCodeService => {
+    const { gemini } = options;
+    const fetchImpl = options.fetchImpl ?? fetch;
     let booting: Promise<OpencodeClient> | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
     // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached —
@@ -182,6 +220,25 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
         // call. Config is fixed at server spawn, so a model first discovered later (the self-heal path) lacks the
         // flag until the next daemon restart; the persisted catalog covers it from then on.
         const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await readPersistedModels())])];
+        /* The Gemini rows, read once here because OpenCode fixes provider config at spawn. A catalog read that
+         * fails degrades to no Gemini provider rather than taking the whole server down with it — Grok would
+         * otherwise lose its runtime over a translator that happened to be unreachable at boot. */
+        const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
+        /* Gemini as an OpenAI-compatible endpoint on the translator. The models have to be NAMED — OpenCode
+         * builds a custom provider's catalog from config alone (there is no models.dev row for a loopback
+         * endpoint), so an id it has never heard of cannot be selected. An unreadable catalog leaves this empty
+         * and the provider is not registered at all, rather than registered serving nothing. */
+        const geminiProvider =
+            gemini === undefined || geminiModels.length === 0
+                ? {}
+                : {
+                      [OPENCODE_GEMINI_PROVIDER]: {
+                          npm: "@ai-sdk/openai-compatible",
+                          name: "Gemini",
+                          options: { baseURL: `${gemini.baseUrl.replace(/\/$/, "")}/v1`, apiKey: gemini.token },
+                          models: Object.fromEntries(geminiModels.map((id) => [id, {}])),
+                      },
+                  };
         // createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
         // XDG_DATA_HOME across the synchronous spawn only — the child captures it at launch; restoring right
         // after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.
@@ -195,7 +252,10 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
                 // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access).
                 config: {
                     permission: { edit: "allow", bash: "allow", webfetch: "allow" },
-                    provider: { xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) } },
+                    provider: {
+                        xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },
+                        ...geminiProvider,
+                    },
                 },
             });
         } finally {

@@ -1,6 +1,6 @@
 import { type AccountUsage, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createCliProxyClient, nextRestartDelay, RESTART_DELAY_BASE_MS, RESTART_DELAY_CAP_MS } from "./translator.js";
+import { createCliProxyClient, nextRestartDelay, renderConfig, RESTART_DELAY_BASE_MS, RESTART_DELAY_CAP_MS } from "./translator.js";
 
 /* The shared account-usage store, in memory. Every client in this file gets one: `accounts` reads it on every
  * call now that a row's headroom travels with the row, so a test that skipped it would be exercising a client
@@ -36,6 +36,21 @@ test("consecutive fast exits double the delay up to the cap", () => {
 
 test("a run that stayed up resets the ladder", () => {
     expect(nextRestartDelay(RESTART_DELAY_CAP_MS, 61_000)).toBe(RESTART_DELAY_BASE_MS);
+});
+
+/* ONE REQUEST MAY NOT COST THE WHOLE FLEET. CLIProxyAPI retries a refusal on the next credential, and its own
+ * default (0) means "every auth file you hold" — correct only if a refusal is always about the account it came
+ * from. Google's is not: it answers a request it objects to with the same RESOURCE_EXHAUSTED as a spent quota,
+ * so one unservable request walked all 31 connected accounts, 44–62 upstream calls, ~60 seconds, every one of
+ * them at ~0% utilization.
+ *
+ * Asserted on the rendered file because that is the only surface this repo owns — the walk happens inside a
+ * separate binary that reads it. A missing key is not a neutral omission here: it unmarshals to Go's zero, which
+ * is the unbounded walk, which is how this went unnoticed. */
+test("bounds how many accounts one request may be retried on", () => {
+    const config = renderConfig({ port: 8789, authDir: "/agent-auth/cliproxy", token: "t", compat: "" });
+
+    expect(config).toContain("max-retry-credentials: 5");
 });
 
 afterEach(() => vi.unstubAllGlobals());

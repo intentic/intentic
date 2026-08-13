@@ -43,10 +43,20 @@ const proxyCooldownReset = (explained: string, now: number = Date.now()): number
  * every credential it holds — that phrasing is only true of a native Claude turn, which is exactly where it is
  * kept.
  *
- * The middle case is the one that cost the most. Headroom left on file means the quota is NOT what refused this
- * turn: the translator had every credential cooling for some other reason — a transient upstream error cools one
- * for a minute — and sending someone away until Monday over a condition that clears in seconds is worse than
- * saying nothing at all. */
+ * The middle case is the one that cost the most, twice, in opposite directions. Headroom left on file means the
+ * quota is NOT what refused this turn, and the first version of this sentence said so and then guessed WHY —
+ * "every credential is cooling down rather than spent, so this clears in moments rather than at a reset".
+ * Sending someone away until Monday over a condition that clears in seconds is worse than saying nothing; so is
+ * promising it clears in moments when it never will.
+ *
+ * That promise was measured wrong: Google answers a request it objects to with the same `RESOURCE_EXHAUSTED` it
+ * uses for a spent quota, so a refusal every account shares reads here as a fleet-wide cooldown. It was one for
+ * days — a Claude Code turn carrying an identity line Google refuses, on 31 accounts at ~0% utilization, telling
+ * the user each time that it would clear in moments.
+ *
+ * So the sentence now states the FACT it can stand behind (the meters say there is room, so a reset is not what
+ * you are waiting for) and stops predicting the recovery it cannot see. Naming the other possibility is what
+ * turns a wrong promise into a useful one: if it keeps happening, the request is being refused, not the quota. */
 const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => {
     if (limit === undefined) {
         return `${vendor} usage limit reached — this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
@@ -56,8 +66,9 @@ const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => 
         const total = limit.withHeadroom + limit.spent;
         return (
             `${vendor} refused this turn, but ${limit.withHeadroom} of ${total} connected accounts still ` +
-            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`} — every ` +
-            `credential is cooling down rather than spent, so this clears in moments rather than at a reset.`
+            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`} — so this is ` +
+            `not a spent allowance and no reset will fix it. Send again; if it keeps refusing, the request is ` +
+            `being turned away rather than the quota, and another model or harness will get through.`
         );
     }
     // Nothing measured either way: the pool was never polled, or the provider has renamed the bucket it is

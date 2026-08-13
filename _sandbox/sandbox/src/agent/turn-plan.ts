@@ -428,6 +428,34 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
     };
 };
 
+/* GEMINI ON ITS NATIVE RUNTIME — the same OpenCode loop Grok runs on, pointed at the translator instead of at
+ * xAI. The credential question is therefore the one a ROUTED turn asks, not the one planGrokTurn asks: OpenCode
+ * holds nothing for Gemini, CLIProxyAPI holds every Google auth file and balances the fleet behind them.
+ *
+ * It exists because the Claude Code loop can no longer reach Google. That CLI prepends its own identity line to
+ * every request and bakes it into the binary; Google's Antigravity channel refuses on that exact sentence, and
+ * reports it as a quota error — so the translator walked all 31 accounts looking for headroom none of them
+ * lacked, ~60s a turn. This loop sends OpenCode's prompt, which the block has nothing to match in.
+ *
+ * The model is resolved from the same catalog the Claude Code path uses, so a pin survives a harness switch. */
+export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+    if (services.config.translator.url === "") {
+        return { ok: false, message: "This sandbox has no model translator, so Gemini can't run here. Run a sandbox built from the published image." };
+    }
+    if ((await services.cliProxy.accounts()).gemini.length === 0) {
+        return { ok: false, message: "Connect your Google account in Sandbox ▸ Agent to run Gemini here." };
+    }
+    // Never empty (discovery → persisted → seed floor), so this always resolves: keep the pinned model while the
+    // catalog still offers it, else take the catalog's default — the same rule routedModel applies.
+    const catalog = await services.providerCatalogs.gemini.models();
+    const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
+    return {
+        ok: true,
+        run: services.geminiAgent,
+        request: withAttachments({ ...context.base, model }, context.attachmentPaths),
+    };
+};
+
 // Pi: the reserved `pi` agent-kind capability, spawned and driven over Pi's own RPC protocol. Harness doesn't
 // apply (Pi is its own loop). Unlike the ACP floor it takes the steering queue (Pi's `steer` command is real
 // mid-turn injection) and the effort tier (set_thinking_level); it has no MCP seam, so no tools are passed.

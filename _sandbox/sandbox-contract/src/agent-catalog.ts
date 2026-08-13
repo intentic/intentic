@@ -158,9 +158,13 @@ export const PLAN_LIMIT_PROVIDERS: readonly NativeProvider[] = ["claude", "codex
 export const reportsPlanLimits = (provider: AgentProvider): boolean => PLAN_LIMIT_PROVIDERS.includes(provider as NativeProvider);
 
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;
-// `claude-code` = the Claude Code loop for any provider (codex/grok then route through the translator). Only
-// surfaced for codex/grok — claude is always its own Claude Code loop, and kimi/gemini have no native runtime
-// to switch to (both only exist under this harness). See AgentHarness in schemas.ts.
+// `claude-code` = the Claude Code loop for any provider (codex/grok/gemini then route through the translator).
+// Surfaced for codex/grok/gemini — claude is always its own Claude Code loop, and kimi has no native runtime to
+// switch to (it only exists under this harness). See AgentHarness in schemas.ts.
+//
+// Gemini's `native` is OpenCode rather than a Google CLI: the image ships no Gemini binary, and OpenCode is
+// already here driving Grok. Both of Gemini's harnesses spend the same translator accounts — the switch changes
+// which agentic loop wraps them, not which credential pays.
 export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Native", value: "native" },
     { label: "Claude Code", value: "claude-code" },
@@ -182,11 +186,14 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
  * and demands one, so a pair can never be silently absent. */
 export interface AgentCapabilities {
     // Which agentic loop actually serves the turn — the question "is the harness `claude-code`" only looks like.
-    // Claude is always its own Claude Code loop, and kimi/gemini have no native runtime at all (both are
-    // re-served through the translator), so all three run it whatever harness the client sent; only codex/grok
-    // have a native runtime to switch away from. Names the session store a finished conversation's transcript is
-    // backfilled from, too.
-    readonly runtime: "claude-code" | "codex" | "opencode" | "acp" | "pi";
+    // Claude is always its own Claude Code loop and Kimi has no native runtime, so both run it whatever harness
+    // the client sent; codex/grok/gemini each have a native runtime to switch away from. Names the session store
+    // a finished conversation's transcript is backfilled from, too.
+    //
+    // `opencode-gemini` is the OpenCode loop pointed at Gemini rather than at xAI, and it is a SEPARATE runtime
+    // id from `opencode` on purpose: adapter health is keyed by this field (adapter-health.ts), so sharing one
+    // would make Grok's xAI credential decide whether the picker greys out Gemini, and the reverse.
+    readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "pi";
     // Mid-turn injection (the SteeringQueue behind /agent/steer). Needs the SDK's streaming-input mode.
     readonly steering: boolean;
     // How much of the permission-mode axis the runtime honours. "modes" = every PermissionMode, with per-tool
@@ -272,6 +279,24 @@ const OPENCODE: AgentCapabilities = {
     recovery: false,
 };
 
+/* The same OpenCode loop, serving Gemini instead of xAI — identical abilities, which is the point of giving it
+ * its own row rather than its own record shape.
+ *
+ * It exists because the alternative was Gemini's ONLY route being the Claude Code loop, and that loop announces
+ * itself to whatever it is pointed at: the CLI prepends its own "You are a Claude agent, built on Anthropic's
+ * Claude Agent SDK." to every request, baked into the binary with no option to suppress it. Google's Antigravity
+ * channel matches that exact sentence and refuses the request — reported as a quota error, which sent the
+ * translator walking all 31 connected accounts looking for one with room, ~60s per attempt, none of which could
+ * ever have answered. Under this runtime the request carries OpenCode's own prompt, so the turn is simply not
+ * Claude Code traffic and the block has nothing to match.
+ *
+ * The credential is unchanged: both harnesses reach Google through the translator and the same auth files. Only
+ * the loop around the model differs. */
+const OPENCODE_GEMINI: AgentCapabilities = {
+    ...OPENCODE,
+    runtime: "opencode-gemini",
+};
+
 // Any agent speaking the Agent Client Protocol: a documented floor rather than the native ceiling. It publishes
 // commands, runs its terminals in the conversation's tmux session, and takes our http MCP tools when it says it
 // can — but it owns its own model, effort and permission posture.
@@ -326,6 +351,9 @@ export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): 
     }
     if (provider === "grok") {
         return harness === "claude-code" ? CLAUDE_CODE : OPENCODE;
+    }
+    if (provider === "gemini") {
+        return harness === "claude-code" ? CLAUDE_CODE : OPENCODE_GEMINI;
     }
     if (isEndpointProvider(provider)) {
         return CLAUDE_CODE;
