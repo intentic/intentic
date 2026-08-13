@@ -1,5 +1,14 @@
 import type { PrepushRun } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
+// Statically imported for its LOAD COST alone — every test re-imports it through `load()` below, and the first
+// of those pulled the unmocked half of the graph (the agent-run model resolver and the contract it resolves
+// against) inside the first test's 20s budget: ~1s idle, but several times that on a runner where every core is
+// busy, which is how this file failed with the first test timing out. The second failure was the same one: a
+// timed-out test keeps running, so this file's push landed on the NEXT test's mocks. Collection is bounded by
+// the run rather than by a test, so paying it here costs the same and can't time anything out. Nothing is
+// bound: `load()` resets the module registry and re-executes the (already transformed) graph fresh per test.
+// oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
+import "./usePushFlow";
 
 /* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
  * situation the flow exists for: the user starts a push, walks off to another view — which destroys the panel
