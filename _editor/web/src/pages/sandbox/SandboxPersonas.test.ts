@@ -89,7 +89,15 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxPersonas) });
-    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    // The stand-in carries the name through as an attribute, so a test can assert WHICH glyph a row wears rather
+    // than only that it wears one — the permission rows are read by their icons and the mapping is the point.
+    app.component(
+        `Icon`,
+        defineComponent({
+            props: { name: String, spin: Boolean },
+            setup: (props) => () => h(`i`, { "data-icon": props.name }),
+        }),
+    );
     app.component(
         `RouterLink`,
         defineComponent({
@@ -238,6 +246,65 @@ it(`sorts what a persona may do into workspace and outward groups`, async () => 
     const rendered = text(el);
     expect(rendered).toContain(`In your workspace`);
     expect(rendered).toContain(`Reaching out`);
+});
+
+/* THE FOLDER FENCE IS A WORKSPACE BOUND, so it reads with the other two rather than in a section of its own below
+ * all seven outward switches — which is where it used to sit, with a screenful of unrelated rows between the two
+ * halves of "what can this card touch in my repo". The two groups now stand side by side, and reading order is
+ * what says which column a heading landed in: workspace things first, outward things after all of them. */
+it(`keeps where-it-works in the workspace group rather than after the outward one`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    const rendered = text(el);
+    expect(rendered.indexOf(`In your workspace`)).toBeLessThan(rendered.indexOf(`Where it works`));
+    expect(rendered.indexOf(`Where it works`)).toBeLessThan(rendered.indexOf(`Reaching out`));
+});
+
+/* EVERY PERMISSION ROW WEARS A GLYPH, and the rule is all of them or none: a list that icons some of its rows
+ * reads as a rendering bug, and the switches are scanned by those marks before they are read. So this fails the
+ * moment a shelf or a grant group is added without one — which is the only way the rail can rot. */
+it(`gives every permission row an icon`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+
+    // A switch row is a <label> with a checkbox in it — ToggleSwitch under its skin.
+    const rows = [...el.querySelectorAll(`label`)].filter((row) => row.querySelector(`input[type="checkbox"]`) !== null);
+    // One workspace shelf, four outward ones, three grant groups.
+    expect(rows).toHaveLength(8);
+    for (const row of rows) {
+        expect(row.querySelector(`i[data-icon]`)).not.toBeNull();
+    }
+
+    // The row the globe was chosen for, spelled out because it is also the one whose mark is claimed elsewhere.
+    const web = rows.find((row) => (row.textContent ?? ``).includes(`Read the web`))!;
+    expect(web.querySelector(`i`)?.getAttribute(`data-icon`)).toBe(`globe`);
+});
+
+/* THE LOCATION FIELDS BORROW THE RAIL from the block they render inside, so their glyphs line up with the switches
+ * above them instead of carrying a second copy of the same classes. That hand-off is a slot prop, and a slot prop
+ * that stops arriving fails SILENTLY — the icons keep rendering, unsized and undimmed, one column out of true. */
+it(`lends the powers rail to the location rows so their icons stay in line`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+
+    /* Found through the label's own text rather than by icon name: <FolderPicker> draws a `folder-open` of its
+     * own inside the Choose button, so a document-wide query for one is a test that passes on the wrong element
+     * the day the markup moves. */
+    const labelled = (words: string): Element => {
+        const span = [...el.querySelectorAll(`span`)].find(
+            (entry) => entry.children.length === 1 && entry.querySelector(`i`) !== null && (entry.textContent ?? ``).trim() === words,
+        );
+        return span!.querySelector(`i`)!;
+    };
+
+    // The same rail the switch rows use — width and tone, not merely "some class".
+    for (const glyph of [labelled(`Starts in`), labelled(`Only these folders`)]) {
+        expect(glyph.className).toContain(`w-4`);
+        expect(glyph.className).toContain(`text-subtle`);
+    }
 });
 
 /* WHERE IT WORKS STATES THE ISOLATION RATHER THAN ASKING ABOUT IT. The three-way placement choice is gone, and

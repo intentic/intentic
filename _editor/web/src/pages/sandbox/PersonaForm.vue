@@ -147,15 +147,19 @@ const folderBound = computed(() => draft.folders.length > 0);
 </script>
 
 <template>
-    <!-- One measure for every field. The name input used to be narrower than the textarea under it, which reads
-         as two forms stacked rather than one. -->
-    <div class="flex max-w-xl flex-col gap-5">
+    <!-- AS WIDE AS THE CARD IT OPENED IN. This was capped at a reading measure, which left the right half of an
+         opened row empty — and, more to the point, left the powers block no room to put its two groups side by
+         side. A settings grid is not prose; the thing that has to stay narrow is the one field you read a line of
+         text in, and that field caps itself below. -->
+    <div class="flex max-w-4xl flex-col gap-5">
         <!-- Who you are making: the live persona, then its name, on one line. The avatar is the size it will be
              in the list below, so the preview is the row rather than a bigger cousin of it. Absent when a row
              above is already showing both — see `showName`. -->
         <div v-if="showName" class="flex items-center gap-3">
             <Avatar :size="32" :name="previewName" :hue="previewName === undefined ? undefined : identityHue(draft.original ?? previewName)" />
-            <div class="ui-field min-w-0 flex-1">
+            <!-- A name is three words. Capped, because an input stretched across the whole card reads as a field
+                 expecting a paragraph. -->
+            <div class="ui-field min-w-0 max-w-sm flex-1">
                 <input
                     v-model="draft.label"
                     :class="cmp.input('w-full font-medium')"
@@ -275,37 +279,52 @@ const folderBound = computed(() => draft.folders.length > 0);
                 >
             </div>
 
-            <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound" />
-        </div>
+            <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound">
+                <!-- WHERE IT WORKS RIDES IN THE WORKSPACE COLUMN, because a folder fence is a limit on your own
+                     tree — the same question as the two controls above it, and nothing to do with what this card
+                     can reach outside. It used to be a section of its own below all seven outward switches, which
+                     put a screenful of unrelated rows between the two halves of "what can it touch in my repo".
+                     It lives HERE rather than inside the shared block because the quick panel has no pickers. -->
+                <template #where="{ rail }">
+                    <div class="flex flex-col gap-3">
+                        <div class="flex flex-col gap-0.5">
+                            <span :class="cmp.sectionLabel()">Where it works</span>
+                            <!-- STATED, NOT ASKED. This used to be a three-way choice between "whatever started
+                                 it", "its own copy" and "the shared workspace" — a question whose options a
+                                 reader had no way to choose between, on top of a default every surface already
+                                 applies. -->
+                            <span class="text-xs text-subtle">
+                                Every session works in its own copy of the workspace, so several can run at once without touching each other's files.
+                            </span>
+                        </div>
 
-        <!-- WHERE IT WORKS. Last, because it is the section most cards leave alone. -->
-        <div class="flex flex-col gap-3 border-t border-line pt-4">
-            <div class="flex flex-col gap-0.5">
-                <span class="ui-field-label">Where it works</span>
-                <!-- STATED, NOT ASKED. This used to be a three-way choice between "whatever started it", "its
-                     own copy" and "the shared workspace" — a question whose options a reader had no way to
-                     choose between, on top of a default every surface already applies. -->
-                <span class="text-xs text-subtle">
-                    Every session works in its own copy of the workspace, so several can run at once without touching each other's files.
-                </span>
-            </div>
+                        <!-- The label sits ABOVE its picker rather than beside it: a folder field is as wide as
+                             the column, and a fixed label column next to it would leave the chips inside no room
+                             to be read. The glyph rides the same rail as the switches above — lent by the block
+                             itself, so the two cannot fall out of line. -->
+                        <div class="flex flex-col gap-1">
+                            <span class="flex items-center gap-2 text-sm text-content">
+                                <Icon name="folder-open" :class="rail" />
+                                Starts in
+                            </span>
+                            <FolderPicker v-model="draft.startIn" label="Starts in" placeholder="The whole workspace" />
+                        </div>
 
-            <div class="flex items-start gap-2.5">
-                <span class="mt-2 w-36 shrink-0 text-sm text-content">Starts in</span>
-                <FolderPicker v-model="draft.startIn" label="Starts in" placeholder="The whole workspace" />
-            </div>
-
-            <div class="flex items-start gap-2.5">
-                <span class="mt-2 w-36 shrink-0 text-sm text-content">Only these folders</span>
-                <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <FolderPicker v-model="draft.folders" multiple label="Only these folders" placeholder="Anywhere in the workspace" />
-                    <!-- Said HERE rather than in documentation, because this is the field whose promise is
-                         easiest to over-read: it refuses file tools, and a shell computes its own paths. -->
-                    <span class="text-xs text-subtle">
-                        File tools pointed outside are refused — this stops mistakes and misread instructions, not a shell.
-                    </span>
-                </span>
-            </div>
+                        <div class="flex flex-col gap-1">
+                            <span class="flex items-center gap-2 text-sm text-content">
+                                <Icon name="folder" :class="rail" />
+                                Only these folders
+                            </span>
+                            <FolderPicker v-model="draft.folders" multiple label="Only these folders" placeholder="Anywhere in the workspace" />
+                            <!-- Said HERE rather than in documentation, because this is the field whose promise is
+                                 easiest to over-read: it refuses file tools, and a shell computes its own paths. -->
+                            <span class="text-xs text-subtle">
+                                File tools pointed outside are refused — this stops mistakes and misread instructions, not a shell.
+                            </span>
+                        </div>
+                    </div>
+                </template>
+            </PersonaPowersFields>
         </div>
 
         <Notice v-if="error !== undefined" :of="error" />
