@@ -25,7 +25,7 @@ const { cleanup } = defineProps<{ cleanup: string }>();
 
 <template>
     <div class="flex flex-col gap-3">
-        <p class="text-base font-medium text-content">What this does</p>
+        <p class="text-sm font-medium text-content">What this does</p>
         <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote (the container names, "nothing
              deployed", "runs as you, no root") and a reference panel nobody finishes reading answers nothing.
              The line naming the dotfiles it writes is gone outright: where a log lands is not a fact anybody

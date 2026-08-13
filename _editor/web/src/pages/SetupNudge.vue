@@ -49,9 +49,8 @@ const emit = defineEmits<{ copied: [] }>();
         <p class="flex items-start gap-2">
             <Icon name="clock" class="mt-0.5 shrink-0" />
             <span v-if="variant === `cloud`" class="min-w-0">
-                <span class="font-medium">Still building.</span> Check <span class="font-mono">{{ cloudName }}</span> in your
-                {{ cloudProvider }} console. Its boot log is <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a
-                fresh sandbox here is always safe.
+                <span class="font-medium">Still building.</span> Check {{ cloudName }} in your {{ cloudProvider }} console. Its boot log is
+                <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh sandbox here is always safe.
             </span>
             <span v-else-if="variant === `emailed`" class="min-w-0">
                 <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host your sandbox. The command
@@ -70,7 +69,7 @@ const emit = defineEmits<{ copied: [] }>();
                 <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
             </span>
         </p>
-        <p v-if="stalled && variant === `terminal`" class="pl-6 text-2xs opacity-90">
+        <p v-if="stalled && variant === `terminal`" class="pl-6 opacity-90">
             Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
         </p>
         <!-- `cta`, because here copying again IS the way out — the quiet chip that suits a copy-beside-content

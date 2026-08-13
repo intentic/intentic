@@ -183,9 +183,7 @@ watch(keepTrying, (on) => {
                     </span>
                     <span class="min-w-0">
                         {{ step.text }}
-                        <a v-if="step.url" :href="step.url" target="_blank" rel="noopener" class="text-link hover:underline">{{
-                            step.urlLabel
-                        }}</a>
+                        <a v-if="step.url" :href="step.url" target="_blank" rel="noopener" class="text-link hover:underline">{{ step.urlLabel }}</a>
                     </span>
                 </li>
             </ol>
@@ -253,8 +251,8 @@ watch(keepTrying, (on) => {
             <label v-if="capacityMiss" class="flex items-start gap-2 text-xs text-muted">
                 <Checkbox v-model="keepTrying" binary />
                 <span class="min-w-0">
-                    <span class="text-content">Keep trying while this tab is open</span> — retries every couple of minutes. Your credential stays
-                    in this tab and is never stored.
+                    <span class="text-content">Keep trying while this tab is open</span> — retries every couple of minutes. Your credential stays in
+                    this tab and is never stored.
                 </span>
             </label>
             <Button
@@ -266,7 +264,7 @@ watch(keepTrying, (on) => {
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p class="text-2xs text-subtle">
+            <p class="text-xs text-subtle">
                 Created in your {{ meta.label }} account, so it's yours:
                 {{ meta.id === `oracle` ? `free within the Always-Free tier` : `billed by ${meta.label} directly to you` }}, and deleting it happens
                 in their console.

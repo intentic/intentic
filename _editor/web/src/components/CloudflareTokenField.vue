@@ -69,7 +69,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
          expected is the failure this flow cannot otherwise surface until the tunnel is already built. -->
     <slot name="zone-confirmed" />
 
-    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-2xs">
+    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
         <a
             href="https://dash.cloudflare.com/profile/api-tokens"
             target="_blank"
