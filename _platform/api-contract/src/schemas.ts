@@ -535,6 +535,13 @@ export const HostedOfferSchema = z.object({
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
+/* Whether this platform can give a sandbox an address of its own — the tunnel fabric behind `setupCode`. A
+ * platform that has not stood one up (the self-hoster's default) mints no codes at all, so the pasted-command
+ * and cloud-machine lanes cannot finish on it, and the wizard must say so BEFORE it draws them. Asking the
+ * mint was the only way to find out, which meant offering lanes first and retracting them a round-trip later. */
+export const AddressOfferSchema = z.object({ enabled: z.boolean() });
+export type AddressOffer = z.infer<typeof AddressOfferSchema>;
+
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),

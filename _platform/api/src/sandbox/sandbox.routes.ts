@@ -484,6 +484,15 @@ export const sandboxRoutes = {
         await openHostedStretch(context.prisma, sandbox.hosted.id);
         return { ok: true };
     }),
+    /* Whether this platform mints addresses — the same switch `setupCode` enforces, asked without spending a
+     * code. It exists because "the mint 404s" is a terrible way for a wizard to learn what it can offer: the
+     * page had already drawn the lanes that need an address by the time the answer came back, and had to take
+     * them off screen again. Cheap and session-only, like hostedOffer, and it reports the platform's
+     * configuration rather than anything about the caller. */
+    addressOffer: os.sandbox.addressOffer.handler(({ context }) => {
+        requireUser(context);
+        return { enabled: zrokEnabled(context.config) };
+    }),
     /* Mint the short-lived setup code the install one-liner carries instead of raw tokens. One lane now: the
      * sandbox's reachability grant on the self-hosted hub is minted (or reused) here and stashed in the
      * payload, so the pasted command carries a code and nothing else — the address it will answer on is a

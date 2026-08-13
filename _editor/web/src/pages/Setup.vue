@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HostedOffer, SandboxSummary, SetupCode, SetupReport } from "@intentic-app/api-contract";
+import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
@@ -124,8 +124,19 @@ const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => en
 
 // The reachability mode (step 1's address line). Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
 const mode = ref<"intentic" | "own">(`intentic`);
-// Whether the intentic-provided path is offered at all (false once its mint 404s — the server feature flag).
-const intenticAvailable = ref(true);
+/* Whether this platform hands out addresses at all — `undefined` until sandbox.addressOffer answers on
+ * arrival, and the gate on every lane that needs one (see `addressed` below).
+ *
+ * IT STARTS UNKNOWN RATHER THAN TRUE, and that is the whole of the fix it exists for. Assuming the offer was
+ * there meant a platform without it drew the machine ladder in full, minted against a route that answers
+ * "not here", and then took the cloud rung back off screen — two options that appeared for one round-trip and
+ * vanished, over an address line left spinning on "Preparing your intentic domain…" forever, because nothing
+ * told it the answer would never come. Unknown draws neither, so nothing has to be retracted. */
+const intenticAvailable = ref<boolean | undefined>(undefined);
+// This platform mints addresses — the answer is in, and it is yes. The lanes that need one gate on this.
+const addressed = computed(() => intenticAvailable.value === true);
+// …and it is no. Distinct from "not yet": the first is a fact to state on the card, the second is a wait.
+const addressless = computed(() => intenticAvailable.value === false);
 
 // --- setup code state (both paths) ---
 // The minted {code, hostname, expiresAt} for the currently chosen target; the command carries only the code.
@@ -272,7 +283,11 @@ const composeShown = computed(() => commandVisible.value && runTab.value === `co
  * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
  * with no Cloudflare of its own), so the form yields to a pointer at step 1 while `mode` says `own`. */
 const machine = ref<"hosted" | "mine" | "cloud">(mobile.value ? `cloud` : `mine`);
-const cloudOffered = computed(() => intenticAvailable.value && !desktop.value);
+const cloudOffered = computed(() => addressed.value && !desktop.value);
+/* The pasted command is an address away from being useless: the script it runs redeems a setup code, and a
+ * platform that mints none has nothing for it to redeem. So this rung stands on the same offer the cloud one
+ * does — including in the desktop app, where the button IS the command. */
+const commandOffered = computed(() => addressed.value);
 
 /* --- the hosted lane (machine === `hosted`) ---
  *
@@ -289,6 +304,10 @@ const cloudOffered = computed(() => intenticAvailable.value && !desktop.value);
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
 const hostedOffered = computed(() => hostedOffer.value?.enabled === true && !desktop.value);
+/* Is there a provision lane to be in at all — a machine we can start, or an address we can put on one the
+ * reader starts. With neither, the way BACK to it (the attach lane's last line) is a promise this platform
+ * cannot keep, and the attach lane is not a detour off the flow but the whole of it. */
+const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 // Provisioning/releasing a machine is a round-trip with a provider at the end of it, so the card it was
 // clicked on says so rather than freezing.
 const hostedBusy = ref(false);
@@ -304,6 +323,18 @@ const hostedRow = computed(() => created.value?.hosted ?? null);
 // one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
 // says why it cannot be taken instead.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
+/* Is there a lane on the provision spine the reader can actually take — an address for a machine of theirs,
+ * a machine of ours still to claim, or one they already have. With none of the three, that spine can only
+ * render a step that never unlocks. */
+const anyLaneTakeable = computed(() => addressed.value || (hostedOffered.value && !hostedSpent.value) || hostedRow.value !== null);
+/* …so the page opens on the lane that still works, and says why once it gets there. Called only once the
+ * sandbox row is settled: a RESUMED hosted sandbox is a lane of its own — its machine already exists — and
+ * reading the offers alone would have sent it here. Never fires on a platform that mints addresses. */
+const fallBackToAttach = (): void => {
+    if (!anyLaneTakeable.value) {
+        lane.value = `attach`;
+    }
+};
 /* The free lane's awake-hour budget, or null for anyone it does not apply to — a member, or a platform
  * running without a ceiling. The distinction is the whole point of reading it here: `null` means the cards
  * below say nothing about hours at all, rather than showing a member a limit they do not have. */
@@ -374,7 +405,6 @@ const onProvisioned = (summary: SandboxSummary): void => {
  * So: one card per rung, each stating its own trade in the reader's terms, with the cost as a badge — a
  * layout that can be READ before it is clicked. `meta` is the badge, `note` the one-liner under the title.
  * The order is the ladder's: instant and small, then your own hardware, then a machine you rent. */
-const ladderShown = computed(() => !desktop.value && (hostedOffered.value || cloudOffered.value));
 interface MachineOption {
     readonly value: "hosted" | "mine" | "cloud";
     readonly icon: IconName;
@@ -418,13 +448,17 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
      * differences that matter after week three. Said as a property of the lane rather than as a nudge: the
      * hosted rung is genuinely the right pick for someone who wants to start now, and a card that argued
      * against it would be selling, not captioning. */
-    {
-        value: `mine` as const,
-        icon: `desktop`,
-        title: `A computer I have`,
-        meta: `Most power · no limits`,
-        note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command. No hour limit, nothing expires, and no membership needed to keep it.`,
-    },
+    ...(commandOffered.value
+        ? [
+              {
+                  value: `mine` as const,
+                  icon: `desktop` as const,
+                  title: `A computer I have`,
+                  meta: `Most power · no limits`,
+                  note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command. No hour limit, nothing expires, and no membership needed to keep it.`,
+              },
+          ]
+        : []),
     ...(cloudOffered.value
         ? [
               {
@@ -437,6 +471,10 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
           ]
         : []),
 ]);
+/* Shown once there is a CHOICE to make. A picker over one rung is not a picker — it is a card describing the
+ * only thing on offer, which is what the step under it already does — and while the offers are still being
+ * read there is nothing honest to draw at all. */
+const ladderShown = computed(() => !desktop.value && ladderOptions.value.length > 1);
 
 /* The command's options are checkboxes, and now they look like checkboxes: the design system's own control
  * (animated in primeng.css, so this row ticks the same way every other box in the app does) with its name
@@ -480,6 +518,12 @@ const targetKey = computed<string | undefined>(() => {
     if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null) {
         return undefined;
     }
+    // Nor does a platform that has no addresses to mint, in EITHER mode — the mint is fabric-gated server-side,
+    // so bring-your-own-Cloudflare fails there exactly like the default does. Asking anyway is what left the
+    // address line spinning on a promise the platform had already declined to make.
+    if (!addressed.value) {
+        return undefined;
+    }
     return created.value.id;
 });
 
@@ -487,6 +531,11 @@ const targetKey = computed<string | undefined>(() => {
 const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
 // `.title` rather than the NoticeModel itself — interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
+    // The one state that is not a wait: there is no command coming, so the lock says what is true and the card
+    // above carries the way on. "Preparing…" here is the sentence that made this page read as hung.
+    if (addressless.value) {
+        return `This platform doesn't hand out addresses, so there's no install command to run. Connect a sandbox you're already running instead.`;
+    }
     if (mode.value === `intentic`) {
         return setupError.value?.title ?? `Preparing your intentic domain…`;
     }
@@ -1222,15 +1271,28 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
  * Owned only — a member can't mint someone else's setup code, so their id gets them a sandbox of their own
  * instead. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
 onMounted(async () => {
-    const [loaded, offer] = await Promise.all([
+    const [loaded, offer, address] = await Promise.all([
         sandbox.list(),
         // An older platform without the route reads as "doesn't host" — the classic lanes carry on unchanged.
         // Resolve-then-call so even a client missing the method entirely lands in the catch, not in mount.
         Promise.resolve()
             .then(() => apiClient.sandbox.hostedOffer())
             .catch((): HostedOffer => ({ enabled: false, remaining: 0 })),
+        // WHAT THIS PLATFORM CAN REACH A SANDBOX WITH, asked before anything is drawn — the two offers land
+        // together, so the ladder and the address line are right on their first frame instead of correcting
+        // themselves a round-trip later. A platform that cannot answer is one that mints nothing.
+        Promise.resolve()
+            .then(() => apiClient.sandbox.addressOffer())
+            .catch((): AddressOffer => ({ enabled: false })),
     ]);
     hostedOffer.value = offer;
+    intenticAvailable.value = address.enabled;
+    /* The picker's default may not survive the offers: `mine` needs an address to put on that machine, and a
+     * phone's `cloud` needs the same one — so on a platform that mints none, both defaults point at a step
+     * that can only sit locked while the machine we host sits unoffered behind a hidden picker. */
+    if (!commandOffered.value && hostedOffered.value && !hostedSpent.value) {
+        machine.value = `hosted`;
+    }
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? loaded.find((entry) => entry.id === requested) : undefined;
     const unfinished = loaded.some((entry) => entry.lastSeenAt !== null)
@@ -1250,6 +1312,7 @@ onMounted(async () => {
                 machine.value = mobile.value ? `cloud` : `mine`;
             }
         }
+        fallBackToAttach();
         return;
     }
     sandbox.select(found.id);
@@ -1266,6 +1329,7 @@ onMounted(async () => {
         machine.value = `cloud`;
         cloudMachine.value = found.cloud;
     }
+    fallBackToAttach();
 });
 
 // Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
@@ -1472,6 +1536,13 @@ watch(commandReady, (ready) => {
                          than a number, since it is the whole flow and a "1" would promise a step 2 that is never
                          coming. -->
                     <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox">
+                        <!-- WHY YOU ARE HERE, when the page chose this lane rather than the reader. Arriving on
+                             "give us your domain" with no explanation reads as a step missing; one sentence
+                             naming what this platform does turns it into the flow it actually is. -->
+                        <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
+                            <Icon name="info-circle" class="mt-0.5 shrink-0" />
+                            <span>This platform doesn't start sandboxes or hand out addresses — it connects to one you're already running.</span>
+                        </p>
                         <p class="text-xs text-muted">
                             Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
                             open your workspace. Nothing to install, nothing to provision.
@@ -1590,8 +1661,16 @@ watch(commandReady, (ready) => {
 
                         <Notice v-if="error" :of="error" />
                         <!-- With a row already in hand, going back CONTINUES that sandbox through the run step rather
-                     than setting a new one up — the label has to say which of the two it is. -->
-                        <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="setLane(`provision`)">
+                     than setting a new one up — the label has to say which of the two it is.
+                     Gone entirely where there is nothing to go back TO: on a platform that neither hosts nor
+                     hands out addresses, both labels promise something it cannot do, and this lane is the flow
+                     rather than a detour off one. -->
+                        <button
+                            v-if="provisionOffered"
+                            type="button"
+                            :class="cmp.linkButton(`text-muted underline hover:text-content`)"
+                            @click="setLane(`provision`)"
+                        >
                             {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
                         </button>
                     </StepSection>
@@ -1747,6 +1826,21 @@ watch(commandReady, (ready) => {
                                         <Icon name="spinner" spin /> Assigned as your machine starts…
                                     </span>
                                 </div>
+                            </template>
+                            <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a spinner
+                                 nor the escape hatch below (both ways off the default address mint a code too, so
+                                 both are the same dead end here). One statement, and the one thing that does work. -->
+                            <template v-else-if="addressless">
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <span :class="factLabel">Address</span>
+                                    <span :class="`${factSlot} text-xs text-muted`">This platform doesn't set one up</span>
+                                </div>
+                                <p class="text-xs text-muted">
+                                    Sandboxes here are reached at an address you already have. Already running one?
+                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                        Connect the domain it answers on</button
+                                    >.
+                                </p>
                             </template>
                             <template v-else-if="mode === `intentic`">
                                 <!-- ONE ROW IN EVERY STATE (provisioned, still minting, or failed) so the escape

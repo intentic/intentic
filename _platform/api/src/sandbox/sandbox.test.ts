@@ -219,6 +219,18 @@ describe(`sandbox routes`, () => {
         await expectOrpcCode(call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: noFabric }), `NOT_FOUND`);
     });
 
+    /* …AND THE SAME ANSWER, ASKED WITHOUT SPENDING A CODE. The wizard has to know which lanes it can offer
+     * before it draws them; discovering it from the mint's 404 meant drawing the ones that need an address
+     * first and taking them back a round-trip later. Same switch, so the two can never disagree. */
+    it(`addressOffer reports the fabric the mint requires, without minting`, async () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn(), update: vi.fn() } });
+        expect(await call(sandboxRoutes.addressOffer, {}, { context: context({ prisma }) })).toEqual({ enabled: true });
+
+        const noFabric = context({ prisma });
+        (noFabric.config as { zrok: { adminToken: string } }).zrok.adminToken = ``;
+        expect(await call(sandboxRoutes.addressOffer, {}, { context: noFabric })).toEqual({ enabled: false });
+    });
+
     // The teardown a delete owes the hub: the account goes, taking every environment, share and name with it.
     it(`delete revokes the sandbox's reachability grant before dropping the row`, async () => {
         const order: string[] = [];

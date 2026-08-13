@@ -2,6 +2,7 @@ import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
+    AddressOfferSchema,
     ClaimChallengeSchema,
     CloudCredentialsSchema,
     CloudOptionsSchema,
@@ -116,6 +117,11 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/wake" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
+    /* Does this platform hand out addresses at all — the question `setupCode` used to answer only by failing.
+     * Shaped like `hostedOffer` and read beside it on arrival, so the wizard knows which lanes exist before it
+     * draws them: a platform with no tunnel fabric can offer neither the pasted command nor a cloud machine,
+     * and its reader belongs in the attach lane from the first frame rather than after a mint 404s. */
+    addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput).output(SetupCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })

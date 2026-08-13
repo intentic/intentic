@@ -66,11 +66,14 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
 // keep describing the world without the hosted rung.
 const setupCode = vi.fn(() => new Promise<never>(() => {}));
 const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
+// The platform hands out addresses unless a test says otherwise — that is the world every lane below assumes,
+// and the one where a mint that never settles is a WAIT rather than a promise that was never on offer.
+const addressOffer = vi.fn().mockResolvedValue({ enabled: true });
 // The wait's two extra calls: the machine's power state (polled while waiting) and the restart its failures
 // offer. Both answer harmlessly by default — a wait that cannot ask falls back to its plain step list.
 const hostedStatus = vi.fn().mockResolvedValue({ machine: `unknown` });
 const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
-vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, hostedStatus, hostedRestart } } }));
+vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart } } }));
 vi.mock(`../composables/sandbox/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
 vi.mock(`../composables/analytics`, () => ({ track: vi.fn() }));
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
@@ -175,6 +178,7 @@ beforeEach(() => {
     hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad` } }));
     hostedRelease.mockReset().mockImplementation(async (id: string) => sandboxRow({ id }));
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
+    addressOffer.mockReset().mockResolvedValue({ enabled: true });
     create.mockReset().mockImplementation(async (name: string) => {
         const row = sandboxRow({ id: `new`, name });
         sandboxes.value = [...sandboxes.value, row];
@@ -351,4 +355,48 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
     await nextTick();
     expect(nameRow()).toContain(`workspace`);
+});
+
+/* A PLATFORM THAT HANDS OUT NO ADDRESSES SAYS SO, IN THE FIRST FRAME. This is the state that read as the page
+ * being broken: the mint 404s (its tunnel fabric is a deployment choice, and self-hosters leave it off), and
+ * the page took that as nothing at all — it had already offered the rungs that need an address, so they
+ * flashed and vanished, over an address line that spun on "Preparing your intentic domain…" for as long as
+ * anyone was willing to watch. Nothing is minted here and nothing is offered that cannot be delivered. */
+it(`opens on the attach lane, with no spinner, when the platform mints no addresses`, async () => {
+    addressOffer.mockResolvedValueOnce({ enabled: false });
+    const el = await mount();
+    // Not asked for: the code the platform has already said it will not mint.
+    expect(setupCode).not.toHaveBeenCalled();
+    expect(el.textContent).not.toContain(`Preparing your intentic domain`);
+    // No rungs to retract — the ladder was never drawn, because there was never more than one thing on offer.
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    // What IS on offer, and why it is the only thing here.
+    expect(el.textContent).toContain(`Connect your sandbox`);
+    expect(el.textContent).toContain(`doesn't start sandboxes or hand out addresses`);
+    // …and no way back to a lane that cannot finish: both labels of that link promise a machine or an address.
+    expect(buttonLabelled(`← Get a domain from intentic instead`)).toBeUndefined();
+});
+
+/* The hosted rung survives an addressless platform: its machine is born holding its own tunnel, so it is the
+ * one lane that never needed a mint. The reader stays on the provision spine — with no ladder, since there is
+ * nothing left to choose between — rather than being sent to attach a sandbox they do not have. */
+it(`keeps the hosted lane when the platform hosts but mints no addresses`, async () => {
+    addressOffer.mockResolvedValueOnce({ enabled: false });
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    const el = await mount();
+    expect(hostedProvision).toHaveBeenCalled();
+    expect(el.textContent).not.toContain(`Connect your sandbox`);
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+});
+
+/* …and when that hosted machine is already spent, the rung is offered but not TAKEABLE, which is the same
+ * nothing as having no rungs at all. The reader belongs in the attach lane rather than in front of a hosted
+ * card that refuses and a locked step behind a picker the page has hidden for having one option. */
+it(`falls to the attach lane when the only rung left is a hosted machine already spent`, async () => {
+    addressOffer.mockResolvedValueOnce({ enabled: false });
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 0 });
+    const el = await mount();
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Connect your sandbox`);
+    expect(setupCode).not.toHaveBeenCalled();
 });
