@@ -37,15 +37,17 @@ const zedSnippet = computed(() =>
 </script>
 
 <template>
-    <Card class="flex flex-col gap-3">
-        <div class="flex items-center gap-2">
-            <Icon name="code" class="text-sm text-link" />
-            <h2 class="text-sm font-semibold text-content">Editor bridge (ACP)</h2>
+    <Card class="flex flex-col gap-4">
+        <div class="flex items-center gap-2.5">
+            <Icon name="code" class="text-lg text-muted" />
+            <div>
+                <h2 class="font-semibold leading-tight">Editor bridge (ACP)</h2>
+                <p class="text-2xs text-subtle">
+                    Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent
+                    settings, and open your synced folder as the project so edits and diffs line up.
+                </p>
+            </div>
         </div>
-        <p class="text-xs text-muted">
-            Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent settings, and
-            open your synced folder as the project so edits and diffs line up.
-        </p>
         <p class="text-2xs text-warning">
             An editor token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
             here if it leaks.
