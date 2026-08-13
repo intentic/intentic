@@ -224,6 +224,51 @@
         --chat-gutter: 2.25rem;
     }
 }
+/* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands.
+
+   Narrow, it sits on the end of its own line, and that line is as tall as the mark: the transcript has no room
+   beside it, and hanging the mark outside the column would either clip it or drag a horizontal scrollbar across
+   the whole panel (the same reason ChatForkCut's mark lives in the column's inset rather than past it).
+
+   Given room, the mark moves OUT into the margin and the line stops carrying it. Two things follow, which is
+   the point of the move: the line is then a hairline rather than a row tall enough to hold a badge, and it can
+   run the column's full width instead of stopping short of one.
+
+   And opened, the line goes entirely — the mark is out in the margin and no longer needs a line to stand on, so
+   the calls start where the line was rather than one row below it. The bar stays in the DOM at zero height:
+   the mark is inside it (one control, one hit target, whichever way it is drawn) and is positioned against it,
+   so the way to close a run is the same mark that opened it, now beside the first call instead of above it.
+
+   The threshold is what the mark needs to clear the words: it reaches 3.5rem past the column's text edge, of
+   which the column's own 2.25rem inset pays most, leaving ~22px to find outside .chat-turns. 58rem of pane
+   gives ~48px each side — comfortably more, and short of it the mark simply stays on the line. */
+.chat-run-bar {
+    padding-block: 0.25rem;
+}
+@container (min-width: 58rem) {
+    .chat-pane .chat-run-bar {
+        padding-block: 0.375rem;
+    }
+    .chat-pane .chat-run-mark {
+        position: absolute;
+        top: 50%;
+        right: -3.5rem;
+        translate: 0 -50%;
+    }
+    .chat-pane .chat-run-bar-open {
+        height: 0;
+        padding-block: 0;
+    }
+    .chat-pane .chat-run-bar-open .chat-run-line {
+        display: none;
+    }
+    /* Centred on the first call's row rather than on the bar it no longer has: half a row down from where the
+       bar collapsed to. */
+    .chat-pane .chat-run-bar-open .chat-run-mark {
+        top: 0.55rem;
+    }
+}
+
 /* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
    removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but
    prose.css's first/last-child edge rules then match the WRAPPER, where margin does nothing, so they are

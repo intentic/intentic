@@ -36,12 +36,15 @@ const hint = computed(() => {
 </script>
 
 <template>
-    <div v-if="run" class="flex w-full flex-col gap-1">
+    <div v-if="run" class="flex w-full flex-col">
         <!-- The whole join is the target, not just the mark on the end of it: the rule is part of the same
-             affordance, and a badge-sized hit area between two paragraphs is a thing you miss. -->
+             affordance, and a badge-sized hit area between two paragraphs is a thing you miss. Where the two
+             stand relative to each other — and what happens to the line when the run opens — is chat.css's,
+             because it is a question about the width of the pane rather than about this run. -->
         <button
             type="button"
-            class="group/run flex w-full items-center gap-2 py-0.5"
+            class="chat-run-bar group/run relative flex w-full items-center gap-2"
+            :class="expanded && 'chat-run-bar-open'"
             :aria-expanded="expanded"
             :aria-label="hint"
             v-tooltip.top="hint"
@@ -50,13 +53,13 @@ const hint = computed(() => {
             <!-- Fades in from the left and arrives at the mark: the gradient is what makes this read as a line
                  LEADING somewhere rather than as a divider cutting the transcript in half. -->
             <span
-                class="h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
+                class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
                 :class="
                     run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'
                 "
             ></span>
             <span
-                class="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-2xs tabular-nums transition-colors"
+                class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-2xs tabular-nums transition-colors"
                 :class="[
                     run.failed
                         ? 'border-danger/40 text-danger'
