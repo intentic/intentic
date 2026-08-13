@@ -52,6 +52,16 @@ reports the profile.
   git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
   execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
   where the permission cards are never raised at all.
+- Tell the agent which words are not the owner's, and act on it (src/guard/outside-content.ts). Everything that
+  arrives from outside the workspace — a stranger's listener or Doorbell message, a fetched page, a foreign MCP
+  server's answer, the output of a shell command that reached the internet — is wrapped in an
+  `<untrusted-content>` envelope whose id is minted per wrap, so content can never close its own envelope and
+  speak in the owner's voice after it. Marker lookalikes (including fullwidth, CJK and zero-width spellings),
+  the harness's own control tags, and foreign models' reserved tokens are neutralized inside the body. The
+  system prompt states the language once rather than repeating a warning per wrap. Wrapping also sets the
+  turn's outside-content bit, and while it is set a credential read the owner has not explicitly ruled on stops
+  being auto-allowed — which is the middle link of the chain (outside text → read a credential → send it out)
+  and the only one a policy can stand in.
 - Let the agent USE a stored secret without ever holding it (src/secrets). Every credential the sandbox stores
   — a connector's token, the DevOps `.env`, the deploy engine's generated values — is masked out of everything
   the agent reads as a stable `{{secret:name}}` reference rather than a blank, and the same token resolves back
@@ -157,6 +167,13 @@ reports the profile.
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
   here.
 - [src/guard/guard.ts](src/guard/guard.ts) — the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/guard/outside-content.ts](src/guard/outside-content.ts) — the envelope around anything the owner did not
+  write, and the neutralizer that keeps content from forging one. Two seams apply it: a stranger's message at
+  turn birth (src/automations/scheduler.ts) and everything the agent pulls in mid-turn
+  ([src/guard/outside-results.ts](src/guard/outside-results.ts), which wraps every MCP server except the
+  daemon's own control servers — an exception list a conformance test pins, so a server added without a
+  decision fails the suite). [src/guard/turn-taint.ts](src/guard/turn-taint.ts) is the one-way bit the wrapping
+  sets and the command gate reads.
 - [src/browser/session-store.ts](src/browser/session-store.ts) — whose browser an account lives in. An
   IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
   accounts born from it share that browser — which is what makes a site's "Continue with Google" one click —

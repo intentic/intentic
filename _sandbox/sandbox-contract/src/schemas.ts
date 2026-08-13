@@ -271,6 +271,16 @@ export const AgentTurnSchema = z
          * for that run alone, and Acceptance picks per run because it fans a session out per story. Either way
          * the pick is the user's, made a second ago. */
         unattended: z.boolean().optional(),
+        /* OUTSIDE CONTENT CAUSED THIS TURN, and what to call the source — "discord", "webchat", whichever
+         * listener provider carried the message. Set by the dispatchers that wake an agent on somebody else's
+         * words; absent for a turn the owner started, a schedule, or a workspace event.
+         *
+         * It is the birth half of the turn's taint (guard/turn-taint.ts). The other half marks itself as the
+         * turn works — a fetched page, a foreign MCP server's answer — and together they are what the command
+         * gate reads before letting a command read credential material unasked. Distinct from `unattended`,
+         * which is about whether anyone is WATCHING: a Doorbell wake is both, an owner asking the agent to read
+         * a web page is neither, and each flag governs a different decision. */
+        outsideWake: z.string().min(1).optional(),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
         // propose → approve → execute flow; 'default' prompts per tool on the permission side channel;
         // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move

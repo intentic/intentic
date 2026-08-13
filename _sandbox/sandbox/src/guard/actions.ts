@@ -90,6 +90,10 @@ export interface CommandRunInput {
     readonly commandClass: CommandClass;
     // SandboxSettings.commandRules. Unlisted ⇒ allowed: the rulebook names what to stop, not what to permit.
     readonly rules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
+    /* What first brought outside content into this turn (guard/turn-taint.ts) — a listener provider, "web", a
+     * foreign MCP server — or undefined for a turn working only on the owner's own material. Present ⇒ the
+     * turn has read text somebody else wrote, which is the condition the credential-read floor below keys on. */
+    readonly outsideSource?: string;
 }
 
 /* May the agent run this shell command? Consulted by the PreToolUse command gate before the command executes.
@@ -101,13 +105,26 @@ export interface CommandRunInput {
  * whether anyone is watching is a property of the turn and not of the policy. */
 export const commandRun = defineGuardedAction<CommandRunInput>({
     action: "command.run",
-    decide: ({ commandClass, rules }) => {
-        const rule = rules[commandClass] ?? "allow";
+    decide: ({ commandClass, rules, outsideSource }) => {
+        const rule = rules[commandClass];
         if (rule === "deny") {
             return DENY(`commands that ${COMMAND_CLASS_LABELS[commandClass]} are refused by the command rules`);
         }
         if (rule === "hold") {
             return HOLD(`the command rules hold commands that ${COMMAND_CLASS_LABELS[commandClass]} for your approval`);
+        }
+        /* THE TAINT FLOOR — the one rule here that the owner did not write, and the only place the outside-
+         * content envelope becomes enforcement rather than narration (guard/turn-taint.ts explains why this
+         * class and no other). A turn that has read somebody else's words does not get to read credential
+         * material unasked; every other class is untouched, so the turn goes on editing, building and replying.
+         *
+         * Applied only where the owner has said NOTHING. An explicit `allow` is a decision about this exact
+         * class — a workspace whose work IS reading credentials, say — and a floor that overrode it would be
+         * this module deciding it knows better than the person who configured it. */
+        if (rule === undefined && commandClass === "secrets.access" && outsideSource !== undefined) {
+            return HOLD(
+                `this turn has taken in content from outside (${outsideSource}), and this command would ${COMMAND_CLASS_LABELS[commandClass]}`,
+            );
         }
         return ALLOW(`no command rule restricts ${commandClass}`);
     },

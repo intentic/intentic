@@ -112,6 +112,41 @@ describe("command.run", () => {
             "send a request out to the internet",
         );
     });
+
+    /* The taint floor — the only verdict here the owner did not write. It holds credential reads on a turn that
+     * has taken in somebody else's words, and it yields to any rule they DID write. */
+    describe("the outside-content floor", () => {
+        test("holds a credential read on a tainted turn, and names the source in the reason", () => {
+            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord" });
+            expect(verdict.effect).toBe("hold");
+            expect(verdict.reason).toContain("discord");
+        });
+
+        test("an untainted turn is untouched", () => {
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: {} }).effect).toBe("allow");
+        });
+
+        test("only the credential class — a tainted turn still deletes and publishes as configured", () => {
+            for (const commandClass of ["git.destructive", "files.destructive", "package.publish", "network.outbound"] as const) {
+                expect(guard(commandRun, { commandClass, rules: {}, outsideSource: "web" }).effect, commandClass).toBe("allow");
+            }
+        });
+
+        test("the owner's own rule wins both ways — the floor applies only where they said nothing", () => {
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "allow" }, outsideSource: "web" }).effect).toBe(
+                "allow",
+            );
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "deny" }, outsideSource: "web" }).effect).toBe(
+                "deny",
+            );
+        });
+
+        // A hold is a real ask here too, so it must not carry the countdown that turns it into "unless I'm slow".
+        test("the floor's hold carries no auto-run window", () => {
+            const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "web" });
+            expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+        });
+    });
 });
 
 describe("wakeSourceOf", () => {

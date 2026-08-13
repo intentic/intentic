@@ -6,6 +6,7 @@ import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-trans
 import type { Services } from "../composition.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
+import { wrapOutsideContent } from "../guard/outside-content.js";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
@@ -283,9 +284,15 @@ export const fireAutomation = async (
                 attempts,
             })
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
-        // The wake's prompt is the automation's configured one plus the outside context that woke it — which is
-        // exactly a chat's opening message, written by the configuration instead of by a person.
-        const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${capped}` : automation.prompt;
+        /* The wake's prompt is the automation's configured one plus the context that woke it — which is exactly
+         * a chat's opening message, written by the configuration instead of by a person. A LISTENER's payload is
+         * a stranger's words (a Discord message, a webchat visitor), so it rides inside the outside-content
+         * envelope — wrapped HERE, at the one point every listener provider's payload joins a prompt, and only
+         * here: the guard's AUTOMATION_PAYLOAD env, the held snapshot and the journal keep the raw payload, so a
+         * guard command parses what arrived and an approved replay wraps freshly on its way back through. A
+         * schedule/event/workspace payload is the workspace talking to itself and rides bare. */
+        const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(capped ?? "", { source: automation.trigger.provider }) : capped;
+        const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${sealed}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a CONVERSATION and therefore on a fleet card. Outside messages are isolated so the
@@ -315,6 +322,11 @@ export const fireAutomation = async (
              * otherwise. Its prompt is the automation's standing brief, whose first 400 characters are a brief
              * about being a brief. */
             unattended: true,
+            /* SOMEBODY ELSE'S WORDS STARTED THIS TURN — set for a listener wake only, and named by the provider
+             * that carried it. It is the same fact the envelope above states to the model, said once more to
+             * the guard layer, which does not depend on the model believing it (guard/turn-taint.ts). A
+             * schedule, a workspace event and a webhook are the workspace talking to itself and set nothing. */
+            ...(automation.trigger.kind === "listener" ? { outsideWake: automation.trigger.provider } : {}),
             // A continuing thread resumes its provider session, so the agent answers the follow-up rather than
             // meeting the visitor again. Absent on a first turn and on every one-off wake.
             ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),

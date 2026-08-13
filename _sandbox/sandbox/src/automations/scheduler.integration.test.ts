@@ -499,9 +499,12 @@ test("the webchat floor keys off its own source — a listener rule does not rea
     );
     const prompts: string[] = [];
     const record = (await services.automations.get("door")) as AutomationRecord;
-    // listener:hold does not hold a webchat wake — the Doorbell has its own admission key.
+    // listener:hold does not hold a webchat wake — the Doorbell has its own admission key. The visitor's
+    // payload rides sealed in the outside-content envelope, same id on both ends.
     await fireAutomation(services, record, fakeWake(prompts), { payload: "hi" });
-    expect(prompts).toEqual(["wake:door\n\n--- Event payload ---\nhi"]);
+    expect(prompts[0]).toMatch(
+        /^wake:door\n\n--- Event payload ---\n<untrusted-content source="webchat" id="([0-9a-f]{16})">\nhi\n<\/untrusted-content id="\1">$/,
+    );
 
     const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } });
     await heldServices.automations.upsert(

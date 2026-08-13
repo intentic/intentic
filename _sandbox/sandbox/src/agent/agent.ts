@@ -40,6 +40,8 @@ import { redactionHooks } from "./agent-redaction.js";
 import { type SecretAccess, secretCommandHooks } from "./agent-secrets.js";
 import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
+import { outsideResultHooks } from "../guard/outside-results.js";
+import { createTurnTaint } from "../guard/turn-taint.js";
 import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
@@ -192,11 +194,18 @@ export interface AgentRequest {
     // The sniffer's rulebook (settings.actionRules) — verdicts per classified outbound call, enforced by the
     // PreToolUse outbound gate. Absent/empty ⇒ the gate is not wired at all (guard/outbound-gate.ts).
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
-    // The command gate's rulebook (settings.commandRules) — a verdict per class of shell command, enforced
-    // before the command runs. A "hold" parks the turn on a permission card, in every posture, which is what
-    // makes it the layer that still applies once bypassPermissions has taken the cards away
-    // (guard/command-gate.ts). Absent/empty ⇒ no hook.
+    /* The command gate's rulebook (settings.commandRules) — a verdict per class of shell command, enforced
+     * before the command runs. A "hold" parks the turn on a permission card, in every posture, which is what
+     * makes it the layer that still applies once bypassPermissions has taken the cards away
+     * (guard/command-gate.ts). Absent/empty is no longer "no hook": the gate is wired on every turn because it
+     * also carries the taint floor, which is not the owner's rulebook but a property of what this turn has
+     * read. A turn with no rules and no outside content still reaches every decide and is allowed by all of
+     * them, which costs one classify per Bash call. */
     readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
+    /* Whether this turn was woken BY outside content — a listener message, a webchat visitor — carrying the
+     * source's name. The mid-turn half (a fetched page, a foreign MCP result) marks itself through the wrap
+     * seam; this is the half only the caller knows (guard/turn-taint.ts). */
+    readonly outsideWake?: string;
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
@@ -451,164 +460,178 @@ const baseOptions = (
     // gate is the one that needs to — its whole point is holding a command in the posture where canUseTool is
     // never called at all.
     push: (event: AgentEvent) => void,
-): OauthRecoveryOptions => ({
-    cwd: request.cwd,
-    // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
-    // own bearer, and the container-env fallback has no refresh token behind it to mint from.
-    ...opt("getOAuthToken", request.baseUrl === undefined ? request.refreshOauthToken : undefined),
-    includePartialMessages: true,
-    // Forward a subagent's own prose and thinking, not just its tool calls. Without it a child's transcript is a
-    // list of tool rows with no narration — enough for the parent's card (whose report arrives as the tool's
-    // result anyway) and nowhere near enough for the Subagents area, which renders the child as a conversation.
-    forwardSubagentText: true,
-    permissionMode,
-    ...opt("allowedTools", request.allowedTools?.slice()),
-    abortController,
-    // Claude Code's coding-tuned preset plus this harness's own guidance — or, when the owner has written a
-    // system prompt of their own, that text alone (system-prompt.ts owns the choice and everything it drops).
-    // The preset matters because the Agent SDK sends an EMPTY system prompt when this is omitted, which is the
-    // main reason a bare SDK turn feels weaker at coding than the CLI/VSCode product.
-    systemPrompt: sdkSystemPrompt({
-        mode: request.systemPromptMode ?? "intentic",
-        custom: request.systemPrompt,
-        append: request.systemAppend,
-        unattended: request.unattended === true,
-        browserOutputDir: request.browserOutputDir,
-    }),
-    // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
-    // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
-    // capability was invisible until now. New skills/subagents/hooks then arrive as files, no code change.
-    settingSources: ["user", "project"],
-    /* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks — the harness reports exactly
-     * that as `sdk_opt_in_required` — and this inline `settings` object is the ask. It lands in the harness's
-     * "flag settings" layer, above the user/project files loaded by settingSources and below managed policy, so
-     * a workspace that pins its own answer in .claude/settings.json is overridden for this turn and an
-     * IT-managed policy still wins. Everything else about fast mode (which plans have it, which models offer
-     * it, whether the pool is in cooldown) stays the harness's to decide — this only says the consumer is
-     * willing.
-     *
-     * `fastModePerSessionOptIn` is the load-bearing half. Without it the harness PERSISTS the choice to the
-     * settings file, and the sandbox's user tier is shared by every conversation in the container — so one
-     * chat's toggle would silently start billing every other chat, and every automation and doorbell turn, at
-     * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
-     *
-     * Omitted entirely when the turn didn't ask, rather than sent as `false`: a `false` in the flag layer would
-     * override a user's own settings.json opt-in, which is theirs to make on turns we say nothing about. */
-    ...(request.fast === true ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
-    env: {
-        ...process.env,
-        // cli-kind capability credentials (e.g. DISCORD_BOT_TOKEN) the agent's shell reads. Rebuilt every turn,
-        // so a newly-added CLI capability is picked up on the next message with no restart. The Bash hook below
-        // forwards the KEY NAMES per command, so the values also reach the tmux panes commands actually run in
-        // (pane env is the tmux server's snapshot, not this subprocess env).
-        ...request.cliEnv,
-        // IS_SANDBOX (we run with --dangerously-skip-permissions, which Claude Code refuses under root unless
-        // the environment is marked already-sandboxed) plus this turn's credential. A custom endpoint points the
-        // harness at ANTHROPIC_BASE_URL + its bearer and WITHHOLDS the subscription OAuth token; a native Claude
-        // turn keeps the token and the default (unset) base URL. The per-turn value wins over any container-env
-        // ANTHROPIC_BASE_URL default. Shared with the quick-model one-shot — see harnessEnv.
-        ...harnessEnv(request),
-        // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
-        ...cleanerEnv(request),
-        // How much this turn may delegate — only the ceilings the owner moved off the harness's own defaults.
-        ...subagentEnv(request),
-        // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
-        // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
-        // inside a namespace at all.
-        ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
-        /* Whose work this is, for the sweep that reclaims what a turn leaves behind (platform/leftovers.ts).
-         * The CLI's MCP servers and their browsers inherit this without knowing it exists, which is the whole
-         * reason it is an env var: nothing below the CLI is ours to hold a handle on. A turn with no
-         * conversation behind it (the bench) is left unstamped rather than given a made-up owner — the sweep
-         * reclaims only what it can attribute, and an owner nothing can report on would read as finished. */
-        ...(request.conversationId !== undefined ? workloadStamp(request.conversationId) : {}),
-    },
-    // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
-    // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live. Installs: an image-scoped install
-    // is pointed at the owner-approved overlay, and so is a command that came back `not found`, which is the
-    // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
-    // resident lsp service and compile errors ride back as additionalContext.
-    hooks: mergeHooks(
-        /* The command gate goes FIRST, ahead of the tmux wrapper, so the classifier and the card both read the
-         * agent's own command line rather than ~100 characters of daemon boilerplate wrapped around it. Nothing
-         * downstream is skipped by that order: a denied command never reaches the wrapper, and an approved one
-         * is rewritten exactly as it would have been. */
-        hasRules(request.commandRules)
-            ? commandGateHooks({
-                  rules: request.commandRules,
-                  unattended: request.unattended === true,
-                  push,
-                  signal: request.signal,
-              })
-            : {},
-        /* The tmux wrapper also carries the shell secret exit — `{{secret:name}}` resolved into the line the
-         * pane executes, inside the same rewrite so the two compose in a known order. Without tmux the exit
-         * still exists, as its own matcher (a reference passed through literally would land in a config as
-         * text). */
-        tmuxEnabled
-            ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId, request.secrets)
-            : request.secrets !== undefined
-              ? secretCommandHooks(request.secrets)
-              : {},
-        /* Every stored credential masked to its reference in every tool RESULT. The Bash filter masks the
-         * terminal lane and only that one, so which of Read/Grep/an MCP call fetched a secret decided whether
-         * the model saw it — this makes the answer the same for all of them (agent/agent-redaction.ts). */
-        request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
-        installSteeringHooks(request.dependencyInstallAllowed === true),
-        // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
-        // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
-        // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
-        hasRules(request.actionRules) ? outboundGateHooks(request.actionRules) : {},
-        // The persona's folder limit, and its answer to whether this session may edit the sandbox's own
-        // configuration. Same posture as the gate above and for the same reason — an unattended wake has no
-        // permission cards, so a hook is the only layer between it and the path it was told to open.
-        request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},
-        /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish — the proof
-         * ledger's follow-up, a standing instruction, a command that has to pass first. No rule ⇒ nothing is
-         * wired, so a workspace that has never opened this pays nothing for it. */
-        turnEndingHooks(request.turnEndingRules ?? [], {
-            isolation: request.isolation?.plan,
-            runCommand: request.runRuleCommand,
-            cwd: request.cwd,
-            onFired: request.onRuleFired,
+): OauthRecoveryOptions => {
+    /* This turn's outside-content bit, minted once here because the two seams that share it are both built
+     * below: the wrap hook SETS it (a page fetched, a foreign server answered) and the command gate READS it
+     * per command. Born set when a stranger caused the wake at all (guard/turn-taint.ts). */
+    const taint = createTurnTaint(request.outsideWake);
+    return {
+        cwd: request.cwd,
+        // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
+        // own bearer, and the container-env fallback has no refresh token behind it to mint from.
+        ...opt("getOAuthToken", request.baseUrl === undefined ? request.refreshOauthToken : undefined),
+        includePartialMessages: true,
+        // Forward a subagent's own prose and thinking, not just its tool calls. Without it a child's transcript is a
+        // list of tool rows with no narration — enough for the parent's card (whose report arrives as the tool's
+        // result anyway) and nowhere near enough for the Subagents area, which renders the child as a conversation.
+        forwardSubagentText: true,
+        permissionMode,
+        ...opt("allowedTools", request.allowedTools?.slice()),
+        abortController,
+        // Claude Code's coding-tuned preset plus this harness's own guidance — or, when the owner has written a
+        // system prompt of their own, that text alone (system-prompt.ts owns the choice and everything it drops).
+        // The preset matters because the Agent SDK sends an EMPTY system prompt when this is omitted, which is the
+        // main reason a bare SDK turn feels weaker at coding than the CLI/VSCode product.
+        systemPrompt: sdkSystemPrompt({
+            mode: request.systemPromptMode ?? "intentic",
+            custom: request.systemPrompt,
+            append: request.systemAppend,
+            unattended: request.unattended === true,
+            browserOutputDir: request.browserOutputDir,
         }),
-        // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
-        // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
-        // worktree-inside-the-worktree that does not exist.
-        request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
-        // Browser: a model-named screenshot resolves against the agent's cwd, not `--output-dir`, so the
-        // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
-        // than left to the prompt because a convention only holds for the agents that happen to read it.
-        request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
-        // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
-        // is where the watchable session is registered. The hook only names what already exists — the browser
-        // is the MCP's to launch and to kill (browser/browser-sessions.ts).
-        request.browserPorts !== undefined ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.conversationId) : {},
-        // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
-        // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
-        // record-keeping — the card already learned the child exists from the task stream.
-        subagents !== undefined ? subagentHooks(subagents) : {},
-        // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
-        // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
-        // in there and speaks the agent's own paths (agent-diagnostics.ts).
-        editDiagnosticsHooks(request.isolation),
-        // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
-        // or a build that failed on a package the tree is genuinely missing says so once, having checked first
-        // (agent-deps.ts). Asked of the main checkout, which is what an isolated turn's dependencies are.
-        depsNoticeHooks(request.dependencyIssue ?? (async () => undefined), request.dependencyInstallAllowed === true),
-    ),
-    // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
-    // inside it, so there is no window in which the turn can see the shared tree.
-    ...(request.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation.anchor) } : {}),
-    ...opt("model", request.model),
-    ...opt("resume", request.sessionId),
-    ...opt(
-        "plugins",
-        request.plugins?.map((path) => ({ type: "local" as const, path })),
-    ),
-    ...reasoningOptions(request),
-    ...opt("disallowedTools", disallowedToolsOf(request)),
-});
+        // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
+        // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
+        // capability was invisible until now. New skills/subagents/hooks then arrive as files, no code change.
+        settingSources: ["user", "project"],
+        /* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks — the harness reports exactly
+         * that as `sdk_opt_in_required` — and this inline `settings` object is the ask. It lands in the harness's
+         * "flag settings" layer, above the user/project files loaded by settingSources and below managed policy, so
+         * a workspace that pins its own answer in .claude/settings.json is overridden for this turn and an
+         * IT-managed policy still wins. Everything else about fast mode (which plans have it, which models offer
+         * it, whether the pool is in cooldown) stays the harness's to decide — this only says the consumer is
+         * willing.
+         *
+         * `fastModePerSessionOptIn` is the load-bearing half. Without it the harness PERSISTS the choice to the
+         * settings file, and the sandbox's user tier is shared by every conversation in the container — so one
+         * chat's toggle would silently start billing every other chat, and every automation and doorbell turn, at
+         * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
+         *
+         * Omitted entirely when the turn didn't ask, rather than sent as `false`: a `false` in the flag layer would
+         * override a user's own settings.json opt-in, which is theirs to make on turns we say nothing about. */
+        ...(request.fast === true ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
+        env: {
+            ...process.env,
+            // cli-kind capability credentials (e.g. DISCORD_BOT_TOKEN) the agent's shell reads. Rebuilt every turn,
+            // so a newly-added CLI capability is picked up on the next message with no restart. The Bash hook below
+            // forwards the KEY NAMES per command, so the values also reach the tmux panes commands actually run in
+            // (pane env is the tmux server's snapshot, not this subprocess env).
+            ...request.cliEnv,
+            // IS_SANDBOX (we run with --dangerously-skip-permissions, which Claude Code refuses under root unless
+            // the environment is marked already-sandboxed) plus this turn's credential. A custom endpoint points the
+            // harness at ANTHROPIC_BASE_URL + its bearer and WITHHOLDS the subscription OAuth token; a native Claude
+            // turn keeps the token and the default (unset) base URL. The per-turn value wins over any container-env
+            // ANTHROPIC_BASE_URL default. Shared with the quick-model one-shot — see harnessEnv.
+            ...harnessEnv(request),
+            // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
+            ...cleanerEnv(request),
+            // How much this turn may delegate — only the ceilings the owner moved off the harness's own defaults.
+            ...subagentEnv(request),
+            // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
+            // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
+            // inside a namespace at all.
+            ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
+            /* Whose work this is, for the sweep that reclaims what a turn leaves behind (platform/leftovers.ts).
+             * The CLI's MCP servers and their browsers inherit this without knowing it exists, which is the whole
+             * reason it is an env var: nothing below the CLI is ours to hold a handle on. A turn with no
+             * conversation behind it (the bench) is left unstamped rather than given a made-up owner — the sweep
+             * reclaims only what it can attribute, and an owner nothing can report on would read as finished. */
+            ...(request.conversationId !== undefined ? workloadStamp(request.conversationId) : {}),
+        },
+        // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
+        // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live. Installs: an image-scoped install
+        // is pointed at the owner-approved overlay, and so is a command that came back `not found`, which is the
+        // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
+        // resident lsp service and compile errors ride back as additionalContext.
+        hooks: mergeHooks(
+            /* The command gate goes FIRST, ahead of the tmux wrapper, so the classifier and the card both read the
+             * agent's own command line rather than ~100 characters of daemon boilerplate wrapped around it. Nothing
+             * downstream is skipped by that order: a denied command never reaches the wrapper, and an approved one
+             * is rewritten exactly as it would have been. */
+            commandGateHooks({
+                rules: request.commandRules ?? {},
+                unattended: request.unattended === true,
+                push,
+                signal: request.signal,
+                taint,
+            }),
+            /* The outside-content envelope on everything the agent PULLS IN mid-turn — a fetched page, a foreign
+             * MCP server's answer, the output of a curl that reached the internet (guard/outside-results.ts). Its
+             * twin wraps a stranger's message at turn birth, before the prompt exists. Wrapping is also what sets
+             * the taint the command gate above reads, so the two are one mechanism seen from both ends. */
+            outsideResultHooks((source) => {
+                taint.mark(source);
+            }),
+            /* The tmux wrapper also carries the shell secret exit — `{{secret:name}}` resolved into the line the
+             * pane executes, inside the same rewrite so the two compose in a known order. Without tmux the exit
+             * still exists, as its own matcher (a reference passed through literally would land in a config as
+             * text). */
+            tmuxEnabled
+                ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId, request.secrets)
+                : request.secrets !== undefined
+                  ? secretCommandHooks(request.secrets)
+                  : {},
+            /* Every stored credential masked to its reference in every tool RESULT. The Bash filter masks the
+             * terminal lane and only that one, so which of Read/Grep/an MCP call fetched a secret decided whether
+             * the model saw it — this makes the answer the same for all of them (agent/agent-redaction.ts). */
+            request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
+            installSteeringHooks(request.dependencyInstallAllowed === true),
+            // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
+            // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
+            // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
+            hasRules(request.actionRules) ? outboundGateHooks(request.actionRules) : {},
+            // The persona's folder limit, and its answer to whether this session may edit the sandbox's own
+            // configuration. Same posture as the gate above and for the same reason — an unattended wake has no
+            // permission cards, so a hook is the only layer between it and the path it was told to open.
+            request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},
+            /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish — the proof
+             * ledger's follow-up, a standing instruction, a command that has to pass first. No rule ⇒ nothing is
+             * wired, so a workspace that has never opened this pays nothing for it. */
+            turnEndingHooks(request.turnEndingRules ?? [], {
+                isolation: request.isolation?.plan,
+                runCommand: request.runRuleCommand,
+                cwd: request.cwd,
+                onFired: request.onRuleFired,
+            }),
+            // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
+            // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
+            // worktree-inside-the-worktree that does not exist.
+            request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
+            // Browser: a model-named screenshot resolves against the agent's cwd, not `--output-dir`, so the
+            // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
+            // than left to the prompt because a convention only holds for the agents that happen to read it.
+            request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
+            // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
+            // is where the watchable session is registered. The hook only names what already exists — the browser
+            // is the MCP's to launch and to kill (browser/browser-sessions.ts).
+            request.browserPorts !== undefined
+                ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.conversationId)
+                : {},
+            // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
+            // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
+            // record-keeping — the card already learned the child exists from the task stream.
+            subagents !== undefined ? subagentHooks(subagents) : {},
+            // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
+            // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
+            // in there and speaks the agent's own paths (agent-diagnostics.ts).
+            editDiagnosticsHooks(request.isolation),
+            // The same misreading the diagnostics hook heads off after an edit, headed off after a COMMAND: a test
+            // or a build that failed on a package the tree is genuinely missing says so once, having checked first
+            // (agent-deps.ts). Asked of the main checkout, which is what an isolated turn's dependencies are.
+            depsNoticeHooks(request.dependencyIssue ?? (async () => undefined), request.dependencyInstallAllowed === true),
+        ),
+        // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
+        // inside it, so there is no window in which the turn can see the shared tree.
+        ...(request.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation.anchor) } : {}),
+        ...opt("model", request.model),
+        ...opt("resume", request.sessionId),
+        ...opt(
+            "plugins",
+            request.plugins?.map((path) => ({ type: "local" as const, path })),
+        ),
+        ...reasoningOptions(request),
+        ...opt("disallowedTools", disallowedToolsOf(request)),
+    };
+};
 
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
 // because the built-in renders its own picker inside the CLI — headless, that UI has nowhere to go. Aliasing

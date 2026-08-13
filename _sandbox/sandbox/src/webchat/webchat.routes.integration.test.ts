@@ -97,6 +97,13 @@ test("an allowed visitor message wakes the agent and streams the reply back as S
     // The visitor message reached the wake and a completed run was recorded.
     expect(turns[0]?.prompt).toContain("support:wc-ok");
     expect(turns[0]?.prompt).toContain("fix the bug");
+    /* …and it arrived marked as a stranger's words, both ways: sealed in the envelope the model reads, and
+     * flagged to the guard layer, which does not depend on the model believing it. This is the public
+     * entry point, so the two halves are asserted here end-to-end rather than only at their own seams. */
+    const sealed = /<untrusted-content source="webchat" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">/.exec(turns[0]?.prompt ?? "");
+    // The visitor's whole payload rides inside one envelope — their text, and the name they chose for themselves.
+    expect(JSON.parse(sealed?.[2] ?? "{}")).toMatchObject({ content: "fix the bug", author: "visitor" });
+    expect(turns[0]?.outsideWake).toBe("webchat");
     expect((await services.automations.get("wc-ok"))?.runs[0]?.outcome).toBe("completed");
     // The inbound request landed in the activity feed.
     expect(appends[0]).toMatchObject({ provider: "webchat", direction: "in", type: "message.received", content: "fix the bug" });

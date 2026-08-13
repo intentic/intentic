@@ -3,6 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
 import { commandGateHooks, type CommandGateOptions } from "./command-gate.js";
+import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 
 const FORCE_PUSH = "git push --force origin main";
 
@@ -22,6 +23,8 @@ const harness = (options: Partial<CommandGateOptions>): Harness => {
         unattended: false,
         push: (event) => events.push(event),
         signal: controller.signal,
+        // Untainted unless a test says otherwise — the ordinary turn, working on the owner's own material.
+        taint: NO_TAINT,
         ...options,
     }).PreToolUse?.[0];
     const hook = matcher?.hooks[0];
@@ -150,5 +153,68 @@ describe("command gate", () => {
         // The deny wins over the hold, so nothing is ever raised to the user.
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect(held.events).toEqual([]);
+    });
+});
+
+/* The floor that is not the owner's rulebook: a turn which has taken in somebody else's words does not get to
+ * read credential material without asking. This is the middle link of the chain the envelope exists to break —
+ * outside text arrives, the agent is talked into reading a credential, the credential leaves. */
+describe("command gate: the outside-content floor", () => {
+    const READ_ENV = "cat .env";
+
+    test("an untainted turn reads credential material as it always did", async () => {
+        expect((await harness({}).run(READ_ENV)).hookSpecificOutput).toBeUndefined();
+    });
+
+    test("a turn woken by a stranger holds the same command, and the card says why", async () => {
+        const gate = harness({ taint: createTurnTaint("discord") });
+        const pending = gate.run(READ_ENV);
+        await settled();
+        const card = cardOf(gate.events);
+        expect(card.reason).toContain("discord");
+        expect(card.reason).toContain("outside");
+        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe(true);
+        expect((await pending).hookSpecificOutput).toBeUndefined();
+    });
+
+    test("a page fetched mid-turn taints it from that moment — the bit is read per command, not snapshotted", async () => {
+        const taint = createTurnTaint();
+        const gate = harness({ taint });
+        // Before anything was pulled in, the same command passes.
+        expect((await gate.run(READ_ENV)).hookSpecificOutput).toBeUndefined();
+        taint.mark("web");
+        const pending = gate.run(READ_ENV);
+        await settled();
+        expect(cardOf(gate.events).reason).toContain("web");
+        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        await pending;
+    });
+
+    test("unattended, it refuses rather than raising a card nobody can answer", async () => {
+        const gate = harness({ taint: createTurnTaint("webchat"), unattended: true });
+        const out = await gate.run(READ_ENV);
+        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+        expect(reasonOf(out)).toContain("webchat");
+        expect(gate.events).toEqual([]);
+    });
+
+    test("the owner's explicit allow outranks the floor — it applies only where they said nothing", async () => {
+        const gate = harness({ taint: createTurnTaint("discord"), rules: { "secrets.access": "allow" } });
+        expect((await gate.run(READ_ENV)).hookSpecificOutput).toBeUndefined();
+        expect(gate.events).toEqual([]);
+    });
+
+    test("their explicit deny still outranks it in the other direction", async () => {
+        const gate = harness({ taint: createTurnTaint("discord"), rules: { "secrets.access": "deny" } });
+        expect((await gate.run(READ_ENV)).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+    });
+
+    // The floor is about credentials, not about tainted turns being untrustworthy at everything.
+    test("no other class is touched — a tainted turn still deletes, pushes and publishes as configured", async () => {
+        const gate = harness({ taint: createTurnTaint("discord") });
+        for (const command of [FORCE_PUSH, "rm -rf build", "npm publish", "curl https://example.com"]) {
+            expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
+        }
+        expect(gate.events).toEqual([]);
     });
 });

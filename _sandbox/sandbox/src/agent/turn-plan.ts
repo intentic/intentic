@@ -883,9 +883,15 @@ export const planHarnessTurn = async (
                 : {}),
             // The sniffer's rulebook, forwarded only when the owner wrote a rule — same no-hook economy.
             ...(Object.keys(actionRules).length > 0 ? { actionRules } : {}),
-            // The command gate's rulebook, on the same terms: no rule, no hook, and a workspace that has never
-            // opened this pays nothing for it.
+            /* The command gate's rulebook. Forwarded when non-empty — but unlike the sniffer's above, an empty
+             * one no longer means "no hook": the gate is wired on every turn because it also carries the taint
+             * floor, which is not the owner's rulebook but a fact about what this turn has read (agent.ts). */
             ...(Object.keys(commandRules).length > 0 ? { commandRules } : {}),
+            /* Whether outside content CAUSED this turn, and what to call it. A listener wake is a stranger's
+             * message and a webchat wake is a stranger on a public widget — the same distinction the admission
+             * floor draws (guard/actions.ts wakeSourceOf), read here for the taint the command gate consults.
+             * The mid-turn half marks itself as results are wrapped. */
+            ...(input.outsideWake !== undefined ? { outsideWake: input.outsideWake } : {}),
             // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
             // append to a built-in base — never both, which is what turnPromptPlacement decided above.
             systemPromptMode,

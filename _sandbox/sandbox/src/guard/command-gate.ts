@@ -4,6 +4,7 @@ import { createRequest } from "../agent/agent-requests.js";
 import { commandRun } from "./actions.js";
 import { classifyCommand, COMMAND_CLASS_LABELS } from "./command-classes.js";
 import { guard, type GuardVerdict } from "./guard.js";
+import type { TurnTaint } from "./turn-taint.js";
 
 /* THE SECOND LAYER, under the admission floor. The floor (guard/actions.ts sessionStart) decides who may wake
  * the agent at all; this decides what a session that is ALREADY RUNNING may do — which is the only question
@@ -37,6 +38,9 @@ export interface CommandGateOptions {
     readonly push: (event: AgentEvent) => void;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
     readonly signal: AbortSignal;
+    /* This turn's outside-content bit (guard/turn-taint.ts), READ per command rather than snapshotted: the
+     * page that taints a turn usually arrives mid-turn, several tool calls before the command that matters. */
+    readonly taint: TurnTaint;
 }
 
 // How much of the command the card shows. Long enough for a heredoc's first lines to identify what this is,
@@ -52,10 +56,11 @@ const refuse = (reason: string): { hookSpecificOutput: Record<string, unknown> }
 const decide = (
     classes: readonly CommandClass[],
     rules: CommandGateOptions["rules"],
+    outsideSource: string | undefined,
 ): { commandClass: CommandClass; verdict: GuardVerdict } | undefined => {
     let held: { commandClass: CommandClass; verdict: GuardVerdict } | undefined;
     for (const commandClass of classes) {
-        const verdict = guard(commandRun, { commandClass, rules });
+        const verdict = guard(commandRun, { commandClass, rules, ...(outsideSource !== undefined ? { outsideSource } : {}) });
         if (verdict.effect === "deny") {
             return { commandClass, verdict };
         }
@@ -87,7 +92,7 @@ export const commandGateHooks = (options: CommandGateOptions): Partial<Record<Ho
                             return {};
                         }
                         const classes = classifyCommand(command).filter((commandClass) => !granted.has(commandClass));
-                        const held = classes.length === 0 ? undefined : decide(classes, options.rules);
+                        const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());
                         if (held === undefined) {
                             return {};
                         }
