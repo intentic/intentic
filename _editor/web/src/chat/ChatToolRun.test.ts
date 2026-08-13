@@ -54,6 +54,15 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
+/* Closing a run is a <Transition>, so the calls leave with the reveal rather than on the tick that shut it —
+ * they are gone once it has run, which is what "closed" means to a reader. jsdom reports no transition
+ * duration, so Vue finishes the leave on the next frames rather than after any real 160ms. */
+const settle = async (): Promise<void> => {
+    await nextTick();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await nextTick();
+};
+
 let next = 0;
 const tool = (over: Partial<ChatTool> & Pick<ChatTool, "category">): ChatTool => ({
     id: `t${(next += 1)}`,
@@ -86,8 +95,10 @@ describe(`ChatToolRun`, () => {
         expect(element.textContent).toContain(`c.ts`);
 
         mark.click();
-        await nextTick();
+        await settle();
+        // Dropped, not merely hidden: a transcript holds hundreds of runs and a closed one costs no DOM.
         expect(element.textContent).not.toContain(`a.ts`);
+        expect(mark.getAttribute(`aria-expanded`)).toBe(`false`);
     });
 
     it(`says how many steps it is offering, for the pointer and the screen reader alike`, () => {

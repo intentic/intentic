@@ -47,7 +47,6 @@ const hint = computed(() => {
             :class="expanded && 'chat-run-bar-open'"
             :aria-expanded="expanded"
             :aria-label="hint"
-            v-tooltip.top="hint"
             @click="toggle"
         >
             <!-- Fades in from the left and arrives at the mark: the gradient is what makes this read as a line
@@ -76,8 +75,21 @@ const hint = computed(() => {
                 {{ run.count }}
             </span>
         </button>
-        <div v-if="expanded" class="flex flex-col gap-1">
-            <ChatToolRows :tools="tools" :live="live" />
-        </div>
+        <!-- The calls arrive by growing into place rather than appearing whole: opening a run moves everything
+             below it down by however tall the run happens to be, and a jump that size, under the sentence you
+             are reading, costs you your place. The reveal is short enough not to be a wait (see chat.css).
+             Still `v-if`, not a hidden block: a transcript holds hundreds of runs and only the opened one has
+             any business being in the DOM — the rows are mounted when the run opens and dropped when it shuts.
+             The grid wrapper is the mechanism: a single row that transitions from no height to its content's,
+             which is the one way to animate to a height nobody knows in advance. -->
+        <Transition name="chat-run-reveal">
+            <div v-if="expanded" class="grid">
+                <div class="min-h-0 overflow-hidden">
+                    <div class="flex flex-col gap-1">
+                        <ChatToolRows :tools="tools" :live="live" />
+                    </div>
+                </div>
+            </div>
+        </Transition>
     </div>
 </template>

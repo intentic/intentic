@@ -255,10 +255,18 @@
        padding. The content box does not move — the reading measure, the bubbles and the line are all exactly
        where they were — but the clip edge now sits past the mark. A quarter-rem more than the mark asks for, so
        the two are never flush at fractional zoom. Only rows that HAVE a mark pay it; nothing else in a turn is
-       drawn outside its row, so nothing else needs the room. */
+       drawn outside its row, so nothing else needs the room.
+
+       VERTICALLY TOO, and for the same reason: a turn's calls are drawn above that turn's own words, so the bar
+       is the first thing in its row — and the mark, being a badge on a hairline, stands ~5px taller than the
+       bar at each end. The top of it was over the row's edge and came off in the same clip, which reads as a
+       pill with its lid sliced. The block outset cancels the same way the inline one does, so the row occupies
+       exactly the height it did and the turns keep their spacing. */
     .chat-pane .chat-message:has(.chat-run-bar) {
         margin-right: -3.75rem;
         padding-right: 3.75rem;
+        margin-block: -0.5rem;
+        padding-block: 0.5rem;
     }
     .chat-pane .chat-run-bar {
         padding-block: 0.375rem;
@@ -280,6 +288,36 @@
        bar collapsed to. */
     .chat-pane .chat-run-bar-open .chat-run-mark {
         top: 0.55rem;
+    }
+}
+/* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). A single grid row taken from no height to its
+   content's — the only way to animate to a height that is only known once the rows are mounted, and the reason
+   the wrapper is a grid at all rather than a plain block.
+   160ms because the motion is not the point: it exists so the paragraph below the run slides to its new place
+   instead of teleporting there, which is what tells you the page moved rather than changed. Long enough to be
+   followed, short enough that clicking twice never feels like waiting on anything.
+   Reduced motion keeps the fade and drops the travel — the same bargain the app strikes everywhere else (see
+   utilities.css), stated here because that block answers for animations and this is a transition. */
+.chat-run-reveal-enter-active,
+.chat-run-reveal-leave-active {
+    transition:
+        grid-template-rows 160ms ease-out,
+        opacity 160ms ease-out;
+}
+.chat-run-reveal-enter-from,
+.chat-run-reveal-leave-to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+.chat-run-reveal-enter-to,
+.chat-run-reveal-leave-from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-run-reveal-enter-active,
+    .chat-run-reveal-leave-active {
+        transition-property: opacity;
     }
 }
 
