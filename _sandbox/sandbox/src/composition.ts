@@ -678,9 +678,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Gemini brings no credential of its own here — the translator holds Google's, exactly as it does for a
     // Gemini turn on the Claude Code harness. An unbaked translator (the dev profile) leaves the config absent
     // and the loop serves Grok alone.
-    const openCode = createOpenCodeService(
-        authRoot,
-        config.translator.url === ""
+    const openCode = createOpenCodeService(authRoot, {
+        // Where a non-isolated conversation delegates from, and so the one directory whose delegation watcher is
+        // worth opening at boot — event streams are per-directory, and a turn registers its own worktree itself.
+        workspaceRoot: config.workspaceRoot,
+        ...(config.translator.url === ""
             ? {}
             : {
                   gemini: {
@@ -688,8 +690,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
                       token: config.translator.token,
                       models: async () => (await geminiModels.models()).models.map((model) => model.id),
                   },
-              },
-    );
+              }),
+    });
     const info =
         config.sandbox.name !== "" && config.sandbox.image !== ""
             ? {

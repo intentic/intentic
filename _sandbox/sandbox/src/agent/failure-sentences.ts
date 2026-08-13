@@ -100,11 +100,15 @@ export const isDeclinedAnswer = (text: string): boolean => {
  * refused CREDENTIAL and the user is told to reconnect an account that is in perfect health. Every routed
  * provider can do this to us: the harness only knows Anthropic's vocabulary, and it is reading somebody else's.
  *
- * Deliberately NOT wired into the error codes. What a turn does next — re-mint the token, wait for a reset,
- * resume — still keys off the prefixes above, because those say what the CLI has stopped trying and this cannot;
- * "rate limit" appears in transient retries the CLI is still working through, which is exactly why it is not one
- * of the phrases below. This decides how a refusal is DESCRIBED, where believing the code over the sentence is
- * what puts the wrong sentence on the screen. */
+ * This decides how a refusal is DESCRIBED, where believing the code over the sentence is what puts the wrong
+ * sentence on the screen — so it is read at both places a description comes from: the frame's code
+ * (error-frames.ts, above the auth branch it would otherwise be mistaken for) and the durable refusal filed
+ * against the account (agent.routes.ts).
+ *
+ * The PHRASES are the conservative half, and stay that way: "rate limit" is deliberately absent, because it
+ * appears in the transient retries the CLI is still working through, and reading one of those as a spent plan
+ * would park a turn that was about to succeed. What a turn does next still keys off the prefixes above, which
+ * say what the CLI has stopped trying — something this cannot know. */
 const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle"];
 
 export const mentionsSpentAllowance = (text: string): boolean =>

@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { type AgentHarness, type AgentProvider, capabilitiesOf, PI_PROVIDER } from "@intentic/sandbox-contract";
 import { codexReadiness } from "../codex/codex-readiness.js";
-import { OPENCODE_BINARY_MISSING } from "../grok/opencode.js";
+import { openCodeBinaryMissing } from "../grok/opencode.js";
 import { onPath } from "../platform/on-path.js";
 import type { AdapterHealth, AgentAdapter } from "./adapter.js";
 import { planAcpTurn, planCodexTurn, planGeminiTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
@@ -91,7 +91,7 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
         }
         // Signed in, but OpenCode is a feature pack and this image may not carry it — a state the credential
         // cannot explain and only a rebuild fixes.
-        return (await onPath("opencode")) ? ready() : unavailable(OPENCODE_BINARY_MISSING);
+        return (await onPath("opencode")) ? ready() : unavailable(openCodeBinaryMissing("Grok"));
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
@@ -118,7 +118,7 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
         if (accounts.gemini.length === 0) {
             return unavailable("Connect your Google account in Sandbox ▸ Agent.");
         }
-        return (await onPath("opencode")) ? ready() : unavailable(OPENCODE_BINARY_MISSING);
+        return (await onPath("opencode")) ? ready() : unavailable(openCodeBinaryMissing("Google"));
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };

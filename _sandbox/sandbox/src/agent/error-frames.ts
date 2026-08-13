@@ -2,7 +2,7 @@ import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
-import { isAuthFailureText, isEntitlementRefusalText, isUsageLimitText } from "./failure-sentences.js";
+import { isAuthFailureText, isEntitlementRefusalText, mentionsSpentAllowance } from "./failure-sentences.js";
 import { opt } from "./opt.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
@@ -121,9 +121,6 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
     }
     const explained = apiErrorMessage(message);
-    if (isUsageLimitText(explained)) {
-        return { kind: "error", code: "rate_limit", message: explained };
-    }
     /* The seat, not the credential: this account authenticates perfectly and its organization has switched
      * Claude Code off for it. ABOVE the auth branch because the two are only distinguishable by the sentence and
      * the recoveries are opposite — a re-mint is what a refused token wants and the one thing that cannot help
@@ -131,6 +128,21 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
      * account that was never disconnected. */
     if (isEntitlementRefusalText(explained)) {
         return { kind: "error", code: "claude-not-entitled", message: explained };
+    }
+    /* A SPENT ALLOWANCE WEARING A CREDENTIAL'S CLOTHES, and it has to be read before the auth branch below.
+     *
+     * Kimi refuses a spent Kimi Code plan with `403 You've reached your usage limit for this billing cycle`, and
+     * a 403 is what the CLI prints its "Failed to authenticate" prefix over — so the sentence satisfies
+     * isAuthFailureText and went out as a refused CREDENTIAL. The client reads that code as "reconnect the
+     * account", which is a fix for a condition the user does not have: the account is in perfect health and the
+     * only thing wrong with it is that its quota is gone until the cycle turns.
+     *
+     * Read from the SENTENCE, like the two conditions above it, and for the reason failure-sentences.ts gives:
+     * the harness only knows Anthropic's vocabulary and every routed provider refuses in its own words. Coded as
+     * the limit it is, so it lands on the client's limit branch — a muted wait-and-retry notice carrying the
+     * provider's own sentence — instead of lighting the reconnect banner. */
+    if (mentionsSpentAllowance(explained)) {
+        return { kind: "error", code: "rate_limit", message: explained };
     }
     // A credential the CLI has stopped trying to use (failure-sentences.ts). Coded so the route can re-mint and
     // resume the turn instead of leaving a dead tab for a human to restart by hand — the same "not a workspace

@@ -5,7 +5,7 @@ import { withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
-import type { OpenCodeService } from "./opencode.js";
+import { openCodeBackendLabel, type OpenCodeService } from "./opencode.js";
 
 /* The xAI Grok provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out —
  * backed by OpenCode (`@opencode-ai/sdk`) pointed at xAI Grok. OpenCode is itself the agentic runtime
@@ -49,6 +49,10 @@ const eventSessionId = (event: Event): string | undefined => {
         case "session.error":
         case "todo.updated":
         case "permission.updated":
+        // Not consumed by streamTurn — carried purely so the inactivity watchdog below counts it as life. A
+        // model that thinks for minutes before its first token emits nothing else, and killing that turn at two
+        // minutes is the same false timeout this file already paid for once.
+        case "session.status":
             return event.properties.sessionID;
         case "message.part.updated":
             return event.properties.part.sessionID;
@@ -67,13 +71,44 @@ const GROK_INACTIVITY_MS = 120_000;
 // Hard overall backstop: even if our session keeps dribbling events, one turn must not run forever.
 const GROK_MAX_TURN_MS = 30 * 60_000;
 
+// How long the event stream gets to say hello before the turn goes ahead without proof it is listening (see the
+// connect handshake in the runner). Generous against a loaded host, but far short of the inactivity watchdog:
+// waiting here costs latency on every turn, and going ahead early costs at most the session id.
+const CONNECT_MS = 5_000;
+
 // The production runner: use the shared OpenCode client to create/resume the session, fire the prompt on the
 // xAI provider, and yield the session's events off the global SSE stream. `inactivityMs` is injectable for tests.
 export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number = GROK_INACTIVITY_MS): GrokRunner =>
     async function* (turn) {
         const c = await openCode.client();
-        // Subscribe BEFORE creating/prompting so the session.created + early part events aren't missed.
-        const sse = await c.event.subscribe();
+        // Subscribe BEFORE creating/prompting so the session.created + early part events aren't missed. Scoped
+        // to this turn's directory because an unscoped stream carries no session events whatsoever — the whole
+        // story is on subscribeEvents in opencode.ts.
+        const sse = await openCode.events(turn.cwd);
+        // A delegation this turn starts runs in this same directory, and its watcher is scoped the same way, so
+        // register it here: the boot only knows the workspace root, and an isolated turn works in a worktree.
+        // Idempotent, so every turn paying for it costs a Set lookup after the first.
+        await openCode.watch(turn.cwd);
+        /* SUBSCRIBING IS NOT CONNECTING, and the difference is a dropped session id.
+         *
+         * `subscribe()` builds a lazy generator — the HTTP request is not made until something READS it. So the
+         * "subscribe first" above bought nothing on its own: the read used to start after the prompt, by which
+         * time `session.created` had already been broadcast, and a brand-new session's id never reached the
+         * client. That id is how the next message resumes this conversation instead of starting a fresh one.
+         *
+         * The first read is therefore issued and AWAITED here, before anything exists to miss: the server opens
+         * every stream with `server.connected`, so that arriving is the proof the subscription is live. Whatever
+         * it turns out to be is kept for the loop rather than dropped — this is a shared stream and a sibling
+         * session's event can legitimately win the race. Bounded, because a server that never says hello must
+         * cost this turn a couple of seconds rather than the turn. */
+        const iterator: AsyncIterator<Event> = sse.stream[Symbol.asyncIterator]();
+        let pending = iterator.next();
+        const hello = await Promise.race([pending, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
+        // Consumed here only if it resolved; otherwise the same promise is still what the loop first awaits.
+        const buffered = hello === "unopened" || hello.done ? undefined : hello.value;
+        if (buffered !== undefined) {
+            pending = iterator.next();
+        }
         let sessionId = turn.sessionId;
         if (sessionId === undefined) {
             const created = await c.session.create({ query: { directory: turn.cwd } });
@@ -124,31 +159,40 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         }
         // Drive the shared SSE iterator manually so each read can race an inactivity timeout (a `for await` can't),
         // and close it on exit (it's a per-turn subscription). Both session.idle and session.error are terminal —
-        // OpenCode may not send idle after an error.
-        const iterator: AsyncIterator<Event> = sse.stream[Symbol.asyncIterator]();
+        // OpenCode may not send idle after an error. The iterator and its first read were opened above, before
+        // the session existed, so nothing this turn broadcast can have been missed.
         // Two independent bounds, measured against wall-clock deadlines rather than a fresh per-read timer: the
         // inactivity deadline advances only on OUR session's events (a busy sibling session on the shared stream
         // must not keep a wedged target turn's watchdog from firing), and the turn deadline is a hard backstop.
         const turnDeadline = Date.now() + GROK_MAX_TURN_MS;
         let inactivityDeadline = Date.now() + inactivityMs;
+        // The event the connect handshake already pulled off the stream, replayed as this loop's first read.
+        let held = buffered;
         try {
             for (;;) {
-                const next = iterator.next();
-                let timer: ReturnType<typeof setTimeout>;
-                const idle = new Promise<"timeout">((resolve) => {
-                    timer = setTimeout(() => resolve("timeout"), Math.max(0, Math.min(inactivityDeadline, turnDeadline) - Date.now()));
-                });
-                const result = await Promise.race([next, idle]);
-                clearTimeout(timer!);
-                if (result === "timeout") {
-                    next.catch(() => {}); // swallow the abandoned read
-                    await c.session.abort({ path: { id: sessionId } }).catch(() => {});
-                    throw new Error("Grok turn timed out waiting for OpenCode.");
+                const next = pending;
+                let event: Event;
+                if (held !== undefined) {
+                    event = held;
+                    held = undefined;
+                } else {
+                    let timer: ReturnType<typeof setTimeout>;
+                    const idle = new Promise<"timeout">((resolve) => {
+                        timer = setTimeout(() => resolve("timeout"), Math.max(0, Math.min(inactivityDeadline, turnDeadline) - Date.now()));
+                    });
+                    const result = await Promise.race([next, idle]);
+                    clearTimeout(timer!);
+                    if (result === "timeout") {
+                        next.catch(() => {}); // swallow the abandoned read
+                        await c.session.abort({ path: { id: sessionId } }).catch(() => {});
+                        throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode.`);
+                    }
+                    if (result.done) {
+                        return;
+                    }
+                    event = result.value;
+                    pending = iterator.next();
                 }
-                if (result.done) {
-                    return;
-                }
-                const event = result.value;
                 if (eventSessionId(event) !== sessionId) {
                     continue;
                 }
@@ -436,7 +480,7 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
             }
         } catch (error) {
             if (!surfacedError) {
-                const message = error instanceof Error ? error.message : "grok agent failed";
+                const message = error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`;
                 // A thrown model-not-found (promptAsync rejected and the runner couldn't self-heal it — no named
                 // alternatives) gets the same code as the event path, so the client reloads the catalog and drops
                 // the bad pinned model rather than showing the raw error.

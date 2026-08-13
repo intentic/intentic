@@ -28,6 +28,13 @@ import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from
 export interface OpenCodeService {
     // Ensure the server is up and return its client (lazy: the first turn or auth call boots it).
     readonly client: () => Promise<OpencodeClient>;
+    // This directory's session-event stream, for a caller that watches one turn. Scoped, because an unscoped
+    // subscription carries no session events at all — subscribeEvents has the whole story.
+    readonly events: (directory: string) => Promise<{ stream: AsyncIterable<OpenCodeEvent> }>;
+    // Keep a delegation watcher running for this directory, for the daemon's life. Idempotent per directory —
+    // every turn calls it and only the first opens a stream. The boot covers the workspace root; this is what
+    // covers an isolated conversation's worktree, which the daemon cannot know about until a turn runs there.
+    readonly watch: (directory: string) => Promise<void>;
     // The warm server's base URL — what a delegated `opencode run --attach <url>` points at, so its session
     // runs where the daemon's event stream can see it (the delegation note names it; agent/delegation.ts).
     readonly url: () => Promise<string>;
@@ -75,8 +82,12 @@ const BOOT_TIMEOUT_MS = 60_000;
 
 // The rebuild-fixable state, in the user's terms. "rebuild" is load-bearing — it is the word the UI reads to
 // route a state to the Environment card — so it has to survive any rewording of this sentence.
-export const OPENCODE_BINARY_MISSING =
-    "This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run Grok here.";
+//
+// `backend` is the product the USER picked, not the runtime that is missing. One `opencode serve` drives both
+// providers, so the sentence that named Grok unconditionally told a user who had chosen a Google model to go
+// and rebuild for a product they were not using — see openCodeBackendLabel.
+export const openCodeBinaryMissing = (backend: string): string =>
+    `This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
 
 /* THE TITLE IS THE DELEGATION'S NAME TAG — `intentic-delegation-<spawning tool call id>`.
  *
@@ -151,14 +162,34 @@ const foldSessionEvent = (event: OpenCodeEvent): void => {
 const STREAM_RETRIES = 3;
 const STREAM_RETRY_MS = 5_000;
 
-/* Watch the warm server's whole event stream for the daemon's life — detached, started once by the boot that
- * created the server. Failures are counted, not logged loudly: losing this stream loses liveness (a delegation
- * settles only by its exit), never correctness. */
-const watchSessionEvents = (client: OpencodeClient): void => {
+/* THE EVENT STREAM IS SCOPED TO A DIRECTORY, AND SUBSCRIBING WITHOUT ONE IS SILENTLY USELESS.
+ *
+ * `/event` with no `directory` still connects, still answers 200, and still delivers `server.connected` and a
+ * heartbeat every twenty seconds — it simply carries no session events at all. So every turn on this runtime
+ * subscribed successfully, saw its own session's events never arrive, sat out the inactivity watchdog and died
+ * as "timed out waiting for OpenCode" — while the turn it was watching ran to completion upstream, spent the
+ * user's allowance, and wrote its files. Measured on the warm server: an unscoped stream saw 0 of a turn's 30
+ * events; the same turn on a scoped stream saw all of them, through `session.idle`.
+ *
+ * The scope is an EXACT directory match, not a prefix — a stream scoped to a parent sees nothing from a session
+ * in its subdirectory — which is why this takes the caller's own cwd and why the delegation watcher can no
+ * longer be a single server-wide subscription (see watch()).
+ *
+ * One helper rather than the query spelled out at each call site: a subscription that forgets the scope does not
+ * fail, it goes quiet, and quiet is exactly what took two days to find the first time. */
+const subscribeEvents = async (client: OpencodeClient, directory: string): ReturnType<OpencodeClient["event"]["subscribe"]> =>
+    client.event.subscribe({ query: { directory } });
+
+/* Watch ONE DIRECTORY's session events for the daemon's life — detached, started per directory the daemon runs
+ * sessions in. Failures are counted, not logged loudly: losing this stream loses liveness (a delegation settles
+ * only by its exit), never correctness.
+ *
+ * A directory, not the whole server, because that is the only stream the server will give: see subscribeEvents. */
+const watchSessionEvents = (client: OpencodeClient, directory: string): void => {
     void (async () => {
         for (let failures = 0; failures < STREAM_RETRIES; failures += 1) {
             try {
-                const sse = await client.event.subscribe();
+                const sse = await subscribeEvents(client, directory);
                 for await (const event of sse.stream) {
                     failures = 0;
                     foldSessionEvent(event as OpenCodeEvent);
@@ -191,16 +222,31 @@ export interface OpenCodeGeminiConfig {
 // they were never asked for and bypass the account fleet entirely.
 export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
 
+/* WHAT A USER-FACING SENTENCE CALLS THE BACKEND BEHIND A TURN ON THIS RUNTIME.
+ *
+ * One `opencode serve` drives both providers, so the adapter that serves a Gemini turn IS the Grok adapter with
+ * a different `providerID` on the prompt. Every failure sentence in it was written when that was not true and
+ * said "Grok" unconditionally — so a user who picked Claude Opus 4.6 on Google and whose turn stalled was told
+ * "Grok turn timed out", naming a product they had not chosen and an account they had not connected.
+ *
+ * Keyed off the OpenCode provider id rather than our own wire id because that is what the runner carries: the
+ * turn hands OpenCode a `providerID`, and this is the same value read back for the sentence. */
+export const openCodeBackendLabel = (providerID: string): string => (providerID === OPENCODE_GEMINI_PROVIDER ? "Google" : "Grok");
+
 /* An options BAG rather than more positionals: the second parameter used to be the test's fetch injection, and
  * adding real configuration behind it would have put a production concern after a test seam — the shape where
  * the next parameter goes in the wrong slot. Both are optional and both are named. */
 export const createOpenCodeService = (
     xdgDataHome: string,
-    options: { readonly gemini?: OpenCodeGeminiConfig; readonly fetchImpl?: typeof fetch } = {},
+    options: { readonly gemini?: OpenCodeGeminiConfig; readonly fetchImpl?: typeof fetch; readonly workspaceRoot?: string } = {},
 ): OpenCodeService => {
-    const { gemini } = options;
+    const { gemini, workspaceRoot } = options;
     const fetchImpl = options.fetchImpl ?? fetch;
     let booting: Promise<OpencodeClient> | undefined;
+    // The directories a delegation watcher is already running for. Event streams are scoped to one exact
+    // directory (subscribeEvents), so "watch everything" is a set of streams rather than one — and this is what
+    // keeps it one PER directory however many turns run there.
+    const watched = new Set<string>();
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
     // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached —
     // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
@@ -267,9 +313,13 @@ export const createOpenCodeService = (
         }
         serverUrl = server.url;
         const client = createOpencodeClient({ baseUrl: server.url });
-        // The delegation watcher rides the boot that made the server, so exactly one stream exists per server
-        // and nothing ever boots one just to listen.
-        watchSessionEvents(client);
+        // The delegation watcher rides the boot that made the server, so nothing ever boots one just to listen.
+        // The workspace root is where a non-isolated conversation delegates from, and therefore the one scope
+        // worth opening unasked; an isolated turn's worktree is registered by the turn itself (watch()).
+        if (workspaceRoot !== undefined) {
+            watched.add(workspaceRoot);
+            watchSessionEvents(client, workspaceRoot);
+        }
         return client;
     };
 
@@ -321,6 +371,16 @@ export const createOpenCodeService = (
 
     return {
         client: ensure,
+        events: async (directory) => subscribeEvents(await ensure(), directory),
+        watch: async (directory) => {
+            if (watched.has(directory)) {
+                return;
+            }
+            // Added BEFORE the await, so two turns starting in the same worktree in the same tick cannot both
+            // get past the guard and open a stream each.
+            watched.add(directory);
+            watchSessionEvents(await ensure(), directory);
+        },
         url: async () => {
             await ensure();
             if (serverUrl === undefined) {

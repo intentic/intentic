@@ -329,20 +329,36 @@ test("a session error and a thrown runner become error events followed by done",
 const fakeOpenCode = (
     events: Event[],
     rejectModel?: { id: string; message: string },
-): { openCode: OpenCodeService; aborted: () => boolean; recorded: string[][]; prompts: (string | undefined)[] } => {
+): {
+    openCode: OpenCodeService;
+    aborted: () => boolean;
+    recorded: string[][];
+    prompts: (string | undefined)[];
+    // The directories the turn subscribed and registered a delegation watcher for. Both are scoped, and a
+    // subscription that loses its scope does not fail — it goes silent — so the scope is asserted, not assumed.
+    scopes: { subscribed: string[]; watched: string[] };
+    // "read" / "create", in the order they happened — see `order` in the body.
+    order: string[];
+} => {
     let aborted = false;
     let releaseHang: (() => void) | undefined;
     // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
     const prompts: (string | undefined)[] = [];
     const recorded: string[][] = [];
+    /* Every real stream opens with `server.connected`, and the runner AWAITS it — that hello is how it knows the
+     * subscription is live before it creates a session whose `session.created` it would otherwise miss. A double
+     * that stayed silent would make every turn here pay the connect bound in full, which is a fake being
+     * unfaithful rather than a runner being slow. It belongs to no session, so it changes nothing else. */
+    const withHello: Event[] = [{ type: "server.connected", properties: {} } as unknown as Event, ...events];
     const stream = {
         [Symbol.asyncIterator]() {
             let i = 0;
             let closed = false;
             return {
                 next(): Promise<IteratorResult<Event>> {
+                    if (order[0] === undefined) order.push("read");
                     if (closed) return Promise.resolve({ done: true, value: undefined as never });
-                    if (i < events.length) return Promise.resolve({ done: false, value: events[i++]! });
+                    if (i < withHello.length) return Promise.resolve({ done: false, value: withHello[i++]! });
                     return new Promise<IteratorResult<Event>>((resolve) => {
                         releaseHang = () => resolve({ done: true, value: undefined as never });
                     });
@@ -358,7 +374,10 @@ const fakeOpenCode = (
     const client = {
         event: { subscribe: async () => ({ stream }) },
         session: {
-            create: async () => ({ data: { id: "s1" } }),
+            create: async () => {
+                order.push("create");
+                return { data: { id: "s1" } };
+            },
             promptAsync: async (options: { body?: { model?: { modelID?: string } } }) => {
                 const modelID = options.body?.model?.modelID;
                 prompts.push(modelID);
@@ -375,11 +394,96 @@ const fakeOpenCode = (
             },
         },
     };
-    const openCode = { client: async () => client, recordModels: async (ids: string[]) => void recorded.push(ids) };
-    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts };
+    const scopes = { subscribed: [] as string[], watched: [] as string[] };
+    // The order that matters: `subscribe()` only opens the HTTP stream when something reads it, so a first read
+    // issued after the session exists misses `session.created` — and with it the id the next message resumes on.
+    const order: string[] = [];
+    const openCode = {
+        client: async () => client,
+        events: async (directory: string) => {
+            scopes.subscribed.push(directory);
+            return { stream };
+        },
+        watch: async (directory: string) => void scopes.watched.push(directory),
+        recordModels: async (ids: string[]) => void recorded.push(ids),
+    };
+    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, scopes, order };
 };
 
 const runnerTurn: GrokTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
+
+/* THE SILENT FAILURE THIS FILE EXISTS TO PREVENT A SECOND TIME.
+ *
+ * OpenCode's event stream is scoped to one exact directory. Subscribing without one still connects, still
+ * answers 200 and still delivers heartbeats — it just carries no session events, so every turn on this runtime
+ * watched a stream its own session would never appear on, rode out the inactivity watchdog and died as "timed
+ * out waiting for OpenCode" while the turn itself ran to completion upstream and spent the user's allowance.
+ *
+ * Nothing about that is observable from the frames a turn emits, which is why it is asserted on the CALL. */
+test("createGrokRunner subscribes and watches scoped to the turn's own directory", async () => {
+    const { openCode, scopes } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const worktree = "/history/worktrees/wise-condor/repo";
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, cwd: worktree })) {
+        void event;
+    }
+    expect(scopes.subscribed).toEqual([worktree]);
+    // The delegation watcher is scoped the same way, and the boot only knows the workspace root — so an isolated
+    // turn's worktree is watched because the turn itself registered it.
+    expect(scopes.watched).toEqual([worktree]);
+});
+
+/* The stream is READ before the session is created, not merely subscribed to.
+ *
+ * `subscribe()` hands back a lazy generator: the HTTP request is not made until the first read. So subscribing
+ * early proves nothing on its own, and a first read issued after the prompt arrives too late for the
+ * `session.created` that carries the id every later message in this conversation resumes on. */
+test("createGrokRunner opens the stream before the session it must not miss the creation of", async () => {
+    const { openCode, order } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)(runnerTurn)) {
+        seen.push(event.type);
+    }
+    expect(order).toEqual(["read", "create"]);
+    // And the creation still reaches the caller, which is the whole point of reading first.
+    expect(seen).toEqual(["session.created", "session.idle"]);
+});
+
+// The runtime is shared: `intentic-gemini` is the same adapter serving Google. A user who picked Claude Opus 4.6
+// there and hit the watchdog was told "Grok turn timed out", naming a product they had not chosen.
+test("a stalled turn is reported against the backend the user actually picked", async () => {
+    const stalled = (provider: string | undefined): Promise<void> =>
+        (async () => {
+            for await (const event of createGrokRunner(
+                fakeOpenCode([]).openCode,
+                20,
+            )({ ...runnerTurn, ...(provider !== undefined ? { provider } : {}) })) {
+                void event;
+            }
+        })();
+    await expect(stalled("intentic-gemini")).rejects.toThrow("Google turn timed out waiting for OpenCode.");
+    await expect(stalled(undefined)).rejects.toThrow("Grok turn timed out waiting for OpenCode.");
+});
+
+// session.status is the only event a model that thinks for minutes before its first token emits. It is not
+// consumed anywhere, and it is carried purely so the watchdog counts it as life rather than killing that turn.
+test("a session.status keeps the inactivity watchdog alive", async () => {
+    const { openCode } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)(runnerTurn)) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created", "session.status", "session.idle"]);
+});
 
 test("createGrokRunner ends the turn on session.error even while the stream stays open", async () => {
     const { openCode } = fakeOpenCode([

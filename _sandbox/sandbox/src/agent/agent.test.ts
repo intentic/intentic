@@ -661,6 +661,42 @@ test("a revoked Claude Code seat is coded as its own refusal, not as a credentia
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "claude-not-entitled", message: seat }, { kind: "done" }]);
 });
 
+/* A SPENT PLAN THAT ARRIVES DRESSED AS A DEAD CREDENTIAL — the routed providers' version of the seat above,
+ * sitting directly above the same branch and for the same reason.
+ *
+ * Kimi refuses a spent Kimi Code plan with `403 You've reached your usage limit for this billing cycle`, and a
+ * 403 is what the CLI prints its "Failed to authenticate" prefix over. So it satisfied isAuthFailureText and
+ * went out as a refused credential, which the client answers with the reconnect banner — a fix for a condition
+ * the user does not have. The account authenticates perfectly; its quota is simply gone until the cycle turns,
+ * and no reconnect brings that back.
+ *
+ * Coded as the limit it is, carrying the provider's OWN sentence (which names the remedy — buy more, or wait)
+ * rather than the canned Claude line, because on a routed turn Anthropic had no part in the refusal. */
+test("a routed provider's spent plan is coded as a limit, not as a credential to reconnect", async () => {
+    const kimi =
+        "Failed to authenticate. API Error: 403 You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle.";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: kimi }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "rate_limit", message: kimi }, { kind: "done" }]);
+});
+
+// The branch below it still stands: a token that was actually revoked says nothing about an allowance, and must
+// keep arming the re-mint-and-resume rather than parking the turn on a reset that is never coming.
+test("a genuinely revoked credential still reads as one to re-mint", async () => {
+    const revoked = "Failed to authenticate. API Error: 401 OAuth access token has been revoked";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: revoked }] } }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "claude-token-refused", message: revoked },
+        { kind: "done" },
+    ]);
+});
+
 /* THE PROVIDER'S OWN FAILURES, read from the CATEGORY rather than the sentence. The harness files every 5xx, every
  * 529 at capacity and every dropped socket as `server_error`, and a pre-retry capacity refusal as `overloaded`;
  * both mean the request is worth making again, which is the one claim the auto-resume has to be right about. The
