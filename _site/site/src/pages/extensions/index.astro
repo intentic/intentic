@@ -16,7 +16,8 @@ import { loadGallery, markInitials, markLogoUrl, sourceHref } from "../../lib/re
  * A DISCOVERY SURFACE, and the layout now says so: the listings come first. This page used to open with the
  * site's heaviest economics: the spend diamond, two spend cards, the revenue ring: before showing a single
  * listing, which put the marketplace below the fold of its own page. The whole economy lives at /earn/ now;
- * what stays here is one band of headline figures and the lifecycle strip, each linking out.
+ * what stays here is one band of headline figures and the lifecycle strip, each linking out, and both sit at
+ * the foot: the hero hands straight over to the gallery, so the listings and the diagram share one screen.
  *
  * Verified leads and stars rank within it, which is what compareEntries already decided; the page just says
  * out loud what that ordering does and does not claim, because a gallery sorted by a number readers know is
@@ -136,24 +137,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
             </div>
         </section>
 
-        {/* The money, in one row: almost everything below installs free, and the whole economy behind the
-            Premium badges is /earn/'s page to tell. This band exists so the badge is never the first a
-            visitor hears of it, and it is the ONLY economics on the page. */}
-        <section class="border-b border-line bg-canvas/60" aria-label="How premium extensions are paid for">
-            <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
-                {
-                    moneyFigures.map((stat) => (
-                        <div class="flex items-baseline gap-2">
-                            <span class="font-mono text-sm font-semibold tracking-tight text-content">{stat.term}</span>
-                            <span class="text-2xs text-subtle">{stat.detail}</span>
-                        </div>
-                    ))
-                }
-                <a class="text-xs text-link hover:underline sm:ml-auto" href="/earn/">How the pool works →</a>
-            </div>
-        </section>
-
-        <div class="mx-auto max-w-7xl space-y-16 px-6 py-16 lg:py-20">
+        <div class="mx-auto max-w-7xl space-y-10 px-6 pt-8 pb-16 lg:pb-20">
             {
                 groups.length === 0 && (
                     <section class="card px-6 py-12 text-center">
@@ -254,11 +238,11 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                         aria-hidden="true"
                     >
                     </div>
-                    <figure class="relative flex flex-col items-center px-4 py-7 text-center sm:px-8">
+                    <figure class="relative flex flex-col items-center px-4 py-5 text-center sm:px-8">
                         <div class="eyebrow text-link">The shape of it</div>
                         <svg
                             viewBox="0 0 520 256"
-                            class="mt-3 h-auto w-full max-w-[600px] text-link"
+                            class="mt-3 h-auto w-full max-w-[520px] text-link"
                             role="img"
                             aria-label="Several extensions bundle Capabilities, UI, Automations or Backend surfaces and plug into the core every sandbox has: Files, Events, Agents, Secrets and Processes."
                         >
@@ -349,6 +333,25 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                 </div>
             </section>
         </div>
+
+        {/* The money, in one row: almost everything above installs free, and the whole economy behind the
+            Premium badges is /earn/'s page to tell. It sits at the foot rather than under the hero, where it
+            cost the gallery and the diagram their shared screen; the lifecycle strip directly above it is
+            where a reader is already looking at Earn, so the figures land next to the question. Still the
+            ONLY economics on the page. */}
+        <section class="border-t border-line bg-canvas/60" aria-label="How premium extensions are paid for">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
+                {
+                    moneyFigures.map((stat) => (
+                        <div class="flex items-baseline gap-2">
+                            <span class="font-mono text-sm font-semibold tracking-tight text-content">{stat.term}</span>
+                            <span class="text-2xs text-subtle">{stat.detail}</span>
+                        </div>
+                    ))
+                }
+                <a class="text-xs text-link hover:underline sm:ml-auto" href="/earn/">How the pool works →</a>
+            </div>
+        </section>
 
         <section class="border-t border-line">
             <div class="mx-auto max-w-7xl px-6 py-14 text-center">
