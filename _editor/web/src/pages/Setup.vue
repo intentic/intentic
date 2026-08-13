@@ -376,7 +376,9 @@ const announced = ref(false);
 // The provisioned machine's display facts (SandboxCloudSchema) — set by the provision response (or a resumed
 // row that was provisioned last visit), and the switch that turns the cloud form into its summary line.
 const cloudMachine = ref<SandboxSummary[`cloud`]>(null);
-const cloudProviderLabel = computed(() => (cloudMachine.value === null ? `` : cloudProviderMeta(cloudMachine.value.provider).label));
+// The company's NAME, never the picker's pitch — every use below is inside a sentence, and `label` carries
+// the free tier's sales line ("Oracle — free 12 GB"), which reads as a typo the moment it lands mid-clause.
+const cloudProviderName = computed(() => (cloudMachine.value === null ? `` : cloudProviderMeta(cloudMachine.value.provider).name));
 // The provision response is a fresher row (it carries the cloud stamp) — adopt it, then let the ordinary
 // claim → report → announce watch narrate the machine's first boot.
 const onProvisioned = (summary: SandboxSummary): void => {
@@ -461,9 +463,17 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               {
                   value: `cloud` as const,
                   icon: `cloud` as const,
-                  title: `A new cloud machine`,
+                  /* WHOSE MACHINE IT IS BELONGS IN THE TITLE, and it is the only thing this rung has to say
+                   * that the one above it doesn't: we host one too, and the difference is the account it
+                   * lives in and the bill. It used to be "A new cloud machine" over "In your own cloud
+                   * account" — a title and a note that spent their two lines saying "cloud" twice, so the
+                   * card's last line, the one place left to tell the reader something they don't know, was
+                   * a paraphrase of its first. It names the three providers instead: somebody who already
+                   * has a Hetzner account recognises this rung as theirs from the picker, without opening
+                   * it. */
+                  title: `A cloud machine I own`,
                   meta: `From free · 12 GB`,
-                  note: `In your own cloud account`,
+                  note: `Oracle, Hetzner or DigitalOcean`,
               },
           ]
         : []),
@@ -2199,7 +2209,7 @@ watch(commandReady, (ready) => {
                                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                                     <span class="min-w-0">
                                         <span class="text-content">{{ cloudMachine.serverName }}</span> was created in your
-                                        {{ cloudProviderLabel }} account ({{ cloudMachine.location }}). It sets itself up from first boot.
+                                        {{ cloudProviderName }} account ({{ cloudMachine.location }}). It sets itself up from first boot.
                                     </span>
                                 </p>
                                 <SetupCloud v-else-if="created" :sandbox-id="created.id" @provisioned="onProvisioned" />
@@ -2437,12 +2447,12 @@ watch(commandReady, (ready) => {
                                          it says that instead. In the app there is no command to name and the
                                          button has a label, so it names the button. -->
                                     <template v-else-if="machine === `cloud` && cloudOffered">
-                                        <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above
-                                        and press "Create the machine". Nothing runs (or costs anything) until you do.
+                                        <span class="font-medium text-content">Waiting for you to create the machine.</span> Paste a credential above,
+                                        then create it — nothing runs, or costs anything, until you do.
                                     </template>
                                     <template v-else-if="desktop && !commandVisible">
-                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
-                                        it up now" above.
+                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press “Set
+                                        it up now” above.
                                     </template>
                                     <template v-else>
                                         <span class="font-medium text-content">Waiting for you to run the command.</span> We'll notice the moment your
@@ -2477,7 +2487,7 @@ watch(commandReady, (ready) => {
                                 class="xl:hidden"
                                 :variant="nudgeVariant"
                                 :cloud-name="cloudMachine?.serverName ?? ``"
-                                :cloud-provider="cloudProviderLabel"
+                                :cloud-provider="cloudProviderName"
                                 :stalled="stalled"
                                 :command="selectedCommand"
                                 :copyable="nudgeCopyable"
@@ -2499,7 +2509,7 @@ watch(commandReady, (ready) => {
                                         launched
                                             ? `the Intentic window`
                                             : cloudMachine
-                                              ? `the machine's boot log in your ${cloudProviderLabel} console`
+                                              ? `the machine's boot log in your ${cloudProviderName} console`
                                               : `that terminal`
                                     }}
                                     for an error. It's safe to re-run.</span
@@ -2540,7 +2550,7 @@ watch(commandReady, (ready) => {
                         v-if="nudging"
                         :variant="nudgeVariant"
                         :cloud-name="cloudMachine?.serverName ?? ``"
-                        :cloud-provider="cloudProviderLabel"
+                        :cloud-provider="cloudProviderName"
                         :stalled="stalled"
                         :command="selectedCommand"
                         :copyable="nudgeCopyable"

@@ -66,7 +66,7 @@ const emit = defineEmits<{ copied: [] }>();
                 <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.
             </span>
             <span v-else class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
+                <span class="font-medium">Still nothing.</span> Nothing starts until you press “Set it up now” above.
             </span>
         </p>
         <p v-if="stalled && variant === `terminal`" class="pl-6 opacity-90">

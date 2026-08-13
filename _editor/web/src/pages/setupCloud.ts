@@ -12,10 +12,22 @@ import { ORACLE_CAPACITY_PHRASE, type CloudCredentials, type CloudProvider, type
  * controls around it is read once, by the person who then has to find the control again. */
 export interface CloudProviderMeta {
     readonly id: CloudProvider;
+    /* THE COMPANY'S NAME, and nothing else — this is the one that goes in SENTENCES. It exists because
+     * `label` below is a pitch, and a pitch reads as a typo the moment it is interpolated: "created in your
+     * Oracle — free 12 GB account", "couldn't reach Oracle — free 12 GB with that credential", "check the boot
+     * log in your Oracle — free 12 GB console". Every line of prose about a provider on this screen was
+     * wearing the picker's sales copy in the middle of it. */
+    readonly name: string;
+    // …and the PICKER's label, which is allowed to sell: the tab is where the free tier is worth naming.
     readonly label: string;
-    // Where the pasted credential comes from, as a "get one" link the user can follow mid-step.
-    readonly credentialUrl: string;
-    readonly credentialLabel: string;
+    /* The token lane's two field affordances: where to make one, and the single requirement a made token can
+     * still fail on. The scope is worth its own line — a read-only token is the one paste that looks perfect
+     * and gets refused — and it used to be buried inside a link label that was then read as a sentence's
+     * subject: "Create a Read & Write API token in your Hetzner Cloud project is used to create this one
+     * machine, and never stored by intentic." Absent for oracle, whose walkthrough already links the console
+     * and whose two pastes come out of one dialog. */
+    readonly credentialUrl?: string;
+    readonly credentialHint?: string;
     // token: one API-token field. oracle: the console's config snippet + the API key PEM, two pastes.
     readonly kind: `token` | `oracle`;
 }
@@ -26,23 +38,24 @@ export interface CloudProviderMeta {
 export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `oracle`,
+        name: `Oracle`,
         label: `Oracle — free 12 GB`,
-        credentialUrl: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
-        credentialLabel: `Add an API key under Profile → API keys`,
         kind: `oracle`,
     },
     {
         id: `hetzner`,
+        name: `Hetzner`,
         label: `Hetzner`,
         credentialUrl: `https://docs.hetzner.com/cloud/api/getting-started/generating-api-token/`,
-        credentialLabel: `Create a Read & Write API token in your Hetzner Cloud project`,
+        credentialHint: `It needs Read & Write access to a Cloud project.`,
         kind: `token`,
     },
     {
         id: `digitalocean`,
+        name: `DigitalOcean`,
         label: `DigitalOcean`,
         credentialUrl: `https://docs.digitalocean.com/reference/api/create-personal-access-token/`,
-        credentialLabel: `Create a personal access token with write scope`,
+        credentialHint: `A personal access token, with write scope.`,
         kind: `token`,
     },
 ];
@@ -62,11 +75,13 @@ export const ORACLE_STEPS: readonly { readonly text: string; readonly url?: stri
         urlLabel: `oracle.com/cloud/free`,
     },
     {
-        text: `Press "Add API key" → "Generate API key pair" → download the key → "Add".`,
+        // Typographic quotes around the console's own button labels, as everywhere else this app quotes a
+        // control — straight ones read as terminal output on a screen that is asking to be trusted with a key.
+        text: `Press “Add API key” → “Generate API key pair” → download the key → “Add”.`,
         url: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
         urlLabel: `Profile → API keys`,
     },
-    { text: `Paste what Oracle then shows you below: the config preview, then the key file you downloaded.` },
+    { text: `Paste both below: the config preview Oracle shows you, then the key file you downloaded.` },
 ];
 
 // Does this refusal mean "no room right now" rather than "no"? Keyed on the adapter's own phrase (a shared

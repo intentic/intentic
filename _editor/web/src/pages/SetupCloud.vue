@@ -66,7 +66,7 @@ const fetchOptions = async (): Promise<void> => {
         size.value = listed.defaultSize;
     } catch (err) {
         if (asked === credentials.value) {
-            optionsError.value = noticeFrom(err, `Couldn't reach ${meta.value.label} with that credential. Try again.`);
+            optionsError.value = noticeFrom(err, `Couldn't reach ${meta.value.name} with that credential. Try again.`);
         }
     } finally {
         if (asked === credentials.value) {
@@ -146,27 +146,43 @@ watch(keepTrying, (on) => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
+    <!-- gap-4 between the form's GROUPS, against the 2 a `ui-field` puts between a label and its own control
+         and the 2 the walkthrough puts between steps. At a flat gap-3 those three distances were within a few
+         pixels of each other, so "Private key" floated equidistant between the box above it and the box below
+         it, and the steps read as five loose lines rather than one list. Spacing is the only grouping this
+         column has — there are deliberately no boxes here — so it has to be the thing that differs. -->
+    <div class="flex flex-col gap-4">
         <Segmented v-model="provider" :options="CLOUD_PROVIDERS.map((entry) => ({ label: entry.label, value: entry.id }))" :stretch="mobile" />
 
-        <!-- The credential, with the "get one" link beside the field it fills — the reader who needs it is
-             mid-step, and sending them to search the provider's docs is where this flow would lose them. -->
+        <!-- The credential, with the "get one" link ON the label's row — the reader who needs it is mid-step,
+             and sending them to search the provider's docs is where this flow would lose them. It is a
+             right-aligned peer of the label rather than a sentence underneath, because underneath is where it
+             was being read as the subject of the reassurance line that followed it. -->
         <template v-if="meta.kind === `token`">
             <label class="ui-field">
-                <span class="ui-field-label">API token</span>
+                <span class="flex items-baseline justify-between gap-3">
+                    <span class="ui-field-label">API token</span>
+                    <a
+                        v-if="meta.credentialUrl"
+                        :href="meta.credentialUrl"
+                        target="_blank"
+                        rel="noopener"
+                        class="shrink-0 text-xs text-link hover:underline"
+                    >
+                        Where do I get one?
+                    </a>
+                </span>
                 <input
                     v-model="token"
                     type="password"
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false"
-                    :placeholder="`Paste your ${meta.label} API token`"
+                    :placeholder="`Paste your ${meta.name} API token`"
                     :class="cmp.input('w-full font-mono text-base md:text-sm')"
                 />
-                <span class="text-xs text-muted">
-                    <a :href="meta.credentialUrl" target="_blank" rel="noopener" class="text-link hover:underline">{{ meta.credentialLabel }}</a>
-                    is used to create this one machine, and never stored by intentic.
-                </span>
+                <!-- The one requirement a perfectly-pasted token still fails on. -->
+                <span v-if="meta.credentialHint" class="text-xs text-muted">{{ meta.credentialHint }}</span>
             </label>
         </template>
         <template v-else>
@@ -175,53 +191,75 @@ watch(keepTrying, (on) => {
                  NO BOX. Three instructions inside a bordered, darker inset, inside the run card, inside a
                  column, is three frames deep to say "press this, then this" — and the frame made the steps
                  read as a quotation from somewhere else rather than as the thing to do next. The numbers are
-                 the structure; they need no walls. -->
-            <ol class="flex flex-col gap-2 text-xs text-content">
-                <li v-for="(step, index) in ORACLE_STEPS" :key="index" class="flex items-start gap-2.5">
-                    <span class="mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-overlay text-2xs font-medium text-subtle">
-                        {{ index + 1 }}
-                    </span>
+                 the structure; they need no walls.
+                 …WHICH IS ALSO WHY THE NUMBERS LOST THEIRS. Each one was a filled circle — a wall around a
+                 digit, on the same list whose comment says the digits need none — and being a 20px box beside
+                 a 16px line of text, it could only be nudged toward the text's centre by hand, never actually
+                 aligned to it. As a plain numeral in a fixed column it shares the text's own line box, so the
+                 alignment is structural rather than a magic number, and the pill's dim fill-on-fill (a
+                 surface-500 digit on a surface-800 disc) stops washing the step out. -->
+            <ol class="flex flex-col gap-2 text-xs leading-5 text-content">
+                <li v-for="(step, index) in ORACLE_STEPS" :key="index" class="grid grid-cols-[1.25rem_1fr] gap-x-1.5">
+                    <span class="tabular-nums font-medium text-muted">{{ index + 1 }}.</span>
                     <span class="min-w-0">
                         {{ step.text }}
                         <a v-if="step.url" :href="step.url" target="_blank" rel="noopener" class="text-link hover:underline">{{ step.urlLabel }}</a>
                     </span>
                 </li>
             </ol>
+            <!-- Both fields are named for what Oracle's own dialog calls them, so the reader is matching
+                 words rather than guessing which blob goes where — and both are sized to the paste they
+                 take: the config is exactly six short lines, the key is a blob nobody reads. Four rows under
+                 a five-line placeholder is what had the first field opening with its own example already
+                 clipped under a scrollbar, which is a field that looks broken before it is touched. -->
             <label class="ui-field">
-                <span class="ui-field-label">Config snippet</span>
+                <span class="ui-field-label">Configuration file preview</span>
                 <textarea
                     v-model="ociConfig"
-                    rows="4"
+                    rows="6"
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false"
                     placeholder="[DEFAULT]&#10;user=ocid1.user.oc1..…&#10;fingerprint=…&#10;tenancy=ocid1.tenancy.oc1..…&#10;region=…"
-                    :class="cmp.input('w-full resize-y font-mono text-base md:text-sm')"
+                    :class="cmp.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
                 />
             </label>
             <label class="ui-field">
                 <span class="ui-field-label">Private key</span>
                 <textarea
                     v-model="ociKey"
-                    rows="4"
+                    rows="3"
                     autocomplete="off"
                     autocapitalize="off"
                     spellcheck="false"
                     placeholder="-----BEGIN PRIVATE KEY-----&#10;…"
-                    :class="cmp.input('w-full resize-y font-mono text-base md:text-sm')"
+                    :class="cmp.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
                 />
-                <span class="text-xs text-muted">
-                    <a :href="meta.credentialUrl" target="_blank" rel="noopener" class="text-link hover:underline">{{ meta.credentialLabel }}</a>
-                    is used to create this one machine, and never stored by intentic.
-                </span>
             </label>
         </template>
 
+        <!-- ONE LINE, ONCE, FOR EVERY LANE — and a whole sentence of its own. It used to be the tail of a
+             sentence whose subject was a link label, which is a construction nobody writes on purpose: it
+             happened because the "get one" link and the "we don't keep this" promise were crammed into one
+             span, and it read as "Create a Read & Write API token in your Hetzner Cloud project is used to
+             create this one machine". Two different jobs; the link went up to the label row, this stayed. -->
+        <p class="flex items-start gap-2 text-xs text-muted">
+            <Icon name="lock" class="mt-0.5 shrink-0" />
+            <span class="min-w-0">Used once, to create this one machine. Never stored by intentic.</span>
+        </p>
+
         <p v-if="optionsLoading" class="flex items-center gap-2 text-xs text-muted">
             <Icon name="spinner" spin class="text-info" />
-            Checking the credential and fetching {{ meta.label }}'s regions and prices…
+            Checking the credential and fetching {{ meta.name }}'s regions and prices…
         </p>
         <Notice v-else-if="optionsError" :of="optionsError" />
+        <!-- The credential's own receipt. The fetch below IS the check on it, so its success is the only
+             confirmation this form can give that the paste was good — and without it, a credential that
+             worked and one that was never finished look the same: nothing happens either way. -->
+        <p v-else-if="options !== null" class="flex items-start gap-2 text-xs text-muted">
+            <Icon name="check" class="mt-0.5 shrink-0 text-success" />
+            <span class="min-w-0"><span class="text-content">That credential works.</span> Below are {{ meta.name }}'s own regions and prices.</span>
+        </p>
 
         <template v-if="options !== null">
             <!-- Stacked on a phone for the same reason the attach lane stacks: side by side, neither pick
@@ -264,10 +302,10 @@ watch(keepTrying, (on) => {
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p class="text-xs text-subtle">
-                Created in your {{ meta.label }} account, so it's yours:
-                {{ meta.id === `oracle` ? `free within the Always-Free tier` : `billed by ${meta.label} directly to you` }}, and deleting it happens
-                in their console.
+            <p class="text-xs leading-relaxed text-subtle">
+                Created in your {{ meta.name }} account, so it's yours:
+                {{ meta.id === `oracle` ? `free within the Always-Free tier` : `billed by ${meta.name} directly to you` }}, and deleting it happens in
+                their console.
             </p>
         </template>
     </div>
