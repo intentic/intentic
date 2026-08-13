@@ -411,17 +411,17 @@ const onProvisioned = (summary: SandboxSummary): void => {
  * READ, THOUGH — NOT STUDIED. The first version of these cards put the whole trade on every card at once:
  * three paragraphs, side by side, above the one command the reader came here to run. Three columns of prose
  * is not a picker; nobody compares three paragraphs, they skim the titles and pick, which means the paragraphs
- * cost attention and bought nothing. So a card is now a big icon, a name, a price and three or four words —
- * and the sentences that genuinely change a decision (this disk is not backed up; this one expires) follow the
- * SELECTION, one line under the row, where there is exactly one of them to read. `meta` is the badge, `note`
- * the few words under it, `detail` the line that appears once this rung is the answer. */
+ * cost attention and bought nothing. A card is an icon, a name, a price and three or four words.
+ *
+ * What that leaves out lands where it is ACTED on rather than skimmed: the free machine's disk is described on
+ * the card that creates it, next to the button, and "or don't use a terminal at all" sits under the whole row
+ * as the fourth answer it is. `meta` is the badge, `note` the few words under it. */
 interface MachineOption {
     readonly value: "hosted" | "mine" | "cloud";
     readonly icon: IconName;
     readonly title: string;
     readonly meta: string;
     readonly note: string;
-    readonly detail: string;
 }
 const ladderOptions = computed<readonly MachineOption[]>(() => [
     ...(hostedOffered.value
@@ -442,29 +442,12 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                           ? `Free · ready in seconds`
                           : `Free · ${hostedHours.value.allowance}h a month, then membership`,
                   note: `Nothing to install`,
-                  /* The durability sentence is here, under the row, rather than only in the terms: this is the
-                   * moment someone chooses a disk that is ours, and "we don't back it up" is the one fact
-                   * about that disk which changes what a reasonable person does next. It names the remedy in
-                   * the same breath, because a warning with no next step just makes the safe choice look
-                   * scary. Deliberately silent about the provider's own snapshots — they are disaster
-                   * recovery we cannot restore from on request, so mentioning them here would read as a
-                   * safety net the user does not actually have. The terms spell that out.
-                   *
-                   * The collection sentence earns its place the same way: a free machine left unopened is
-                   * eventually removed, and someone deciding where their work will live is owed that before
-                   * they commit rather than in the email that warns them. */
-                  detail:
-                      hostedHours.value === null
-                          ? `It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
-                          : `It sleeps while you're away and wakes when you come back. Leave it unopened for a few weeks and we remove it, and we don't back it up — turn on desktop sync, or keep your work in a git remote.`,
               },
           ]
         : []),
-    /* The two rungs where the machine is the READER'S — and neither carries a `detail`, because neither has
-     * anything to say that its own three lines don't. "Your CPUs, your RAM, your GPU" is a poem about owning
-     * a computer, addressed to somebody who owns one; "no hour limit, nothing expires" is the badge again in
-     * a longer coat. A detail line is for a fact the reader would be worse off not knowing, and the hosted
-     * rung's disk is the only one on this row. */
+    /* The two rungs where the machine is the READER'S. Neither says more than its three lines, because there
+     * is no more to say: "Your CPUs, your RAM, your GPU" is a poem about owning a computer, addressed to
+     * somebody who owns one, and "no hour limit, nothing expires" is the badge again in a longer coat. */
     ...(commandOffered.value
         ? [
               {
@@ -473,7 +456,6 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   title: `A computer I have`,
                   meta: `Most power · no limits`,
                   note: `One pasted command`,
-                  detail: ``,
               },
           ]
         : []),
@@ -485,15 +467,10 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   title: `A new cloud machine`,
                   meta: `From free · 12 GB`,
                   note: `In your own cloud account`,
-                  detail: ``,
               },
           ]
         : []),
 ]);
-/* The chosen rung's sentences, under the row. One rung's worth of prose on screen instead of three, and it
- * is the rung the reader has actually landed on — which is also when "we don't back this up" stops being
- * one option's small print and becomes a fact about where their work is about to live. */
-const ladderDetail = computed(() => ladderOptions.value.find((option) => option.value === machine.value)?.detail ?? ``);
 /* Shown once there is a CHOICE to make. A picker over one rung is not a picker — it is a card describing the
  * only thing on offer, which is what the step under it already does — and while the offers are still being
  * read there is nothing honest to draw at all. */
@@ -1024,23 +1001,18 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
     if (creating.value || hostedBusy.value) {
         return;
     }
-    // Re-pressing the rung you are already on is a no-op EXCEPT on the hosted one with no machine behind it:
-    // there the card is the retry, which is where a reader whose first attempt hit capacity weather will press.
-    if (next === prev && !(next === `hosted` && (created.value?.hosted ?? null) === null)) {
+    if (next === prev) {
         return;
     }
     hostedError.value = undefined;
     const row = created.value;
     const rowHosted = (row?.hosted ?? null) !== null;
+    /* CHOOSING THE HOSTED RUNG STARTS NOTHING. It used to create the machine on the click — the rung WAS the
+     * button — so reading the row cost you a machine, and clicking back off it destroyed one. A picker whose
+     * options have side effects is not a picker; the card below now carries the button, and until it is
+     * pressed this click has done nothing but change what the page is describing. */
     if (next === `hosted`) {
-        if (rowHosted) {
-            machine.value = next;
-            return;
-        }
         machine.value = next;
-        if (!(await provisionHosted())) {
-            machine.value = prev; // the reason is on the card; the reader stays where they chose from
-        }
         return;
     }
     if (rowHosted && row !== null) {
@@ -1350,16 +1322,13 @@ onMounted(async () => {
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         await autoCreate();
-        /* THE ZERO-CLICK FIRST RUN: on a platform that hosts, that fresh sandbox is also STARTED with no
-         * command and no choice — the wait card below narrates it, and the ladder stays one click away. The
-         * create above is the one every lane makes, so a provision that refuses leaves an ordinary sandbox on
-         * an ordinary command lane with the reason on the card, which is exactly what this page did before
-         * the hosted lane existed. */
+        /* THE ONE-CLICK FIRST RUN: on a platform that hosts, the free machine is what a fresh sandbox is
+         * POINTED AT — the ladder opens on it and the card below is a button and a sentence — but nothing is
+         * created until that button is pressed. It used to provision here, on arrival, which meant a machine
+         * (and the hour meter that starts with it) existed for everybody who ever loaded this page, including
+         * the reader who came to paste a command on their own hardware. */
         if (offer.enabled && offer.remaining > 0 && !desktop.value) {
             machine.value = `hosted`;
-            if (!(await provisionHosted())) {
-                machine.value = mobile.value ? `cloud` : `mine`;
-            }
         }
         fallBackToAttach();
         return;
@@ -1865,15 +1834,21 @@ watch(commandReady, (ready) => {
                                  this page can ever show and therefore distinguished none of them — it was decoration
                                  sitting where a reader looks for the value. -->
                             <!-- A hosted sandbox's address is the daemon's own announce — no mint, no escape
-                                 hatches: the machine was born holding its tunnel, and the page redirects the
-                                 moment the address below turns real. -->
-                            <template v-if="hostedRow !== null">
+                                 hatches: the machine is born holding its tunnel, and the page redirects the
+                                 moment the address below turns real.
+                                 KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing this rung starts
+                                 nothing, there is a stretch with the hosted lane selected and no machine behind
+                                 it — and read off the machine, this row fell through to the mint's spinner and
+                                 promised a domain that this lane never asks for. A spinner before the button is
+                                 pressed is the same lie the addressless platform used to tell. -->
+                            <template v-if="machine === `hosted`">
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span :class="factLabel">Address</span>
                                     <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
-                                    <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
+                                    <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                         <Icon name="spinner" spin /> Assigned as your machine starts…
                                     </span>
+                                    <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
                                 </div>
                             </template>
                             <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a spinner
@@ -2060,7 +2035,7 @@ watch(commandReady, (ready) => {
                                 role="radio"
                                 :aria-checked="machine === option.value"
                                 :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
-                                class="flex cursor-pointer flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                class="flex cursor-pointer flex-col items-start gap-1 rounded-xl border px-3.5 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                                 :class="
                                     machine === option.value
                                         ? `border-link bg-overlay`
@@ -2092,10 +2067,27 @@ watch(commandReady, (ready) => {
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>
                             </button>
                         </div>
-                        <!-- The chosen rung's small print, and only its. Quiet, because it is read once, at the
-                             moment it becomes true — and it is the one place the free machine's "we don't back
-                             this up" is stated where somebody is deciding where their work will live. -->
-                        <p v-if="ladderDetail" class="px-1 text-2xs leading-snug text-subtle">{{ ladderDetail }}</p>
+                        <!-- THE APP, UNDER THE ROW AND UNDER EVERY RUNG. It used to live at the foot of the
+                             command card, addressed only to the reader who had already chosen to paste
+                             something — which is the reader least in need of an installer. It is a fourth
+                             answer to the same question the row asks, so it belongs with the row: whichever
+                             rung is selected, "or don't use a terminal at all" is still on the table.
+                             Never on a phone: every link here is a Windows or Linux installer, and a phone that
+                             follows one downloads a file it cannot open. And never inside the app itself, where
+                             it would offer the reader what they are already running. -->
+                        <p v-if="!desktop && !mobile" class="px-1 text-2xs text-subtle">
+                            Rather not use a terminal?
+                            <button type="button" class="cursor-pointer text-link hover:underline" @click="runHere">Open the Intentic app</button>,
+                            or download it for <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Windows</a>,
+                            <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux AppImage</a>,
+                            <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a> or
+                            <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>.
+                            <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
+                                 YOUR build once staged. -->
+                            <span v-if="platformUrlOverride" class="text-warning">
+                                Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code> first.
+                            </span>
+                        </p>
                     </div>
 
                     <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
@@ -2165,9 +2157,35 @@ watch(commandReady, (ready) => {
                                 <Icon name="spinner" spin class="text-info" />
                                 Starting a machine for you…
                             </p>
-                            <Button v-else label="Try again" class="w-full justify-center md:w-auto" @click="provisionHosted">
-                                <template #icon><Icon name="refresh" /></template>
-                            </Button>
+                            <!-- NOTHING HAS BEEN CREATED YET, AND THIS IS THE THING THAT CREATES IT. The rung
+                                 above is a description; this is the commitment, which is why the one fact about
+                                 this machine that changes what a reasonable person does — its disk is ours and we
+                                 do not back it up — is stated HERE, where somebody is deciding, rather than as
+                                 small print under a picker they were only reading.
+                                 `hostedError` above already says why a previous attempt failed, so this doubles
+                                 as the retry without having to call itself one. -->
+                            <template v-else>
+                                <Button
+                                    :label="hostedError ? `Try again` : `Start my machine`"
+                                    class="w-full justify-center md:w-auto"
+                                    :disabled="hostedSpent"
+                                    @click="provisionHosted"
+                                >
+                                    <template #icon><Icon :name="hostedError ? `refresh` : `bolt`" /></template>
+                                </Button>
+                                <p class="text-2xs leading-snug text-subtle">
+                                    <template v-if="hostedSpent">
+                                        You already have the free machine your account comes with. Pick another rung above, or delete the sandbox
+                                        that's using it.
+                                    </template>
+                                    <template v-else>
+                                        It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep
+                                        your work in a git remote.<template v-if="hostedHours">
+                                            Unopened for a few weeks, it's removed.</template
+                                        >
+                                    </template>
+                                </p>
+                            </template>
                         </template>
 
                         <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
@@ -2368,28 +2386,9 @@ watch(commandReady, (ready) => {
                                      outright — that file declares its own env. -->
                                 <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
 
-                                <!-- Read in an ordinary browser: the same handoff is one click away IF the app is
-                                 already installed (the OS routes the link), and one download away if it isn't.
-                                 Deliberately the quietest thing on the card — the command above is the path that
-                                 works on every machine, and this is an offer, not a redirect. Compose declares its
-                                 own shape and is chosen by people who want a file, so it is left alone.
-                                 Never on a phone: every link here is a Windows or Linux installer, and a phone
-                                 that follows one downloads a .msi it cannot open. The app is worth offering to
-                                 this person — just on the machine they are about to open the emailed link on,
-                                 where this same block is waiting and the download actually runs. -->
-                                <p v-if="!desktop && !mobile && runTab !== `compose`" class="border-t border-line pt-3 text-2xs text-subtle">
-                                    Rather not use a terminal?
-                                    <button type="button" class="text-link hover:underline" @click="runHere">Open the Intentic app</button>, or
-                                    download it for <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Windows</a>,
-                                    <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux AppImage</a>,
-                                    <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a> or
-                                    <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>.
-                                    <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
-                                         YOUR build once staged — the same story as the dev sandbox image above. -->
-                                    <span v-if="platformUrlOverride" class="text-warning">
-                                        Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code> first.
-                                    </span>
-                                </p>
+                                <!-- The app's offer used to close this card. It is under the ladder now, beside the
+                                     other answers to "which machine" — where it reaches the reader who has not
+                                     already committed to pasting something, which is the one it was written for. -->
                             </template>
                         </template>
 

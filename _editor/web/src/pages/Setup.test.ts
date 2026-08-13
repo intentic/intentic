@@ -242,17 +242,25 @@ it(`renames the sandbox it created, from the step itself`, async () => {
  * without a single choice: the page creates the row the ordinary way, provisions a machine for it, and shows
  * the wait — no command, no copy button, nothing to paste. The classic tests above run with the offer
  * answering "disabled", which is every self-hosted platform and every platform from before the lane existed. */
-it(`auto-starts a hosted machine on arrival when the platform offers one`, async () => {
+it(`points a fresh sandbox at the free machine, and starts nothing until the button is pressed`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
     const el = await mount();
     // The row is created the ordinary way — the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(hostedProvision).toHaveBeenCalledWith(`new`);
+    // …but the machine is NOT. Arriving on a page used to cost a machine (and start its hour meter) for
+    // everybody who loaded it, including the reader who came to paste a command on hardware of their own.
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.textContent).not.toContain(`Starting the machine`);
+    // What the reader gets instead is the commitment, and the one fact that should inform it.
+    expect(buttonLabelled(`Start my machine`)).toBeDefined();
+    expect(el.textContent).toContain(`don't back it up`);
+
+    buttonLabelled(`Start my machine`)!.click();
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await nextTick();
     // The wait names its steps rather than asserting one sentence at every problem — see hostedWait.ts.
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).toContain(`Putting it on the internet`);
-    // Nothing pasteable on the zero-click path: the wait is the whole step.
-    expect(el.textContent).not.toContain(`Copy`);
 });
 
 /* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first
@@ -263,9 +271,12 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
+    buttonLabelled(`Start my machine`)!.click();
+    await vi.waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
     expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(el.textContent).toContain(`no capacity right now`);
     expect(nameRow()).toContain(`workspace`);
+    // The way out is the same button, now saying what pressing it would be.
+    expect(buttonLabelled(`Try again`)).toBeDefined();
 });
 
 // A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is —
@@ -330,15 +341,15 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
  * answer to "and then?", which is the question a price is read to settle.
  * The sentences that go with it are NOT on the card: three rungs of small print, side by side, is not a
  * picker. They follow the selection, one rung's worth at a time. */
-it(`states the hour ceiling and what follows it on the hosted card, with the small print under the row`, async () => {
+it(`states the hour ceiling and what follows it on the hosted card, with the small print beside the button`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
     expect(hosted?.textContent).toContain(`40h a month, then membership`);
-    expect(hosted?.textContent).not.toContain(`we remove it`);
-    // …and the chosen rung is the hosted one here, so its small print is what the row is followed by.
-    expect(el.textContent).toContain(`we remove it`);
+    // The card stays three lines: what this machine's disk is, the reader reads where they commit to it.
+    expect(hosted?.textContent).not.toContain(`back it up`);
     expect(el.textContent).toContain(`don't back it up`);
+    expect(el.textContent).toContain(`it's removed`);
 });
 
 // A member has no ceiling, so a member is shown none — the absence of the block is the whole contract.
@@ -354,6 +365,9 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
     const el = await mount();
+    buttonLabelled(`Start my machine`)!.click();
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await nextTick();
     const mine = [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I have`)) as HTMLButtonElement;
     mine.click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
@@ -389,7 +403,7 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
     addressOffer.mockResolvedValueOnce({ enabled: false });
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
     const el = await mount();
-    expect(hostedProvision).toHaveBeenCalled();
+    expect(buttonLabelled(`Start my machine`)).toBeDefined();
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
 });
