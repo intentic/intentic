@@ -106,6 +106,17 @@ binary reads `ZROK2_*` env vars (`ZROK2_API_ENDPOINT`, not `ZROK_API_ENDPOINT` �
 api-v2.zrok.io), its REST API consumes `application/zrok.v1+json` (plain JSON answers 500), and every
 already-exists case is a 409 that means success.
 
+### The failure mode to know about
+
+A frontend that answers **404 "share not found" for every address**, while the box says its share is
+`active` and the controller shows the name bound, is a frontend with the wrong `frontend_token` — it asks the
+controller "what belongs to me?" and is told, correctly, nothing. Its log says `retrieved '0' mappings` and
+nothing else is wrong anywhere. The bootstrap script scrapes that token out of a CLI table and on this
+deployment captured the table's border character instead, so the stack now re-reads it from the API and
+writes it into `frontend.yaml` on every deploy (`zrok2-frontend-token`, which the frontend waits for). If you
+ever see the symptom again, that service's log line — and `grep frontend_token` in the config volume — is the
+first place to look.
+
 ### Parked until private shares land
 
 SSH-shaped traffic can't ride a public HTTP frontend, so three things wait for zrok *private* `tcpTunnel`

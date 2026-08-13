@@ -190,8 +190,14 @@ fn connect(
     if connect_token.is_empty() {
         bail!("CONNECT_TOKEN is required (via the setup code or env) — copy the one-liner from the platform's setup screen.");
     }
+    /* A grant is what makes a sandbox reachable from anywhere; it is NOT what makes it run. Without one the
+     * box still starts and still answers on this machine's loopback — which is the whole of what a local-dev
+     * box, a sandbox published behind its owner's own domain, and the nightly update drill ever needed. This
+     * used to be a hard refusal, and that refusal took the update-survival drill (and every no-tunnel start)
+     * down with it: the sandbox it was drilling had never asked to be public. */
     if !provided_tunnel {
-        bail!("this sandbox has no reachability grant — re-open its setup screen and copy the command again\n       (the platform mints the grant with the setup code).");
+        eprintln!("intentic: no reachability grant — this sandbox will answer on this machine only (loopback).");
+        eprintln!("          Re-open its setup screen for a command that carries one, or publish it behind your own domain.");
     }
     // SELF_HOST still wants the user's OWN Cloudflare token: it publishes THIS machine's sshd so the sandbox
     // can deploy to it, which is the deploy engine's fabric — not the sandbox's, which the hub now serves.
@@ -233,10 +239,15 @@ fn connect(
     reporter.stage("pulling-image");
     ensure_image(&sandbox_image, &log)?;
 
-    // The address is the platform's answer, not something this flow provisions: the box enables against the
-    // hub itself and serves its own share. What used to be a Cloudflare tunnel mint plus a sidecar container
-    // is now two env values riding into the container below.
-    let sandbox_public_url = format!("https://{sandbox_hostname}");
+    /* The address is the platform's answer, not something this flow provisions: the box enables against the
+     * hub itself and serves its own share. What used to be a Cloudflare tunnel mint plus a sidecar container
+     * is now two env values riding into the container below. Empty when no grant came with the command — the
+     * daemon reads an empty SANDBOX_PUBLIC_URL as "loopback only", which is exactly what that sandbox is. */
+    let sandbox_public_url = if sandbox_hostname.is_empty() {
+        String::new()
+    } else {
+        format!("https://{sandbox_hostname}")
+    };
 
     // Expose THIS machine's sshd over its own tunnel so the sandbox can deploy to it through `cloudflared
     // access` — a NAT'd local machine the sandbox can't reach by IP.
@@ -385,7 +396,11 @@ fn connect(
     reporter.stage("verifying");
     let findings = doctor::verify_chain(
         &slug,
-        Some(&sandbox_public_url),
+        if sandbox_public_url.is_empty() {
+            None
+        } else {
+            Some(&sandbox_public_url)
+        },
         std::time::Duration::from_secs(120),
     );
     if let Some(summary) = checks::failure_summary(&findings) {
@@ -404,15 +419,23 @@ fn connect(
 
     println!("intentic sandbox started.");
     reporter.stage("done");
-    println!("Your sandbox will be reachable at {sandbox_public_url} (DNS may take a few seconds to propagate).");
-    println!(
-        "Return to the platform — your sandbox announces itself and setup continues automatically."
-    );
+    if sandbox_public_url.is_empty() {
+        println!("Your sandbox answers on this machine only — open it from the platform on this computer.");
+    } else {
+        println!("Your sandbox will be reachable at {sandbox_public_url} (DNS may take a few seconds to propagate).");
+        println!(
+            "Return to the platform — your sandbox announces itself and setup continues automatically."
+        );
+    }
 
     // Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command
     // carried. Runs after the "return to the platform" lines — the wizard's live gate flips on the sandbox
     // itself, independent of this stage — and never fails the setup.
-    if let (Some(dir), false) = (sync_dir, sync_pair_token.is_empty()) {
+    if let (Some(dir), false, false) = (
+        sync_dir,
+        sync_pair_token.is_empty(),
+        sandbox_public_url.is_empty(),
+    ) {
         if !run_desktop_sync(&container, &sandbox_public_url, &sync_pair_token, &dir) {
             eprintln!("intentic: warning — desktop sync didn't finish. Your sandbox is fine; enable sync any time from the workspace's Desktop sync card.");
         }
@@ -426,6 +449,7 @@ fn connect(
      * Never fails the setup. A machine that does not finish this is a machine whose Computers view says its
      * sandboxes are not visible — exactly what every sandbox said before this existed. */
     if !host_pair_token.is_empty()
+        && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
     {
         eprintln!("intentic: warning — this computer wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");

@@ -271,6 +271,39 @@ services:
 
   # ── zrok2 Frontend ────────────────────────────────────────────────────────
 
+  # The frontend answers by NAME, and it finds the names by asking the controller "what belongs to frontend
+  # <token>?" — so a wrong token there is not an error anywhere, just a frontend that serves 404 for every
+  # share while looking perfectly healthy. The bootstrap script scrapes that token out of a CLI TABLE, and on
+  # this deployment it captured the table's border character instead: `retrieved '0' mappings`, every sandbox
+  # address "not found", and nothing in any log naming the cause. So the token is re-read from the API — the
+  # authority for it — and written into the config on every deploy, before the frontend starts. Idempotent:
+  # when the file already says the right thing this rewrites the same bytes.
+  zrok2-frontend-token:
+    image: alpine/curl:8.14.1
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        token="$$(curl -sSf -H "x-token: $${ZROK2_ADMIN_TOKEN}" -H "accept: application/zrok.v1+json" \
+          "http://zrok2-controller:$${ZROK2_CTRL_PORT}/api/v2/frontends" \
+          | sed 's/.*"frontendToken":"\([^"]*\)".*/\1/')"
+        if [ -z "$$token" ] || [ "$${#token}" -lt 8 ]; then
+          echo "ERROR: the controller returned no usable frontend token" >&2; exit 1
+        fi
+        sed -i "s|^\(\s*frontend_token:\).*|\1 \"$$token\"|" /var/lib/zrok2/config/frontend.yaml
+        echo "frontend token written into frontend.yaml (length $${#token})"
+    environment:
+      ZROK2_ADMIN_TOKEN: ${ZROK2_ADMIN_TOKEN:?err}
+      ZROK2_CTRL_PORT: ${ZROK2_CTRL_PORT:-18080}
+    depends_on:
+      zrok2-controller:
+        condition: service_healthy
+    volumes:
+      - zrok2-config:/var/lib/zrok2
+    networks:
+      - zrok2
+
   zrok2-frontend:
     <<: *zrok2-image
     command: ["access", "dynamicProxy", "/var/lib/zrok2/config/frontend.yaml"]
@@ -278,8 +311,8 @@ services:
       ZROK2_API_ENDPOINT: http://zrok2-controller:${ZROK2_CTRL_PORT:-18080}
       HOME: /var/lib/zrok2
     depends_on:
-      zrok2-controller:
-        condition: service_healthy
+      zrok2-frontend-token:
+        condition: service_completed_successfully
     volumes:
       - zrok2-config:/var/lib/zrok2:ro
     ports:
