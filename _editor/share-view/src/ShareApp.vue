@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
-import { Icon } from "@intentic/ui";
+/* Both by FILE rather than through the barrel, which is boot.ts's rule and this is what enforces it: the barrel
+ * statically imports every component in the kit, and among them is the graph canvas, whose stylesheet import is
+ * a side effect no bundler will drop. Reached through the barrel, prose costs this page a fifth of a megabyte of
+ * Vue Flow — in the bundle a stranger downloads to read someone's transcript, for a canvas a conversation almost
+ * never contains. Reached by file, a `dag` figure loads it on demand and nothing else pays. */
+import Icon from "@intentic/ui/src/components/Icon.vue";
+import Markdown from "@intentic/ui/src/components/Markdown.vue";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
-import { copyCodeFromEvent, renderMarkdown } from "@intentic/ui/markdown";
 import { CHAT_SURFACE } from "@intentic-app/web/chat/chatSurface";
 import ChatToolCard from "@intentic-app/web/chat/ChatToolCard.vue";
 import { computed, provide, ref } from "vue";
@@ -29,10 +34,10 @@ const payload = computed(() => (result.ok ? result.payload : undefined));
 // transcript and a published one, stated once here (chatSurface.ts).
 provide(CHAT_SURFACE, shareSurface);
 
-// Prose goes through the shared engine with NO decorator. The app passes one that turns file mentions into
-// links into the workspace; here there is no workspace, and a link that navigated nowhere would be a promise
-// the page cannot keep.
-const prose = (text: string): string => renderMarkdown(text);
+/* Prose goes through the shared component with NO decorator. The app passes one that turns file mentions into
+ * links into the workspace; here there is no workspace, and a link that navigated nowhere would be a promise the
+ * page cannot keep. Everything else about the answer is the app's — including the figures in it, so a
+ * conversation shared for the diagram it drew shows the diagram. */
 
 const subtitle = computed(() => {
     const shared = payload.value;
@@ -76,10 +81,6 @@ const openThinking = ref<Record<number, boolean>>({});
 const toggleThinking = (index: number): void => {
     openThinking.value = { ...openThinking.value, [index]: !openThinking.value[index] };
 };
-
-// The rendered markdown carries its own controls — a code block's copy button. Delegated here for the same
-// reason the app delegates it: the buttons live inside v-html and can hold no component of their own.
-const onMarkdownClick = (event: MouseEvent): void => copyCodeFromEvent(event);
 </script>
 
 <template>
@@ -97,10 +98,13 @@ const onMarkdownClick = (event: MouseEvent): void => copyCodeFromEvent(event);
                 </p>
             </header>
 
-            <!-- `chat-turns` is the column the app reads a conversation in; `md-prose` + `chat-markdown` are
-                 what dress the rendered prose. All three come from the app's own stylesheets, which is why a
-                 shared page's type, spacing and code blocks match the chat rather than approximating it. -->
-            <main class="chat-turns flex flex-1 flex-col gap-3" @click="onMarkdownClick" @pointerdown="copyCodeFromEvent">
+            <!-- `chat-turns` is the column the app reads a conversation in; `chat-markdown` tunes the prose
+                 tokens for it (<Markdown> brings `md-prose` itself). Both come from the app's own stylesheets,
+                 which is why a shared page's type, spacing and code blocks match the chat rather than
+                 approximating it. -->
+            <!-- No copy delegation up here: a code block's button lives inside rendered prose, and <Markdown>
+                 binds its own — a second listener on this element would copy the same text twice. -->
+            <main class="chat-turns flex flex-1 flex-col gap-3">
                 <template v-for="(message, index) in payload.messages" :key="index">
                     <div v-if="dayMarks.get(index)" class="flex items-center gap-2 py-1 text-2xs text-subtle">
                         <span class="h-px flex-1 bg-line"></span>
@@ -153,12 +157,11 @@ const onMarkdownClick = (event: MouseEvent): void => copyCodeFromEvent(event);
                             <ChatToolCard v-for="tool in toolsOf(message)" :key="tool.id" :tool="tool" :live="LIVE" />
                         </div>
 
-                        <!-- eslint-disable-next-line vue/no-v-html -- the same sanitized engine the app's own prose goes through -->
-                        <div
+                        <Markdown
                             v-if="message.text"
-                            class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5"
-                            v-html="prose(message.text)"
-                        ></div>
+                            :source="message.text"
+                            class="chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5"
+                        />
                     </div>
                 </template>
             </main>

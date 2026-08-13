@@ -321,11 +321,13 @@
     }
 }
 
-/* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
-   removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but
-   prose.css's first/last-child edge rules then match the WRAPPER, where margin does nothing, so they are
-   restated one level down. Both parts are v-if'd on non-empty content, so whichever exists is correctly
-   first/last. */
+/* An assistant body is a run of parts (useMarkdown): prose in .md-part wrappers — at least two while the turn
+   streams, since the settled prefix and the still-writing tail are rendered apart — and any figures the answer
+   drew, which are components and so sit here as themselves. display:contents removes the prose wrappers from
+   layout so the text inside still behaves as direct children of .chat-markdown — but prose.css's first/last-child
+   edge rules then match the WRAPPER, where margin does nothing, so they are restated one level down. A figure
+   needs no such restatement: it is a real child, so prose.css collapses its outer edge directly. Empty parts are
+   dropped by the engine, so whichever exists is correctly first/last. */
 .chat-markdown > .md-part {
     display: contents;
 }

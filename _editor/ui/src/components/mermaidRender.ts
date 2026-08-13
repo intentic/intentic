@@ -23,8 +23,44 @@ import { mermaidTheme } from "./mermaidTheme.js";
 let ids = 0;
 let queue: Promise<unknown> = Promise.resolve();
 
-/* One diagram's SVG markup, or a rejection when mermaid will not draw it (invalid syntax, or a diagram type
- * this build does not know) — the caller shows the source instead.
+/* THE DEADLINE — the one failure a diagram cannot show on its own.
+ *
+ * MermaidDiagram has three states: drawn, refused, and not yet. A refusal puts the fenced source on screen, so
+ * every way this function can FAIL is already visible to the reader. What it cannot survive is a promise that
+ * never settles: the component keeps its "not yet" placeholder, which is a wash the size of a small diagram,
+ * and a reader looking at that grey box has no way to tell it from a diagram the app has quietly given up on.
+ *
+ * Two things in here can hang rather than fail. The import is a megabyte fetched over whatever link the app is
+ * running on, and a stalled response never rejects — it simply never arrives. Mermaid's own layout measures
+ * text in a scratch DOM, which a pathological diagram can sit in. So a render that misses this budget is
+ * treated exactly like a refusal, and the reader gets the source: what this surface showed before it drew
+ * diagrams at all, which makes a timeout no worse than not having the feature.
+ *
+ * It is also what stops ONE diagram from taking the page. The queue below only advances when this promise
+ * settles, so without a deadline a single hung render leaves every later diagram waiting behind it — a whole
+ * conversation of grey boxes from one bad draw. Generous on purpose: a slow first load should finish, not be
+ * cut off a second before it arrives. */
+const DRAW_BUDGET_MS = 15_000;
+
+/* A timed-out render may still be running when the next one starts, which is the interleaving the queue exists
+ * to prevent (see THE ID and THE ORDER above). Deliberate: that render has already failed the reader, and
+ * letting the rest of the page draw is worth more than protecting a result nobody is waiting for any more. */
+const bounded = async (work: Promise<string>): Promise<string> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new Error(`mermaid did not draw within ${DRAW_BUDGET_MS}ms`)), DRAW_BUDGET_MS);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+/* One diagram's SVG markup, or a rejection when mermaid will not draw it (invalid syntax, a diagram type this
+ * build does not know, or the deadline above) — the caller shows the source instead.
  *
  * `securityLevel: strict` is mermaid's own DOMPurify pass over every label plus no `click` bindings, which is
  * the defence markdown/render.ts already applies to the prose around the diagram; documents here are as
@@ -37,8 +73,9 @@ export const renderMermaid = (code: string, scheme: "light" | "dark", font: stri
         const { svg } = await mermaid.render(`md-mermaid-${(ids += 1)}`, code);
         return svg;
     };
-    // Both arms run `work`: one diagram's refusal must not stop the next one from being drawn.
-    const next = queue.then(work, work);
+    const start = (): Promise<string> => bounded(work());
+    // Both arms run `start`: one diagram's refusal must not stop the next one from being drawn.
+    const next = queue.then(start, start);
     queue = next.catch(() => undefined);
     return next;
 };

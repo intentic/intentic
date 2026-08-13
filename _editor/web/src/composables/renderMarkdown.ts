@@ -1,7 +1,9 @@
 import {
     createStreamingMarkdown as createEngineStream,
     type MarkdownDecorator,
+    type MarkdownPart,
     renderMarkdown as renderEngine,
+    renderMarkdownParts as renderEngineParts,
     type RenderedMarkdown,
     type StreamingMarkdown,
 } from "@intentic/ui/markdown";
@@ -17,7 +19,7 @@ import { linkifyFileRefs } from "./markdownFileLinks";
  * so nothing in the app can accidentally render prose WITHOUT its file links. */
 
 export { markdownParseCount, settledEnd } from "@intentic/ui/markdown";
-export type { RenderedMarkdown, StreamingMarkdown };
+export type { MarkdownPart, RenderedMarkdown, StreamingMarkdown };
 
 /* The app's decorator, in the one shape both ways of rendering prose take it. A surface that renders to a
  * STRING (the chat, below) hands it to the engine; one that renders through the kit's <Markdown> component (the
@@ -39,6 +41,11 @@ export const fileLinkDecorator =
         linkifyFileRefs(fragment, options?.dir, options?.agent);
 
 export const renderMarkdown = (source: string, agent?: string): string => renderEngine(source, fileLinkDecorator({ agent }));
+
+// The same document as the pieces a surface mounts — prose runs plus the figures between them (see the engine's
+// renderMarkdownParts). What a chat turn renders, so an agent's ```mermaid draws in the answer that wrote it
+// rather than only in the file it later saves it to.
+export const renderMarkdownParts = (source: string, agent?: string): RenderedMarkdown => renderEngineParts(source, fileLinkDecorator({ agent }));
 
 // One renderer per streaming message (the caller holds it for the message's lifetime) — see the engine for
 // why a live turn is split into a settled prefix and a re-parsed tail. The scope arrives as a GETTER precisely

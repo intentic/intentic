@@ -90,10 +90,14 @@ watch(drawn, () => void nextTick(floorWidth));
     <!-- Centred with `text-center` rather than flex: an over-wide flex child centred in a scroll container has
          its overflowing left edge clipped unreachably, and the whole point of the floor above is that this
          container sometimes scrolls. An svg is inline, so text alignment centres it while it still fits. -->
-    <div ref="host" class="md-mermaid">
-        <div v-if="drawn !== undefined" class="my-4 overflow-x-auto text-center" v-html="drawn"></div>
+    <!-- The block rhythm is on the ROOT, as it is for every other figure kind, so a surface that collapses its
+         own first and last block (prose.css, and a chat bubble's tighter version of it) reaches this one too. On
+         the inner div it collapsed straight back out through this element and a diagram ending an answer hung a
+         stray line of space under it, inside the bubble. -->
+    <div ref="host" class="md-mermaid my-4">
+        <div v-if="drawn !== undefined" class="overflow-x-auto text-center" v-html="drawn"></div>
         <div v-else-if="refused" v-html="source"></div>
         <!-- Pending: a wash the size of a small diagram, so the page does not jump when one arrives. -->
-        <div v-else class="my-4 h-24 rounded-lg bg-content/[0.04]"></div>
+        <div v-else class="h-24 rounded-lg bg-content/[0.04]"></div>
     </div>
 </template>

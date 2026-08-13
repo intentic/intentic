@@ -8,7 +8,14 @@
 import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
-import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
+import { createStreamingMarkdown, markdownParseCount, renderMarkdown, type RenderedMarkdown, settledEnd } from "./renderMarkdown";
+
+/* A rendered document is a list of parts — prose runs as HTML, figures as data (see renderMarkdownParts). These
+ * two read it the way the assertions below want to talk about it: what a reader would SEE, and which run is
+ * which. `prose` is deliberately not the whole document: a figure has no html, and a test that stringified one
+ * would be asserting on the fence source the surface no longer shows. */
+const prose = (parts: RenderedMarkdown): string => parts.flatMap((part) => (part.kind === `html` ? [part.html] : [])).join(``);
+const runs = (parts: RenderedMarkdown): number => parts.filter((part) => part.kind === `html`).length;
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
 // return a string, whatever it's handed — the assistant bubble re-runs it on every partial-markdown delta, so a
@@ -131,7 +138,7 @@ describe(`markup that would render invisibly`, () => {
     });
 
     it(`recovers the same way on a streaming tail frame`, () => {
-        expect(createStreamingMarkdown(() => undefined).render(`4.`).tail).toContain(`4.`);
+        expect(prose(createStreamingMarkdown(() => undefined).render(`4.`))).toContain(`4.`);
     });
 
     it(`leaves markup that is visible without text alone`, () => {
@@ -176,26 +183,28 @@ describe(`streaming split`, () => {
         expect(settledOf(`- item\n\n    continued body\n`)).toBe(``);
     });
 
+    /* The settled prefix and the still-writing tail are separate PARTS, and the first must come back
+     * byte-identical while it stands: an identical v-html string is what Vue skips patching, which is what
+     * leaves the DOM — and any text the user has selected in it — alone while the turn writes on. */
     it(`renders the settled part byte-identically across frames and only grows the tail`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const first = stream.render(`Done paragraph.\n\nStill wri`);
         const second = stream.render(`Done paragraph.\n\nStill writing here`);
-        expect(first.settled).toBe(second.settled);
-        expect(first.settled).toContain(`Done paragraph.`);
-        expect(second.tail).toContain(`Still writing here`);
-        expect(second.tail).not.toContain(`Done paragraph.`);
+        expect(first[0]).toEqual(second[0]);
+        expect(prose(first.slice(0, 1))).toContain(`Done paragraph.`);
+        expect(prose(second.slice(1))).toContain(`Still writing here`);
+        expect(prose(second.slice(1))).not.toContain(`Done paragraph.`);
     });
 
     it(`concatenates to the same visible text as a whole-message render`, () => {
         const text = `# Title\n\nSome prose with \`code\`.\n\n- a\n- b\n\nTail sentence.`;
         const stream = createStreamingMarkdown(() => undefined);
-        const { settled, tail } = stream.render(text);
         const strip = (html: string): string =>
             html
                 .replace(/<[^>]*>/g, ``)
                 .replace(/\s+/g, ` `)
                 .trim();
-        expect(strip(settled + tail)).toBe(strip(renderMarkdown(text)));
+        expect(strip(prose(stream.render(text)))).toBe(strip(renderMarkdown(text)));
     });
 
     /* The reason the split exists. Streaming a message one character at a time, the settled prefix must be
@@ -220,8 +229,61 @@ describe(`streaming split`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         stream.render(`First version.\n\nMore text`);
         const rewritten = stream.render(`Different entirely.\n\nOther`);
-        expect(rewritten.settled).toContain(`Different entirely.`);
-        expect(rewritten.settled).not.toContain(`First version.`);
+        expect(prose(rewritten)).toContain(`Different entirely.`);
+        expect(prose(rewritten)).not.toContain(`First version.`);
+    });
+});
+
+/* FIGURES IN A TURN THAT IS STILL BEING WRITTEN. The transcript renders an answer as parts precisely so an
+ * agent's ```mermaid draws in the chat and not only in the file it later saves — and a live turn is where that
+ * has to hold, because a diagram is usually the last thing an answer contains and the turn it belongs to can
+ * run for minutes after writing it.
+ *
+ * Whether mermaid can DRAW a given body is mermaid's own question, answered at mount (markdownMermaid.test.ts).
+ * These pin the half this module owns: when a fence becomes a figure, and what happens to it as the text grows. */
+describe(`streaming a document with a figure in it`, () => {
+    const DIAGRAM = '```mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n```';
+
+    it(`leaves a half-written fence as prose, so no diagram is drawn from a partial body`, () => {
+        const stream = createStreamingMarkdown(() => undefined);
+        const parts = stream.render('Here it is.\n\n```mermaid\nflowchart LR\n    a["One"] -->');
+        expect(parts.every((part) => part.kind === `html`)).toBe(true);
+        // The reader watches the source arrive, which is the honest thing to show while it is arriving.
+        expect(prose(parts)).toContain(`flowchart LR`);
+    });
+
+    /* The reason the TAIL is split into parts too. A diagram nothing follows never settles, so a tail left whole
+     * would hold it as arrow syntax until the turn ended — and an answer that ends on its diagram is the common
+     * case, not the corner one. */
+    it(`draws a closed fence the answer ends on, without waiting for a block after it`, () => {
+        const stream = createStreamingMarkdown(() => undefined);
+        const parts = stream.render(`Here it is.\n\n${DIAGRAM}`);
+        expect(parts.filter((part) => part.kind === `figure`)).toHaveLength(1);
+        expect(prose(parts)).toContain(`Here it is.`);
+        // The fence source is gone from the prose — the figure replaced it rather than joining it.
+        expect(prose(parts)).not.toContain(`flowchart LR`);
+    });
+
+    /* A figure comes back BY IDENTITY while its prefix stands, which is what keeps mermaid from redrawing on
+     * every frame of the turn: an unchanged prop is a component that never re-renders, never re-imports a
+     * megabyte of grammars, and never flashes its placeholder in the middle of an answer. */
+    it(`hands back the same figure as the turn writes on`, () => {
+        const stream = createStreamingMarkdown(() => undefined);
+        const before = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nStill wri`);
+        const after = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nStill writing here`);
+        const figure = before.find((part) => part.kind === `figure`);
+        expect(figure).toBeDefined();
+        expect(after.find((part) => part.kind === `figure`)).toBe(figure);
+    });
+
+    // Prose either side of a diagram is its own run, and stays on its own side of it.
+    it(`cuts the document into runs around the figure, in reading order`, () => {
+        const stream = createStreamingMarkdown(() => undefined);
+        const parts = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nTail`);
+        expect(parts.map((part) => part.kind)).toEqual([`html`, `figure`, `html`, `html`]);
+        expect(runs(parts)).toBe(3);
+        expect(prose(parts.slice(0, 1))).toContain(`Intro.`);
+        expect(prose(parts.slice(2))).toContain(`After.`);
     });
 });
 

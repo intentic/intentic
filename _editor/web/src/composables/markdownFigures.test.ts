@@ -91,10 +91,15 @@ describe(`<Markdown> with figures`, () => {
      * What is checked is everything up to that boundary: the fence became a figure, it is captioned, and it mounted a
      * graph with an explicit height. The node mapping itself is covered by typing plus figures.test.ts, and the
      * rendering below it is DagGraph's, which the app already relies on elsewhere. */
-    it(`renders a dag figure as a captioned, explicitly sized graph frame`, () => {
+    // Awaited, unlike every other figure kind here: the dag is the one branch MarkdownFigure imports lazily, so
+    // it arrives a microtask after mount rather than with it (see DagFigure.vue for what that buys).
+    it(`renders a dag figure as a captioned, explicitly sized graph frame`, async () => {
         const host = render(
             `\`\`\`dag\n{ "title": "The wire", "nodes": [{ "id": "web", "label": "Browser app", "note": "Vue" }, { "id": "daemon", "label": "Daemon" }], "edges": [{ "from": "web", "to": "daemon" }] }\n\`\`\``,
         );
+        await vi.waitFor(() => {
+            expect(host.querySelector(`figure`)).not.toBeNull();
+        });
         const figure = host.querySelector(`figure`);
         expect(figure?.querySelector(`figcaption`)?.textContent).toBe(`The wire`);
         // The frame carries its own height because prose cannot host a canvas of unknown height.

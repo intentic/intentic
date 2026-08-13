@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { type CodeBlock, codeBlockHtml, escapeHtml } from "./code.js";
+import { type Figure, splitFigureSegments } from "./figures.js";
 
 /* Render untrusted markdown (workspace files, agent chat output, memory notes) to SANITIZED HTML for v-html.
  * Vue's v-html does NOT sanitize, so we must do it ourselves — marked passes inline HTML through, so without
@@ -38,14 +39,12 @@ const CODE_PLACEHOLDER = /<pre data-md-code="(\d+)"><\/pre>/g;
  * that a decorator only ever authors markup of its own, never re-admits markup from the source. */
 export type MarkdownDecorator = (fragment: DocumentFragment) => void;
 
-// Sanitized HTML plus the code blocks its placeholders stand for. Split from substitution so a streaming
-// turn can parse its settled prefix once and still pick up highlighting that lands later.
+// One prose run's sanitized HTML plus the code blocks its placeholders stand for. Split from substitution so a
+// streaming turn can parse its settled prefix once and still pick up highlighting that lands later.
 interface MarkdownParts {
     readonly html: string;
     readonly blocks: readonly CodeBlock[];
 }
-
-const EMPTY: MarkdownParts = { html: ``, blocks: [] };
 
 // Number of markdown parses since load. The streaming split exists to keep this proportional to an answer's
 // BLOCK count rather than its frame count; renderMarkdown.test.ts asserts exactly that, which is the only
@@ -100,8 +99,56 @@ const substitute = (parts: MarkdownParts, colour: boolean): string =>
 
 const asText = (source: string): string => (typeof source === `string` ? source : String(source ?? ``));
 
-// Whole-message render: everything is finished text, so every code block is worth colouring.
+// ONE PROSE RUN, as a string. The engine's smallest unit and everything below is built out of it; a surface
+// renders a whole document through the parts API instead, which is the only shape a figure fits in.
 export const renderMarkdown = (source: string, decorate?: MarkdownDecorator): string => substitute(parseParts(asText(source), decorate), true);
+
+/* ---- a document, as the pieces a surface can actually mount ------------------------------------------------
+ *
+ * A figure fence (figures.ts) is a COMPONENT, and there is nowhere in an HTML string to put one — so a document
+ * that holds figures cannot be rendered as one v-html and a surface that insists on a string is a surface where
+ * every diagram stays a wall of arrow syntax. That was the chat transcript for as long as it rendered its two
+ * streaming halves as two strings: the file preview drew the mermaid an agent wrote, and the answer that wrote
+ * it did not.
+ *
+ * So the engine's document-level output is a LIST: prose runs already sanitized to HTML, and figures as data
+ * for the caller to draw. A document without figures is one part and renders exactly as it always did, which is
+ * the property that keeps this free — no surface pays markup, layout or a wrapper for a feature it never uses. */
+export type MarkdownPart = { readonly kind: "html"; readonly html: string } | { readonly kind: "figure"; readonly figure: Figure };
+
+export type RenderedMarkdown = readonly MarkdownPart[];
+
+/* The parse, held between renders. A prose run keeps its parsed PARTS rather than its finished html because
+ * substitution has to run again on every render — a code block that was still uncoloured when its run settled
+ * picks up its highlighting from a later pass (see `substitute`) without re-parsing anything. */
+type ParsedPart = { readonly kind: "prose"; readonly parts: MarkdownParts } | { readonly kind: "figure"; readonly figure: Figure };
+
+const parseDocument = (text: string, decorate: MarkdownDecorator | undefined): readonly ParsedPart[] =>
+    splitFigureSegments(text).map((segment) =>
+        segment.kind === `prose` ? { kind: `prose`, parts: parseParts(segment.text, decorate) } : { kind: `figure`, figure: segment.figure },
+    );
+
+/* A parsed document → what the surface renders. Figure parts are passed through BY IDENTITY, which is what
+ * keeps a diagram from being redrawn on every frame of a streaming turn: the prop the component receives is the
+ * same object it already has, so it never re-renders, never re-imports mermaid, and never flashes its
+ * placeholder in the middle of an answer.
+ *
+ * An empty prose run is dropped rather than rendered as an empty wrapper. Surfaces style their first and last
+ * block by position (prose.css), and a blank part at either end would take that position and silently move a
+ * document's edges. */
+const renderDocument = (document: readonly ParsedPart[], colour: boolean): MarkdownPart[] =>
+    document.flatMap((part): MarkdownPart[] => {
+        if (part.kind === `figure`) {
+            return [part];
+        }
+        const html = substitute(part.parts, colour);
+        return html === `` ? [] : [{ kind: `html`, html }];
+    });
+
+// Whole-message render: everything is finished text, so every code block is worth colouring and every closed
+// figure fence is worth drawing.
+export const renderMarkdownParts = (source: string, decorate?: MarkdownDecorator): RenderedMarkdown =>
+    renderDocument(parseDocument(asText(source), decorate), true);
 
 /* Streaming split — the answer a turn is still writing is re-rendered on every animation frame (the
  * typewriter loop appends a few characters per frame), and re-parsing + re-sanitizing the WHOLE message each
@@ -184,12 +231,6 @@ export const settledEnd = (text: string, from: number): number => {
     return settled;
 };
 
-export interface RenderedMarkdown {
-    // `settled` is stable across frames for a given prefix; `tail` is the part still being written.
-    readonly settled: string;
-    readonly tail: string;
-}
-
 export interface StreamingMarkdown {
     readonly render: (source: string) => RenderedMarkdown;
 }
@@ -198,7 +239,7 @@ export interface StreamingMarkdown {
 export const createStreamingMarkdown = (decorate?: MarkdownDecorator): StreamingMarkdown => {
     let boundary = 0;
     let settledSource = ``;
-    let settledParts = EMPTY;
+    let settled: readonly ParsedPart[] = [];
     return {
         render: (source) => {
             const text = asText(source);
@@ -206,7 +247,7 @@ export const createStreamingMarkdown = (decorate?: MarkdownDecorator): Streaming
             if (!text.startsWith(settledSource)) {
                 boundary = 0;
                 settledSource = ``;
-                settledParts = EMPTY;
+                settled = [];
             }
             const next = settledEnd(text, boundary);
             if (next > boundary) {
@@ -217,11 +258,20 @@ export const createStreamingMarkdown = (decorate?: MarkdownDecorator): Streaming
                 // the cut, a reference-style link defined earlier) then still does, and any seam artifact in
                 // the tail heals the moment it settles. This runs once per completed block — not per frame,
                 // which is the entire point.
-                settledParts = parseParts(settledSource, decorate);
+                settled = parseDocument(settledSource, decorate);
             }
-            // The tail is not coloured: its text changes every frame, so highlighting it would thrash the
-            // cache for a block that is about to settle and be highlighted exactly once.
-            return { settled: substitute(settledParts, true), tail: substitute(parseParts(text.slice(boundary), decorate), false) };
+            /* The tail is split into parts too, not left as one string — otherwise a diagram DRAWS only once
+             * something follows it, and the diagram an answer ends on is exactly the one nothing follows. It
+             * would sit as arrow syntax for the rest of the turn (minutes, if the agent is running tools) and
+             * become a picture at the end, which reads as the app noticing late.
+             *
+             * Splitting it is safe for the same reason settling is: a boundary is always outside a fence, so a
+             * half-written diagram is never a figure — an unclosed fence stays prose by construction
+             * (splitFigureSegments), and the closing backticks are what turn it into a picture.
+             *
+             * The tail is not coloured: its text changes every frame, so highlighting it would thrash the
+             * cache for a block that is about to settle and be highlighted exactly once. */
+            return [...renderDocument(settled, true), ...renderDocument(parseDocument(text.slice(boundary), decorate), false)];
         },
     };
 };

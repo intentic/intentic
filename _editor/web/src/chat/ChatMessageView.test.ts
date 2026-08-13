@@ -7,6 +7,11 @@ import type { ChatMessage } from "../composables/chat/transcript";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
 const roster = vi.hoisted(() => ({ running: 0 }));
+// What the markdown engine hands this row for the message under test — prose runs, and the figures between them
+// (see useMarkdown). Empty for every test that is not about the answer's body.
+const markdown = vi.hoisted(() => ({
+    parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
+}));
 
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
@@ -37,9 +42,22 @@ vi.hoisted(() => {
     };
 });
 
+// Taken as a namespace rather than destructured: this file already imports `h` and `defineComponent` at the top,
+// and a factory that names them again shadows them.
 vi.mock("@intentic/ui", async () => {
-    const { ref } = await import("vue");
-    return { useDevice: () => ({ mobile: ref(false) }) };
+    const vue = await import("vue");
+    return {
+        useDevice: () => ({ mobile: vue.ref(false) }),
+        /* WHICH picture a figure gets is the design system's question (MarkdownFigure, and mermaid's own parser
+         * below it); what this row owns is whether a figure part reaches the bubble at all. So it stands in as a
+         * marker naming the kind, rather than dragging a megabyte of diagram grammars into a jsdom transcript. */
+        MarkdownFigure: vue.defineComponent({
+            props: { figure: { type: Object, required: true } },
+            render(): unknown {
+                return vue.h(`div`, { class: `figure-stub` }, String(this.figure[`kind`]));
+            },
+        }),
+    };
 });
 vi.mock("@intentic/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
 // withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
@@ -63,7 +81,7 @@ vi.mock("../composables/chat/transcript", async () => {
 });
 vi.mock("../composables/useMarkdown", async () => {
     const { computed } = await import("vue");
-    return { useMarkdown: () => computed(() => ({ settled: ``, tail: `` })) };
+    return { useMarkdown: () => computed(() => markdown.parts) };
 });
 vi.mock("../composables/workspace/openFileRef", () => ({ openFileRefFromEvent: vi.fn() }));
 vi.mock("../composables/workspace/useHistory", () => ({ restoreSnapshot: vi.fn() }));
@@ -137,6 +155,7 @@ beforeEach(() => {
     vi.setSystemTime(1_000_000);
     clock.turnStartedAt = Date.now() - 35_000;
     roster.running = 0;
+    markdown.parts = [];
 });
 
 afterEach(() => {
@@ -272,6 +291,38 @@ describe(`ChatMessageView question card`, () => {
 /* An errand is the app's prompt, not the user's (errands.ts): the row says what was asked for, and the words
  * the agent actually got are behind one press rather than gone — the audit trail is the whole reason this is a
  * fold rather than a suppression. */
+/* THE ANSWER'S BODY, which is prose AND the pictures drawn in it. A turn is rendered as parts precisely so a
+ * ```mermaid an agent writes becomes a diagram in the chat rather than a wall of arrow syntax — for a long time
+ * the file preview drew the diagrams and the answer that wrote them did not. */
+describe(`ChatMessageView answer body`, () => {
+    const body = { id: 3, role: `assistant`, text: `Here it is.` } as const satisfies ChatMessage;
+
+    it(`draws a figure the answer wrote, in its place among the prose`, () => {
+        markdown.parts = [
+            { kind: `html`, html: `<p>Here it is.</p>` },
+            { kind: `figure`, figure: { kind: `mermaid` } },
+            { kind: `html`, html: `<p>And after.</p>` },
+        ];
+        const element = mount(body);
+        const rendered = element.querySelector(`.chat-markdown`)?.children ?? [];
+        expect([...rendered].map((child) => child.className)).toEqual([`md-part`, `figure-stub`, `md-part`]);
+        expect(rendered[1]?.textContent).toBe(`mermaid`);
+    });
+
+    /* The shape every message that holds no figure renders in, and the reason the parts are wrapped in
+     * display:contents rather than laid out: a turn's prose must reach .chat-markdown as its own children, or
+     * prose.css's edge rules land on a wrapper and the bubble gains margins it never had. */
+    it(`keeps a figure-free answer as plain prose wrappers`, () => {
+        markdown.parts = [
+            { kind: `html`, html: `<p>Settled.</p>` },
+            { kind: `html`, html: `<p>Still writing</p>` },
+        ];
+        const element = mount(body);
+        expect(element.querySelectorAll(`.chat-markdown > .md-part`)).toHaveLength(2);
+        expect(element.querySelector(`.figure-stub`)).toBeNull();
+    });
+});
+
 describe(`ChatMessageView errand row`, () => {
     const errand = ERRANDS.landConflict;
     const prompt = errandPrompt(errand, [`What blocked the land:\nroot\n  - src/auth/session.ts`]);

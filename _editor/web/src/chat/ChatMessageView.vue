@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type IconName, useDevice } from "@intentic/ui";
+import { type IconName, MarkdownFigure, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -857,12 +857,16 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
 
-            <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
-                 (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is
-                 display:contents, so the prose still lays out as direct children of .chat-markdown. -->
+            <!-- The answer, as the parts the engine cut it into (see useMarkdown): prose runs, and the figures
+                 an agent drew between them. Several v-html slots rather than one, and that is the streaming
+                 property — a settled run is unchanged between frames, so Vue leaves its DOM (and the user's
+                 selection) alone while only the short tail is re-rendered. `.md-part` is display:contents, so
+                 the prose still lays out as direct children of .chat-markdown. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
-                <div v-if="body.settled" class="md-part" v-html="body.settled"></div>
-                <div v-if="body.tail" class="md-part" v-html="body.tail"></div>
+                <template v-for="(part, index) in body" :key="index">
+                    <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
+                    <MarkdownFigure v-else :figure="part.figure" />
+                </template>
             </div>
 
             <div v-if="message.plan" class="chat-surface w-full overflow-hidden rounded-xl">
@@ -877,7 +881,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <span v-else-if="message.plan.status === 'rejected'" class="text-2xs font-medium text-muted">✕ Kept planning</span>
                     <span v-else-if="message.plan.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
                 </div>
-                <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3" v-html="plan.settled"></div>
+                <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3">
+                    <template v-for="(part, index) in plan" :key="index">
+                        <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
+                        <MarkdownFigure v-else :figure="part.figure" />
+                    </template>
+                </div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
                          and the container is the isolation boundary. -->

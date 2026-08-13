@@ -54,9 +54,18 @@ export default defineConfig({
         // The floor for what the page uses unguarded, and generous about who can read a shared link: a
         // recipient's browser is not one we chose.
         target: "es2022",
-        // Grammars and the highlighter load on demand — a conversation with no code in it should not pay for
-        // shiki at all. Chunks are fine here (unlike the widget, which must be one file): the daemon copies the
-        // whole directory, and every asset URL is absolute under `base`.
-        rollupOptions: {},
+        /* Grammars and the highlighter load on demand — a conversation with no code in it should not pay for
+         * shiki at all. Chunks are fine here (unlike the widget, which must be one file): the daemon copies the
+         * whole directory, and every asset URL is absolute under `base`.
+         *
+         * THE GRAPH CANVAS IS CUT OUT BY HAND, because nothing else can cut it. A transcript can contain a `dag`
+         * figure, so the prose surface reaches DagGraph — and DagGraph is Vue Flow, dagre and a stylesheet, a
+         * fifth of a megabyte. MarkdownFigure already imports it lazily (DagFigure.vue), which is enough in the
+         * app but not here: the design system's barrel ALSO imports it statically, the shared tool card pulls
+         * that barrel in for a highlighter and a diff stat, and a module with any static importer in the graph is
+         * bundled where the static importer lives. Named as a group, it becomes the chunk the lazy import already
+         * wanted it to be — fetched by the rare shared conversation that draws a graph, downloaded by nobody
+         * else. */
+        rollupOptions: { output: { advancedChunks: { groups: [{ name: `dag-graph`, test: /DagGraph\.vue|@vue-flow|@dagrejs/ }] } } },
     },
 });

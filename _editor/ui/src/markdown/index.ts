@@ -28,8 +28,10 @@ export {
 export {
     createStreamingMarkdown,
     type MarkdownDecorator,
+    type MarkdownPart,
     markdownParseCount,
     renderMarkdown,
+    renderMarkdownParts,
     type RenderedMarkdown,
     settledEnd,
     type StreamingMarkdown,

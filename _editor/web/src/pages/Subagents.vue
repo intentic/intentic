@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AgentProvider, NATIVE_PROVIDERS, type RestoredMessage, type SubagentSession } from "@intentic/sandbox-contract";
-import { formatTokens, Icon, type IconName, useDevice } from "@intentic/ui";
+import { formatTokens, Icon, type IconName, Markdown, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -18,7 +18,7 @@ import ProviderLogo from "../chat/ProviderLogo.vue";
 import IdentityTile from "../components/IdentityTile.vue";
 import RailCard from "../components/RailCard.vue";
 import RailLane from "../components/RailLane.vue";
-import { renderMarkdown } from "../composables/renderMarkdown";
+import { fileLinkDecorator } from "../composables/renderMarkdown";
 
 /* THE AGENTS THIS SANDBOX'S AGENTS STARTED — the third surface of the same kind, after the terminal panel and the
  * Browsers area. A turn's shell and its browser were already things the operator could open and look at; the
@@ -219,6 +219,12 @@ const transcript = useQuery({
     },
 });
 const messages = computed<RestoredMessage[]>(() => transcript.data.value ?? []);
+
+// A child's prose is the chat's prose: the same component the transcript renders an answer with, so a report
+// that draws a diagram draws it here too. The decorator is built once rather than in the template — it is a
+// prop, and a new function every frame would re-parse every message on every render. No agent scope: a child
+// works in its parent's tree, and the paths it names are that tree's.
+const decorate = fileLinkDecorator();
 
 // The transcript pane scrolls itself to the bottom as a running child writes — the same expectation the chat sets.
 const pane = ref<HTMLElement | undefined>();
@@ -428,8 +434,7 @@ watch(messages, () => {
                     v-if="current?.summary !== undefined && current.summary !== current.error"
                     class="scrollbar-thin max-h-56 shrink-0 overflow-y-auto py-2"
                 >
-                    <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
-                    <div class="chat-turns md-prose chat-markdown chat-markdown-compact" v-html="renderMarkdown(current.summary)"></div>
+                    <Markdown :source="current.summary" :decorate="decorate" class="chat-turns chat-markdown chat-markdown-compact" />
                 </div>
 
                 <!-- ITS WORK, in the chat's own shapes: prose as prose, tool calls as the very cards the
@@ -451,12 +456,12 @@ watch(messages, () => {
                             </p>
                             <template v-else>
                                 <div v-if="message.thinking" class="text-2xs italic leading-relaxed text-subtle">{{ message.thinking }}</div>
-                                <!-- `md-prose` is what dresses that output — every rule in prose.css hangs off
-                                     it, and without it the renderer's headings, lists, tables and code blocks
-                                     all came out as undifferentiated body text. `chat-markdown` is only the
-                                     transcript's tuning of those tokens. -->
-                                <!-- eslint-disable-next-line vue/no-v-html -- same sanitized renderer the chat's own prose goes through -->
-                                <div v-if="message.text" class="md-prose chat-markdown" v-html="renderMarkdown(message.text)"></div>
+                                <!-- <Markdown> brings `md-prose` with it, which is what dresses the output —
+                                     every rule in prose.css hangs off that class, and rendered without it the
+                                     headings, lists, tables and code blocks all came out as undifferentiated
+                                     body text. `chat-markdown` is only the transcript's tuning of those
+                                     tokens. -->
+                                <Markdown v-if="message.text" :source="message.text" :decorate="decorate" class="chat-markdown" />
                                 <ChatToolCard
                                     v-for="tool in message.tools ?? []"
                                     :key="tool.id"

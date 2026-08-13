@@ -20,8 +20,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { copyCodeFromEvent } from "../markdown/code.js";
-import { splitFigureSegments } from "../markdown/figures.js";
-import { type MarkdownDecorator, renderMarkdown } from "../markdown/render.js";
+import { type MarkdownDecorator, renderMarkdownParts } from "../markdown/render.js";
 import MarkdownFigure from "./MarkdownFigure.vue";
 
 defineOptions({ inheritAttrs: false });
@@ -33,22 +32,23 @@ const { source, decorate } = defineProps<{
     decorate?: MarkdownDecorator;
 }>();
 
-const segments = computed(() => splitFigureSegments(source));
+// Prose runs and figures, in reading order (see renderMarkdownParts). Every run goes through the same engine
+// with the same decorator, so file links and code blocks behave identically either side of a figure.
+const parts = computed(() => renderMarkdownParts(source, decorate));
 
 // The whole document as one string when it holds no figures — the shape every existing surface renders in.
-const plain = computed(() => (segments.value.length === 1 && segments.value[0]?.kind === `prose` ? renderMarkdown(source, decorate) : undefined));
-
-// Each run is rendered by the same engine with the same decorator, so file links and code blocks behave
-// identically either side of a figure.
-const run = (text: string): string => renderMarkdown(text, decorate);
+const plain = computed(() => {
+    const only = parts.value.length === 1 ? parts.value[0] : undefined;
+    return only?.kind === `html` ? only.html : undefined;
+});
 </script>
 
 <template>
     <div v-if="plain !== undefined" v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent" v-html="plain"></div>
     <div v-else v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent">
-        <template v-for="(segment, index) in segments" :key="index">
-            <div v-if="segment.kind === `prose`" class="md-run" v-html="run(segment.text)"></div>
-            <MarkdownFigure v-else :figure="segment.figure" />
+        <template v-for="(part, index) in parts" :key="index">
+            <div v-if="part.kind === `html`" class="md-run" v-html="part.html"></div>
+            <MarkdownFigure v-else :figure="part.figure" />
         </template>
     </div>
 </template>
