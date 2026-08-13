@@ -494,11 +494,8 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
 /* The label in front of each of step 1's two facts. Label and value are ONE size — the field size, since the
  * name becomes a field — and colour alone separates them: the name used to sit in the step's own heading, in
  * the heading's weight and the heading's colour, where the one word on the card worth changing read as the
- * label in front of it.
- * NO FIXED WIDTH ANY MORE. It used to be `w-16`, because the two facts were stacked and the width was what
- * lined their values up. They sit on ONE ROW now — the card reports two short facts and asked for a fifth of
- * the screen to do it, above the choice the page actually turns on — and on a row a padded label is just a
- * hole between a word and the value it introduces. */
+ * label in front of it. The rows' shared grid column, rather than padding on either label, lines the two
+ * values up. */
 const factLabel = `shrink-0 text-sm text-muted`;
 
 /* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
@@ -1789,11 +1786,11 @@ watch(commandReady, (ready) => {
                                     Use a new sandbox instead</button
                                 >.
                             </p>
-                            <!-- THE TWO FACTS, ON ONE ROW. They were stacked, each in a slot tall enough to become a
-                                 field, under a paragraph and a link — a card the height of the choice below it, to
-                                 say a name and a hostname. Side by side they are one line on a desktop and wrap the
-                                 way any sentence does on a phone, and the run step comes up the page to meet them. -->
-                            <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                            <!-- TWO STABLE ROWS. Putting both facts in one wrapping row made the loading address fit
+                                 beside the name, then drop below it when the real hostname and escape hatch arrived.
+                                 Both rows share the same label column, so their values begin on the same vertical
+                                 line; anything long in the address row wraps inside that value column. -->
+                            <div class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
                                 <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
                                  it is also where it is changed — and the change is a pencil, not a sentence: the
                                  card used to spend a paragraph explaining that the name was a default and a link
@@ -1805,8 +1802,8 @@ watch(commandReady, (ready) => {
                                  used to replace this row with a stacked field and two labelled buttons, which moved
                                  every glyph on the card and shoved the run step down the page — a jump, on a card
                                  whose whole job is to sit still while you read it. -->
-                                <div class="flex items-center gap-x-2">
-                                    <span :class="factLabel">Name</span>
+                                <span :class="factLabel">Name</span>
+                                <div class="flex min-w-0 items-center">
                                     <!-- The name and the field it becomes share ONE grid cell at one type scale, one
                                      height and one padding, so switching modes paints a border and nothing else.
                                      The hidden sizer gives the field the width of the text it holds instead of the
@@ -1880,8 +1877,7 @@ watch(commandReady, (ready) => {
                                     </div>
                                 </div>
 
-                                <!-- THE ADDRESS, BESIDE THE NAME — the two facts this card reports, on the line it
-                                     takes to report them.
+                                <!-- THE ADDRESS, UNDER THE NAME — the second fact this card reports.
                                      No padlock: the tunnel is https by construction, so the icon marked every
                                      address this page can ever show and therefore distinguished none of them — it
                                      was decoration sitting where a reader looks for the value.
@@ -1891,9 +1887,10 @@ watch(commandReady, (ready) => {
                                      errored with no way to choose a different address at all.
                                      The own-zone case is the one that is missing here, because it is the one that
                                      is not a fact: it is a form, and it keeps its own block under this row. -->
-                                <div v-if="addressFact !== `own`" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <template v-if="addressFact !== `own`">
                                     <span :class="factLabel">Address</span>
-                                    <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
+                                    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                        <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
                                          escape hatches: the machine is born holding its tunnel, and the page
                                          redirects the moment this turns real.
                                          KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing that rung starts
@@ -1902,39 +1899,40 @@ watch(commandReady, (ready) => {
                                          spinner and promised a domain that lane never asks for. A spinner before
                                          the button is pressed is the same lie the addressless platform used to
                                          tell. -->
-                                    <template v-if="addressFact === `hosted`">
-                                        <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
-                                        <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin /> Assigned as your machine starts…
-                                        </span>
-                                        <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
-                                    </template>
-                                    <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
+                                        <template v-if="addressFact === `hosted`">
+                                            <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
+                                            <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
+                                                <Icon name="spinner" spin /> Assigned as your machine starts…
+                                            </span>
+                                            <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
+                                        </template>
+                                        <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
                                          spinner nor the escape hatch (both ways off the default address mint a code
                                          too, so both are the same dead end here). -->
-                                    <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
-                                        This platform doesn't set one up
-                                    </span>
-                                    <template v-else>
-                                        <!-- `.title` — this is a NoticeModel, and interpolating the object itself
-                                             put its JSON on the card. -->
-                                        <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
-                                        <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
-                                        <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin /> Preparing your intentic domain…
+                                        <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
+                                            This platform doesn't set one up
                                         </span>
-                                        <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
+                                        <template v-else>
+                                            <!-- `.title` — this is a NoticeModel, and interpolating the object itself
+                                             put its JSON on the card. -->
+                                            <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
+                                            <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
+                                            <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
+                                                <Icon name="spinner" spin /> Preparing your intentic domain…
+                                            </span>
+                                            <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
                                              "Already reachable at a domain? Connect it" were two links, in two
                                              places, asking the same question — how should this be reached — and the
                                              reader had to know the difference between provisioning under their zone
                                              and attaching an address that already answers BEFORE they could tell
                                              which link was theirs. Now one link opens both, each stating what it
                                              does rather than what it is called. -->
-                                        <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
-                                            {{ reaching ? `Keep this address` : `Use a different address` }}
-                                        </button>
-                                    </template>
-                                </div>
+                                            <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
+                                                {{ reaching ? `Keep this address` : `Use a different address` }}
+                                            </button>
+                                        </template>
+                                    </div>
+                                </template>
                             </div>
 
                             <!-- What the two facts could not say on their own line, under the row rather than in
