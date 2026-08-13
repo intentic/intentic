@@ -4,7 +4,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import SpendFigure from "../components/SpendFigure.astro";
-import ChatMock from "../components/ChatMock.astro";
+import AppChat from "../components/AppChat.astro";
 
 /* /earn: THE ECONOMY, top-level, because it is the one system on this site with two audiences. A member asks
  * "what does the membership get me and where do my credits go"; a creator asks "what is my share and what is
@@ -97,48 +97,47 @@ const spendRules = [
  * The service lane demonstrated rather than described: a service is not a store you browse, it arrives as an
  * offer in the middle of real work, and the exchange IS the product's safety story. The offer is a CARD the
  * product raises — every number on it comes from the platform, and the Run button is the only thing that can
- * release the spend (the agent's own call sits parked on it). The bubbles below picture that shipped card,
- * buttons and all, rather than invent a nicer flow.
+ * release the spend (the agent's own call sits parked on it).
+ *
+ * DRAWN IN THE PRODUCT'S OWN CHAT (AppChat.astro), surface for surface, rather than in a generic chat client
+ * with avatars and name rows: the figure's claim is "this is what happens on your screen", and a mock-up that
+ * looks like Slack cannot make it. The thread therefore ends where the product ends it — on an unpressed
+ * card. Nothing after it exists yet, because nothing after it may exist until the reader would have clicked.
  *
  * The service and its price are FICTIONAL on purpose. It is a named example, not the demo service, because a real
  * provider sets its own price and pinning the figure to any real number would let this page pass one service's
- * rate off as a catalog-wide one. The balances are arithmetic off the published allowance, so they cannot
- * disagree with the figures above. */
+ * rate off as a catalog-wide one. The balance is the published allowance, so it cannot disagree with the
+ * figures above. */
 const SERVICE_CREDITS = 40;
 const chatBalance = pool.dailyCredits;
-const chatAfter = chatBalance - SERVICE_CREDITS;
-// The context bar's leading mark — a chat glyph, the in-product counterpart to the release figure's Discord
-// mark, so the two ChatMocks read as the same client on two surfaces.
-const chatGlyph = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg>`;
+/* The transcript's date marker, in the app's own format (@intentic/ui formatDate) and stamped at BUILD time.
+ * The app names a real day above the first turn of one, so a figure with no marker is missing a row the
+ * product always draws — and a hard-coded date is a screenshot that visibly rots. This is the honest third
+ * option: every deploy re-dates the figure to the day it shipped. */
+const chatDay = new Intl.DateTimeFormat(`en-US`, { year: `numeric`, month: `short`, day: `numeric` }).format(Date.now());
 
-// The same ChatMock the "release-captain" figure uses, so the two chats on the site are one drawing. A
-// message may carry an `offer` (the spend card) and a `receipt`; the component renders both as flat siblings
-// of the text, so the premium card is one surface on the thread rather than a card nested in a bubble.
 const chat = [
-    { author: "You", time: "2:14", text: "We're launching the beta next month. Which communities should we use, and when should we post?" },
+    { role: "user" as const, text: "We're launching the beta next month. Which communities should we use, and when should we post?" },
+    // The free work first, in the row the app gives a tool call — this is what "in the middle of real work"
+    // looks like, and it is also the evidence for the agent's own "I can do the obvious part myself".
+    { role: "tool" as const, name: "WebSearch", target: "r/SaaS r/startups launch threads", summary: "18 results" },
+    { role: "agent" as const, text: "I can scan the obvious subreddits myself for free. The catalog also lists a deeper option:" },
     {
-        author: "Agent",
-        agent: true,
-        time: "2:14",
-        text: "I can scan the obvious subreddits myself for free. The catalog also lists a deeper option:",
+        role: "offer" as const,
         offer: {
-            name: "acme.reddit-research",
-            chip: "Premium service",
-            pitch: "Audiences, posting windows and past results for your product.",
+            // The header the daemon writes, the body it fills, and the two buttons, in the app's own order.
+            title: "Run acme.reddit-research?",
+            description: "Audiences, posting windows and past results for your product.",
+            byline: "acme.reddit-research · by acme",
+            why: "Their window data covers the subreddits I can only guess at.",
+            request: "beta launch · developer tools · EU + US",
             // One line, not a labelled grid — price and balance straight from the platform.
-            meta: `${n(SERVICE_CREDITS)} credits per run · ${n(chatBalance)} left today`,
-            // The two buttons, drawn as shipped: the click IS the consent, so the figure shows a click rather
-            // than a typed "go ahead" the product no longer accepts as one.
+            meta: `${n(SERVICE_CREDITS)} credits per run · ${n(chatBalance)} of ${n(chatBalance)} left today`,
+            // The click IS the consent, so the figure shows a click rather than a typed "go ahead" the
+            // product no longer accepts as one.
             run: `Run — ${n(SERVICE_CREDITS)} credits`,
             skip: "Skip — free",
         },
-    },
-    {
-        author: "Agent",
-        agent: true,
-        time: "2:16",
-        text: "Three communities stand out, each with a matching posting window. The full report is in research/launch-plan.md.",
-        receipt: `acme.reddit-research · one run · ${n(SERVICE_CREDITS)} credits · ${n(chatAfter)} left today`,
     },
 ];
 
@@ -395,11 +394,12 @@ const rules = [
                     </div>
 
                     <figure class="w-full lg:justify-self-end">
-                        <ChatMock
+                        <AppChat
                             thread={chat}
-                            header={{ icon: chatGlyph, title: "chat" }}
-                            input="Ask anything…"
-                            ariaLabel="A conversation where the agent offers a paid service run and the owner approves it"
+                            title="Beta launch — where to post"
+                            day={chatDay}
+                            input="Answer above, or add a message for after…"
+                            ariaLabel="The product's chat, where the agent offers a paid service run and the owner has yet to approve it"
                         />
                         <figcaption class="mt-3 text-2xs leading-relaxed text-subtle">
                             The platform makes the call; the provider never learns who you are. Fails to answer → credits come straight back.

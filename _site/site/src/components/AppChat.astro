@@ -1,0 +1,199 @@
+---
+/* THE PRODUCT'S CHAT, AS THE PRODUCT DRAWS IT. Not a stylised chat client: every surface below is the app's
+ * own, ported from _editor/web/src/chat/ChatMessageView.vue and chat.css so a visitor who signs up recognises
+ * the screen they were shown. That is the whole point of the figure — a drawing that invents its own bubbles,
+ * avatars and name rows is a promise about a UI that does not exist.
+ *
+ * WHAT THE APP ACTUALLY LOOKS LIKE, and what this therefore does NOT have:
+ *   · No avatars, no author names, no "Agent" badges, no per-message timestamps. The transcript separates the
+ *     two speakers by SHAPE — the user's words sit in a right-aligned bubble, the agent's answer is a
+ *     full-width surface — because a chat panel read beside code cannot spend a 32px gutter on identity.
+ *   · A turn is a STACK, not a message: tool rows, then the answer, then whatever card the turn raised. The
+ *     cards are siblings of the text, never nested inside a bubble.
+ *   · One date marker above the first turn of a day, and nothing else between turns.
+ *
+ * Message roles map one-to-one onto the app's:
+ *   user   → .chat-prompt's bubble (right, capped at 85% of the column)
+ *   agent  → the rendered answer (.chat-surface-assistant, full width)
+ *   tool   → one meta-tier row: chevron, icon, tool name, mono target, right-aligned result
+ *   offer  → the priced service card the daemon raises, in its PENDING state — the two buttons are the
+ *            product's spend gate, so a figure about paying for a run has to show them unpressed. */
+
+export interface ChatOffer {
+    // Every field is the platform's, relayed through the daemon's offer card — the model types none of it.
+    // Header, then the body's four lines, then the two buttons: the app's own order.
+    title: string;
+    description: string;
+    byline: string;
+    why?: string;
+    request?: string;
+    meta: string;
+    run: string;
+    skip: string;
+}
+
+export type ChatEntry =
+    | { role: "user"; text: string }
+    | { role: "agent"; text: string }
+    | { role: "tool"; name: string; target: string; summary?: string }
+    | { role: "offer"; offer: ChatOffer };
+
+interface Props {
+    // The chat tab strip's title — the conversation's name, which the app lets you rename in place.
+    title: string;
+    // The date marker. One per day, above the first turn sent on it.
+    day?: string;
+    thread: ChatEntry[];
+    // The composer's placeholder. Omit and the figure ends at the transcript.
+    input?: string;
+    ariaLabel?: string;
+    class?: string;
+}
+
+const { title, day, thread, input, ariaLabel, class: klass = "" } = Astro.props;
+
+const icon = (paths: string, width = 1.5) =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+
+// The app's glyphs are Remix Icon through one <Icon> primitive; these are the same shapes drawn as inline
+// strokes, since the site carries no icon runtime.
+const chevronDown = icon('<path d="m6 9 6 6 6-6"/>');
+const chevronRight = icon('<path d="m9 6 6 6-6 6"/>');
+const plusGlyph = icon('<path d="M12 5v14M5 12h14"/>');
+const historyGlyph = icon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>');
+const popoutGlyph = icon('<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>');
+const searchGlyph = icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>');
+const starGlyph = icon('<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>');
+const checkGlyph = icon('<path d="M20 6 9 17l-5-5"/>', 2);
+const timesGlyph = icon('<path d="M18 6 6 18M6 6l12 12"/>', 2);
+const sparkGlyph = icon('<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>');
+const atGlyph = icon('<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>');
+const branchGlyph = icon('<circle cx="7" cy="6" r="2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="12" r="2"/><path d="M7 8v8M7 12h8"/>');
+const micGlyph = icon('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>');
+const stopGlyph = icon('<circle cx="12" cy="12" r="9"/><rect x="9" y="9" width="6" height="6" rx="1"/>');
+const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5 14.5 8.5-10"/>');
+---
+
+<div class={`card overflow-hidden shadow-xl shadow-black/30 ${klass}`} role="log" aria-label={ariaLabel}>
+    {/* THE CHAT TAB STRIP the panel wears: a status dot, the conversation's name, and the ✚ / past-chats /
+        pop-out trio the app keeps on the right. Meta tier throughout — it is chrome above the transcript, and
+        the app deliberately never lets it out-weigh a message. */}
+    <header class="flex items-center gap-1 border-b border-line px-1.5 py-1.5">
+        <span class="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-2xs">
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>
+            <span class="min-w-0 truncate text-content">{title}</span>
+            <span class="shrink-0 text-subtle [&>svg]:h-3 [&>svg]:w-3" set:html={chevronDown} />
+        </span>
+        <span class="flex shrink-0 items-center gap-1 pr-1 text-subtle [&>span]:flex [&>span]:h-6 [&>span]:w-6 [&>span]:items-center [&>span]:justify-center [&_svg]:h-3.5 [&_svg]:w-3.5">
+            <span set:html={plusGlyph} />
+            <span set:html={historyGlyph} />
+            <span set:html={popoutGlyph} />
+        </span>
+    </header>
+
+    {/* The transcript column. `gap-1` is the app's own spacing between the rows of a turn — the panel is dense
+        on purpose, because a turn is mostly chrome around an answer. */}
+    <div class="flex flex-col gap-1 px-4 pt-4 pb-2">
+        {day && <div class="flex justify-center pb-0.5 text-2xs text-subtle">{day}</div>}
+
+        {
+            thread.map((entry) => {
+                if (entry.role === "user") {
+                    /* The prompt: right-aligned, capped at 85% of the column, and in the app it STICKS to the
+                       top while its answer streams beneath. Extra air above and below is .chat-prompt's own. */
+                    return (
+                        <div class="flex flex-col items-end pt-3 pb-2">
+                            <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed text-content">{entry.text}</div>
+                        </div>
+                    );
+                }
+
+                if (entry.role === "tool") {
+                    /* One line per call, at the meta tier: the fold chevron, the tool's icon, its name, the
+                       target in mono, and the result phrase pushed right as a trailing annotation. */
+                    return (
+                        <div class="flex min-w-0 items-center gap-1.5 text-2xs text-muted">
+                            <span class="shrink-0 [&>svg]:h-3 [&>svg]:w-3" set:html={chevronRight} />
+                            <span class="shrink-0 text-link [&>svg]:h-3 [&>svg]:w-3" set:html={searchGlyph} />
+                            <span class="shrink-0 font-medium">{entry.name}</span>
+                            <span class="min-w-0 truncate font-mono">{entry.target}</span>
+                            {entry.summary && <span class="ml-auto shrink-0 tabular-nums text-subtle">{entry.summary}</span>}
+                        </div>
+                    );
+                }
+
+                if (entry.role === "agent") {
+                    // The rendered answer — full width, quieter border than the prompt, prose at the body tier.
+                    return <div class="chat-surface-assistant w-full rounded-lg px-3.5 py-2.5 text-xs leading-relaxed text-content">{entry.text}</div>;
+                }
+
+                /* THE SPEND GATE. One card on the transcript — header, body, buttons — not a card inside a
+                   bubble. It is shown pending because that is the only state in which the run has not
+                   happened yet: the agent's own call sits parked on the daemon until a button here settles it. */
+                const { offer } = entry;
+                return (
+                    <div class="chat-surface w-full overflow-hidden rounded-xl">
+                        <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                            <span class="shrink-0 text-primary-500 [&>svg]:h-3.5 [&>svg]:w-3.5" set:html={starGlyph} />
+                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{offer.title}</span>
+                        </div>
+
+                        <div class="flex flex-col gap-1 px-3.5 py-3">
+                            <span class="text-xs leading-relaxed text-content/85">{offer.description}</span>
+                            <span class="font-mono text-2xs text-subtle">{offer.byline}</span>
+                            {offer.why && <span class="text-2xs leading-snug text-subtle">The agent's case: {offer.why}</span>}
+                            {offer.request && <span class="truncate font-mono text-2xs text-subtle">Request: {offer.request}</span>}
+                            {/* Price and balance on one mono line, at the body tier: the only line on the card
+                                the reader must not skim past. */}
+                            <span class="pt-1 font-mono text-xs text-content">{offer.meta}</span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                            <span class="chat-decision chat-decision-primary">
+                                <span class="[&>svg]:h-3.5 [&>svg]:w-3.5" set:html={checkGlyph} />
+                                {offer.run}
+                            </span>
+                            <span class="chat-decision chat-decision-secondary">
+                                <span class="[&>svg]:h-3.5 [&>svg]:w-3.5" set:html={timesGlyph} />
+                                {offer.skip}
+                            </span>
+                        </div>
+                    </div>
+                );
+            })
+        }
+    </div>
+
+    {
+        input && (
+            /* THE COMPOSER, which in the app is a box floating over the transcript rather than a field at the
+               foot of it: the message row, then the row of controls that decide what the next turn runs on. */
+            <div class="px-3 pt-1 pb-3">
+                <div class="flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg">
+                    <div class="px-4 py-3 text-xs leading-relaxed text-subtle">{input}</div>
+                    <div class="flex items-center gap-1 px-2.5 pb-2.5 text-subtle">
+                        <span class="flex h-7 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted">
+                            <span class="text-link [&>svg]:h-3 [&>svg]:w-3" set:html={sparkGlyph} />
+                            Claude Opus 5
+                            <span class="[&>svg]:h-3 [&>svg]:w-3" set:html={chevronDown} />
+                        </span>
+                        {/* The effort meter: four bars, lit up to the level the next turn runs at. */}
+                        <span class="flex h-7 items-center gap-0.5 px-1.5">
+                            {[0, 1, 2, 3].map((i) => (
+                                <span class={`h-3 w-1 rounded-xs ${i < 3 ? "bg-primary-500" : "bg-content/10"}`} />
+                            ))}
+                        </span>
+                        <span class="flex h-7 w-7 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5" set:html={atGlyph} />
+                        <span class="flex h-7 w-7 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5" set:html={branchGlyph} />
+                        <span class="flex h-7 w-7 items-center justify-center [&>svg]:h-3.5 [&>svg]:w-3.5" set:html={micGlyph} />
+                        {/* Stop, then Send. Both are here for the whole live turn — and a turn parked on a card
+                            is live, holding the conversation's run lock, which is exactly why the app keeps an
+                            exit that is not "answer the card". Send is dim because the box is empty. */}
+                        <span class="composer-send composer-stop ml-auto [&>svg]:h-4 [&>svg]:w-4" set:html={stopGlyph} />
+                        <span class="composer-send composer-send-off [&>svg]:h-4 [&>svg]:w-4" set:html={sendGlyph} />
+                    </div>
+                </div>
+            </div>
+        )
+    }
+</div>

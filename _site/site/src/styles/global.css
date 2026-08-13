@@ -187,6 +187,70 @@
         background: var(--color-card);
     }
 
+    /* ── The product's chat surfaces (app _editor/web/src/chat/chat.css) ─────────────────────────
+     * Copied verbatim, not approximated, because the one figure that uses them (AppChat.astro) is a
+     * claim about a screen the visitor will see after signing up. The app's tokens are already
+     * ported above, so these mixes resolve to the same colours here as they do in the product.
+     *
+     * .chat-surface carries the user's prompt bubble and every decision card: a translucent wash with
+     * a border warmed a fraction toward the brand, which is what separates "something is being asked
+     * of you" from the agent simply talking. .chat-surface-assistant is that quieter answer. */
+    .chat-surface {
+        background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
+    }
+    .chat-surface-assistant {
+        background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
+        border: 1px solid var(--color-line);
+    }
+
+    /* The answer to a decision card — the app's ChatDecisionButton, whose two tones are WEIGHT rather
+     * than agreement: primary is the answer the card is asking for, secondary is everything else.
+     * Both are the app's PrimeVue button underneath, so the numbers below are measured off it. */
+    .chat-decision {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .chat-decision-primary {
+        background: color-mix(in srgb, var(--color-primary-400) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-primary-400) 20%, transparent);
+        color: var(--color-primary-400);
+    }
+    .chat-decision-secondary {
+        background: color-mix(in srgb, var(--color-content) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-content) 16%, transparent);
+        color: var(--color-content);
+    }
+
+    /* The composer's two round controls. A turn parked on a card is still a LIVE turn, so the panel carries
+     * Stop beside Send — and Send is disabled, because the box is empty. Both states are the app's own: a
+     * figure that drew a lit send button would be showing a composer nobody could press. */
+    .composer-send {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 2rem;
+        width: 2rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--color-primary-400) 14%, transparent);
+        color: var(--color-primary-400);
+    }
+    .composer-send-off {
+        background: var(--color-overlay);
+        color: var(--color-subtle);
+    }
+    .composer-stop {
+        background: var(--color-overlay);
+        color: var(--color-content);
+    }
+
     /* Translucent tint chip (app StatusBadge) */
     .chip {
         display: inline-flex;

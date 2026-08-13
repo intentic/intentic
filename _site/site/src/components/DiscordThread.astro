@@ -1,0 +1,105 @@
+---
+/* A DISCORD CHANNEL, drawn as Discord draws one. It used to share a component with the /earn figure, on the
+ * reasoning that two chats on one site should be one drawing — but the two are not one surface. This thread
+ * happens in Discord, where a teammate types; the /earn thread happens in the product's own panel. Making
+ * them match meant one of them was lying about where it takes place, and the one that lost was this one:
+ * an agent reached through a chat app is the whole claim of the figure, so the chat app has to be legible AS
+ * a chat app.
+ *
+ * So this is Discord's anatomy rather than ours: an avatar gutter, a bold display name with the APP tag every
+ * bot carries beside it, a timestamp, and the message as plain text under the name — Discord has no bubbles.
+ * Our palette, because the site is one brand and a figure is not a screenshot. */
+
+export interface DiscordMsg {
+    author: string;
+    // A bot account. Discord marks these with a tag next to the name, which is exactly the fact this figure
+    // is about: the thing answering in the channel is not a person.
+    app?: boolean;
+    time?: string;
+    text: string;
+}
+
+interface Props {
+    thread: DiscordMsg[];
+    // The channel bar: the hash mark, the channel name, and who is around.
+    channel: string;
+    status?: string;
+    // The message box at the foot.
+    input?: string;
+    ariaLabel?: string;
+    class?: string;
+}
+
+const { thread, channel, status, input, ariaLabel, class: klass = "" } = Astro.props;
+
+// simple-icons (CC0), verbatim. Monochrome: the figure is a diagram of the conversation, not a logo wall.
+const discordMark =
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
+
+const botGlyph =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/></svg>';
+
+const plusGlyph =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+---
+
+<div class={`card overflow-hidden shadow-xl shadow-black/30 ${klass}`} role="log" aria-label={ariaLabel}>
+    <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <span class="text-subtle [&>svg]:h-4 [&>svg]:w-4" set:html={discordMark} />
+        <span class="font-mono text-xs text-content">{channel}</span>
+        {
+            status && (
+                <span class="ml-auto flex items-center gap-1.5 text-2xs text-subtle">
+                    <span class="h-1.5 w-1.5 rounded-full bg-success" />
+                    {status}
+                </span>
+            )
+        }
+    </div>
+
+    <div class="space-y-3.5 p-4">
+        {
+            thread.map((msg) => (
+                <div class="flex gap-3">
+                    {msg.app ? (
+                        <span
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600/15 text-link [&>svg]:h-5 [&>svg]:w-5"
+                            set:html={botGlyph}
+                        />
+                    ) : (
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-overlay text-xs font-semibold text-muted">
+                            {msg.author.charAt(0)}
+                        </span>
+                    )}
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span class={`text-sm font-medium ${msg.app ? "text-link" : "text-content"}`}>{msg.author}</span>
+                            {/* Discord's own bot marker, and the one thing on this figure that says the
+                                thing answering is not a person. */}
+                            {msg.app && (
+                                <span class="rounded bg-primary-600/20 px-1 py-px text-[0.625rem] font-semibold tracking-wide text-link uppercase">
+                                    App
+                                </span>
+                            )}
+                            {msg.time && <span class="text-2xs text-subtle">{msg.time}</span>}
+                        </div>
+                        {/* Plain text under the name — Discord draws no bubble, and a bubble here was the
+                            clearest tell that this was our chat wearing a Discord header. */}
+                        <p class="mt-0.5 text-sm leading-relaxed text-muted">{msg.text}</p>
+                    </div>
+                </div>
+            ))
+        }
+    </div>
+
+    {
+        input && (
+            <div class="px-4 pb-4">
+                <div class="flex items-center gap-2.5 rounded-lg bg-overlay/60 px-3 py-2.5">
+                    <span class="shrink-0 text-subtle [&>svg]:h-4 [&>svg]:w-4" set:html={plusGlyph} />
+                    <span class="text-sm text-subtle">{input}</span>
+                </div>
+            </div>
+        )
+    }
+</div>
