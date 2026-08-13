@@ -28,6 +28,15 @@ import { extensionUiNames } from "../names.mjs";
  * primitives the kit deliberately passes through).
  *
  *   node scripts/build.mjs
+ *
+ * WIRED TO `prepack` AS WELL AS `build`, because the alternative fails silently and does so on the one day it
+ * matters. Everything this package publishes lives under `dist/` — `main`, `types` and every `exports` target —
+ * and `dist/` is gitignored. Pack a clean checkout without having built, and npm produces a perfectly valid
+ * tarball containing `src/` and `names.mjs` and nothing else: no error, no warning, a real version number on
+ * the registry, and an install whose `main` resolves to a file that is not there. That is verified rather than
+ * feared — it is what packing this package did before `prepack` existed. The release does run `turbo run build`
+ * first, so this is usually a three-second no-op; it is here so that being usually-true is not what the
+ * correctness of a published artifact rests on.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));

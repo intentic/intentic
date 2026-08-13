@@ -35,6 +35,7 @@
     },
     "scripts": {
         "build": "node scripts/build.mjs",
+        "prepack": "node scripts/build.mjs",
         "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {

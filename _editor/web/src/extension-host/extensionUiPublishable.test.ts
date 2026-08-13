@@ -24,6 +24,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, `utf8`)) as {
     peerDependencies?: Record<string, string>;
     exports: Record<string, unknown>;
     files: string[];
+    scripts: Record<string, string>;
 };
 
 describe(`the published shape of @intentic/extension-ui`, () => {
@@ -62,5 +63,16 @@ describe(`the published shape of @intentic/extension-ui`, () => {
         collect(manifest.exports);
         const packed = (path: string): boolean => manifest.files.some((entry) => path.replace(/^\.\//u, ``).startsWith(entry));
         expect(published.filter((path) => !packed(path))).toEqual([]);
+    });
+
+    /* EVERYTHING IT PUBLISHES IS BUILT, AND `dist/` IS GITIGNORED — so a pack that runs without the build
+     * having happened produces a valid tarball containing `src/` and `names.mjs` and NOTHING ELSE. No error, no
+     * warning, a real version on the registry, and an install whose `main` resolves to a file that is not
+     * there. That is measured rather than imagined: it is exactly what `pnpm pack` did here before `prepack`
+     * existed. The release does build first, so this is normally a three-second no-op — it exists so that
+     * "normally" is not what the correctness of a published artifact rests on. */
+    test(`builds itself at pack time, so a tarball cannot ship without its dist`, () => {
+        expect(manifest.scripts[`prepack`]).toBe(manifest.scripts[`build`]);
+        expect(manifest.scripts[`build`]).toBeDefined();
     });
 });

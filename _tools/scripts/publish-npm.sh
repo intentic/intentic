@@ -39,8 +39,42 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 for i in "${!names[@]}"; do
   ( npm view "${names[$i]}@$VERSION" version >/dev/null 2>&1 && touch "$work/on-npm-$i" ) &
+  # Does the package exist AT ALL — see the bootstrap check below.
+  ( npm view "${names[$i]}" name >/dev/null 2>&1 && touch "$work/exists-$i" ) &
 done
 wait
+
+# A PACKAGE THAT HAS NEVER BEEN PUBLISHED CANNOT BE PUBLISHED BY THIS WORKFLOW, and it fails in a way worth
+# spending ten lines to prevent.
+#
+# Trusted publishing is registered per package, on that package's own settings page on npmjs.com. A name nobody
+# has ever published has no such page, so no trusted publisher can be registered against it, so the OIDC
+# exchange below has nothing to exchange for. npm reports that as an auth failure on the `npm publish` line —
+# indistinguishable, at a glance, from a misconfigured publisher on a package that does exist.
+#
+# Left to run, it fails ONE PACKAGE AT A TIME, in the middle of a serial loop that has already published the
+# ones before it. The release ends half-landed, and the next person reads an auth error rather than the fact
+# that the name is simply new. So: say it once, up front, naming all of them, before anything ships.
+#
+# The remedy is publish-catchup.sh from an authenticated maintainer machine — it bootstraps the first version
+# under a real login, after which each package has a settings page and its trusted publisher can be registered
+# (Settings -> Trusted publisher -> GitHub Actions, workflow `npm-publish.yml`). From the release after that,
+# this script owns them.
+missing=()
+for i in "${!names[@]}"; do
+  [ -e "$work/exists-$i" ] || missing+=("${names[$i]}")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  {
+    echo "these packages have never been published, so no trusted publisher can exist for them yet:"
+    printf '  %s\n' "${missing[@]}"
+    echo
+    echo "bootstrap them once from an authenticated maintainer machine:"
+    echo "  bash _tools/scripts/publish-catchup.sh $VERSION"
+    echo "then register each one's trusted publisher on npmjs.com (workflow: npm-publish.yml) and re-run the tag."
+  } >&2
+  exit 1
+fi
 
 for i in "${!PUB[@]}"; do
   if [ -e "$work/on-npm-$i" ]; then
