@@ -20,6 +20,7 @@ const config = (over?: Record<string, unknown>): Config =>
             flyApiToken: `fly`,
             flyOrg: `intentic`,
             region: `iad`,
+            regionEu: `waw`,
             appPrefix: `intentic-sbx`,
             image: `ghcr.io/intentic/sandbox:stable`,
             cpus: 2,
@@ -30,6 +31,7 @@ const config = (over?: Record<string, unknown>): Config =>
             monthlyHours: 40,
             idleDays: 21,
             idleWarnDays: 14,
+            poolSize: 1,
         },
         ...over,
     }) as unknown as Config;
@@ -42,7 +44,16 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
     ({
         membership: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
+        // The claim's transactional hand-off: the stub just settles what the model calls already returned.
+        $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
         ...overrides,
+        // An empty pool by default, so every test not ABOUT the pool exercises the cold path it always did.
+        hostedPoolMachine: {
+            findMany: vi.fn().mockResolvedValue([]),
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            delete: vi.fn().mockResolvedValue({}),
+            ...overrides[`hostedPoolMachine`],
+        },
         hostedMachine: { update: vi.fn().mockResolvedValue({}), ...overrides[`hostedMachine`] },
     }) as unknown as OrpcContext[`prisma`];
 
@@ -124,6 +135,94 @@ describe(`provisionHosted`, () => {
         );
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
+
+    // A warm machine matching the caller's region: identity written in (the SAME composer the cold path
+    // uses, so nothing can drift), no-op override written out, machine started, hour meter opened at claim.
+    const poolRow = {
+        id: `p1`,
+        appName: `intentic-sbx-pool-abc123`,
+        machineId: `m7`,
+        volumeId: `vol_7`,
+        region: `iad`,
+        image: `ghcr.io/intentic/sandbox:stable`,
+        state: `ready`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    };
+
+    it(`claims a warm machine when one is waiting: brands it, starts it, and opens the meter at claim`, async () => {
+        const created = vi.fn().mockResolvedValue({});
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => json({ ok: true }) },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { create: created },
+            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow]), updateMany, delete: poolDelete },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        expect(result).toEqual({ appName: `intentic-sbx-pool-abc123`, region: `iad` });
+        // The row was WON, not just read — the guarded update is what keeps two claimers off one machine.
+        expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
+        // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
+        const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
+            config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[] };
+        };
+        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
+        expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
+        expect(update.config.init).toBeUndefined();
+        expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
+        expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
+        // The user's clock starts here — the pool's own no-op boot was the platform's cost, not theirs.
+        expect(created).toHaveBeenCalledWith({
+            data: { sandboxId: `s1`, appName: `intentic-sbx-pool-abc123`, machineId: `m7`, volumeId: `vol_7`, region: `iad`, wokeAt: expect.any(Date) },
+        });
+        expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
+    });
+
+    it(`ignores warm machines in the wrong region — the residency promise beats the fast path`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+        ]);
+        const findMany = vi.fn().mockResolvedValue([]);
+        const prisma = fakePrisma({ hostedMachine: { create: vi.fn().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
+        await provisionHosted(prisma as never, config(), logger, { ...args, region: `waw` });
+        // The pool was asked ONLY for the caller's region (and the current image) — never "anything warm".
+        expect(findMany).toHaveBeenCalledWith({
+            where: { region: `waw`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
+            orderBy: { createdAt: `asc` },
+        });
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
+    });
+
+    it(`falls back to a cold build when the claim stumbles — the reader is owed a machine, not a pool hit`, async () => {
+        const created = vi.fn().mockResolvedValue({});
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            // The brand fails on the warm machine…
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `host unavailable` }, 500) },
+            // …and the cold path proceeds as if the pool never existed.
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { create: created },
+            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), delete: poolDelete },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);
+        expect(result.appName).not.toBe(`intentic-sbx-pool-abc123`);
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
+        // The won row is NOT put back: a half-branded machine already carries this sandbox's tokens, so it
+        // stays `claimed` for the reconcile job to collect rather than becoming someone else's "warm" machine.
+        expect(poolDelete).not.toHaveBeenCalled();
+    });
 });
 
 describe(`wakeHosted`, () => {
@@ -145,15 +244,28 @@ describe(`wakeHosted`, () => {
 });
 
 describe(`reapHostedOrphans`, () => {
-    it(`destroys only our-prefix apps whose row is gone; everything else in the org is untouched`, async () => {
+    it(`destroys only our-prefix apps whose row is gone; live machines, pool machines and strangers stand`, async () => {
         const calls = stubFetch([
             {
                 match: (method, url) => method === `GET` && url.includes(`/apps?org_slug=`),
-                respond: () => json({ apps: [{ name: `intentic-sbx-live` }, { name: `intentic-sbx-orphan` }, { name: `unrelated-app` }] }),
+                respond: () =>
+                    json({
+                        apps: [
+                            { name: `intentic-sbx-live` },
+                            { name: `intentic-sbx-orphan` },
+                            // A warm machine waiting in the pool is OURS ON PURPOSE — a reaper that eats the
+                            // pool every night would silently turn every claim back into a cold build.
+                            { name: `intentic-sbx-pool-warm1` },
+                            { name: `unrelated-app` },
+                        ],
+                    }),
             },
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
-        const prisma = fakePrisma({ hostedMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) } });
+        const prisma = fakePrisma({
+            hostedMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
+            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
+        });
         await reapHostedOrphans(prisma as never, config(), logger);
         const deleted = calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url);
         expect(deleted).toHaveLength(1);

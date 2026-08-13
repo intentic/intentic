@@ -475,9 +475,10 @@ const ladderShown = computed(() => !desktop.value && ladderOptions.value.length 
 
 /* The label column of step 1's two facts. A fixed width is what makes "Name" and "Address" one grid rather
  * than two sentences that happen to be stacked — and the width is the reason the VALUES line up, which is the
- * only alignment on the card that carries meaning. Muted and small against a value in content colour:
- * the name used to sit in the step's own heading, in the heading's weight and the heading's colour, where the
- * one word on the card worth changing read as the label in front of it. */
+ * only alignment on the card that carries meaning. Label and value are ONE size — the field size, since the
+ * name becomes a field — and colour alone separates them: the name used to sit in the step's own heading, in
+ * the heading's weight and the heading's colour, where the one word on the card worth changing read as the
+ * label in front of it. */
 const factLabel = `w-16 shrink-0 text-sm text-muted`;
 
 /* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
@@ -486,7 +487,7 @@ const factLabel = `w-16 shrink-0 text-sm text-muted`;
  * would start the name a few pixels right of an address that has none, and the two facts on this card would
  * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
  * first attempt and it hard-codes a spacing token the theme is free to change. */
-const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-base text-content`;
+const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-sm text-content`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
 // chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
@@ -1523,11 +1524,19 @@ watch(commandReady, (ready) => {
                     <!-- Medium, not semibold, and every heading under it follows: at a screen's worth of dark
                          surfaces this page was set almost entirely in bold — page title, three step headings, the
                          panel's — and a hierarchy in which everything is emphasised has none. Size and colour
-                         carry it now; weight only marks the step you are being asked to read. -->
-                    <h1 class="min-w-0 flex-1 text-xl font-medium md:text-2xl">Set up your workspace</h1>
+                         carry it now; weight only marks the step you are being asked to read.
+                         FOUR SIZES ON THE WHOLE PAGE, and they are the theme's own: this title, a card heading
+                         (StepSection's, at the body size), `text-sm` for the things that are VALUES — the two
+                         facts, a rung's name, the panel's heading, anything sitting in or beside a field, since
+                         `cmp.input` is that size — and `text-xs` for every word that is prose. `text-2xs` is
+                         gone from this flow entirely: an 11px caption under 12px body is not a tier anybody
+                         reads as one, it is the same sentence looking accidentally smaller, and this page had it
+                         in nine places. A 24px title over an 11px line was the widest ramp in the app for the
+                         screen with the least on it. -->
+                    <h1 class="min-w-0 flex-1 text-lg font-medium md:text-xl">Set up your workspace</h1>
                     <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
                          work the attach lane doesn't do. -->
-                    <p class="w-full text-base text-muted">
+                    <p class="w-full text-sm text-muted">
                         <template v-if="lane === `attach`"
                             >Point intentic at the sandbox you're already running. One address, and you're in.</template
                         >
@@ -1550,11 +1559,11 @@ watch(commandReady, (ready) => {
                         <!-- WHY YOU ARE HERE, when the page chose this lane rather than the reader. Arriving on
                              "give us your domain" with no explanation reads as a step missing; one sentence
                              naming what this platform does turns it into the flow it actually is. -->
-                        <p v-if="!provisionOffered" class="flex items-start gap-2 text-sm text-muted">
+                        <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
                             <Icon name="info-circle" class="mt-0.5 shrink-0" />
                             <span>This platform doesn't start sandboxes or hand out addresses — it connects to one you're already running.</span>
                         </p>
-                        <p class="text-sm text-muted">
+                        <p class="text-xs text-muted">
                             Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
                             open your workspace. Nothing to install, nothing to provision.
                         </p>
@@ -1585,12 +1594,12 @@ watch(commandReady, (ready) => {
                                     <template #icon><Icon name="link" /></template>
                                 </Button>
                             </div>
-                            <span v-if="domainProblem" class="text-sm text-warning">{{ domainProblem }}</span>
-                            <span v-else-if="normalizedDomain" class="text-sm text-muted"
+                            <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
+                            <span v-else-if="normalizedDomain" class="text-xs text-muted"
                                 >We'll connect to <span>{{ normalizedDomain }}</span
                                 >.</span
                             >
-                            <span v-else class="text-sm text-muted">The https address your sandbox already answers on (https:// is optional).</span>
+                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
                         </label>
 
                         <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
@@ -1606,13 +1615,13 @@ watch(commandReady, (ready) => {
                                 :class="cmp.input('w-full text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
-                            <span class="text-sm text-muted">Just so you can tell it apart in the switcher.</span>
+                            <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
                         <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
                             <span>Nothing answered at that address.</span>
-                            <span class="text-2xs opacity-80">
+                            <span class="opacity-80">
                                 Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
                                 <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
@@ -1620,7 +1629,7 @@ watch(commandReady, (ready) => {
                         </div>
                         <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
                             <span>That address accepted the connection but never answered.</span>
-                            <span class="text-2xs opacity-80">
+                            <span class="opacity-80">
                                 Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give
                                 it a moment and try again.
                             </span>
@@ -1629,7 +1638,7 @@ watch(commandReady, (ready) => {
                      resumed sandbox's container is gone, so name that instead of quoting a 530. -->
                         <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
                             <span>That domain is live, but no sandbox is running behind it.</span>
-                            <span class="text-2xs opacity-80">
+                            <span class="opacity-80">
                                 Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
                                 container<template v-if="created !== null"
                                     >, or get a domain from intentic and run the install command instead</template
@@ -1639,7 +1648,7 @@ watch(commandReady, (ready) => {
                         <template v-else-if="attachOutcome?.kind === `needs-token`">
                             <div :class="cmp.alertWarning('flex flex-col gap-1')">
                                 <span>Your sandbox is up, but it wouldn't let us in yet.</span>
-                                <span class="text-2xs opacity-80"
+                                <span class="opacity-80"
                                     >It's waiting to be claimed with the connection token it was started with. Paste that
                                     <code>CONNECT_TOKEN</code> to claim it as yours.</span
                                 >
@@ -1663,7 +1672,7 @@ watch(commandReady, (ready) => {
                         </template>
                         <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
                             <span>{{ attachOutcome.message }}</span>
-                            <span class="text-2xs opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
+                            <span class="opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
                         </div>
                         <Notice
                             v-else-if="attachOutcome?.kind === `rejected`"
@@ -1720,7 +1729,7 @@ watch(commandReady, (ready) => {
                                      ran before was torn down locally; one that was made here and never started is
                                      simply where the user left off — telling them a container was cleared would
                                      be describing a machine that never existed. -->
-                                <p class="text-sm leading-relaxed text-muted">
+                                <p class="text-xs leading-relaxed text-muted">
                                     <template v-if="neverStarted">
                                         This one was made last time you were here but never started. Pick up where you left off, or create a new
                                         sandbox instead.
@@ -1730,7 +1739,7 @@ watch(commandReady, (ready) => {
                                         below to start a fresh daemon, or create a new sandbox instead.
                                     </template>
                                 </p>
-                                <button type="button" :class="cmp.linkButton(`text-sm text-muted underline hover:text-content`)" @click="startFresh">
+                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
                                     Not this one? Create a new sandbox instead
                                 </button>
                             </template>
@@ -1841,7 +1850,7 @@ watch(commandReady, (ready) => {
                                     <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                         <Icon name="spinner" spin /> Assigned as your machine starts…
                                     </span>
-                                    <span v-else :class="`${factSlot} text-sm text-muted`">Assigned when your machine starts</span>
+                                    <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
                                 </div>
                             </template>
                             <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a spinner
@@ -1850,7 +1859,7 @@ watch(commandReady, (ready) => {
                             <template v-else-if="addressless">
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span :class="factLabel">Address</span>
-                                    <span :class="`${factSlot} text-sm text-muted`">This platform doesn't set one up</span>
+                                    <span :class="`${factSlot} text-xs text-muted`">This platform doesn't set one up</span>
                                 </div>
                                 <p class="text-xs text-muted">
                                     Sandboxes here are reached at an address you already have. Already running one?
@@ -1884,7 +1893,7 @@ watch(commandReady, (ready) => {
                                          difference between provisioning under their zone and attaching an address
                                          that already answers BEFORE they could tell which link was theirs. Now one
                                          link opens both, each stating what it does rather than what it is called. -->
-                                    <button type="button" :class="cmp.linkButton(`text-sm`)" @click="reaching = !reaching">
+                                    <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
                                         {{ reaching ? `Keep this address` : `Use a different address` }}
                                     </button>
                                 </div>
@@ -1913,10 +1922,10 @@ watch(commandReady, (ready) => {
                                     </button>
                                     <InfoHint label="Why the Cloudflare API token is required">
                                         <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
-                                        <p class="mb-3 text-2xs leading-relaxed text-muted">
+                                        <p class="mb-3 text-xs leading-relaxed text-muted">
                                             intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.
                                         </p>
-                                        <ul class="flex flex-col gap-2 text-2xs text-muted">
+                                        <ul class="flex flex-col gap-2 text-xs text-muted">
                                             <li class="flex items-start gap-2">
                                                 <Icon name="bolt" class="mt-0.5 text-link" />
                                                 <span>Lets the install command <span class="text-content">create the tunnel</span></span>
@@ -2044,10 +2053,10 @@ watch(commandReady, (ready) => {
                                     <Icon
                                         :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
                                         :spin="hostedBusy && option.value === `hosted`"
-                                        class="shrink-0 text-lg"
+                                        class="shrink-0 text-base"
                                         :class="machine === option.value ? `text-link` : `text-muted`"
                                     />
-                                    <span class="min-w-0 text-base font-medium text-content">{{ option.title }}</span>
+                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
                                 </span>
                                 <span class="text-xs text-muted">{{ option.meta }}</span>
                                 <!-- Three or four words: what this rung asks of you, or where it puts the
@@ -2083,7 +2092,7 @@ watch(commandReady, (ready) => {
                                      list still ticking beside "here is what broke" is the page arguing with
                                      itself, and the reader has one thing to decide, not two to reconcile. -->
                                 <template v-if="hostedWait.failure">
-                                    <p class="flex items-start gap-2 text-sm text-content">
+                                    <p class="flex items-start gap-2 text-xs text-content">
                                         <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
                                         <span>{{ hostedWait.failure.problem }}</span>
                                     </p>
@@ -2105,13 +2114,13 @@ watch(commandReady, (ready) => {
                                         <li
                                             v-for="step in hostedWait.steps"
                                             :key="step.key"
-                                            class="flex items-center gap-2 text-sm"
+                                            class="flex items-center gap-2 text-xs"
                                             :class="step.state === `todo` ? `text-subtle` : `text-content`"
                                         >
                                             <Icon
                                                 :name="step.state === `done` ? `check` : step.state === `active` ? `spinner` : `circle`"
                                                 :spin="step.state === `active`"
-                                                class="shrink-0 text-2xs"
+                                                class="shrink-0 text-xs"
                                                 :class="
                                                     step.state === `done` ? `text-success` : step.state === `active` ? `text-info` : `text-subtle`
                                                 "
@@ -2124,7 +2133,7 @@ watch(commandReady, (ready) => {
                                     </p>
                                 </template>
                             </template>
-                            <p v-else-if="hostedBusy" class="flex items-center gap-2 text-sm text-content">
+                            <p v-else-if="hostedBusy" class="flex items-center gap-2 text-xs text-content">
                                 <Icon name="spinner" spin class="text-info" />
                                 Starting a machine for you…
                             </p>
@@ -2252,7 +2261,7 @@ watch(commandReady, (ready) => {
                              that runs this is by construction not the one reading it.
                              Not on a phone: the line that opened this disclosure already said who copying is for,
                              and repeating it here would be the third sentence in a card about a fourth device. -->
-                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-sm text-muted">
+                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
                                         <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
                                         <span class="min-w-0">
                                             <template v-if="desktop"
@@ -2323,7 +2332,7 @@ watch(commandReady, (ready) => {
                                                 <span class="min-w-0">Local dev: builds from your checkout</span>
                                                 <Icon name="chevron-down" class="shrink-0 text-subtle" />
                                             </summary>
-                                            <p class="mt-1 pl-6 text-2xs">
+                                            <p class="mt-1 pl-6">
                                                 This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that. Every run
                                                 rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
                                                 minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
@@ -2390,7 +2399,7 @@ watch(commandReady, (ready) => {
                                  report: a spinner beside "here is what broke" is the page contradicting itself. -->
                             <p
                                 v-if="reportFailures === null"
-                                class="flex items-start gap-2 text-sm"
+                                class="flex items-start gap-2 text-xs"
                                 :class="handoff === `claimed` ? `text-content` : `text-muted`"
                             >
                                 <Icon
@@ -2456,7 +2465,7 @@ watch(commandReady, (ready) => {
                                         <span v-if="failure.remedy !== ``" class="opacity-90"> Fix: {{ failure.remedy }}</span>
                                     </li>
                                 </ul>
-                                <p class="pl-6 text-2xs opacity-90">Fix the above, then run the same command again. It stays valid.</p>
+                                <p class="pl-6 opacity-90">Fix the above, then run the same command again. It stays valid.</p>
                             </div>
 
                             <!-- The correction, on a timer — and NOT here on a wide screen, where it rides in the

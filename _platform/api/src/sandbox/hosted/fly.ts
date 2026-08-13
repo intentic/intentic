@@ -112,6 +112,13 @@ export const startMachine = async (token: string, app: string, machineId: string
     await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/start`);
 };
 
+// Replace a machine's whole config (Fly's update semantics: the posted config IS the new one, nothing is
+// merged) — the warm pool's claim writes a sandbox's real identity into a machine built before it had one.
+// Same image ⇒ no new pull, and the machine stays on its host, which is what keeps its volume attached.
+export const updateMachine = async (token: string, app: string, machineId: string, config: FlyMachineConfig): Promise<void> => {
+    await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`, { config });
+};
+
 export const stopMachine = async (token: string, app: string, machineId: string): Promise<void> => {
     await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/stop`);
 };

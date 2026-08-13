@@ -152,6 +152,12 @@ const configSchema = z.object({
              * HOSTED_IDLE_DAYS, HOSTED_IDLE_WARN_DAYS. */
             idleDays: z.coerce.number().int().nonnegative().default(21),
             idleWarnDays: z.coerce.number().int().nonnegative().default(14),
+            /* THE WARM POOL: machines built (image pulled, then stopped) before anyone asks, PER REGION, so
+             * claiming the free sandbox costs the seconds of a machine start instead of the minutes of an
+             * image pull. A pool machine holds no identity and no running compute — its standing cost is its
+             * volume — and the reconcile job keeps the pool at this size, rebuilding it when the image moves.
+             * 0 (the default) disables the pool and drains anything left in it. HOSTED_POOL_SIZE. */
+            poolSize: z.coerce.number().int().nonnegative().default(0),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL — intentic's OWN model keys, and the SECOND documented exception to the secret-free

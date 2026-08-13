@@ -7,6 +7,7 @@ import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
 import { startPoolCycle } from "./pool/pool-cycle-job.js";
 import { seedDemoService } from "./pool/pool-demo.js";
+import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
 
@@ -36,6 +37,8 @@ startRetention(prisma, config, logger);
 // The frozen month is what payouts settle on, and the only record of what was owed once the ledger rows behind
 // it age out. No-ops on a platform without a pool.
 startPoolCycle(prisma, config, logger);
+// Keeps warm hosted machines built ahead of demand (and drains them when the pool is off) — see hosted-pool.ts.
+startHostedPool(prisma, config, logger);
 // The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
 // and self-swallowing — a catalog short one demo row must never hold the platform's boot.
 void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));

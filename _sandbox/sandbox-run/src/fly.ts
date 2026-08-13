@@ -50,6 +50,12 @@ export interface FlyMachineConfig {
     // idle exit stops the machine — which is the whole point of the hosted lane's economics.
     readonly restart: { readonly policy: "on-failure"; readonly max_retries: number };
     readonly auto_destroy: false;
+    /* Replace what the image would run. `flyMachineConfig` never sets it — a sandbox machine runs the image's
+     * own entrypoint — but the warm pool's first boot does: a no-op exec pulls the image onto the host and
+     * exits clean, so the machine stops holding a warm rootfs and nothing sandbox-shaped ever ran without an
+     * identity. Machine updates REPLACE the whole config, so the claim's config (built by flyMachineConfig,
+     * no init) is also what erases the override. */
+    readonly init?: { readonly exec: readonly string[] };
 }
 
 export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({

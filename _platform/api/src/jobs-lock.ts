@@ -13,7 +13,10 @@ import type { Config } from "./config.js";
 
 // One stable key per exclusive job.
 export const JOB_RETENTION = 1;
-export const JOB_SANDBOX_POOL = 2;
+// The hosted lane's warm pool reconcile (hosted-pool.ts) — two replicas building toward the same target
+// would overshoot it every tick. Key 2 belonged to the retired Cloudflare sandbox pool, whose job this is
+// the spiritual successor of.
+export const JOB_HOSTED_POOL = 2;
 // The monthly money cycle — close, then pay. Exclusive for a stronger reason than the others: two replicas
 // closing the same month would each write a set of statements, and two payout runs would race for the same
 // ones. Money counted twice is not a duplicate log line.

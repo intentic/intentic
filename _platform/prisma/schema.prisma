@@ -191,13 +191,16 @@ model Sandbox {
 
 // The pre-provisioned pool (ReservedSandbox) died with the Cloudflare tunnels it existed to amortize: a zrok
 // account mint is one fast call, so sandbox.create provisions inline and nothing is reserved ahead of demand.
+// The HOSTED lane grew a pool of its own (HostedPoolMachine below) for the cost a mint never had: pulling the
+// sandbox image onto a Fly host is the minutes-long part of a first boot, and it can be paid before anyone asks.
 
 // A HOSTED sandbox's machine on Fly — the row that inverts the cloud stamp's stance on purpose: `cloud` is
 // display-only residue of a machine the platform can never reach again, while this row is exactly the way
 // back in (start on wake, stop, destroy on delete). One per sandbox, dies with it (the reaper destroys the
-// Fly app whose row is gone). appName is `<prefix>-<sandbox id>` — the reaper's prefix match and the delete
-// dialog's words both read it. Nothing here is a credential: the platform's own Fly token (config) is what
-// acts, these are just addresses.
+// Fly app whose row is gone). appName is `<prefix>-<sandbox id>` for a machine built to order and
+// `<prefix>-pool-<hex>` for one claimed from the warm pool — the reaper's prefix match and the delete
+// dialog's words both read it off this row rather than re-deriving it. Nothing here is a credential: the
+// platform's own Fly token (config) is what acts, these are just addresses.
 model HostedMachine {
     id        String   @id @default(cuid())
     sandboxId String   @unique
@@ -221,6 +224,35 @@ model HostedMachine {
     updatedAt DateTime @updatedAt
 
     @@map("hosted_machine")
+}
+
+/* THE WARM POOL — machines built before anyone asks for one, so claiming the free sandbox takes the seconds
+ * of a start instead of the minutes of an image pull. A pool machine is a full app + volume + machine on Fly
+ * whose one boot ran a no-op instead of the sandbox (enough to pull the image onto its host, nothing more),
+ * now sitting stopped. It carries NO identity: no connect token, no owner, no reachability grant — those are
+ * written into its env at claim time, before the machine ever runs the sandbox, so the first-boot trust story
+ * (OWNER_EMAIL seeded before the daemon exists) is exactly the built-to-order one.
+ *
+ * `state` is the build's own little machine: `building` from creation until the no-op boot is observed
+ * stopped, `ready` from then until a claim wins the row, `claimed` for the instant between winning and the
+ * hand-off committing (a `claimed` row that lingers is a claim that crashed — the reconcile job collects it).
+ * `image` pins what was actually pulled: a config change strands nothing, the reconcile rebuilds drifted
+ * machines. Region matters beyond latency — an EEA caller may only claim an EEA machine, or the privacy
+ * policy's residency promise breaks. The hour meter does not know these rows exist: the no-op boot is the
+ * platform's own cost, and a user's clock starts at claim, when their HostedMachine row is stamped. */
+model HostedPoolMachine {
+    id        String   @id @default(cuid())
+    appName   String   @unique
+    machineId String
+    volumeId  String
+    region    String
+    image     String
+    state     String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([region, state])
+    @@map("hosted_pool_machine")
 }
 
 // Awake MINUTES this account's hosted machines have burned this calendar month — the meter behind the free
