@@ -34,8 +34,10 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 // The group half of a `<group>.<route>` name — a route name with no dot in it is its own area rather than a
 // hole in the list.
 const areas = (names: readonly string[]): string[] => [...new Set(names.map((name) => name.split(`.`)[0] ?? name))].toSorted();
-const groups = computed(() => areas(missingRoutes.value));
-const driftedGroups = computed(() => areas(driftedRoutes.value));
+// Shown to a person, so the area reads as a name (`Agent`), not a raw route prefix (`agent`).
+const capitalize = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
+const missingLabel = computed(() => areas(missingRoutes.value).map(capitalize).join(`, `));
+const driftedLabel = computed(() => areas(driftedRoutes.value).map(capitalize).join(`, `));
 // The developer's remedy is the one the dev loop already documents; a user's is the update card's path.
 const isDev = import.meta.env.DEV;
 const { slug } = useEnvironment();
@@ -69,44 +71,25 @@ const reloadCommand = computed(() => `sh _sandbox/sandbox/scripts/dev-reload.sh$
                         dot
                     />
                 </div>
-                <p class="text-2xs text-subtle">
-                    {{
-                        daemonBehind
-                            ? `Its daemon was built before some of what this app knows about. Everything else is unaffected.`
-                            : `One of the two is running older code than the other. Everything else is unaffected.`
-                    }}
-                </p>
             </div>
         </div>
 
-        <p v-if="daemonBehind" class="text-2xs text-subtle">
-            Missing — these will report that the feature is unavailable rather than working. Affected area<span v-if="groups.length !== 1">s</span>:
-            <span class="font-mono">{{ groups.join(`, `) }}</span>
-        </p>
+        <p v-if="daemonBehind" class="text-2xs text-subtle">{{ missingLabel }} won't work here. Everything else works.</p>
 
-        <p v-if="daemonDrifted" class="text-2xs text-subtle">
-            Changed — these still answer, but exchange different fields than this app expects, so something may look blank or fail to save. Affected
-            area<span v-if="driftedGroups.length !== 1">s</span>: <span class="font-mono">{{ driftedGroups.join(`, `) }}</span>
-        </p>
+        <p v-if="daemonDrifted" class="text-2xs text-subtle">{{ driftedLabel }} may show blank values or fail to save. Everything else works.</p>
 
         <template v-if="isDev">
             <p class="text-xs font-medium text-content">
-                {{
-                    daemonBehind
-                        ? `Its daemon predates your working tree — reload it:`
-                        : `If the sandbox is the older side, reloading it settles this:`
-                }}
+                {{ daemonBehind ? `Reload the sandbox to catch it up:` : `Reload the sandbox first:` }}
             </p>
-            <Code :code="reloadCommand" lang="bash" label="Reload command" :wrap="true" />
-            <p v-if="!daemonBehind" class="text-2xs text-subtle">
-                Still here afterwards? Then this page is the older side — reload it and the two agree again.
-            </p>
+            <Code :code="reloadCommand" lang="bash" :wrap="true" />
+            <p v-if="!daemonBehind" class="text-2xs text-subtle">Still showing? Reload this page instead.</p>
         </template>
         <p v-else class="text-2xs text-subtle">
             {{
                 daemonBehind
-                    ? `Updating the sandbox to a newer image restores these features.`
-                    : `Reloading this page, or updating the sandbox to a newer image, brings the two back in line.`
+                    ? `Update the sandbox to a newer image to restore this.`
+                    : `Reload this page, or update the sandbox to a newer image.`
             }}
         </p>
     </Card>

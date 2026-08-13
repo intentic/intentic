@@ -67,7 +67,7 @@ it(`names the sandbox as behind only when a missing route proves it`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`This sandbox is behind the app`);
     // Direction is known here, so nothing hedges — a page reload would not bring a route back.
-    expect(text).not.toMatch(/this page is the older side/i);
+    expect(text).not.toMatch(/reload this page/i);
 });
 
 it(`refuses to name a side when only the payloads disagree`, () => {
@@ -78,7 +78,7 @@ it(`refuses to name a side when only the payloads disagree`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`This sandbox and the app disagree`);
     expect(text).not.toContain(`This sandbox is behind the app`);
-    expect(text).toMatch(/this page is the older side/i);
+    expect(text).toMatch(/reload this page/i);
 });
 
 it(`prints the reload for THIS sandbox, not an image rebuild`, () => {
