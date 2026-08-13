@@ -37,10 +37,12 @@ import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 /* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · session meta;
- * a self-hiding stats row (cost · +ins −dels · msgs · subagents · context ring); the live
- * activity line while running; time-ago / Completed footer. `now` ticks from AgentsView so every card's
- * elapsed readout advances together without per-card timers. The title renames in place (hover pencil →
- * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML.
+ * the live activity line while running; and one closing summary line that carries the stats
+ * (cost · +ins −dels · msgs · subagents · context ring) with the time pinned to its right.
+ * `now` ticks from AgentsView so every card's elapsed readout advances together without per-card timers. The
+ * title renames in place (hover pencil → inline input); the drill-in rides beside it as a hover glyph, except
+ * on a card that needs the user, where it is spelled out on the summary line. The root is a div-button, not a
+ * <button>, so the nested pencil/input stay valid HTML.
  *
  * `dense` is the same card in its ROW form, which the board switches on when it stacks its lanes (AgentsView).
  * A stacked lane is as wide as the view, so the blocks that have to stack inside a 280px column run along one
@@ -216,6 +218,19 @@ const stats = computed(
         props.agent.subagents !== undefined ||
         context.value !== undefined,
 );
+// Only a card with a registry entry behind it may say the work COMPLETED — that is the daemon's account of a
+// turn, and the client-only standings have none to draw on. A chat reopened from History sits in this lane too
+// (nothing is running, nothing is owed) and knows nothing about how it ended; its chip already says what it is.
+const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
+// Whether this card can date itself at all — a draft that has never been touched cannot.
+const dated = computed(() => props.agent.startedAt !== undefined || props.agent.archivedAt !== undefined || props.agent.updatedAt > 0);
+/* WHETHER THE CLOSING LINE HAS ANYTHING TO SAY. The stats and the time-ago used to be two rows, and the second
+ * of them held four characters and an affordance that only appears under the pointer — a full row of card
+ * height, on every card on the board, so that a lane fit five agents where it could have fit six. They are one
+ * wrapping line now: tallies from the left, the standing and the time pinned to the right, and a lane too
+ * narrow for both wraps them rather than buying the row outright. Gated on everything it draws and nothing
+ * else, so a card with no numbers, no date and nothing to drill into opens no empty strip of padding. */
+const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
@@ -397,6 +412,23 @@ const grab = (event: PointerEvent): void => {
                 >
                     <Icon name="undo" class="text-2xs" />
                 </button>
+                <!-- THE DRILL-IN, among the other quiet affordances rather than spelled out at the foot of the
+                     card. It was a text link down there — "Review changes", "See where it stopped" — and being
+                     in the flow of the line it had to RESERVE its hundred-odd pixels while invisible, which is
+                     what pushed the time onto a row of its own and cost every card on the board a line of
+                     height for something nobody could see. As an icon it costs nothing at rest, and the words
+                     it lost are on its tooltip. The exception is a card that needs the user: there the label is
+                     the point and stays spelled out on the summary line below, where it is always visible. -->
+                <button
+                    v-if="review !== undefined && lane !== 'attention'"
+                    type="button"
+                    :aria-label="review"
+                    v-tooltip.top="review"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
+                    @click.stop="reviewCard"
+                >
+                    <Icon name="arrow-right" class="text-2xs" />
+                </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />
             <span v-else-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
@@ -473,58 +505,6 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <div v-if="stats" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted">
-                <!-- No hover labels on this row. Chips side by side each raising its own box turned a glance
-                     across the card's numbers into a strip of pop-ups, and every label was the legend for a
-                     glyph the reader had already decoded: the speech bubbles are turns, the ring is context. A
-                     stat you cannot name from its icon does not belong in a chip row.
-                     WHAT IS NOT HERE, AND WHY. The row carried a token reading (`277 / 65k`) and a count of
-                     files touched, and a board is scanned rather than studied — every chip in it spends the
-                     same glance, so a chip has to change what the reader does next or it is taxing the ones
-                     that do. Tokens were the raw form of the cost sitting beside them: two numbers, an icon,
-                     and no decision anybody makes from a board that the money figure does not make shorter.
-                     The file count was drawn with the duplicate-pages glyph — which reads as "copy", not as
-                     "files" — and stood next to the +/− that already says how big the change is. Both facts
-                     still exist where they are read on purpose rather than in passing: the tokens in the Usage
-                     tab, the files in the agent's own Changes panel. -->
-                <!-- The card's cost is this agent's lifetime total, read only — the Usage tab still breaks it
-                     down by day and model, but reaching it from here put a route change inside the chip row a
-                     click aims THROUGH on its way to focusing the agent, and the misfires cost more than the
-                     shortcut saved. It stays while the tokens go because it is the board's ONE economic
-                     signal, three characters wide, and an agent that has quietly spent $23 is worth catching. -->
-                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-                <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
-                    <span class="text-success">+{{ agent.diff.insertions }}</span>
-                    <span class="text-danger"> −{{ agent.diff.deletions }}</span>
-                </span>
-                <span v-if="agent.turns !== undefined && agent.turns > 0"> <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }} </span>
-                <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
-                     running five children used to look exactly like one running none. A nested button, like the
-                     cost above and for the same reason: the click opens the Subagents area rather than the agent
-                     — narrowed to THIS agent's children, because the chip is a claim about one card and a list of
-                     everything the sandbox has ever spawned answers a question nobody asked here. The chip counts
-                     live-of-total while any are working and settles to the lifetime total once none are — "3 / 5"
-                     says something a bare "5" cannot, and only while it is true. -->
-                <button
-                    v-if="agent.subagents !== undefined"
-                    type="button"
-                    class="cursor-pointer transition-colors hover:text-content hover:underline"
-                    :class="{ 'text-link': agent.subagents.running > 0 }"
-                    v-tooltip.top="
-                        agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
-                    "
-                    @click.stop="router.push({ name: `subagents`, query: { agent: agent.id } })"
-                >
-                    <Icon name="users" class="mr-0.5 text-2xs" />{{
-                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
-                    }}
-                </button>
-                <span v-if="context !== undefined" class="inline-flex items-center gap-1">
-                    <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
-                    <span>{{ context }}%</span>
-                </span>
-            </div>
-
             <!-- THE LOOP LINE. Above the activity line and never instead of it: the activity says what the
                  agent is doing this second, this says what it is doing it TOWARDS, and a looping agent without
                  the second one is a spinner with no end in sight. Survives the loop's end on purpose — how a
@@ -534,8 +514,8 @@ const grab = (event: PointerEvent): void => {
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
-            <!-- The live line and the footer both claim the row's leftovers, so a wide board splits them and a
-                 narrow one wraps the footer onto its own line rather than shaving the activity to an ellipsis. -->
+            <!-- The live line and the summary both claim the row's leftovers, so a wide board splits them and a
+                 narrow one wraps the summary onto its own line rather than shaving the activity to an ellipsis. -->
             <p
                 v-if="turnInFlight(agent) && activityText"
                 class="flex min-w-0 items-center gap-1.5 text-2xs text-link"
@@ -629,33 +609,89 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <div class="flex min-w-0 items-center gap-2 text-2xs text-subtle" :class="dense ? 'min-w-32 flex-1' : ''">
-                <!-- The deliberate view-change: a contextual CTA that names its destination, so a plain card click
-                     stays a lightweight focus. Persistent when the agent needs the user (attention lane); a quiet
-                     hover-reveal otherwise — the rename-pencil pattern. Absent for drafts (review is undefined). -->
-                <button
-                    v-if="review !== undefined"
-                    type="button"
-                    class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link transition-opacity hover:underline"
-                    :class="lane === 'attention' ? '' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
-                    @click.stop="reviewCard"
-                >
-                    {{ review }}<Icon name="arrow-right" class="text-2xs" />
-                </button>
-                <!-- Only a card with a registry entry behind it may say the work COMPLETED — that is the
-                     daemon's account of a turn, and the client-only standings have none to draw on. A chat
-                     reopened from History sits in this lane too (nothing is running, nothing is owed) and knows
-                     nothing about how it ended; its chip already says what it is. -->
-                <span v-else-if="lane === 'finished' && !unregistered(agent.status)" class="inline-flex shrink-0 items-center gap-1 text-muted">
-                    <Icon name="check" class="text-2xs" />Completed
+            <!-- THE CLOSING SUMMARY LINE: the numbers this card counted, then the drill-in and the time held to
+                 the right of the same line (see `summary`). -->
+            <div
+                v-if="summary"
+                class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-muted"
+                :class="dense ? 'min-w-32 flex-1' : ''"
+            >
+                <!-- No hover labels on the numbers. Chips side by side each raising its own box turned a glance
+                     across the card's numbers into a strip of pop-ups, and every label was the legend for a
+                     glyph the reader had already decoded: the speech bubbles are turns, the ring is context. A
+                     stat you cannot name from its icon does not belong in a chip row.
+                     WHAT IS NOT HERE, AND WHY. The line carried a token reading (`277 / 65k`) and a count of
+                     files touched, and a board is scanned rather than studied — every chip in it spends the
+                     same glance, so a chip has to change what the reader does next or it is taxing the ones
+                     that do. Tokens were the raw form of the cost sitting beside them: two numbers, an icon,
+                     and no decision anybody makes from a board that the money figure does not make shorter.
+                     The file count was drawn with the duplicate-pages glyph — which reads as "copy", not as
+                     "files" — and stood next to the +/− that already says how big the change is. Both facts
+                     still exist where they are read on purpose rather than in passing: the tokens in the Usage
+                     tab, the files in the agent's own Changes panel. -->
+                <!-- The card's cost is this agent's lifetime total, read only — the Usage tab still breaks it
+                     down by day and model, but reaching it from here put a route change inside the chip row a
+                     click aims THROUGH on its way to focusing the agent, and the misfires cost more than the
+                     shortcut saved. It stays while the tokens go because it is the board's ONE economic
+                     signal, three characters wide, and an agent that has quietly spent $23 is worth catching. -->
+                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
+                    <span class="text-success">+{{ agent.diff.insertions }}</span>
+                    <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                 </span>
-                <span class="flex-1"></span>
-                <span v-if="agent.startedAt !== undefined" class="shrink-0 text-link">{{ formatElapsed(agent.startedAt, now) }}</span>
-                <!-- An archived card is read as a record, so it dates itself by when it LEFT the board — "last
-                     active 3d ago" is the same fact its neighbours already show and answers a question nobody in
-                     an archive is asking. -->
-                <span v-else-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
-                <span v-else-if="agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                <span v-if="agent.turns !== undefined && agent.turns > 0"> <Icon name="comments" class="mr-0.5 text-2xs" />{{ agent.turns }} </span>
+                <!-- THE AGENTS THIS AGENT STARTED. A card is the answer to "what is this agent up to", and one
+                     running five children used to look exactly like one running none. A nested button, like the
+                     cost above and for the same reason: the click opens the Subagents area rather than the agent
+                     — narrowed to THIS agent's children, because the chip is a claim about one card and a list of
+                     everything the sandbox has ever spawned answers a question nobody asked here. The chip counts
+                     live-of-total while any are working and settles to the lifetime total once none are — "3 / 5"
+                     says something a bare "5" cannot, and only while it is true. -->
+                <button
+                    v-if="agent.subagents !== undefined"
+                    type="button"
+                    class="cursor-pointer transition-colors hover:text-content hover:underline"
+                    :class="{ 'text-link': agent.subagents.running > 0 }"
+                    v-tooltip.top="
+                        agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
+                    "
+                    @click.stop="router.push({ name: `subagents`, query: { agent: agent.id } })"
+                >
+                    <Icon name="users" class="mr-0.5 text-2xs" />{{
+                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
+                    }}
+                </button>
+                <span v-if="context !== undefined" class="inline-flex items-center gap-1">
+                    <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
+                    <span>{{ context }}%</span>
+                </span>
+
+                <!-- The standing and the clock, held to the END of the line by their own margin rather than by a
+                     spacer element: a spacer is an item, and on a lane narrow enough to wrap it would take the
+                     whole first line with it and leave the numbers stranded above an empty row. -->
+                <span class="ml-auto inline-flex shrink-0 items-center gap-2 text-subtle">
+                    <!-- The deliberate view-change, spelled out for the one card that has earned the width: an
+                         agent waiting on the user, whose label IS the instruction ("Answer", "Approve spend",
+                         "See what blocked it"). Every other card carries the same press as the arrow up in the
+                         header, where it costs no height. -->
+                    <button
+                        v-if="review !== undefined && lane === 'attention'"
+                        type="button"
+                        class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
+                        @click.stop="reviewCard"
+                    >
+                        {{ review }}<Icon name="arrow-right" class="text-2xs" />
+                    </button>
+                    <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
+                        <Icon name="check" class="text-2xs" />Completed
+                    </span>
+                    <span v-if="agent.startedAt !== undefined" class="shrink-0 text-link">{{ formatElapsed(agent.startedAt, now) }}</span>
+                    <!-- An archived card is read as a record, so it dates itself by when it LEFT the board —
+                         "last active 3d ago" is the same fact its neighbours already show and answers a question
+                         nobody in an archive is asking. -->
+                    <span v-else-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
+                    <span v-else-if="agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                </span>
             </div>
         </div>
     </div>
