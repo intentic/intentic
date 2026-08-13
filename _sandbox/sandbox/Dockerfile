@@ -141,7 +141,7 @@ RUN printf '%s\n' \
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # chmod as in the build stage: in-sandbox `pnpm install` (dev in /work, scaffold inject) compiles node-pty
 # from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
-RUN corepack enable && corepack prepare pnpm@11.13.1 --activate \
+RUN corepack enable && corepack prepare pnpm@11.21.0 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
 # node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty, @discordjs/opus) and
 # for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the

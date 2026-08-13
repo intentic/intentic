@@ -367,7 +367,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `pnpm`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `pnpm`, version: `11.13.1` }],
+            tools: [{ name: `pnpm`, version: `11.21.0` }],
             purpose: `Installs and runs workspace packages.`,
         },
         {

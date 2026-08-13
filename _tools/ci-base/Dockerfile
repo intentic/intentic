@@ -67,7 +67,7 @@ COPY --from=oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d9708
 # ponytail: bump together with package.json's packageManager field.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable \
-    && corepack prepare pnpm@11.13.1 --activate \
+    && corepack prepare pnpm@11.21.0 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
