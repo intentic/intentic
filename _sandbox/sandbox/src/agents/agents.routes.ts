@@ -357,15 +357,26 @@ export const createAgentsRoutes = (services: Services) => {
                     notRunning(id);
                 }
             }
-            // Over the roster, so "archivable right now" is decided by the same status the card is wearing —
-            // including the derived half, which is invisible from the persisted entry (see archive.ts).
-            await services.agents.refreshStandings();
-            const targets =
-                input.ids ??
-                services.agents
+            /* THE RE-PROBE IS THE BULK PRESS'S ALONE. "Every agent that is archivable right now" is a question
+             * about the DERIVED half of the status, which is invisible from the persisted entry (see
+             * archive.ts) — so "Clear" has to re-ask git before it can decide what qualifies.
+             *
+             * A named archive has already been decided, by the user, about a card they are looking at: the ids
+             * ARE the answer that probe would produce. Awaiting it anyway made one click cost a standing read
+             * over the whole live roster — cheap while every verdict's key still holds, and a git pass per
+             * agent the moment anything moved main (a land, a hand-commit, a restart empties the cache
+             * outright). That is the whole of "archiving one card is sometimes ultra slow" on a board with a
+             * thousand sessions on it: the press paid for the fleet before it did the one thing it was for.
+             * Nothing downstream needs the fresher verdict either — the guards a named archive owes the user
+             * are `notRunning` above, and archiveAgents re-reads each entry as it goes. */
+            const archivableNow = async (): Promise<string[]> => {
+                await services.agents.refreshStandings();
+                return services.agents
                     .list()
                     .filter(archivable)
                     .map((agent) => agent.id);
+            };
+            const targets = input.ids ?? (await archivableNow());
             const archived = await archiveAgents(services, targets, Date.now());
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
             // the revision that applied it — the browser holds these ids off the board until a roster at least

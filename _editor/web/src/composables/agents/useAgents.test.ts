@@ -655,6 +655,98 @@ describe("archive", () => {
         expect(archivedFlash.value).toBe(flashes + 1);
     });
 
+    /* THE PRESS PAINTS; THE REQUEST FOLLOWS IT.
+     *
+     * Behind one press sit a commit of whatever the worktree held, a checkout teardown and a ref park, per repo
+     * — so the card used to hold still for as long as the git took, which on a board carrying a fleet's worth
+     * of finished sessions reads as a button that did nothing. The card leaves on the press instead, and the
+     * daemon's answer only ever corrects it: what it declined comes back, and a failure brings back the lot. */
+    describe("before the daemon has answered", () => {
+        // A request left open on purpose, so the assertions can be made in the frame the user actually sees.
+        const held = <T>(): { answer: Promise<T>; give: (value: T) => void; refuse: (error: Error) => void } => {
+            let give!: (value: T) => void;
+            let refuse!: (error: Error) => void;
+            const answer = new Promise<T>((resolve, reject) => {
+                give = resolve;
+                refuse = reject;
+            });
+            return { answer, give, refuse };
+        };
+
+        it("takes the card off the board on the press, and leaves it off when the archive lands", async () => {
+            const { archive, lanes } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            const request = held<{ moved: AgentSummary[]; rev: number }>();
+            post.mockReturnValueOnce(request.answer as never);
+
+            const press = archive([`a`]);
+
+            // Not awaited: the daemon has said nothing yet, and this is the whole point of the change.
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
+            request.give({ moved: [archivedAgent(`a`)], rev: 2 });
+            await press;
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
+        });
+
+        it("slides the card back when the press fails, under the strip that says why", async () => {
+            const { archive, lanes, notice } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
+
+            await archive([`a`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+            expect(notice.value).toContain(`the agent's turn is running`);
+        });
+
+        // The removal is a guess about what the daemon will take. An agent it declines — a turn that started
+        // under the press, a worktree that would not retire — is a card that must come back, while the ones
+        // beside it stay gone.
+        it("hands back exactly what the daemon declined", async () => {
+            const { archive, lanes, archived, undoable } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+
+            await archive([`a`, `b`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
+            expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
+            expect(undoable.value).toEqual([`a`]);
+        });
+
+        // "Nothing moved" is the case the optimistic removal got entirely wrong, so the board is put back whole.
+        it("puts the whole lane back when nothing moved", async () => {
+            const { archive, lanes, receipt } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [], rev: 2 } as never);
+
+            await archive();
+
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+            expect(receipt.value?.message).toContain(`Nothing to archive`);
+        });
+
+        /* The rollback withdraws only its OWN unanswered intent. Two presses can be open on one card — the card
+         * menu of a card still animating out, a double press — and if the one that FAILS is the one that
+         * answers last, dropping the hold the successful one left would put an archived card back on the board
+         * for good. So the failure hands back only what nobody has since archived. */
+        it("leaves a card another press did archive off the board when it rolls back", async () => {
+            const { archive, lanes } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            const first = held<{ moved: AgentSummary[]; rev: number }>();
+            post.mockReturnValueOnce(first.answer as never);
+            const failing = archive([`a`]);
+            // The second press, made while the first is still open, is the one that lands.
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+            await archive([`a`]);
+
+            first.refuse(new Error(`daemon went away`));
+            await failing;
+
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
+        });
+    });
+
     it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
         const { archive, receipt } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);

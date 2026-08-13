@@ -395,3 +395,33 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
     expect(agents[0]).toMatchObject({ id: "conv1", costUsd: 0.25 });
     expect(agents[0]?.status).not.toBe("running");
 });
+
+/* WHAT A NAMED ARCHIVE DOES NOT DO FIRST.
+ *
+ * The standing probe answers "which agents would the board call finished right now" — a question only the bulk
+ * press has to ask, since it is the one deciding what qualifies. A named archive has already been decided, by
+ * the user, about a card in front of them.
+ *
+ * Asking anyway made one click cost a probe over the whole live roster. That is nearly free while the verdicts
+ * still hold — and a git pass per agent the moment anything moves the main line, which is why archiving one
+ * card on a board carrying a thousand sessions was fast most of the time and interminable the rest of it. */
+test("archiving a named agent asks nothing of the rest of the fleet; clearing the lane still does", async () => {
+    const daemon = services();
+    const probe = vi.spyOn(daemon.agents, "refreshStandings");
+    const client = clientFor(createApp(daemon));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+    await runAgentTurn(client, { prompt: "and this", conversationId: "conv2", isolated: true });
+    // The roster read is self-healing and probes on purpose (agents.routes list) — this test is about the press.
+    probe.mockClear();
+
+    await client.agents.archive({ ids: ["conv1"] });
+
+    expect(probe).not.toHaveBeenCalled();
+    expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv1"]);
+
+    probe.mockClear();
+    await client.agents.archive({});
+
+    expect(probe).toHaveBeenCalled();
+    expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
+});

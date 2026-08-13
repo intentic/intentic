@@ -224,6 +224,29 @@ const archivedCards = computed(() => archived.value.filter((agent) => !insideRun
 // How big the archive READS — the rows it would draw, which is what the door promising to open it and the
 // header counting it are both about. A run filed away with its four steps is one row there, not five.
 const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.value.length);
+/* HOW MUCH OF THE ARCHIVE IS DRAWN AT ONCE.
+ *
+ * The live lanes are self-limiting — the board holds what the user is working on, and the Finished lane windows
+ * itself (FINISHED_WINDOW) — but the archive is the pile everything ends up in, and it was drawn WHOLE. Every
+ * row is a full card: its status, its cost, its diff, its own animation slot in the lane's TransitionGroup. So
+ * opening the door on a workspace with a thousand sessions behind it built a thousand cards in one frame, and
+ * the press that opened it looked like the app had hung — the one moment the archive is asked to prove it is
+ * cheap to keep things in.
+ *
+ * A page rather than the Finished lane's fixed window, because the two lists are asked different questions: the
+ * lane is confirming what just completed (six is the whole answer), while the archive is browsed and searched.
+ * So this GROWS — the tail row adds a page and never takes one back, since a reader who pressed for more has
+ * not asked to be walked back up the list.
+ *
+ * Sized to fill a tall column and no more: enough that scrolling starts before the tail is reached, small
+ * enough that the frame lands immediately. */
+const ARCHIVE_PAGE = 30;
+const archiveShown = ref(ARCHIVE_PAGE);
+// The archive under the query, whole — the filter runs over the PILE and the page is taken from its results,
+// never the other way round: paging first would search the thirty rows that happened to be drawn and answer
+// "no matches" for a session sitting nine hundred rows down.
+const archiveRows = computed(() => (filtering.value ? archivedCards.value.filter(matches) : archivedCards.value));
+const archiveHidden = computed(() => Math.max(0, archiveRows.value.length - archiveShown.value));
 
 // The run's DESIGN, on the workflows page — a different question from "what is it doing", and the only one
 // this board cannot answer: editing the graph belongs where the graph is authored.
@@ -231,7 +254,12 @@ const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.
 // query answers with the board first and its outskirts second; reset whenever the query changes, since "show
 // me the rest" was said about a set that no longer exists.
 const showBeyond = ref(false);
-watch(needle, () => (showBeyond.value = false));
+// A new query is a new list: both of these were "show me more" said about a set that no longer exists, and an
+// archive left scrolled four pages deep would answer the next search with four pages of it.
+watch(needle, () => {
+    showBeyond.value = false;
+    archiveShown.value = ARCHIVE_PAGE;
+});
 /* WHICH CARD WEARS THE RING. Normally the docked chat's agent — desktop only, since a phone has no dock for
  * "selected" to be about — and, for a moment after a link named one, that card on either form factor (the
  * focus block below sets `flashId`; it owns the timer that clears it).
@@ -272,17 +300,23 @@ const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, 
 // A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep the
 // TransitionGroup off several hundred cards), and a result set is neither — hiding four of a query's six hits
 // behind "6 earlier" would be the board deciding which of the user's own matches they meant.
+//
+// THE ARCHIVE KEEPS ITS PAGE UNDER A FILTER, which is the opposite call and the same reasoning: the pile it is
+// paging is unbounded, so a query matching four hundred filed-away sessions is exactly the case the cap is for.
+// Nothing is hidden by it either — the tail row says how many are behind it and adds them.
 const cardsFor = (lane: FleetLane): FleetAgent[] => {
-    const source =
-        lane !== `finished`
-            ? boardLanes.value[lane]
-            : archiveOpen.value
-              ? archivedCards.value
-              : windowed.value
-                ? finishedWindow.value.shown
-                : boardLanes.value.finished;
+    if (lane === `finished` && archiveOpen.value) {
+        return archiveRows.value.slice(0, archiveShown.value);
+    }
+    const source = lane !== `finished` ? boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : boardLanes.value.finished;
     return filtering.value ? source.filter(matches) : source;
 };
+/* How many rows a lane's filter KEPT — the numerator the lane headers and the board's tally both report, and
+ * deliberately not the length of what is DRAWN: the archive draws a page of its matches (see cardsFor), so
+ * counting the cards would have a header reporting the pager's state as the search's answer ("30 of 1030" over
+ * four hundred hits). Every other lane draws everything it kept, so the two readings are one number there. */
+const keptIn = (lane: FleetLane): number =>
+    (lane === `finished` && archiveOpen.value ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;
 /* How many of the lane's ROWS the filter kept, against how many it holds — the `3 of 12` on its header. The
  * denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
  * disagreed with the cards under it would be worse than none.
@@ -296,7 +330,7 @@ const laneCount = (lane: FleetLane): string => {
         archiveOpen.value && lane === `finished`
             ? archiveSize.value
             : boardLanes.value[lane].length + runsInLane(boardRunRows.value, lane, Number.POSITIVE_INFINITY, needingYou.value).length;
-    return filtering.value ? `${cardsFor(lane).length + runsFor(lane).length} of ${held}` : `${held}`;
+    return filtering.value ? `${keptIn(lane)} of ${held}` : `${held}`;
 };
 /* What the tail row collapses: the window's own count, so a card pinned into the lane is counted out of it
  * rather than being both on screen and reported as hidden — PLUS the runs the same window capped.
@@ -382,6 +416,9 @@ const toggleArchive = (): void => {
     archiveOpen.value = !archiveOpen.value;
     purged.value = false;
     if (archiveOpen.value) {
+        // Back to one page on every opening: the door is pressed to look something up, and it should cost the
+        // same the tenth time as the first however far the last visit scrolled.
+        archiveShown.value = ARCHIVE_PAGE;
         void loadArchived();
     }
 };
@@ -629,7 +666,7 @@ const started = computed(
 );
 // The header's tally. Summed over the same cardsFor and runsFor the lanes render, so it can never disagree
 // with the `n of m` counts under it.
-const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length + runsFor(lane.key).length, 0));
+const kept = computed(() => LANES.reduce((sum, lane) => sum + keptIn(lane.key), 0));
 const matchTally = computed(() => `${kept.value} of ${total.value}`);
 // Nothing on the board AND nothing beyond it — the filter's own empty state, which is a different thing from
 // an empty fleet (there ARE agents; none of them is this one).
@@ -1322,6 +1359,19 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     >
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
+                    </button>
+                    <!-- The archive's own tail. One-way, unlike the lane's toggle above: this pile has no
+                         "fewer" worth offering — the reader pressed for more of a list they are searching, and
+                         collapsing it back under them would lose their place. The count is what the row is for,
+                         so it stays honest under a query (archiveRows filters before the page is taken). -->
+                    <button
+                        v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
+                        type="button"
+                        :class="cmp.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
+                        @click="archiveShown += ARCHIVE_PAGE"
+                    >
+                        <Icon name="chevron-down" class="text-2xs" />
+                        {{ archiveHidden }} more
                     </button>
                 </section>
             </div>

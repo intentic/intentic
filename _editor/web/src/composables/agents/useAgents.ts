@@ -29,7 +29,13 @@ const registry = shallowRef<AgentSummary[]>([]);
 // The OTHER half of the fleet — the agents filed away. Declared here, beside the roster it is the counterpart
 // of, because `fleet` reads it: an archived session whose tab holds unsent words is lifted back onto the board.
 // What the list is, when it is read, and why it is pull-only rather than streamed is under "--- Archive" below.
-const archived = ref<FleetAgent[]>([]);
+//
+// shallowRef for the roster's reason, which applies here twice over: every write below REPLACES this array, and
+// this is the half that GROWS WITHOUT BOUND — the board's live roster is bounded by what the user is working
+// on, while the archive is everything they ever finished. A deep ref re-proxied every filed-away summary on
+// each write, so opening the archive on a fleet with a thousand sessions in it paid for a thousand proxies
+// before it drew anything.
+const archived = shallowRef<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 
 /* --- Roster ordering ----------------------------------------------------------------------------------------
@@ -112,6 +118,46 @@ const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], r
         pending.set(move.id, move.present === undefined ? { untilRev: rev } : { untilRev: rev, present: move.present });
     }
     registry.value = withPending(registry.value.filter((agent) => !pending.has(agent.id)));
+};
+
+/* THE SAME REMOVAL, TAKEN BEFORE THE DAEMON HAS ANSWERED — and the way back if it never does.
+ *
+ * Archiving is the board's one safe exit: nothing is destroyed, the branch and the conversation are kept, and
+ * the counter it lands in is one press from opening. What it is NOT is quick — behind the press sit a commit
+ * of whatever the worktree held, a checkout teardown and a ref park, per repo. So the press held its card in
+ * place for as long as the git took, which on a board carrying a thousand sessions reads as a button that did
+ * nothing, and the honest response to a button that did nothing is to press it again.
+ *
+ * The card therefore leaves on the press and the request runs behind it. Everything that CANNOT be taken back
+ * cheaply still waits for the answer — the chat tab stays open, the archive list is written from what actually
+ * moved, the undo set counts what actually moved — so a refusal costs the user a card sliding back into its
+ * lane under the error strip, and nothing else.
+ *
+ * Held at POSITIVE_INFINITY because at this moment there is no revision to hold to: no roster may retire this
+ * intent, only the answer that replaces it (holdPending at the rev that applied it) or the rollback below.
+ * Returns the rollback, which puts back every card it took but the ones named `keep` — the daemon's own
+ * account of what moved, since an aimed-at agent it declined is a card that must come back. */
+const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<string>) => void) => {
+    const held = new Map(registry.value.filter((agent) => ids.includes(agent.id)).map((agent) => [agent.id, agent]));
+    holdPending(
+        ids.map((id) => ({ id })),
+        Number.POSITIVE_INFINITY,
+    );
+    return (keep) => {
+        const back = [...held].filter(([id]) => keep?.has(id) !== true);
+        for (const [id] of back) {
+            // Only ever this call's OWN unanswered intent: an overlapping press that has since re-held the same
+            // id at a real revision is holding it against a roster in flight, and dropping that would let the
+            // card it archived flicker back onto the board.
+            if (pending.get(id)?.untilRev === Number.POSITIVE_INFINITY) {
+                pending.delete(id);
+            }
+        }
+        const returning = back.filter(([id]) => !pending.has(id)).map(([, agent]) => agent);
+        if (returning.length > 0) {
+            registry.value = withPending([...registry.value, ...returning]);
+        }
+    };
 };
 
 /* The review panel's diff query (the per-file landed flags behind "Land now", and the conflict report) is
@@ -760,11 +806,15 @@ const dismissReceipt = (): void => {
 // header's "Clear"). The daemon answers with the agents that actually moved: "everything finished" cannot be
 // re-derived once the lane is empty, and the summaries are what the archive list renders.
 const archive = async (ids?: readonly string[]): Promise<void> => {
-    // The bulk press has no ids of its own, so it borrows the lane's — otherwise "Clear" would sit silent
-    // through the round-trip while the cards it is about to take carried on looking untouched.
-    const release = claimBusy(ids ?? lanes.value.finished.map((agent) => agent.id));
+    // The bulk press has no ids of its own, so it borrows the lane's — the Finished lane IS the archivable set
+    // (it is landed-or-idle by construction), so this is the same set the daemon will pick, and any card it
+    // declines is handed back by the rollback below.
+    const aimed = ids ?? lanes.value.finished.map((agent) => agent.id);
+    const release = claimBusy(aimed);
     // A sweep is the archive with no per-card animation to vouch for it, so it is the archive that reports.
     const sweep = ids === undefined || ids.length > 1;
+    // The cards leave here, not on the answer — see takeOffBoard for why, and for what `restore` puts back.
+    const restore = takeOffBoard(aimed);
     try {
         const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(
             `/agents/archive`,
@@ -772,7 +822,9 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         );
         if (moved.length === 0) {
             // A press that changed nothing always says so, however few cards it aimed at: silence is the one
-            // reading the user can't distinguish from a broken button.
+            // reading the user can't distinguish from a broken button. And every card it took on spec goes back,
+            // because "nothing moved" is exactly the case the optimistic removal guessed wrong about.
+            restore();
             receipt.value = { message: `Nothing to archive — every finished agent is already off the board.` };
             return;
         }
@@ -789,6 +841,9 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             moved.map((agent) => ({ id: agent.id })),
             rev,
         );
+        // …and the rest of what the press aimed at comes back: the removal was taken on spec, and this is the
+        // daemon's account of which of it was right.
+        restore(gone);
         archived.value = [
             // Object.assign, not a spread — `moved` is this call's own freshly-parsed JSON.
             ...moved.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false })),
@@ -810,6 +865,8 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             receipt.value = { message: `${count} agent${count === 1 ? `` : `s`} archived`, undo: undoArchive };
         }
     } catch (error) {
+        // The press failed, so the cards it took slide back into their lane — under the strip that says why.
+        restore();
         notice.value = errorMessage(error, `Couldn't archive that.`);
     } finally {
         release();
