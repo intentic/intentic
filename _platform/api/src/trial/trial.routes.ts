@@ -133,7 +133,10 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (attempt === undefined || attempt.response.status >= 500) {
             await refundTrialMessage(prisma, ownerId, at);
             c.get(`logger`)?.warn({ tried: attempt?.tried ?? 0 }, `trial: no key answered`);
-            return c.json({ error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } }, 502);
+            return c.json(
+                { error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } },
+                502,
+            );
         }
         /* Streamed straight through. The body is upstream's own — SSE frames for a streaming request, JSON for a
          * plain one — and re-encoding it here would mean owning a wire format that is not ours and re-shipping

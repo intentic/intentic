@@ -5,7 +5,11 @@ import { parseSkillFile, skillDocument } from "./skill-file.js";
 // Skills surface is re-listed by parsing the very file the save composed.
 test("a composed skill round-trips through the parser", () => {
     const doc = skillDocument("release-notes", "Use when drafting release notes.", "# Notes\n\nRun `git log`.");
-    expect(parseSkillFile(doc)).toEqual({ name: "release-notes", description: "Use when drafting release notes.", body: "# Notes\n\nRun `git log`.\n" });
+    expect(parseSkillFile(doc)).toEqual({
+        name: "release-notes",
+        description: "Use when drafting release notes.",
+        body: "# Notes\n\nRun `git log`.\n",
+    });
 });
 
 /* The value that would silently change what the frontmatter MEANS. A description reading "Use when: the user asks"

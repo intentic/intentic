@@ -30,7 +30,7 @@ import { tsgoExePath } from "./tsgo.js";
 // The compiler answers about one project; callers ask about files. The nearest tsconfig.json above a file is
 // its project — the same question ts.findConfigFile answers, asked without loading any compiler.
 export const findTsconfig = (fromPath: string): string | undefined => {
-    for (let dir = dirname(resolve(fromPath)); ; ) {
+    for (let dir = dirname(resolve(fromPath)); ;) {
         const candidate = join(dir, "tsconfig.json");
         if (existsSync(candidate)) {
             return candidate;
@@ -67,7 +67,7 @@ const UNLOADED_FOUNDATIONS = new Set([2318, 2468, 2688]);
 const MISSING_TYPE_DEFINITIONS = new Set([2580, 2582, 2584, 2591]);
 
 const typesAbove = (fromDir: string): boolean => {
-    for (let dir = resolve(fromDir); ; ) {
+    for (let dir = resolve(fromDir); ;) {
         if (existsSync(join(dir, "node_modules", "@types"))) {
             return true;
         }

@@ -125,11 +125,7 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
                 agent: async function* (request) {
                     // Exactly what the `ask` tool does — the card names the conversation it parked, which is
                     // what lets the reply route end that turn.
-                    const { id, wait } = createRequest(
-                        "question",
-                        { kind: "question", requestId: "", cancelled: true },
-                        request.conversationId,
-                    );
+                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
                     yield { kind: "question", requestId: id, questions: [] };
                     raised?.(id);
                     const { resolved } = await wait(request.signal);

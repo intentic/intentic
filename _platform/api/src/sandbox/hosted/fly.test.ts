@@ -53,7 +53,10 @@ describe(`fly`, () => {
 
     it(`lists app names and tolerates delete's empty body`, async () => {
         stubFetch([
-            { match: (method, url) => method === `GET` && url.includes(`/apps?org_slug=`), respond: () => json({ apps: [{ name: `a` }, { name: `b` }] }) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/apps?org_slug=`),
+                respond: () => json({ apps: [{ name: `a` }, { name: `b` }] }),
+            },
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
         expect(await listAppNames(`tok`, `intentic`)).toEqual([`a`, `b`]);

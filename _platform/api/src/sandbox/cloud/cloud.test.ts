@@ -305,15 +305,20 @@ describe(`oracle`, () => {
         ]);
         // Re-route the instance POST per body: refuse ad1, accept everything after.
         const instanceRoute = calls; // recorded calls carry the body the walk sent
-        vi.stubGlobal(`fetch`, ((original) =>
-            (url: URL | string, init?: RequestInit): Promise<Response> => {
-                const body = typeof init?.body === `string` ? (JSON.parse(init.body) as { availabilityDomain?: string }) : {};
-                if (String(url).endsWith(`/instances/`) && body.availabilityDomain !== `ad1`) {
-                    instanceRoute.push({ method: `POST`, url: String(url), body });
-                    return Promise.resolve(json({ id: `vm-ad2` }));
+        vi.stubGlobal(
+            `fetch`,
+            (
+                (original) =>
+                (url: URL | string, init?: RequestInit): Promise<Response> => {
+                    const body = typeof init?.body === `string` ? (JSON.parse(init.body) as { availabilityDomain?: string }) : {};
+                    if (String(url).endsWith(`/instances/`) && body.availabilityDomain !== `ad1`) {
+                        instanceRoute.push({ method: `POST`, url: String(url), body });
+                        return Promise.resolve(json({ id: `vm-ad2` }));
+                    }
+                    return original(url, init);
                 }
-                return original(url, init);
-            })(globalThis.fetch as (url: URL | string, init?: RequestInit) => Promise<Response>));
+            )(globalThis.fetch as (url: URL | string, init?: RequestInit) => Promise<Response>),
+        );
         const created = await oracleCreate(snippet, pem, { name: `n`, location: `ad1`, size: `VM.Standard.A1.Flex`, userData: `` });
         expect(created.serverId).toBe(`vm-ad2`);
         const launched = instanceRoute.filter((entry) => entry.url.endsWith(`/instances/`));

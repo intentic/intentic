@@ -104,9 +104,7 @@ export const browserHandler: CapabilityHandler = {
         if (site === undefined) {
             throw new Error(`"${urls.homeUrl}" is not a web address — include https:// and the site's host`);
         }
-        const note = browserToolsNote(
-            born === undefined ? undefined : { id: born.id, email: (born.config as IdentityConfig).email },
-        );
+        const note = browserToolsNote(born === undefined ? undefined : { id: born.id, email: (born.config as IdentityConfig).email });
         const skill = await contributedSkill(contribution, id, note, config as Record<string, string>);
         if (skill === undefined) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);

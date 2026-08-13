@@ -1,5 +1,12 @@
 import { readFile, rename } from "node:fs/promises";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema, LandConflictSchema, type LandedMessage } from "@intentic/sandbox-contract";
+import {
+    AgentHarnessSchema,
+    AgentOriginSchema,
+    AgentProviderSchema,
+    ForkedFromSchema,
+    LandConflictSchema,
+    type LandedMessage,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
 

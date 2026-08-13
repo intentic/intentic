@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AgentRunButton, type AgentRunChoice, cmp, Icon, timeAgo, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, cmp, Icon, Notice, noticeOf, timeAgo, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
 import type { DeployResource } from "./contract";
 import { host } from "./host";
 import type { Incident } from "./incidents";
@@ -57,6 +57,6 @@ const startFix = (): void => {
                 @pick="fixModel.choose"
             />
         </div>
-        <div v-if="failure" :class="cmp.alertDanger(`break-words`)">{{ failure }}</div>
+        <Notice v-if="failure" :of="noticeOf(failure)" />
     </div>
 </template>

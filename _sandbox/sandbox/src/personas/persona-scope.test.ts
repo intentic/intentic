@@ -10,7 +10,11 @@ const scopeFor = (extra: Partial<Persona>) =>
     personaScopeOf(turnPersona({ personas: [{ id: "card", capabilities: [], ...extra }], actsAs: "card", unattended: true }), ROOT);
 
 // Drive the PreToolUse hook the way the SDK does, and answer with the refusal reason or undefined for "allowed".
-const attempt = async (hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>, tool: string, input: Record<string, unknown>): Promise<string | undefined> => {
+const attempt = async (
+    hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>,
+    tool: string,
+    input: Record<string, unknown>,
+): Promise<string | undefined> => {
     const hook = hooks.PreToolUse?.[0]?.hooks[0];
     if (hook === undefined) {
         throw new Error("no PreToolUse hook was wired");

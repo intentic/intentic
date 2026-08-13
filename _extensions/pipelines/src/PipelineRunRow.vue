@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { AgentRunButton, type AgentRunChoice, Avatar, Button, Dialog, formatTimestamp, Icon, StatusBadge, timeAgo, useAgentRunPick } from "@intentic/extension-ui";
+import {
+    AgentRunButton,
+    type AgentRunChoice,
+    Avatar,
+    Button,
+    Dialog,
+    formatTimestamp,
+    Icon,
+    StatusBadge,
+    timeAgo,
+    useAgentRunPick,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import PipelineDagGraph from "./PipelineDagGraph.vue";

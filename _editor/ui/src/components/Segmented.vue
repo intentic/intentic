@@ -42,7 +42,11 @@ const model = defineModel<T>({ required: true });
 </script>
 
 <template>
-    <div role="tablist" class="flex items-center" :class="[stretch ? `w-full gap-1 rounded-lg border border-line bg-canvas p-1` : `gap-0.5`, wrap ? `flex-wrap gap-y-1` : ``]">
+    <div
+        role="tablist"
+        class="flex items-center"
+        :class="[stretch ? `w-full gap-1 rounded-lg border border-line bg-canvas p-1` : `gap-0.5`, wrap ? `flex-wrap gap-y-1` : ``]"
+    >
         <button
             v-for="option in options"
             :key="option.value"

@@ -81,14 +81,14 @@ const setDailyMax = (raw: string): void => {
 <template>
     <div class="flex w-pop-sm flex-col gap-3 p-1">
         <p class="text-2xs text-subtle">
-            A gate gives this workflow a webhook a CI pipeline can call: the pipeline POSTs what it knows, the whole design runs, and
-            the reply is pass, fail or blocked — read off one declared field, never scraped out of prose.
+            A gate gives this workflow a webhook a CI pipeline can call: the pipeline POSTs what it knows, the whole design runs, and the reply is
+            pass, fail or blocked — read off one declared field, never scraped out of prose.
         </p>
 
         <template v-if="gate === undefined">
             <p v-if="eligible.length === 0" class="text-2xs text-warning">
-                A gate reads a declared output field, and no step declares one yet. Give the deciding step a data field first — select
-                it on the canvas and add one under Advanced.
+                A gate reads a declared output field, and no step declares one yet. Give the deciding step a data field first — select it on the
+                canvas and add one under Advanced.
             </p>
             <Button v-else label="Add a gate" size="small" severity="secondary" class="self-start" @click="add()">
                 <template #icon><Icon name="plus" /></template>

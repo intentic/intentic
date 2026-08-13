@@ -71,4 +71,8 @@ const flatten = (content: readonly StructuralElement[] | undefined): string[] =>
     return lines;
 };
 
-export const documentText = (doc: GoogleDoc): string => flatten(doc.body?.content).join("\n").replaceAll(/\n{3,}/g, "\n\n").trim();
+export const documentText = (doc: GoogleDoc): string =>
+    flatten(doc.body?.content)
+        .join("\n")
+        .replaceAll(/\n{3,}/g, "\n\n")
+        .trim();

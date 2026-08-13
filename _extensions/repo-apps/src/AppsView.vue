@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, type IconName, Page, PageAction, PageHeader, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Notice, noticeOf, Page, PageAction, PageHeader, StatusBadge, type IconName } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
@@ -206,9 +206,9 @@ onUnmounted(() => {
                     </template>
                 </PageHeader>
 
-                <div v-if="error" :class="cmp.alertDanger('mb-4')">{{ error }}</div>
-                <div v-if="testsError" :class="cmp.alertDanger('mb-4')">{{ testsError }}</div>
-                <div v-if="actionError" :class="cmp.alertDanger('mb-4')">{{ actionError }}</div>
+                <Notice v-if="error" :of="noticeOf(error)" class="mb-4" />
+                <Notice v-if="testsError" :of="noticeOf(testsError)" class="mb-4" />
+                <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-4" />
 
                 <!-- Apps: startable instances (monorepo only), one grouped list keyed by type. Each app carries its
                      own Run-tests when it owns projects; the type icon (globe = frontend, server = backend) is the

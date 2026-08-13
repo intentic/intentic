@@ -153,9 +153,10 @@ test("dispatch routes by provider and channelId and wakes with the JSON line as 
     await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
     await eventually(async () => expect((await services.automations.get("all-channels"))?.runs).toHaveLength(1));
     // The stranger's JSON line rides sealed in the outside-content envelope — byte-identical inside it.
-    const sealed = /^wake:all-channels\n\n--- Event payload ---\n<untrusted-content source="discord" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">$/.exec(
-        prompts[0] ?? "",
-    );
+    const sealed =
+        /^wake:all-channels\n\n--- Event payload ---\n<untrusted-content source="discord" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">$/.exec(
+            prompts[0] ?? "",
+        );
     expect(sealed?.[2]).toBe(JSON.stringify(message()));
     // The c2-scoped automation and the disabled one never fired.
     expect((await services.automations.get("one-channel"))?.runs).toEqual([]);

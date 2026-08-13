@@ -80,8 +80,7 @@ const classesOf = (css: string): Set<string> =>
 
 // A fresh compiler per build: `build()` accumulates the candidates it has been given, so two calls on one
 // instance would measure the union rather than each set.
-const surfaceBuild = async (): Promise<(candidates: string[]) => string> =>
-    (await compile(SURFACE, { base: ROOT, loadStylesheet })).build;
+const surfaceBuild = async (): Promise<(candidates: string[]) => string> => (await compile(SURFACE, { base: ROOT, loadStylesheet })).build;
 
 test("every class the first-party extensions use is one the surface promises", async () => {
     const screens = readdirSync(join(ROOT, `_extensions`), { withFileTypes: true })

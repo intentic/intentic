@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Panel, type TimeWindow, timeWindowWords } from "@intentic/extension-ui";
+import { cmp, Icon, Notice, noticeOf, Panel, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -37,7 +37,7 @@ const days = computed(() => byDay(episodes, Date.now()));
         <!-- A connection that should be up and isn't says so here, where the person who selected it is looking.
              Above the scroll, so it stays put while the feed under it moves. -->
         <template v-if="source?.lastError || source?.gateway === `idle`" #strips>
-            <p v-if="source?.lastError" :class="cmp.alertDanger('mx-4 mt-3 px-3 py-2 text-2xs')">{{ source.lastError }}</p>
+            <Notice v-if="source?.lastError" :of="noticeOf(source.lastError)" class="mx-4 mt-3" />
             <p v-else class="mx-4 mt-3 text-2xs text-muted">
                 Idle — no enabled listener automation for {{ source.label }} yet, so nothing is being listened for.
             </p>

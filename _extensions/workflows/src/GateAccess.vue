@@ -32,8 +32,8 @@ const url = computed<string | undefined>(() => {
         </div>
         <p class="text-2xs text-subtle">
             POST what the pipeline knows — commit, branch, preview URL — and the reply waits for the run: an
-            <code>outcome</code> of pass, fail or blocked, with one line of why. The token in the URL is the whole auth — keep it
-            in your CI's secret store, never in a committed file.
+            <code>outcome</code> of pass, fail or blocked, with one line of why. The token in the URL is the whole auth — keep it in your CI's secret
+            store, never in a committed file.
         </p>
         <Code :code="githubStep(workflow.name)" lang="yaml" label="GitHub Actions — the URL goes in a secret named INTENTIC_GATE_URL" />
         <Code :code="curlLine(url)" lang="bash" label="Any CI" wrap />

@@ -181,12 +181,23 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
         }
         const feature = FEATURE_SKILLS[skill.name];
         if (feature !== undefined) {
-            rows.push(summary({ id: skill.name, name: skill.name, description: skill.description, origin: "builtin", owner: feature, enabled: true }));
+            rows.push(
+                summary({ id: skill.name, name: skill.name, description: skill.description, origin: "builtin", owner: feature, enabled: true }),
+            );
             continue;
         }
         const provider = capabilityFor(capabilities, skill.name);
         if (provider !== undefined) {
-            rows.push(summary({ id: skill.name, name: skill.name, description: skill.description, origin: "capability", owner: provider.id, enabled: true }));
+            rows.push(
+                summary({
+                    id: skill.name,
+                    name: skill.name,
+                    description: skill.description,
+                    origin: "capability",
+                    owner: provider.id,
+                    enabled: true,
+                }),
+            );
             continue;
         }
         rows.push(summary({ id: skill.name, name: skill.name, description: skill.description, origin: "dropped", enabled: true, removable: true }));

@@ -15,17 +15,29 @@ const fakePrisma = (seed = 0) => {
             const value = spent.get(key(where.userId_day.userId, where.userId_day.day));
             return value === undefined ? null : { credits: value };
         }),
-        upsert: vi.fn(async ({ where, create, update }: { where: { userId_day: { userId: string; day: string } }; create: { credits: number }; update: { credits: { increment: number } } }) => {
-            const k = key(where.userId_day.userId, where.userId_day.day);
-            const next = (spent.get(k) ?? 0) + (spent.has(k) ? update.credits.increment : create.credits);
-            spent.set(k, next);
-            return { credits: next };
-        }),
-        update: vi.fn(async ({ where, data }: { where: { userId_day: { userId: string; day: string } }; data: { credits: { decrement: number } } }) => {
-            const k = key(where.userId_day.userId, where.userId_day.day);
-            spent.set(k, (spent.get(k) ?? 0) - data.credits.decrement);
-            return { credits: spent.get(k) };
-        }),
+        upsert: vi.fn(
+            async ({
+                where,
+                create,
+                update,
+            }: {
+                where: { userId_day: { userId: string; day: string } };
+                create: { credits: number };
+                update: { credits: { increment: number } };
+            }) => {
+                const k = key(where.userId_day.userId, where.userId_day.day);
+                const next = (spent.get(k) ?? 0) + (spent.has(k) ? update.credits.increment : create.credits);
+                spent.set(k, next);
+                return { credits: next };
+            },
+        ),
+        update: vi.fn(
+            async ({ where, data }: { where: { userId_day: { userId: string; day: string } }; data: { credits: { decrement: number } } }) => {
+                const k = key(where.userId_day.userId, where.userId_day.day);
+                spent.set(k, (spent.get(k) ?? 0) - data.credits.decrement);
+                return { credits: spent.get(k) };
+            },
+        ),
         updateMany: vi.fn(async ({ where, data }: { where: { userId: string; day: string; credits: { lt: number } }; data: { credits: number } }) => {
             const k = key(where.userId, where.day);
             if ((spent.get(k) ?? 0) < 0) {

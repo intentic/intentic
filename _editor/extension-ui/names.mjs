@@ -45,6 +45,7 @@ export const extensionUiNames = [
     "NavRail",
     "noticeFrom",
     "noticeOf",
+    "Notice",
     "NoticeStack",
     "Page",
     "PageAction",

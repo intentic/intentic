@@ -49,9 +49,9 @@ test("the HTTP timeout is a minute past the gate's own hold", () => {
  * build that goes red instead of somebody's pipeline going blind. */
 test("readVerdict agrees with the contract's own schema", () => {
     const verdicts = [
-        { outcome: "pass", reason: "verdict is \"pass\".", runId: "run-1", value: "pass" },
-        { outcome: "fail", reason: "verdict is \"almost\".", runId: "run-2", value: "almost" },
-        { outcome: "blocked", reason: "\"Judge\" failed.", runId: "run-3" },
+        { outcome: "pass", reason: 'verdict is "pass".', runId: "run-1", value: "pass" },
+        { outcome: "fail", reason: 'verdict is "almost".', runId: "run-2", value: "almost" },
+        { outcome: "blocked", reason: '"Judge" failed.', runId: "run-3" },
     ];
     for (const verdict of verdicts) {
         expect(GateVerdictSchema.safeParse(verdict).success).toBe(true);
@@ -64,8 +64,7 @@ test("readVerdict agrees with the contract's own schema", () => {
 });
 
 test("the exit is the verdict: pass 0, fail 1, blocked whatever was asked for", () => {
-    const of = (outcome: "pass" | "fail" | "blocked", blockedExit: number) =>
-        exitOf({ outcome, reason: "", runId: "r" }, blockedExit);
+    const of = (outcome: "pass" | "fail" | "blocked", blockedExit: number) => exitOf({ outcome, reason: "", runId: "r" }, blockedExit);
     expect(of("pass", 3)).toBe(0);
     expect(of("fail", 3)).toBe(1);
     expect(of("blocked", 0)).toBe(0);

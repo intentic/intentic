@@ -62,6 +62,11 @@ const start = async (): Promise<void> => {
          carries a typed address, and silence here would read as "not started yet". -->
     <span v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">no dev server</span>
 
+    <!-- THE ONE FAILURE IN THESE PACKS THAT IS NOT A <Notice>, and deliberately so. Every other hand-rolled
+         `cmp.alertDanger()` strip is now that component; this is a CHIP — it sits inline in a row of addresses,
+         truncates to whatever width is left, and carries its full text in a tooltip. A notice box is a block
+         that owns its line, which is the opposite of what this row needs. It borrows the danger tint, not the
+         shape. -->
     <span v-else-if="failure" :class="[cmp.alertDanger(`px-2 py-0.5 text-2xs`), `truncate`]" :title="failure">{{ failure }}</span>
 
     <!-- READY, SERVING ONE THING, FROM A TERMINAL. The address is the label — the one fact worth checking at a

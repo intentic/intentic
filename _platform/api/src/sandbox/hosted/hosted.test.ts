@@ -178,7 +178,14 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
         // The user's clock starts here — the pool's own no-op boot was the platform's cost, not theirs.
         expect(created).toHaveBeenCalledWith({
-            data: { sandboxId: `s1`, appName: `intentic-sbx-pool-abc123`, machineId: `m7`, volumeId: `vol_7`, region: `iad`, wokeAt: expect.any(Date) },
+            data: {
+                sandboxId: `s1`,
+                appName: `intentic-sbx-pool-abc123`,
+                machineId: `m7`,
+                volumeId: `vol_7`,
+                region: `iad`,
+                wokeAt: expect.any(Date),
+            },
         });
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
@@ -213,7 +220,11 @@ describe(`provisionHosted`, () => {
         ]);
         const prisma = fakePrisma({
             hostedMachine: { create: created },
-            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), delete: poolDelete },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([poolRow]),
+                updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+                delete: poolDelete,
+            },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);

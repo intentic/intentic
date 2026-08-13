@@ -238,7 +238,11 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                  are often five of them, so a line apiece turned the answer to "which port did I
                                  get" into a column to read top to bottom. -->
                             <div v-if="reachable(group).length > 0" class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                                <span v-for="port in reachable(group)" :key="`${port.port}:${port.state}`" class="flex min-w-0 items-baseline gap-1.5">
+                                <span
+                                    v-for="port in reachable(group)"
+                                    :key="`${port.port}:${port.state}`"
+                                    class="flex min-w-0 items-baseline gap-1.5"
+                                >
                                     <span class="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium" :class="PORT_CHIP[port.state]">
                                         localhost:{{ port.port }}
                                     </span>

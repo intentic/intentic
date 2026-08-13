@@ -2,7 +2,15 @@ import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-co
 import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
 import { askQuickModel, type QuickModelAttempt } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
-import { cleanBreakingNote, cleanCommitSubject, cleanReleaseNote, commitMessagePrompt, fallbackBreakingNote, markSubjectBreaking, type RepoDiff } from "../git/commit-message.js";
+import {
+    cleanBreakingNote,
+    cleanCommitSubject,
+    cleanReleaseNote,
+    commitMessagePrompt,
+    fallbackBreakingNote,
+    markSubjectBreaking,
+    type RepoDiff,
+} from "../git/commit-message.js";
 import { claimedContractShrink } from "../git/contract-shrink.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 

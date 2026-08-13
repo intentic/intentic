@@ -51,7 +51,9 @@ const emit = defineEmits<{ promote: [number]; remove: [number] }>();
             <span
                 v-else-if="warnThinking && entry.choice && namesThinking(entry.choice.model)"
                 class="shrink-0 text-2xs text-warning"
-                v-tooltip.top="'This model reasons before it answers — accurate, but seconds slower for a job meant to be instant. A quieter row of the same model is usually the better quick model.'"
+                v-tooltip.top="
+                    'This model reasons before it answers — accurate, but seconds slower for a job meant to be instant. A quieter row of the same model is usually the better quick model.'
+                "
             >
                 Thinks
             </span>

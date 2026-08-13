@@ -61,8 +61,8 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                     <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
                 </div>
                 <p v-if="breaking" class="text-2xs text-subtle">
-                    This update removes or changes things you may rely on — read what changes below before taking it. Your files (in /work) are
-                    kept either way, and you can roll back afterwards —
+                    This update removes or changes things you may rely on — read what changes below before taking it. Your files (in /work) are kept
+                    either way, and you can roll back afterwards —
                     <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
                         >what updates never break</a
                     >.

@@ -1170,10 +1170,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                  The one exception is a query that matched NOTHING: there is no card left on the board to drag,
                  so the full height buys nothing and costs the miss its explanation, which would otherwise be
                  pushed to exactly the fold. -->
-            <div
-                class="grid gap-3 p-3"
-                :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-5 lg:px-5', noMatches ? '' : 'h-full']"
-            >
+            <div class="grid gap-3 p-3" :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-5 lg:px-5', noMatches ? '' : 'h-full']">
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
@@ -1411,11 +1408,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              off the board can only be reached by scrolling to look for something you don't know is there.
              Expanded, it takes at most half the column and scrolls itself, so the board above it never
              disappears. -->
-        <div
-            v-if="beyondVisible"
-            class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2"
-            :class="narrow ? '' : 'lg:px-4'"
-        >
+        <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2" :class="narrow ? '' : 'lg:px-4'">
             <button
                 type="button"
                 class="flex w-full shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"

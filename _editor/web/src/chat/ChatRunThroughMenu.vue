@@ -58,8 +58,8 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
              Somebody reading this has just pressed a control whose glyph told them nothing. -->
         <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
             Nothing saved yet. A <strong class="font-medium text-muted">loop</strong> sends your message over and over — fixing, checking, fixing —
-            until something you can state is true. A <strong class="font-medium text-muted">workflow</strong> hands it to a design of several
-            sessions instead of to this chat.
+            until something you can state is true. A <strong class="font-medium text-muted">workflow</strong> hands it to a design of several sessions
+            instead of to this chat.
         </p>
 
         <!-- The way back to an ordinary message, and it has to be a row: the pill is a badge, so unpicking

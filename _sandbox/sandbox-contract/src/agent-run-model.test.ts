@@ -56,7 +56,5 @@ test("drops a malformed key instead of sending it to a provider", () => {
 test("carries a model id the static catalog has never heard of", () => {
     // The picker offers a custom-id escape hatch, so a pin can name a model released after this build. Second-
     // guessing it here would quietly run something other than what the settings row says.
-    expect(resolveAgentRunModels([CLAUDE], [`claude:claude-opus-9-preview`])).toEqual([
-        { provider: `claude`, model: `claude-opus-9-preview` },
-    ]);
+    expect(resolveAgentRunModels([CLAUDE], [`claude:claude-opus-9-preview`])).toEqual([{ provider: `claude`, model: `claude-opus-9-preview` }]);
 });

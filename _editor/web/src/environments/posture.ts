@@ -38,7 +38,11 @@ const read = (): LocalPosture | undefined => {
         return undefined;
     }
     const view = local.view !== undefined && VIEWS.has(local.view) ? (local.view as LocalPosture["view"]) : "chat";
-    return { engineUrl: local.engineUrl.replace(/\/+$/, ""), view, label: local.label !== undefined && local.label !== "" ? local.label : "This machine" };
+    return {
+        engineUrl: local.engineUrl.replace(/\/+$/, ""),
+        view,
+        label: local.label !== undefined && local.label !== "" ? local.label : "This machine",
+    };
 };
 
 // Snapshotted once at module eval, like `environment` itself — a posture cannot change mid-session.

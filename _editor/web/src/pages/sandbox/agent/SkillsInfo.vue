@@ -44,8 +44,6 @@ const ORIGINS = [
             and situations it should trigger on rather than describing the skill in the abstract. A skill nobody can tell when to use is a skill that
             never gets used, and nothing on screen looks wrong when that happens.
         </p>
-        <p class="mt-1.5 text-2xs text-subtle">
-            Changes land on the next turn — a conversation already running keeps the skills it started with.
-        </p>
+        <p class="mt-1.5 text-2xs text-subtle">Changes land on the next turn — a conversation already running keeps the skills it started with.</p>
     </InfoDialog>
 </template>

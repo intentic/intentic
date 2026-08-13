@@ -137,13 +137,21 @@ const connect = (path: string): Promise<net.Socket> =>
         socket.once("error", reject);
     });
 
-const exists = async (path: string): Promise<boolean> => readFile(path).then(() => true).catch(() => false);
+const exists = async (path: string): Promise<boolean> =>
+    readFile(path)
+        .then(() => true)
+        .catch(() => false);
 
 test("handshake and tools/list are answered with no backend; the first tool call spawns it; closing kills it", async () => {
     const harness = await startMux();
     const client = await connect(harness.socket);
 
-    const init = await rpc(client, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+    const init = await rpc(client, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+    });
     expect((init["result"] as { serverInfo: { name: string } }).serverInfo.name).toBe("intentic-browser");
     client.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
 
@@ -172,7 +180,12 @@ test("handshake and tools/list are answered with no backend; the first tool call
 test("a second turn's mux answers tools/list straight from the cache — no probe, no backend", async () => {
     const first = await startMux();
     const client = await connect(first.socket);
-    await rpc(client, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+    await rpc(client, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+    });
     await rpc(client, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     client.destroy();
 
@@ -182,7 +195,12 @@ test("a second turn's mux answers tools/list straight from the cache — no prob
     const manifest = JSON.parse(await readFile(join(second.dir, "manifest.json"), "utf8")) as { probe: { command: string } };
     expect(manifest.probe.command).toBeTruthy();
     const client2 = await connect(second.socket);
-    await rpc(client2, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+    await rpc(client2, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+    });
     const list = await rpc(client2, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     expect((list["result"] as { tools: unknown[] }).tools).toHaveLength(1);
     // No backend and no probe ran for the second mux.

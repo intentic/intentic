@@ -31,7 +31,13 @@ describe(`flyMachineConfig`, () => {
     });
 
     it(`drops empty env values — an empty secret must not shadow the workspace .env`, () => {
-        const config = flyMachineConfig({ ...run, env: [[`OWNER_EMAIL`, `o@example.com`], [`HOST_SSH_KEY`, ``]] });
+        const config = flyMachineConfig({
+            ...run,
+            env: [
+                [`OWNER_EMAIL`, `o@example.com`],
+                [`HOST_SSH_KEY`, ``],
+            ],
+        });
         expect(config.env[`OWNER_EMAIL`]).toBe(`o@example.com`);
         expect(`HOST_SSH_KEY` in config.env).toBe(false);
     });

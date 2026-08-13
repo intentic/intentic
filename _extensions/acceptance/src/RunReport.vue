@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, cmp, Icon, Markdown, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
+import { Button, Card, cmp, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
 import { isShotPath, storyDir, storyStanding } from "./runs";
@@ -244,7 +244,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
             </div>
         </Card>
 
-        <div v-if="failure" :class="cmp.alertDanger()">{{ failure }}</div>
+        <Notice v-if="failure" :of="noticeOf(failure)" />
 
         <div class="overflow-hidden rounded-lg border border-line bg-card">
             <div v-for="story in run.manifest.stories" :key="story.slug" class="border-b border-line last:border-b-0">
@@ -313,10 +313,16 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                          report, and it is the reader's whole answer: the provider's own sentence, in the alert
                          the rest of this view uses for a failure. Sending them to the session for it (which is
                          all this panel used to do) means opening a transcript whose only content is this line. -->
-                    <div v-else-if="outcomes[story.slug]?.invalidResult" :class="cmp.alertDanger()">
-                        The session wrote a result that did not match this run's story and acceptance criteria. Open the session to correct it.
-                    </div>
-                    <div v-else-if="failureOf(story.slug)" :class="cmp.alertDanger()">{{ failureOf(story.slug) }}</div>
+                    <Notice
+                        v-else-if="outcomes[story.slug]?.invalidResult"
+                        :of="
+                            noticeOf(
+                                `The session wrote a result that did not match this run's story and acceptance criteria. Open the session to correct it.`,
+                            )
+                        "
+                    />
+                    <!-- `?? ``` is for the compiler, not the reader: `failureOf` is a call, so the guard above cannot narrow it. -->
+                    <Notice v-else-if="failureOf(story.slug)" :of="noticeOf(failureOf(story.slug) ?? ``)" />
                     <div v-else :class="cmp.emptyState()">
                         {{
                             verdictBadge(story.slug).variant === `info`

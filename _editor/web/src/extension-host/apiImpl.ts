@@ -2,7 +2,14 @@ import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, Picked
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import { type AgentHarness, type AgentProvider, type ExtensionSummary, providerLabel, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type ExtensionSummary,
+    providerLabel,
+    sandboxRequestFor,
+    WorkspaceFileSchema,
+} from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { modelLabelFor } from "../composables/chat/modelPicker";
 import { agentRunChoice, shellModelPicking } from "../composables/chat/shellModelPicking";
@@ -440,7 +447,9 @@ export const createExtensionApi = (
                 named(selection.provider as AgentProvider, selection.model, selection.account, selection.harness as AgentHarness),
             pick: async (options) => {
                 const choice = await shellModelPicking().pick(options);
-                return choice === undefined ? undefined : named(choice.provider as AgentProvider, choice.model, choice.account, choice.harness as AgentHarness);
+                return choice === undefined
+                    ? undefined
+                    : named(choice.provider as AgentProvider, choice.model, choice.account, choice.harness as AgentHarness);
             },
         },
         navigate: (path) => {

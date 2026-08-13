@@ -59,9 +59,7 @@ const SubscriptionSchema = z.object({
     customer: z.string(),
     status: z.string(),
     current_period_end: z.number().optional(),
-    items: z
-        .object({ data: z.array(z.object({ current_period_end: z.number().optional() })) })
-        .optional(),
+    items: z.object({ data: z.array(z.object({ current_period_end: z.number().optional() })) }).optional(),
 });
 
 export interface StripeSubscription {
@@ -256,15 +254,7 @@ export const stripeGateway = (secretKey: string, fetchFn: typeof fetch = fetch, 
         return { grossCents, feeCents };
     },
     transfer: async ({ amountCents, currency, destination, idempotencyKey }) =>
-        TransferSchema.parse(
-            await post(
-                fetchFn,
-                secretKey,
-                `/transfers`,
-                { amount: String(amountCents), currency, destination },
-                idempotencyKey,
-            ),
-        ),
+        TransferSchema.parse(await post(fetchFn, secretKey, `/transfers`, { amount: String(amountCents), currency, destination }, idempotencyKey)),
 });
 
 // How far a webhook's timestamp may sit from now — Stripe's own recommended replay window.

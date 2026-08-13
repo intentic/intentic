@@ -75,7 +75,13 @@ test("stamps the pane command with the conversation owner, and refuses one outsi
     // The owner rides beside the session stamp, so a pane's whole tree is attributable to its conversation
     // (the reaper's licence over `setsid` survivors — platform/reaper.ts).
     const owned = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv-1"));
-    expect(owned).toBe(wrap("echo hi", `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted("echo hi")}`, "run"));
+    expect(owned).toBe(
+        wrap(
+            "echo hi",
+            `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted("echo hi")}`,
+            "run",
+        ),
+    );
     // It lands unquoted-adjacent in the shell line every command flows through, so a hostile id stays out.
     const unsafe = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv;rm -rf /"));
     expect(unsafe).toBe(wrap("echo hi", born(demoted("echo hi")), "run"));

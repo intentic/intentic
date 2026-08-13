@@ -63,9 +63,9 @@ describe("the free-trial endpoint", () => {
         const file = memoryStore();
         const store = withTrialEndpoint(file, config, trialService(true));
 
-        await expect(store.upsert({ id: TRIAL_ENDPOINT_ID, kind: `endpoint`, config: { baseUrl: `http://evil.test/v1`, protocol: `openai` } })).rejects.toThrow(
-            /cannot be edited/,
-        );
+        await expect(
+            store.upsert({ id: TRIAL_ENDPOINT_ID, kind: `endpoint`, config: { baseUrl: `http://evil.test/v1`, protocol: `openai` } }),
+        ).rejects.toThrow(/cannot be edited/);
         // A remove answers like any absent id rather than throwing, so the capabilities route above needs no
         // special case — and the underlying file is untouched either way.
         expect(await store.remove(TRIAL_ENDPOINT_ID)).toBe(false);

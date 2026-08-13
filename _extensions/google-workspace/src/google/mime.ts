@@ -54,7 +54,13 @@ export const buildMessage = (draft: Draft, boundarySeed: string): string => {
     }
     const boundary = `gw-${boundarySeed}`;
     const parts = [
-        [`--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", wrap(Buffer.from(draft.body, "utf8").toString("base64"))].join("\r\n"),
+        [
+            `--${boundary}`,
+            "Content-Type: text/plain; charset=UTF-8",
+            "Content-Transfer-Encoding: base64",
+            "",
+            wrap(Buffer.from(draft.body, "utf8").toString("base64")),
+        ].join("\r\n"),
         ...attachments.map((attachment) =>
             [
                 `--${boundary}`,

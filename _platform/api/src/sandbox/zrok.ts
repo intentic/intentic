@@ -89,10 +89,7 @@ export const createSandboxAccount = async (
 
 // Revoke a sandbox's reachability outright: the account goes, and every environment, share and name under it
 // goes with it. Idempotent: an account already gone is a success, so a retried removal cannot fail on it.
-export const deleteSandboxAccount = async (
-    config: { apiEndpoint: string; adminToken: string; zone: string },
-    sandboxId: string,
-): Promise<void> => {
+export const deleteSandboxAccount = async (config: { apiEndpoint: string; adminToken: string; zone: string }, sandboxId: string): Promise<void> => {
     try {
         await call({
             endpoint: config.apiEndpoint,

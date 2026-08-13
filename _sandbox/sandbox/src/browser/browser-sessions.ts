@@ -178,7 +178,12 @@ const finish = (record: BrowserSessionRecord): void => {
     // tool call is waiting on the user, not on Chromium, so nothing else would ever release it — the turn would
     // sit parked on a banner this same finish just took down. Idempotent against the turn-abort settle racing in.
     if (record.help !== undefined) {
-        resolveRequest({ kind: "browser_help", requestId: record.help.requestId, helped: false, note: "the browser closed before anyone could help" });
+        resolveRequest({
+            kind: "browser_help",
+            requestId: record.help.requestId,
+            helped: false,
+            note: "the browser closed before anyone could help",
+        });
         record.help = undefined;
     }
     record.browser = undefined;

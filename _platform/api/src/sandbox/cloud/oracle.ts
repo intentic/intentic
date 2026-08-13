@@ -223,7 +223,11 @@ export const oracleCreate = async (config: string, privateKeyPem: string, create
         }
     }
     const domains = availabilityDomainsSchema.parse(
-        await call(credential, `GET`, `${endpoint(credential, `identity`)}/20160918/availabilityDomains/?compartmentId=${encodeURIComponent(credential.tenancy)}`),
+        await call(
+            credential,
+            `GET`,
+            `${endpoint(credential, `identity`)}/20160918/availabilityDomains/?compartmentId=${encodeURIComponent(credential.tenancy)}`,
+        ),
     );
     for (const domain of domains.map((entry) => entry.name).filter((name) => name !== create.location)) {
         try {

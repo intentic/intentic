@@ -451,7 +451,10 @@ watch(
                 @pointercancel="onTimelineUp"
                 @pointerleave="hoverTime = undefined"
             >
-                <div class="relative h-1 rounded-full transition-[height,background-color] group-hover/bar:h-1.5" :class="hasVideo ? `bg-white/25` : `bg-overlay`">
+                <div
+                    class="relative h-1 rounded-full transition-[height,background-color] group-hover/bar:h-1.5"
+                    :class="hasVideo ? `bg-white/25` : `bg-overlay`"
+                >
                     <div
                         v-for="(range, index) in buffered"
                         :key="index"

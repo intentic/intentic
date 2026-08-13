@@ -329,10 +329,8 @@ type CodexSpawn = (binary: string, args: readonly string[], env: Record<string, 
 
 const spawnCodex: CodexSpawn = (binary, args, env) => spawn(binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
 
-const stdioConnector = (
-    binaryPath: () => Promise<string | undefined> = codexBinary,
-    spawnProcess: CodexSpawn = spawnCodex,
-): CodexAppServerConnector =>
+const stdioConnector =
+    (binaryPath: () => Promise<string | undefined> = codexBinary, spawnProcess: CodexSpawn = spawnCodex): CodexAppServerConnector =>
     async (turn) => {
         const binary = await binaryPath();
         if (binary === undefined) {
@@ -446,7 +444,8 @@ const turnIdFrom = (value: unknown): string => {
     return string(object(result["turn"], "turn/start result.turn"), "id", "turn/start result.turn");
 };
 
-const sandboxPolicy = (mode: CodexSandboxMode): JsonValue => (mode === "read-only" ? { type: "readOnly", networkAccess: false } : { type: "dangerFullAccess" });
+const sandboxPolicy = (mode: CodexSandboxMode): JsonValue =>
+    mode === "read-only" ? { type: "readOnly", networkAccess: false } : { type: "dangerFullAccess" };
 
 const usageFrom = (value: unknown): CodexUsage => {
     const params = object(value, "thread/tokenUsage/updated params");

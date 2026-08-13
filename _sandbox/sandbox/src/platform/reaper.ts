@@ -296,7 +296,13 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             return stats.mtimeMs;
         }
         const children = await readdir(path).catch(() => [] as string[]);
-        const stamps = await Promise.all(children.map((child) => stat(join(path, child)).then((s) => s.mtimeMs).catch(() => 0)));
+        const stamps = await Promise.all(
+            children.map((child) =>
+                stat(join(path, child))
+                    .then((s) => s.mtimeMs)
+                    .catch(() => 0),
+            ),
+        );
         return Math.max(stats.mtimeMs, ...stamps);
     };
 

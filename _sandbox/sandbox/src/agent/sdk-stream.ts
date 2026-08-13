@@ -19,14 +19,7 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { errorFrame, rateLimitFrame } from "./error-frames.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import { opt } from "./opt.js";
-import {
-    noteDelegation,
-    noteSubagentSpawn,
-    noteSubagentTask,
-    settleDelegation,
-    type SubagentTaskMessage,
-    type SubagentTurn,
-} from "./subagents.js";
+import { noteDelegation, noteSubagentSpawn, noteSubagentTask, settleDelegation, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
@@ -720,7 +713,10 @@ class TurnFold {
                      * one, where the recorded quota answers instead — and may name no instant at all, which the
                      * client renders as a plain notice. That is the truth; an invented clock time is not. */
                     const allowance = this.args.allowance;
-                    yield await rateLimitFrame(allowance, allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined);
+                    yield await rateLimitFrame(
+                        allowance,
+                        allowance === undefined ? Math.ceil((Date.now() + message.retry_delay_ms) / 1000) : undefined,
+                    );
                     return true;
                 }
                 /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is

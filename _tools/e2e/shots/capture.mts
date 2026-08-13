@@ -200,7 +200,14 @@ const SHOTS: Shot[] = [
     /* The turn keeps running in the fixture across navigations, so opening the conversation twice shows the
      * chat a few seconds INTO it — the plan card — without sitting on one page long enough for the mobile
      * shell to move on. */
-    { name: "mobile-chat", path: "/agents/cnv_checkout_stripe", openFirst: "/agents/cnv_checkout_stripe", mobile: true, settleMs: 3200, dpr: DENSE_DPR },
+    {
+        name: "mobile-chat",
+        path: "/agents/cnv_checkout_stripe",
+        openFirst: "/agents/cnv_checkout_stripe",
+        mobile: true,
+        settleMs: 3200,
+        dpr: DENSE_DPR,
+    },
 ];
 
 const TYPES: Record<string, string> = {

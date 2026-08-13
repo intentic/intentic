@@ -74,13 +74,7 @@ const unchanged = computed(() => name.value.trim() === props.id);
         </form>
         <template #footer>
             <Button label="Cancel" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
-            <Button
-                label="Rename"
-                size="small"
-                :loading="busy"
-                :disabled="problem !== undefined || unchanged"
-                @click="emit(`rename`, name.trim())"
-            />
+            <Button label="Rename" size="small" :loading="busy" :disabled="problem !== undefined || unchanged" @click="emit(`rename`, name.trim())" />
         </template>
     </Dialog>
 </template>

@@ -169,8 +169,7 @@ export const selectConnection = (connections: readonly Connection[], wanted: str
     return connections[0] as Connection;
 };
 
-export const describe = (connection: Connection): string =>
-    connection.email === "" ? connection.name : `${connection.name} (${connection.email})`;
+export const describe = (connection: Connection): string => (connection.email === "" ? connection.name : `${connection.name} (${connection.email})`);
 
 // The credential, or the card's problem said out loud. Every command goes through here, so a card that cannot
 // authenticate fails with what to fix rather than with whatever Google says about an empty token.

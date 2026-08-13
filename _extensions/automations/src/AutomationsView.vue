@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract";
-import { Button, cmp, ConfirmDialog, Icon, InfoHint, Page, PageAction, PageHeader, RowGroup, SearchBar, Segmented } from "@intentic/extension-ui";
+import {
+    Button,
+    cmp,
+    ConfirmDialog,
+    Icon,
+    InfoHint,
+    Notice,
+    noticeOf,
+    Page,
+    PageAction,
+    PageHeader,
+    RowGroup,
+    SearchBar,
+    Segmented,
+} from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
@@ -250,7 +264,7 @@ const toggleDetail = (id: string): void => {
             </template>
         </PageHeader>
 
-        <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
+        <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <div class="flex flex-col gap-6">
             <!-- Held wakes: the only thing on this page that is waiting on the READER, so it stays at the top and

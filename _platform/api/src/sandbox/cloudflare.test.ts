@@ -556,7 +556,12 @@ describe(`reapOrphanDnsRecords`, () => {
     // pair for a live sandbox and for a deleted one, a stray ACME TXT, and the operator's own records.
     const records = [
         { id: `r-live`, type: `CNAME`, name: `sandbox-aaaaaaaaaaaa.example.com`, content: `11111111-1111-4111-8111-111111111111.cfargotunnel.com` },
-        { id: `r-dangling`, type: `CNAME`, name: `p0rt5l0t4bcd-bbbbbbbbbbbb.example.com`, content: `22222222-2222-4222-8222-222222222222.cfargotunnel.com` },
+        {
+            id: `r-dangling`,
+            type: `CNAME`,
+            name: `p0rt5l0t4bcd-bbbbbbbbbbbb.example.com`,
+            content: `22222222-2222-4222-8222-222222222222.cfargotunnel.com`,
+        },
         { id: `r-local-live`, type: `A`, name: `local-aaaaaaaaaaaa.example.com`, content: `127.0.0.1` },
         { id: `r-local-gone`, type: `A`, name: `local-cccccccccccc.example.com`, content: `127.0.0.1` },
         { id: `r-acme-gone`, type: `TXT`, name: `_acme-challenge.local-cccccccccccc.example.com`, content: `stale-order` },
@@ -569,7 +574,16 @@ describe(`reapOrphanDnsRecords`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             {
                 match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?is_deleted=false`),
-                respond: () => ok([{ id: `11111111-1111-4111-8111-111111111111`, name: `sandbox-aaaaaaaaaaaa`, status: `healthy`, conns_active_at: null, created_at: `2026-01-01T00:00:00Z` }]),
+                respond: () =>
+                    ok([
+                        {
+                            id: `11111111-1111-4111-8111-111111111111`,
+                            name: `sandbox-aaaaaaaaaaaa`,
+                            status: `healthy`,
+                            conns_active_at: null,
+                            created_at: `2026-01-01T00:00:00Z`,
+                        },
+                    ]),
             },
             { match: (method, url) => method === `GET` && url.includes(`/dns_records?per_page=`), respond: () => ok(records) },
             { match: (method) => method === `DELETE`, respond: () => ok({}) },

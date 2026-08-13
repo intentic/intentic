@@ -145,9 +145,7 @@ describe(`chipMessageNotice`, () => {
     // The wait names the model being asked and how long it has been — a wait that is visibly moving, instead
     // of the bare "writing…" that read the same at second 2 and second 60.
     test(`names the model being asked, and the seconds it is taking`, () => {
-        expect(chipMessageNotice({ ...state, draft: running() })).toBe(
-            `Writing a message for Review panel · audit — Asking gemini-3-flash… 10s`,
-        );
+        expect(chipMessageNotice({ ...state, draft: running() })).toBe(`Writing a message for Review panel · audit — Asking gemini-3-flash… 10s`);
     });
 
     test(`a draft that has not reached a model yet is reading the diff`, () => {

@@ -100,7 +100,9 @@ export interface RelayedRunAnswer extends RelayedAnswer {
 // platform's to know and this side honestly cannot say.
 const BROKEN_STREAM: RelayedRunAnswer = {
     status: 502,
-    body: JSON.stringify({ error: { type: "service_unavailable", message: "The service stream broke before an answer arrived. Please try again shortly." } }),
+    body: JSON.stringify({
+        error: { type: "service_unavailable", message: "The service stream broke before an answer arrived. Please try again shortly." },
+    }),
     contentType: "application/json",
     streamed: true,
 };
@@ -186,7 +188,10 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
                         resolve({
                             status: 502,
                             body: JSON.stringify({
-                                error: { type: "service_unavailable", message: "The service did not answer — nothing was charged. Please try again shortly." },
+                                error: {
+                                    type: "service_unavailable",
+                                    message: "The service did not answer — nothing was charged. Please try again shortly.",
+                                },
                             }),
                             contentType: "application/json",
                             streamed: true,

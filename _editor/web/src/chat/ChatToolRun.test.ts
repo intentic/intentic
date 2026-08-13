@@ -102,8 +102,16 @@ describe(`ChatToolRun`, () => {
     });
 
     it(`says how many steps it is offering, for the pointer and the screen reader alike`, () => {
-        expect(mount([read(`a.ts`)]).querySelector(`button`)?.getAttribute(`aria-label`)).toBe(`Show 1 step`);
-        expect(mount([read(`a.ts`), read(`b.ts`)]).querySelector(`button`)?.getAttribute(`aria-label`)).toBe(`Show 2 steps`);
+        expect(
+            mount([read(`a.ts`)])
+                .querySelector(`button`)
+                ?.getAttribute(`aria-label`),
+        ).toBe(`Show 1 step`);
+        expect(
+            mount([read(`a.ts`), read(`b.ts`)])
+                .querySelector(`button`)
+                ?.getAttribute(`aria-label`),
+        ).toBe(`Show 2 steps`);
     });
 
     it(`spins while the turn is live, and only while it is live`, () => {

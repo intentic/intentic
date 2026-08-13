@@ -26,7 +26,8 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         prisma: fakePrisma({}),
         config: {
             webOrigin: `https://app.test`,
-            intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+            intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true },
+            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
             secrets: { key: `` },
             email: { apiKey: ``, from: `` },
         },
@@ -39,10 +40,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-
-
 // A Cloudflare API where the tunnel delete fails with `tunnelDelete` (its connections cleanup + zone/list all
-
 
 // A happy-path Cloudflare API: one zone, tunnel t1 found by name, connector token, ingress + DNS accepted.
 
@@ -240,7 +238,7 @@ describe(`sandbox routes`, () => {
         });
         vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
             order.push(`hub`);
-            expect((init?.method ?? `GET`)).toBe(`DELETE`);
+            expect(init?.method ?? `GET`).toBe(`DELETE`);
             expect(String(url)).toContain(`/account`);
             return Promise.resolve(new Response(``, { status: 200 }));
         });
@@ -281,7 +279,8 @@ describe(`sandbox routes`, () => {
             { ...sandboxRow, id: `s3` },
         ];
         const config = {
-            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+            intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true },
+            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prisma = fakePrisma({

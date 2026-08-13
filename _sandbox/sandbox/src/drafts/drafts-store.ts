@@ -81,4 +81,5 @@ Only "platform" and "content" are required; everything else is optional.
 
 // Drafts are native to every sandbox (like automations), so no capability owns this skill — the daemon
 // converges it at boot (the composeEnvironment pattern), keeping the prose current across daemon updates.
-export const ensureDraftsSkill = (services: Services): Promise<void> => writeLoadedSkill(services.files, services.workspace.root, "drafts", DRAFTS_SKILL);
+export const ensureDraftsSkill = (services: Services): Promise<void> =>
+    writeLoadedSkill(services.files, services.workspace.root, "drafts", DRAFTS_SKILL);

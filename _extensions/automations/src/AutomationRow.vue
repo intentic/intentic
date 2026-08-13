@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, formatDateTime, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
+import { Button, cmp, CopyButton, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
@@ -297,7 +297,7 @@ const doorbell = computed(() => {
                  into a column you scrolled twice. The row has the whole page width and the automation's own
                  history under it. -->
             <div v-if="editing" class="flex flex-col gap-3 pr-3">
-                <div v-if="editError" :class="cmp.alertDanger()">{{ editError }}</div>
+                <Notice v-if="editError" :of="noticeOf(editError)" />
                 <AutomationFields :state="editForm" :name-locked="true" />
                 <div class="flex items-center justify-end gap-2 border-t border-line pt-2.5">
                     <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />

@@ -118,10 +118,17 @@ describe(`routeShapes`, () => {
         // "assume compatible". The two neighbours still get fingerprinted, which is the part that matters: one
         // unexpressable route must not cost the whole walk.
         const withStream = {
-            vpn: { list: fixture.vpn.list, watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(eventIterator(z.object({ a: z.string() }))) },
+            vpn: {
+                list: fixture.vpn.list,
+                watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(eventIterator(z.object({ a: z.string() }))),
+            },
         };
         expect(Object.keys(routeShapes(withStream)).toSorted()).toEqual([`vpn.list`]);
-        expect(contractRoutes(withStream).map((route) => route.name).toSorted()).toEqual([`vpn.list`, `vpn.watch`]);
+        expect(
+            contractRoutes(withStream)
+                .map((route) => route.name)
+                .toSorted(),
+        ).toEqual([`vpn.list`, `vpn.watch`]);
     });
 });
 

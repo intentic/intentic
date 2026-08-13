@@ -52,8 +52,14 @@ export const extensionsContract = {
      * survives what a bare re-add would lose. `revert` swaps the kept-previous checkout back. Update and revert
      * change the code that runs, so like install they are owner-only. */
     checkUpdates: oc.route({ method: "POST", path: "/extensions/updates/check" }).output(ExtensionUpdatesCheckedSchema),
-    updatePreview: oc.route({ method: "POST", path: "/extensions/{id}/update/preview" }).input(ExtensionUpdateActionSchema).output(ExtensionUpdatePreviewSchema),
-    applyUpdate: oc.route({ method: "POST", path: "/extensions/{id}/update" }).input(ExtensionUpdateActionSchema).output(ExtensionUpdateAppliedSchema),
+    updatePreview: oc
+        .route({ method: "POST", path: "/extensions/{id}/update/preview" })
+        .input(ExtensionUpdateActionSchema)
+        .output(ExtensionUpdatePreviewSchema),
+    applyUpdate: oc
+        .route({ method: "POST", path: "/extensions/{id}/update" })
+        .input(ExtensionUpdateActionSchema)
+        .output(ExtensionUpdateAppliedSchema),
     revert: oc.route({ method: "POST", path: "/extensions/{id}/revert" }).input(CapabilityIdParamSchema).output(ExtensionUpdateAppliedSchema),
     // The owner's standing answer per extension (notify / agent / auto, and the advisory opt-out) — see
     // ExtensionUpdatePolicySchema for what each rung means.

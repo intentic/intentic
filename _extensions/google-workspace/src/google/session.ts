@@ -25,7 +25,9 @@ interface CachedToken extends AccessToken {
 // outlives the process.
 const fingerprintOf = (credential: Credential): string =>
     createHash("sha256")
-        .update(credential.mode === "user" ? `${credential.clientId}:${credential.refreshToken}` : `${credential.clientEmail}:${credential.privateKey}`)
+        .update(
+            credential.mode === "user" ? `${credential.clientId}:${credential.refreshToken}` : `${credential.clientEmail}:${credential.privateKey}`,
+        )
         .digest("hex")
         .slice(0, 16);
 

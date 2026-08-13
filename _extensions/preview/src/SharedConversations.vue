@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, CopyButton, Icon, InfoHint, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { useShares } from "./useShares";
 
@@ -60,8 +60,8 @@ const when = (at: number): string => {
             <StatusBadge v-if="shares.length > 0" variant="warning" :label="`${shares.length} public`" size="xs" />
         </div>
 
-        <div v-if="actionError" :class="cmp.alertDanger('mb-2 px-4 py-3 text-sm')">{{ actionError }}</div>
-        <div v-else-if="error" :class="cmp.alertDanger('mb-2 px-4 py-3 text-sm')">{{ error }}</div>
+        <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-2" />
+        <Notice v-else-if="error" :of="noticeOf(error)" class="mb-2" />
 
         <div v-if="shares.length > 0" class="rounded-lg border border-line bg-card">
             <div class="flex flex-col divide-y divide-line">

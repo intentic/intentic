@@ -350,7 +350,8 @@ export const browserServersOf = async (
         );
     }
     const socat = muxAvailable();
-    const lazy = socat !== undefined && conversationId !== undefined ? await startBrowserMux(specs, { display, conversationId, socat, runtime }) : undefined;
+    const lazy =
+        socat !== undefined && conversationId !== undefined ? await startBrowserMux(specs, { display, conversationId, socat, runtime }) : undefined;
     return { servers: { ...servers, ...(lazy ?? specs) }, ports, passkeys };
 };
 
@@ -383,7 +384,16 @@ const startBrowserMux = async (
         // never the tool surface.
         probe: {
             command: process.execPath,
-            args: [context.runtime.cli, "--browser", "chromium", "--executable-path", context.runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
+            args: [
+                context.runtime.cli,
+                "--browser",
+                "chromium",
+                "--executable-path",
+                context.runtime.executablePath,
+                "--no-sandbox",
+                "--isolated",
+                "--headless",
+            ],
         },
         owners,
     };

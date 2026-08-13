@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, DagGraph, Icon, timeAgo } from "@intentic/extension-ui";
+import { Button, cmp, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
@@ -89,7 +89,7 @@ const openChat = (conversationId: string): void => host().navigate(`/agents/${en
             </Button>
         </header>
 
-        <p v-if="failure" :class="cmp.alertDanger('m-3')">{{ failure }}</p>
+        <Notice v-if="failure" :of="noticeOf(failure)" class="m-3" />
         <p v-if="run.detail" class="shrink-0 px-4 py-2 text-xs text-subtle">{{ run.detail }}</p>
 
         <div class="flex min-h-0 flex-1">

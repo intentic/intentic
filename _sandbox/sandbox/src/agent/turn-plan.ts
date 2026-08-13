@@ -440,7 +440,10 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
  * The model is resolved from the same catalog the Claude Code path uses, so a pin survives a harness switch. */
 export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     if (services.config.translator.url === "") {
-        return { ok: false, message: "This sandbox has no model translator, so Gemini can't run here. Run a sandbox built from the published image." };
+        return {
+            ok: false,
+            message: "This sandbox has no model translator, so Gemini can't run here. Run a sandbox built from the published image.",
+        };
     }
     if ((await services.cliProxy.accounts()).gemini.length === 0) {
         return { ok: false, message: "Connect your Google account in Sandbox ▸ Agent to run Gemini here." };

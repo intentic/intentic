@@ -78,12 +78,7 @@ const savedImage = async (codexHome: string, path: string): Promise<Buffer> => {
 const decodedImage = (result: string): Buffer => {
     const encoded = result.trim();
     const padding = encoded.indexOf("=");
-    if (
-        encoded === "" ||
-        !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) ||
-        encoded.length % 4 === 1 ||
-        (padding !== -1 && encoded.length % 4 !== 0)
-    ) {
+    if (encoded === "" || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1 || (padding !== -1 && encoded.length % 4 !== 0)) {
         throw new Error("Codex image result is not valid base64");
     }
     const paddingBytes = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
@@ -113,7 +108,8 @@ export const persistCodexImageArtifact = async (options: {
     readonly codexHome: string;
     readonly image: CodexImageResult;
 }): Promise<string> => {
-    const bytes = options.image.saved_path === undefined ? decodedImage(options.image.result) : await savedImage(options.codexHome, options.image.saved_path);
+    const bytes =
+        options.image.saved_path === undefined ? decodedImage(options.image.result) : await savedImage(options.codexHome, options.image.saved_path);
     assertPng(bytes);
 
     const outputDir = codexImageOutputDir(options.workspaceRoot);

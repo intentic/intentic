@@ -21,7 +21,8 @@ const connection: Connection = {
     problem: undefined,
 };
 
-const decode = (segment: string): Record<string, unknown> => JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as Record<string, unknown>;
+const decode = (segment: string): Record<string, unknown> =>
+    JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as Record<string, unknown>;
 
 describe("assertionFor", () => {
     const assertion = assertionFor(domain, "ana@company.com", ["https://www.googleapis.com/auth/gmail.modify"], 1_770_000_000);

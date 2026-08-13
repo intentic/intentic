@@ -41,7 +41,9 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CALENDAR = "https://www.googleapis.com/calendar/v3";
 
 interface HistoryPage {
-    readonly history?: readonly { readonly messagesAdded?: readonly { readonly message?: { readonly id?: string; readonly labelIds?: string[] } }[] }[];
+    readonly history?: readonly {
+        readonly messagesAdded?: readonly { readonly message?: { readonly id?: string; readonly labelIds?: string[] } }[];
+    }[];
     readonly historyId?: string;
 }
 

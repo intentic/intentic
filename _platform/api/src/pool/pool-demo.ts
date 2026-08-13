@@ -58,7 +58,11 @@ export const demoAnswer = (query: string): object => ({
  * the platform's own forward parses these exact lines, so the documented shape cannot drift from the
  * enforced one. */
 export const demoStream = (query: string): string =>
-    [{ event: `status`, text: `Searching the demo corpus…` }, { event: `status`, text: `Composing the summary…` }, { event: `result`, data: demoAnswer(query) }]
+    [
+        { event: `status`, text: `Searching the demo corpus…` },
+        { event: `status`, text: `Composing the summary…` },
+        { event: `result`, data: demoAnswer(query) },
+    ]
         .map((event) => JSON.stringify(event))
         .join(`\n`)
         .concat(`\n`);

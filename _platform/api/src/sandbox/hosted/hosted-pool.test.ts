@@ -116,7 +116,9 @@ describe(`reconcileHostedPool`, () => {
         ]);
         const prisma = fakePrisma({
             hostedPoolMachine: {
-                findMany: vi.fn().mockResolvedValue([poolRow({ state: `building` }), poolRow({ id: `p2`, appName: `intentic-sbx-pool-waw`, region: `waw` })]),
+                findMany: vi
+                    .fn()
+                    .mockResolvedValue([poolRow({ state: `building` }), poolRow({ id: `p2`, appName: `intentic-sbx-pool-waw`, region: `waw` })]),
                 update,
             },
         });
@@ -141,7 +143,10 @@ describe(`reconcileHostedPool`, () => {
         const del = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         const prisma = fakePrisma({
-            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow(), poolRow({ id: `p2`, appName: `intentic-sbx-pool-two` })]), delete: del },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([poolRow(), poolRow({ id: `p2`, appName: `intentic-sbx-pool-two` })]),
+                delete: del,
+            },
         });
         await reconcileHostedPool(prisma, config({ poolSize: 0 }), logger);
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(2);

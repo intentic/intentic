@@ -153,8 +153,7 @@ const pick = <T>(values: readonly T[]): T => values[randomInts(1)[0]! % values.l
 const randomInts = (count: number): Uint32Array => crypto.getRandomValues(new Uint32Array(count));
 
 // Lowercase base36, one character per drawn word — 0-9a-z, all of which the id guard accepts.
-const tail = (): string =>
-    Array.from(randomInts(TAIL_LENGTH), (value) => (value % 36).toString(36)).join("");
+const tail = (): string => Array.from(randomInts(TAIL_LENGTH), (value) => (value % 36).toString(36)).join("");
 
 /* A fresh conversation id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`. Sixteen characters or so
  * against a UUID's thirty-six, and the first eleven of them are the ones a person reads. */

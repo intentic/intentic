@@ -7,14 +7,16 @@ import {
     formatTimestamp,
     Icon,
     InfoHint,
+    Notice,
+    noticeOf,
     Panel,
     Row,
     RowGroup,
     Segmented,
     sinceOf,
     TIME_WINDOWS,
-    type TimeWindow,
     timeAgo,
+    type TimeWindow,
 } from "@intentic/extension-ui";
 import { computed, nextTick, ref, watch } from "vue";
 import { useLogs, useLogTail } from "./useLogs";
@@ -159,7 +161,7 @@ watch(tail, () => {
 
 <template>
     <div class="flex flex-col">
-        <div v-if="error" :class="cmp.alertDanger('mb-3 px-4 py-3 text-sm')">{{ error }}</div>
+        <Notice v-if="error" :of="noticeOf(error)" class="mb-3" />
 
         <!-- The padding is what the rows scroll behind once this is pinned; the negative margin gives it back, so
              the band exists only when it is needed and the resting layout is unchanged. -->
@@ -267,7 +269,7 @@ watch(tail, () => {
                 </template>
 
                 <template v-if="tailError" #strips>
-                    <div :class="cmp.alertDanger('m-4 mb-0')">{{ tailError }}</div>
+                    <Notice :of="noticeOf(tailError)" class="m-4 mb-0" />
                 </template>
 
                 <div ref="pane" class="scrollbar-thin min-h-0 flex-1 overflow-auto p-4">

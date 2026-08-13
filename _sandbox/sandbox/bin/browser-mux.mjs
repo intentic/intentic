@@ -276,7 +276,12 @@ for (const [owner, spec] of Object.entries(manifest.owners)) {
                 if (message.method === "tools/list") {
                     void toolSchemas().then(
                         (tools) => send(socket, { jsonrpc: "2.0", id: message.id, result: { tools } }),
-                        (error) => send(socket, { jsonrpc: "2.0", id: message.id, error: { code: -32603, message: `browser tools unavailable: ${error?.message ?? error}` } }),
+                        (error) =>
+                            send(socket, {
+                                jsonrpc: "2.0",
+                                id: message.id,
+                                error: { code: -32603, message: `browser tools unavailable: ${error?.message ?? error}` },
+                            }),
                     );
                     return;
                 }

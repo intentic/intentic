@@ -7,13 +7,15 @@ import {
     ConfirmDialog,
     formatTimestamp,
     InfoHint,
-    type NoticeModel,
+    Notice,
+    noticeOf,
     NoticeStack,
     Row,
     RowGroup,
     SplitView,
     StatusBadge,
     timeAgo,
+    type NoticeModel,
     useAsyncAction,
     useNow,
 } from "@intentic/extension-ui";
@@ -460,7 +462,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <DraftPost v-else :draft="draft" />
                                     <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
                                          one state whose entire content is an explanation, hidden behind a hover. -->
-                                    <p :class="cmp.alertDanger(`mt-3 max-w-read`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                                    <Notice :of="noticeOf(draft.error ?? `The publisher did not say why.`)" class="mt-3 max-w-read" />
                                     <div :class="FACTS">
                                         <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
                                     </div>

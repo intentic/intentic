@@ -125,7 +125,12 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
                 continue;
             }
             // Unreadable, failed, or stuck past the pull's worst case — rebuild rather than wait on it.
-            if (machine === undefined || machine.state === `failed` || machine.state === `destroyed` || now - row.createdAt.getTime() > BUILD_TIMEOUT_MS) {
+            if (
+                machine === undefined ||
+                machine.state === `failed` ||
+                machine.state === `destroyed` ||
+                now - row.createdAt.getTime() > BUILD_TIMEOUT_MS
+            ) {
                 // oxlint-disable-next-line eslint/no-await-in-loop
                 await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                     logger.error({ err: error, app: row.appName }, `hosted pool: collecting a dead build failed`),

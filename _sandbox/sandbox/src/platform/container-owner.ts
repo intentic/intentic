@@ -118,7 +118,12 @@ export const claimContainer = async (
     const owner = await liveOwner(home, roots, graceMs);
     if (owner !== undefined) {
         logger.warn(
-            { ownerPid: owner.pid, ownerWorkspaceRoot: owner.workspaceRoot, ownerHistoryRoot: owner.historyRoot, ...(agentSession === undefined ? {} : { agentSession }) },
+            {
+                ownerPid: owner.pid,
+                ownerWorkspaceRoot: owner.workspaceRoot,
+                ownerHistoryRoot: owner.historyRoot,
+                ...(agentSession === undefined ? {} : { agentSession }),
+            },
             "another live daemon owns this container — running as a guest: claiming nothing, sweeping nothing, and leaving its processes, HOME and singletons alone",
         );
         return { container: false, roots: !sameRoots(owner, roots) };

@@ -107,7 +107,13 @@ const resumePending = async (deps: PayoutDeps, at: Date): Promise<PayoutOutcome[
  * the read that preceded it: two runs racing — different replicas, or a tick overlapping a slow predecessor —
  * would otherwise both believe they own the same statements. Whoever updates fewer rows than it expected has
  * lost the race and rolls back, which the transaction makes free. */
-const payCreator = async (deps: PayoutDeps, userId: string, statementIds: readonly string[], amountCents: number, at: Date): Promise<PayoutOutcome | undefined> => {
+const payCreator = async (
+    deps: PayoutDeps,
+    userId: string,
+    statementIds: readonly string[],
+    amountCents: number,
+    at: Date,
+): Promise<PayoutOutcome | undefined> => {
     const { prisma, config } = deps;
     const destination = await destinationOf(prisma, userId);
     if (destination === undefined) {

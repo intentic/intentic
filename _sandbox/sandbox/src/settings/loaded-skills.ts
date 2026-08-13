@@ -98,7 +98,9 @@ const indexSection = (skills: readonly { name: string; description: string }[]):
         "description below, read that skill's SKILL.md before improvising — it carries the exact commands,",
         "endpoints, and rules. (A harness that loads Agent Skills natively already surfaces these same files.)",
         "",
-        ...skills.map((skill) => `- **${skill.name}**${skill.description === "" ? "" : ` — ${skill.description}`} → \`.agents/skills/${skill.name}/SKILL.md\``),
+        ...skills.map(
+            (skill) => `- **${skill.name}**${skill.description === "" ? "" : ` — ${skill.description}`} → \`.agents/skills/${skill.name}/SKILL.md\``,
+        ),
     ].join("\n");
 
 // Splice the managed block into whatever AGENTS.md already says: replace it where it stands, append it where it

@@ -55,7 +55,12 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
  * Refusing AFTER incrementing means a refused attempt still consumes a slot, which is deliberate: it is the only
  * version of this that can't be raced, and the effect on an honest user is nil (they are already at zero, and
  * the counter resets on the same schedule either way). */
-export const spendTrialMessage = async (prisma: PrismaClient, config: Config, userId: string, now: Date): Promise<TrialStatus & { allowed: boolean }> => {
+export const spendTrialMessage = async (
+    prisma: PrismaClient,
+    config: Config,
+    userId: string,
+    now: Date,
+): Promise<TrialStatus & { allowed: boolean }> => {
     const allowance = config.trial.dailyMessages;
     const day = trialDay(now);
     const row = await prisma.trialUsage.upsert({
@@ -74,7 +79,5 @@ export const refundTrialMessage = async (prisma: PrismaClient, userId: string, n
     await prisma.trialUsage
         .update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { messages: { decrement: 1 } } })
         .catch(() => undefined);
-    await prisma.trialUsage
-        .updateMany({ where: { userId, day: trialDay(now), messages: { lt: 0 } }, data: { messages: 0 } })
-        .catch(() => undefined);
+    await prisma.trialUsage.updateMany({ where: { userId, day: trialDay(now), messages: { lt: 0 } }, data: { messages: 0 } }).catch(() => undefined);
 };

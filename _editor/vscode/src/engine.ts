@@ -77,11 +77,7 @@ const engineCommand = (context: vscode.ExtensionContext): { argv: readonly strin
     return { argv: [process.execPath, bundled], cwd: join(context.extensionPath, "engine") };
 };
 
-export const startEngine = async (
-    context: vscode.ExtensionContext,
-    workspaceRoot: string,
-    output: vscode.OutputChannel,
-): Promise<Engine> => {
+export const startEngine = async (context: vscode.ExtensionContext, workspaceRoot: string, output: vscode.OutputChannel): Promise<Engine> => {
     const port = await freePort();
     const { argv, cwd } = engineCommand(context);
     const [command, ...args] = argv;

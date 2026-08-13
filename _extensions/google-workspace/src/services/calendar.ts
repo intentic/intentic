@@ -66,7 +66,11 @@ const eventBody = (ctx: CommandContext, zone: string, now: Date): Record<string,
         ...(end === undefined ? {} : { end: parseWhen(end, now, zone) }),
         ...(attendees.length === 0 ? {} : { attendees: attendees.map((email) => ({ email })) }),
         ...(bool(args, "meet")
-            ? { conferenceData: { createRequest: { requestId: `gw-${process.hrtime.bigint().toString(36)}`, conferenceSolutionKey: { type: "hangoutsMeet" } } } }
+            ? {
+                  conferenceData: {
+                      createRequest: { requestId: `gw-${process.hrtime.bigint().toString(36)}`, conferenceSolutionKey: { type: "hangoutsMeet" } },
+                  },
+              }
             : {}),
     };
 };
@@ -150,7 +154,9 @@ const show: Command = {
         }
         ctx.out(`Organizer: ${event.organizer?.email ?? "—"}`);
         for (const attendee of event.attendees ?? []) {
-            ctx.out(`Attendee: ${attendee.email ?? "?"} (${attendee.responseStatus ?? "needsAction"}${attendee.optional === true ? ", optional" : ""})`);
+            ctx.out(
+                `Attendee: ${attendee.email ?? "?"} (${attendee.responseStatus ?? "needsAction"}${attendee.optional === true ? ", optional" : ""})`,
+            );
         }
         if (event.description !== undefined) {
             ctx.out("");
@@ -175,7 +181,10 @@ const create: Command = {
         const created = await call<CalendarEvent>(ctx.session, {
             method: "POST",
             url: `${API}/calendars/${encodeURIComponent(id)}/events`,
-            query: { sendUpdates: list(ctx.args, "attendees", "with").length > 0 ? "all" : "none", conferenceDataVersion: bool(ctx.args, "meet") ? 1 : 0 },
+            query: {
+                sendUpdates: list(ctx.args, "attendees", "with").length > 0 ? "all" : "none",
+                conferenceDataVersion: bool(ctx.args, "meet") ? 1 : 0,
+            },
             body: { ...body, end: body["end"] ?? defaultEnd(body["start"] as EventTime) },
         });
         if (ctx.json) {
@@ -192,7 +201,7 @@ const create: Command = {
 const update: Command = {
     name: "update",
     summary: "Change an event — only the fields you pass",
-    usage: 'gw cal update <eventId> [--title] [--start] [--end] [--location] [--description] [--attendees] [--calendar id]',
+    usage: "gw cal update <eventId> [--title] [--start] [--end] [--location] [--description] [--attendees] [--calendar id]",
     writes: true,
     run: async (ctx) => {
         const id = calendarId(ctx.args);
@@ -242,15 +251,18 @@ const busy: Command = {
         if (emails.length === 0) {
             throw new Error("Pass --emails with at least one address.");
         }
-        const answer = await call<{ calendars?: Record<string, { busy?: { start: string; end: string }[]; errors?: { reason: string }[] }> }>(ctx.session, {
-            method: "POST",
-            url: `${API}/freeBusy`,
-            body: {
-                timeMin: toInstant(flag(ctx.args, "from") ?? "now", now, zone),
-                timeMax: toInstant(flag(ctx.args, "to") ?? "+3d", now, zone),
-                items: emails.map((id) => ({ id })),
+        const answer = await call<{ calendars?: Record<string, { busy?: { start: string; end: string }[]; errors?: { reason: string }[] }> }>(
+            ctx.session,
+            {
+                method: "POST",
+                url: `${API}/freeBusy`,
+                body: {
+                    timeMin: toInstant(flag(ctx.args, "from") ?? "now", now, zone),
+                    timeMax: toInstant(flag(ctx.args, "to") ?? "+3d", now, zone),
+                    items: emails.map((id) => ({ id })),
+                },
             },
-        });
+        );
         if (ctx.json) {
             printJson(ctx, answer);
             return;

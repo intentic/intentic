@@ -85,8 +85,7 @@ test("CORS names the configured origins and no others, so an arbitrary page cann
     // A family entry admits one floating label and nothing more — an editor webview's per-session origin,
     // without opening the suffix to subdomain chains or foreign hosts.
     const family = createApp(services({ config: { ...testConfig, webOrigin: "https://*.webview.example.net" } }));
-    const familyOf = async (origin: string) =>
-        (await family.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
+    const familyOf = async (origin: string) => (await family.request("/health", { headers: { origin } })).headers.get("access-control-allow-origin");
     expect(await familyOf("https://0a1b2c.webview.example.net")).toBe("https://0a1b2c.webview.example.net");
     expect(await familyOf("https://a.b.webview.example.net")).toBeNull();
     expect(await familyOf("https://webview.example.net")).toBeNull();

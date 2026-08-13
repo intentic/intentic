@@ -103,7 +103,9 @@ export const identityHandler: CapabilityHandler = {
             (capability) => capability.kind === "browser" && (capability.config.identity ?? "") === id,
         );
         if (born.length > 0) {
-            throw new Error(`"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`);
+            throw new Error(
+                `"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`,
+            );
         }
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
         await clearSession(ctx.workspace.root, id);

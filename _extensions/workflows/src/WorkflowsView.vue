@@ -6,14 +6,16 @@ import {
     ConfirmDialog,
     Icon,
     InfoHint,
+    Notice,
+    noticeOf,
     Page,
     PageAction,
     PageHeader,
     Row,
     RowGroup,
     StatusBadge,
-    type StatusVariant,
     timeAgo,
+    type StatusVariant,
 } from "@intentic/extension-ui";
 import { type LoopDesign, loopDesignLine, type Workflow, type WorkflowRun, type WorkflowSummary } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
@@ -349,7 +351,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             </template>
         </PageHeader>
 
-        <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
+        <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <!-- A link to a run that has rolled off the ledger. Not an error — nothing failed and nothing is wrong
              with the card that sent you here — so it states the fact and leaves the page usable beneath it. -->

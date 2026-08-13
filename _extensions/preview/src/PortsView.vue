@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -106,7 +106,7 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
 
 <template>
     <div class="flex flex-col gap-4">
-        <div v-if="error || actionError" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error ?? actionError }}</div>
+        <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
         <RowGroup label="Listening">
             <template #info>

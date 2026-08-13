@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, CopyButton, Icon } from "@intentic/extension-ui";
+import { Button, cmp, CopyButton, Icon, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
@@ -270,7 +270,7 @@ const finish = (id: string): void => {
         </div>
 
         <form v-if="savedId === undefined" class="flex flex-col gap-3" @submit.prevent="submit">
-            <div v-if="submitError" :class="cmp.alertDanger()">{{ submitError }}</div>
+            <Notice v-if="submitError" :of="noticeOf(submitError)" />
 
             <AutomationFields ref="fields" :state="state" :recipe-note="template?.title" />
 

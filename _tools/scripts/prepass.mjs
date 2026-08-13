@@ -617,7 +617,9 @@ const hooksDir = join(root, ".githooks");
 if (process.platform !== "win32" && existsSync(hooksDir)) {
     for (const hook of readdirSync(hooksDir)) {
         if ((statSync(join(hooksDir, hook)).mode & 0o111) === 0) {
-            disarmed.push(`.githooks/${hook} is not executable — git skips it with a hint and the push bypasses every gate in this file; run \`pnpm install\` (or \`chmod +x .githooks/*\`) to re-arm`);
+            disarmed.push(
+                `.githooks/${hook} is not executable — git skips it with a hint and the push bypasses every gate in this file; run \`pnpm install\` (or \`chmod +x .githooks/*\`) to re-arm`,
+            );
         }
     }
 }

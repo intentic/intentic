@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource } from "./contract";
-import { AgentRunButton, type AgentRunChoice, Button, cmp, Code, Icon, StatusBadge, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, Button, cmp, Code, Icon, Notice, noticeOf, StatusBadge, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
 import { host } from "./host";
 import { computed, ref } from "vue";
 import { imageLabel, STATE_TONE } from "./stateVisual";
@@ -148,7 +148,7 @@ const logText = computed(() => {
 
         <div v-if="expanded" class="border-t border-line/60 px-4 pb-4 pt-3">
             <!-- Whatever Komodo refused, next to the button that asked. -->
-            <div v-if="error" :class="cmp.alertDanger(`mb-3 break-words`)">{{ error }}</div>
+            <Notice v-if="error" :of="noticeOf(error)" class="mb-3" />
 
             <!-- A stack's services ride the list response, so this costs no extra call. Two columns of plain
                  text rather than a wrap of bordered chips: the names are what the reader is scanning for, and

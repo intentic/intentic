@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Popover, ResizeSeam } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Notice, noticeOf, Popover, ResizeSeam } from "@intentic/extension-ui";
 import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import GatePanel from "./GatePanel.vue";
@@ -187,7 +187,7 @@ const commit = async (): Promise<void> => {
             </Button>
         </header>
 
-        <p v-if="failure" :class="cmp.alertDanger('m-3')">{{ failure }}</p>
+        <Notice v-if="failure" :of="noticeOf(failure)" class="m-3" />
 
         <div class="flex min-h-0 flex-1">
             <!-- The canvas takes everything the inspector does not. -->

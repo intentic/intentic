@@ -53,9 +53,7 @@ const hint = computed(() => {
                  LEADING somewhere rather than as a divider cutting the transcript in half. -->
             <span
                 class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
-                :class="
-                    run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'
-                "
+                :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
             ></span>
             <span
                 class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-2xs tabular-nums transition-colors"

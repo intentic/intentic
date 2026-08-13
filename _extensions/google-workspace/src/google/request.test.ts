@@ -38,7 +38,9 @@ describe("googleError", () => {
     });
 
     it("suggests the two things a 404 actually means", () => {
-        expect(googleError(404, at("drive"), { error: { message: "File not found: abc." } }).message).toMatch(/check the id, and that this account can actually see it|see that item/);
+        expect(googleError(404, at("drive"), { error: { message: "File not found: abc." } }).message).toMatch(
+            /check the id, and that this account can actually see it|see that item/,
+        );
     });
 
     it("says a rate limit is a rate limit", () => {

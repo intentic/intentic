@@ -5,10 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import { fakeCodexRunner } from "../testing.js";
 import { createCodexAgent } from "./codex-agent.js";
 
-const PNG = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl5sAAAAASUVORK5CYII=",
-    "base64",
-);
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl5sAAAAASUVORK5CYII=", "base64");
 const roots: string[] = [];
 
 afterEach(async () => {

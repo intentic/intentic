@@ -333,8 +333,12 @@ export const createResourceSampler = (owners: () => Readonly<Record<string, unkn
         gcCount = 0;
         gcTotalMs = 0;
         gcMaxMs = 0;
-        const selfStatusPromise = readFile("/proc/self/status", "utf8").then(parseProcStatus).catch(() => undefined);
-        const openFdsPromise = readdir("/proc/self/fd").then((entries) => entries.length).catch(() => undefined);
+        const selfStatusPromise = readFile("/proc/self/status", "utf8")
+            .then(parseProcStatus)
+            .catch(() => undefined);
+        const openFdsPromise = readdir("/proc/self/fd")
+            .then((entries) => entries.length)
+            .catch(() => undefined);
         const processesPromise = processSnapshot(previousProcessCpu);
         const [selfStatus, openFds, processes, system] = await Promise.all([selfStatusPromise, openFdsPromise, processesPromise, systemSnapshot()]);
         previousProcessCpu = processes.cpuByPid;

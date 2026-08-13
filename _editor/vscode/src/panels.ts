@@ -20,7 +20,9 @@ const onBridgeMessage = (message: unknown, badge: (count: number) => void): void
         }
         const target = vscode.Uri.joinPath(folder.uri, path);
         const options: vscode.TextDocumentShowOptions =
-            typeof line === "number" && Number.isFinite(line) ? { selection: new vscode.Range(Math.max(0, line - 1), 0, Math.max(0, line - 1), 0) } : {};
+            typeof line === "number" && Number.isFinite(line)
+                ? { selection: new vscode.Range(Math.max(0, line - 1), 0, Math.max(0, line - 1), 0) }
+                : {};
         void vscode.window.showTextDocument(target, options);
         return;
     }

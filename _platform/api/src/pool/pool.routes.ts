@@ -200,7 +200,12 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             await refundCredits(prisma, ownerId, service.creditsPerRun, at);
             c.get(`logger`)?.warn({ service: service.slug }, `pool: service did not serve — run refunded`);
             return c.json(
-                { error: { type: `service_unavailable`, message: `${service.name} did not answer — nothing was charged. Please try again shortly.` } },
+                {
+                    error: {
+                        type: `service_unavailable`,
+                        message: `${service.name} did not answer — nothing was charged. Please try again shortly.`,
+                    },
+                },
                 502,
             );
         }
@@ -311,9 +316,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (!verifyStripeSignature(payload, c.req.header(`stripe-signature`), config.pool.stripeWebhookSecret, now)) {
             return c.json({ error: `bad signature` }, 400);
         }
-        const event = z
-            .object({ type: z.string(), data: z.object({ object: z.unknown() }) })
-            .safeParse(JSON.parse(payload));
+        const event = z.object({ type: z.string(), data: z.object({ object: z.unknown() }) }).safeParse(JSON.parse(payload));
         if (!event.success) {
             return c.json({ error: `malformed event` }, 400);
         }
@@ -322,7 +325,12 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             const session = z
                 .object({ mode: z.string(), client_reference_id: z.string().nullable(), subscription: z.string().nullable() })
                 .safeParse(data.object);
-            if (session.success && session.data.mode === `subscription` && session.data.client_reference_id !== null && session.data.subscription !== null) {
+            if (
+                session.success &&
+                session.data.mode === `subscription` &&
+                session.data.client_reference_id !== null &&
+                session.data.subscription !== null
+            ) {
                 await applySubscription(prisma, await stripe().subscription(session.data.subscription), session.data.client_reference_id);
             }
         } else if (type === `customer.subscription.updated` || type === `customer.subscription.deleted`) {

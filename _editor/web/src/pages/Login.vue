@@ -130,7 +130,9 @@ const signIn = async (): Promise<void> => {
                          with that consequence should be given to the rule itself. -->
                     By continuing you agree to our
                     <a href="https://intentic.dev/terms/" target="_blank" rel="noopener" class="text-link hover:underline">Terms</a>,
-                    <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener" class="text-link hover:underline">Acceptable Use Policy</a>
+                    <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener" class="text-link hover:underline"
+                        >Acceptable Use Policy</a
+                    >
                     and
                     <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener" class="text-link hover:underline">Privacy Policy</a>.
                 </p>

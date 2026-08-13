@@ -18,7 +18,8 @@ const baseConfig = {
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
+    zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     trial: { keys: `k1,k2`, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: false },
@@ -48,7 +49,11 @@ const fakePrisma = ({ used }: Counters = {}) => {
         updateMany: vi.fn(async () => ({ count: 0 })),
     };
     const prisma = {
-        sandbox: { findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) => (where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null)) },
+        sandbox: {
+            findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) =>
+                where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
+            ),
+        },
         trialUsage,
     };
     return { prisma: prisma as unknown as PrismaClient, trialUsage, spent: () => messages };

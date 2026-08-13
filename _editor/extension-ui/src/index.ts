@@ -84,8 +84,19 @@ export {
     NavRail,
     /* <NoticeStack> and its model ship beside <ConfirmDialog> for the same reason <InfoDialog> does: a view
      * with several async actions needs somewhere for their failures to land that isn't one action's own row,
-     * and a hand-rolled error strip is the first thing to disagree with the app's about tone and dismissal. */
+     * and a hand-rolled error strip is the first thing to disagree with the app's about tone and dismissal.
+     *
+     * <Notice> — THE SINGLE ONE — was missing from that shipment, and it is the same mistake <Row>/<RowGroup>
+     * and <PageAction>/<PageHeader> each record one release earlier: the container went out without the thing
+     * that goes in it. Notice.vue's own comment says every view that hand-rolled `cmp.alertDanger()` around an
+     * interpolated error string renders it instead, "which is what makes the app's failures sound like one
+     * product rather than like sixty throw sites" — and the app took that sweep, 107 call sites of it. The
+     * extensions could not: the kit handed out the stack and kept the row, so thirteen of them went on
+     * hand-rolling the strip. Most of a view's failures are ONE at a time; the stack is the rarer case. */
     type NoticeModel,
+    type NoticeTone,
+    type NoticeAction,
+    Notice,
     NoticeStack,
     Page,
     /* <PageAction> ships beside <PageHeader> for the same reason <Row> ships beside <RowGroup>: handing out the

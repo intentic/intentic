@@ -180,7 +180,10 @@ onUnmounted(() => clearInterval(timer));
 
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
-                <span>Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want to add.</span>
+                <span
+                    >Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want
+                    to add.</span
+                >
             </div>
         </form>
     </div>

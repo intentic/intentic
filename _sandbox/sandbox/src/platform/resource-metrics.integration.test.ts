@@ -2,12 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-    RESOURCE_METRICS_FILE,
-    type ResourceSampler,
-    type ResourceSnapshot,
-    startResourceMetrics,
-} from "./resource-metrics.js";
+import { RESOURCE_METRICS_FILE, type ResourceSampler, type ResourceSnapshot, startResourceMetrics } from "./resource-metrics.js";
 
 const roots: string[] = [];
 
@@ -38,7 +33,12 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
 
     const text = await readFile(join(historyRoot, "logs", RESOURCE_METRICS_FILE), "utf8");
     expect(text.endsWith("\n")).toBe(true);
-    expect(text.trim().split("\n").map((line) => JSON.parse(line))).toEqual([snapshot]);
+    expect(
+        text
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line)),
+    ).toEqual([snapshot]);
     expect(sampler.stop).toHaveBeenCalledOnce();
 });
 

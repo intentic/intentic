@@ -814,10 +814,7 @@ const runPending = async (): Promise<void> => {
                                         :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
                                         @click="toggleDir(row.path)"
                                     >
-                                        <Icon
-                                            :name="row.expanded ? 'chevron-down' : 'chevron-right'"
-                                            class="w-2.5 shrink-0 text-3xs text-subtle"
-                                        />
+                                        <Icon :name="row.expanded ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-3xs text-subtle" />
                                         <Icon name="folder" class="shrink-0 text-2xs text-subtle" />
                                         <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
                                     </button>

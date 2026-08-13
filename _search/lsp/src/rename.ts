@@ -158,8 +158,7 @@ export const rename = async (file: string, symbol: string, newName: string): Pro
             textDocument: { uri, languageId: LANGUAGE_IDS[extname(file)] ?? "typescript", version: 1, text },
         });
         const outline = (await session.request("textDocument/documentSymbol", { textDocument: { uri } }, REQUEST_TIMEOUT_MS)) as
-            | readonly DocumentSymbol[]
-            | null;
+            readonly DocumentSymbol[] | null;
         const anchored = outline === null ? undefined : symbolPosition(outline, symbol);
         const candidates = anchored !== undefined ? [anchored] : lexicalCandidates(text, symbol);
         if (candidates.length === 0) {

@@ -5,13 +5,15 @@ import {
     cmp,
     Icon,
     InfoHint,
+    Notice,
+    noticeOf,
     Page,
     PageAction,
     PageHeader,
     RowGroup,
     StatusBadge,
-    type StatusVariant,
     timeAgo,
+    type StatusVariant,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markAcceptanceSeen } from "./attention";
@@ -422,7 +424,7 @@ const run = async (model: PickedModel): Promise<void> =>
             </template>
         </PageHeader>
 
-        <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
+        <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <!-- ONE run's report, in place of the two lists. A back link rather than a tab: you are looking at
                      a thing, not filtering a list. -->

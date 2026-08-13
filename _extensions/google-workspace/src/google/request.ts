@@ -143,8 +143,7 @@ export const call = async <T>(session: Session, spec: CallSpec): Promise<T> => {
     return (await response.json()) as T;
 };
 
-export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> =>
-    Buffer.from(await (await send(session, spec)).arrayBuffer());
+export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> => Buffer.from(await (await send(session, spec)).arrayBuffer());
 
 /* Every Google list endpoint pages the same way — `pageToken` in, `nextPageToken` out — and every one of them
  * will happily walk a 30,000-message mailbox if nothing stops it. `limit` is that stop, and it is required

@@ -4,15 +4,7 @@ import { type Args, bool, flag, list, positional, required, limit as readLimit }
 import { type Command, type CommandContext, type CommandGroup, printJson } from "../cli/command.js";
 import { clip, count, row, tally, when } from "../cli/format.js";
 import { mapLimit } from "../google/batch.js";
-import {
-    type GmailMessage,
-    type ParsedMessage,
-    addressOf,
-    headerOf,
-    nameOf,
-    parseMessage,
-    replySubject,
-} from "../google/gmail-message.js";
+import { type GmailMessage, type ParsedMessage, addressOf, headerOf, nameOf, parseMessage, replySubject } from "../google/gmail-message.js";
 import { type Attachment, type Draft, buildMessage, contentTypeOf, encodeRaw } from "../google/mime.js";
 import { call, paginate } from "../google/request.js";
 import type { Session } from "../google/session.js";
@@ -146,7 +138,10 @@ const read: Command = {
     usage: "gw mail read <messageId>",
     run: async (ctx) => {
         const message = parseMessage(
-            await call<GmailMessage>(ctx.session, { url: `${API}/messages/${encodeURIComponent(positional(ctx.args, 1, "A message id"))}`, query: { format: "full" } }),
+            await call<GmailMessage>(ctx.session, {
+                url: `${API}/messages/${encodeURIComponent(positional(ctx.args, 1, "A message id"))}`,
+                query: { format: "full" },
+            }),
         );
         if (ctx.json) {
             printJson(ctx, message);
@@ -287,7 +282,9 @@ const attachments: Command = {
     usage: "gw mail attachments <messageId> [--download DIR]",
     run: async (ctx) => {
         const id = positional(ctx.args, 1, "A message id");
-        const message = parseMessage(await call<GmailMessage>(ctx.session, { url: `${API}/messages/${encodeURIComponent(id)}`, query: { format: "full" } }));
+        const message = parseMessage(
+            await call<GmailMessage>(ctx.session, { url: `${API}/messages/${encodeURIComponent(id)}`, query: { format: "full" } }),
+        );
         const into = flag(ctx.args, "download");
         if (into === undefined) {
             if (ctx.json) {

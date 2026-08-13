@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
-import { AgentRunButton, type AgentRunChoice, Button, Icon, type IconName, StatusBadge, type StatusVariant, timeAgo, useAgentRunPick } from "@intentic/extension-ui";
+import {
+    AgentRunButton,
+    type AgentRunChoice,
+    Button,
+    Icon,
+    type IconName,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+    useAgentRunPick,
+} from "@intentic/extension-ui";
 import { host } from "./host";
 import { computed } from "vue";
 import type { ChoreRun } from "./useRuns";

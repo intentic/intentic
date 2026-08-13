@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { cmp, FilterBar, Icon, InfoHint, Segmented, sinceOf, StatusBadge, TIME_WINDOWS, type TimeWindow } from "@intentic/extension-ui";
+import {
+    cmp,
+    FilterBar,
+    Icon,
+    InfoHint,
+    Notice,
+    noticeOf,
+    Segmented,
+    sinceOf,
+    StatusBadge,
+    TIME_WINDOWS,
+    type TimeWindow,
+} from "@intentic/extension-ui";
 import { computed } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
 import { matches, toEpisodes, toSources } from "./episodes";
@@ -65,7 +77,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
     <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both, and a section that drew
          its own would sit as a page inside a page. -->
     <div class="flex flex-col gap-3">
-        <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
+        <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above the
              instrument rather than inside the feed it would otherwise scroll away with. -->

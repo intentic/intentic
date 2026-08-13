@@ -22,26 +22,14 @@
     "types": "./dist/types/extension-ui/src/index.d.ts",
     "exports": {
         ".": {
+            "@intentic/src": "./src/index.ts",
             "types": "./dist/types/extension-ui/src/index.d.ts",
-            "import": {
-                "@intentic/src": "./src/index.ts",
-                "default": "./dist/index.js"
-            },
-            "require": {
-                "@intentic/src": "./src/index.ts",
-                "default": "./dist/index.js"
-            }
+            "default": "./dist/index.js"
         },
         "./format": {
+            "@intentic/src": "./src/format.ts",
             "types": "./dist/types/extension-ui/src/format.d.ts",
-            "import": {
-                "@intentic/src": "./src/format.ts",
-                "default": "./dist/format.js"
-            },
-            "require": {
-                "@intentic/src": "./src/format.ts",
-                "default": "./dist/format.js"
-            }
+            "default": "./dist/format.js"
         },
         "./names": "./names.mjs"
     },

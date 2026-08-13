@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Checkbox, cmp, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 
@@ -316,7 +316,7 @@ onBeforeUnmount(() => void flush());
                     </template>
                 </p>
 
-                <div v-if="failure" :class="cmp.alertDanger(`mt-4`)">{{ failure }}</div>
+                <Notice v-if="failure" :of="noticeOf(failure)" class="mt-4" />
             </div>
 
             <!-- OUTSIDE the column: the document is measured, the toolbar under it is not. Kept inside the 68ch

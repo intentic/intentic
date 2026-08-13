@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, Dialog, Icon } from "@intentic/extension-ui";
+import { Button, cmp, CopyButton, Dialog, Icon, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";
 import { type DoorbellInstall, embedSnippet, useAutomations, useDoorbellInstalls } from "./useAutomations";
@@ -82,15 +82,13 @@ const allowOrigin = async (origin: string): Promise<void> => {
                         {{ origin }}
                     </code>
                 </div>
-                <p v-else :class="cmp.alertDanger()">
-                    No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.
-                </p>
+                <Notice v-else :of="noticeOf(`No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.`)" />
             </div>
 
             <div class="ui-field">
                 <span class="ui-field-label">Has it loaded?</span>
 
-                <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
+                <Notice v-if="error" :of="noticeOf(error)" />
 
                 <!-- The waiting state is a real state, not an empty one: it tells the user what to DO to make it
                      change, which is the only useful thing to say while nothing has happened yet. -->
@@ -132,7 +130,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
                         </span>
                     </div>
 
-                    <p v-if="addError" :class="cmp.alertDanger()">{{ addError }}</p>
+                    <Notice v-if="addError" :of="noticeOf(addError)" />
                 </template>
             </div>
         </div>

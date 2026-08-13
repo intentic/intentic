@@ -3,7 +3,12 @@ import { type GmailMessage, addressOf, attachmentsOf, bodyText, nameOf, parseMes
 
 const b64 = (text: string): string => Buffer.from(text, "utf8").toString("base64url");
 
-const message = (payload: NonNullable<GmailMessage["payload"]>): GmailMessage => ({ id: "m1", threadId: "t1", labelIds: ["INBOX", "UNREAD"], payload });
+const message = (payload: NonNullable<GmailMessage["payload"]>): GmailMessage => ({
+    id: "m1",
+    threadId: "t1",
+    labelIds: ["INBOX", "UNREAD"],
+    payload,
+});
 
 describe("bodyText", () => {
     it("prefers the plain-text part", () => {

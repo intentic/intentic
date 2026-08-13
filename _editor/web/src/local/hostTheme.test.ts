@@ -34,7 +34,13 @@ const chromeVar = (): string => document.documentElement.style.getPropertyValue(
 beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute("style");
-    window.env = { production: false, api: { url: "" }, auth: { googleClientId: "" }, analytics: { posthogKey: "", posthogHost: "" }, afterSignOut: "/login" };
+    window.env = {
+        production: false,
+        api: { url: "" },
+        auth: { googleClientId: "" },
+        analytics: { posthogKey: "", posthogHost: "" },
+        afterSignOut: "/login",
+    };
 });
 
 it("applies the env-carried theme at load, and the mode rides with it", () => {

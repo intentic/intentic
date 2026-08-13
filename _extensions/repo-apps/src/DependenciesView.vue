@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import { Card, cmp, type DagEdge, DagGraph, type DagNode, ToggleSwitch } from "@intentic/extension-ui";
+import { Card, cmp, DagGraph, Notice, noticeOf, ToggleSwitch, type DagEdge, type DagNode } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
 
@@ -105,7 +105,7 @@ const dagEdges = computed<DagEdge[]>(() =>
 
 <template>
     <div class="flex h-full min-h-0 flex-col gap-3 p-4">
-        <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+        <Notice v-if="error" :of="noticeOf(error)" />
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-3 text-2xs text-muted">
                 <span v-for="group in legend" :key="group" class="flex items-center gap-1.5">

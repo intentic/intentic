@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import {
-    type AgentRunChoice,
     cmp,
     CountBar,
-    type CountItem,
     Icon,
     InfoHint,
+    Notice,
+    noticeOf,
     PageAction,
     ProgressRing,
     RowGroup,
     SplitView,
+    type AgentRunChoice,
+    type CountItem,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
@@ -176,9 +178,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                     Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
                     webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent seeded
                     with that run's failed jobs' logs and takes you to its card on the Agents board — it stands out on the failure a branch is
-                    actually stuck on, and stays quiet on older failures a later green run has already left behind. It opens on the model in
-                    Sandbox ▸ Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages — click one for
-                    that stage's jobs, or expand the row for the full job graph.
+                    actually stuck on, and stays quiet on older failures a later green run has already left behind. It opens on the model in Sandbox ▸
+                    Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages — click one for that stage's
+                    jobs, or expand the row for the full job graph.
                 </span>
             </InfoHint>
         </template>
@@ -196,8 +198,8 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         </template>
 
         <template #strips>
-            <div v-if="error" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">{{ error }}</div>
-            <div v-if="actionError" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">{{ actionError }}</div>
+            <Notice v-if="error" :of="noticeOf(error)" />
+            <Notice v-if="actionError" :of="noticeOf(actionError)" />
         </template>
 
         <!-- Only where there is a choice to make. An index over one repository is 16rem of chrome pointing at the

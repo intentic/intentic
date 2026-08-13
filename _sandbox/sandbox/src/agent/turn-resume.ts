@@ -503,7 +503,12 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
     const restore = (card: ParkedCard) => {
         switch (card.kind) {
             case "plan":
-                return restoreRequest(card.requestId, "plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." }, conversationId);
+                return restoreRequest(
+                    card.requestId,
+                    "plan",
+                    { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." },
+                    conversationId,
+                );
             case "question":
                 return restoreRequest(card.requestId, "question", { kind: "question", requestId: "", cancelled: true }, conversationId);
             case "permission":

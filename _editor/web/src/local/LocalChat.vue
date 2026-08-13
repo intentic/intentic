@@ -23,7 +23,7 @@ onUnmounted(() => {
 <template>
     <!-- h-dvh, not h-full: this route mounts straight under the router outlet, where no ancestor carries a
          height — 100% of nothing left the panel hugging its content with dead space below. -->
-    <div class="grid h-dvh w-full" style="grid-template-areas: 'chat'; grid-template-columns: 1fr; grid-template-rows: 1fr">
+    <div class="grid h-dvh w-full" style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr">
         <div ref="slot" class="contents"></div>
     </div>
 </template>

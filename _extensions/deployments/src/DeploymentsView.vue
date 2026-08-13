@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource, DeployServer } from "./contract";
 import {
-    type AgentRunChoice,
     Button,
     cmp,
     CountBar,
-    type CountItem,
     Icon,
     InfoHint,
+    Notice,
+    noticeOf,
     Page,
     PageAction,
     PageHeader,
     RowGroup,
+    type AgentRunChoice,
+    type CountItem,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
@@ -271,7 +273,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
             <!-- A poll that failed while a board is already on screen. Kept at the top and kept SMALL: the rows
                  below are the last good answer and still worth reading, so this says the board has stopped
                  refreshing rather than replacing it. -->
-            <div v-if="error && board !== undefined" :class="cmp.alertDanger(`mb-4 break-words`)">{{ error }}</div>
+            <Notice v-if="error && board !== undefined" :of="noticeOf(error)" class="mb-4" />
 
             <!-- Nothing has come back yet — including the window where the sandbox handshake still gates the
                  fetch. Show the board's shape rather than a line of text that everything then jumps under. -->
@@ -281,11 +283,17 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                  It gets its own branch because the alternative is what actually shipped: `board` undefined fell
                  through to the board below, whose zero resources rendered "Komodo has no stacks or deployments
                  yet" — a confident wrong answer about the one thing the reader came to check. -->
-            <div v-else-if="board === undefined" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">
-                <div class="font-medium">Couldn't load this Komodo connection</div>
-                <div class="mt-1 text-xs opacity-80">{{ error ?? `The sandbox did not answer.` }}</div>
-                <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
-            </div>
+            <!-- Title, cause and the one thing to do about it — the three parts <Notice> is shaped around, so
+                 they arrive in the app's own order and wording rather than this view's. -->
+            <Notice
+                v-else-if="board === undefined"
+                :of="{
+                    tone: `danger`,
+                    title: `Couldn't load this Komodo connection`,
+                    detail: error ?? `The sandbox did not answer.`,
+                    action: { label: `Try again`, run: () => void refetch() },
+                }"
+            />
 
             <!-- The single most important thing this view can say, and it can only say it by rendering.
                  Deliberately a WARNING and not an error: not being able to see production is not the same as

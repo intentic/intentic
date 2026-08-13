@@ -29,7 +29,7 @@ const valuesOf = async (args: Args): Promise<string[][]> => {
     if (json !== undefined) {
         const parsed = JSON.parse(json) as unknown;
         if (!Array.isArray(parsed) || !parsed.every((entry) => Array.isArray(entry))) {
-            throw new Error("--json-values must be an array of arrays, e.g. '[[\"name\",\"total\"],[\"ana\",7]]'.");
+            throw new Error('--json-values must be an array of arrays, e.g. \'[["name","total"],["ana",7]]\'.');
         }
         return parsed.map((entry: unknown[]) => entry.map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
     }

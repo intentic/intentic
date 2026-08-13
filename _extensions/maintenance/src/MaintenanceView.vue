@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel } from "@intentic/sandbox-contract/chores";
-import { type AgentRunChoice, Button, cmp, PageAction, RowGroup, Segmented, SplitView } from "@intentic/extension-ui";
+import { Button, cmp, Notice, noticeOf, PageAction, RowGroup, Segmented, SplitView, type AgentRunChoice } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
@@ -216,7 +216,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
 
         <template #strips>
             <div v-if="notice" :class="cmp.alertWarning()">{{ notice }}</div>
-            <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+            <Notice v-if="error" :of="noticeOf(error)" />
 
             <!-- What this repository can be asked and what we actually asked it. Above both panes because it is a
                  statement about the scope, not a row in the list it qualifies. -->

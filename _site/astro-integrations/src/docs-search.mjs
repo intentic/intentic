@@ -36,7 +36,27 @@ const CELL = " · ";
  * @typedef {{ url: string, title: string, section: string, blurb: string }} DocsSearchPage
  */
 
-const NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", mdash: "—", ndash: "–", rsquo: "’", lsquo: "‘", ldquo: "“", rdquo: "”", middot: "·", rarr: "→", larr: "←", lbrace: "{", rbrace: "}", dollar: "$" };
+const NAMED_ENTITIES = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+    hellip: "…",
+    mdash: "—",
+    ndash: "–",
+    rsquo: "’",
+    lsquo: "‘",
+    ldquo: "“",
+    rdquo: "”",
+    middot: "·",
+    rarr: "→",
+    larr: "←",
+    lbrace: "{",
+    rbrace: "}",
+    dollar: "$",
+};
 
 function decodeEntities(text) {
     return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body) => {
@@ -60,15 +80,17 @@ function textOf(node) {
 }
 
 function tidy(text) {
-    return text
-        .replace(/\s+/g, " ")
-        .replace(/(?: ·)+ ·/g, " ·")
-        .replace(/ · $/, "")
-        /* Tags render with a trailing space, so `<strong>Automations</strong>:` leaves "Automations :" — close that
-         * gap back up. The lookahead spares a leading ellipsis: `execute(command, ...args)` is a signature people
-         * search for, and "command,...args" is not what they would type. */
-        .replace(/\s+([,;:!?)\]]|\.(?!\.))/g, "$1")
-        .trim();
+    return (
+        text
+            .replace(/\s+/g, " ")
+            .replace(/(?: ·)+ ·/g, " ·")
+            .replace(/ · $/, "")
+            /* Tags render with a trailing space, so `<strong>Automations</strong>:` leaves "Automations :" — close that
+             * gap back up. The lookahead spares a leading ellipsis: `execute(command, ...args)` is a signature people
+             * search for, and "command,...args" is not what they would type. */
+            .replace(/\s+([,;:!?)\]]|\.(?!\.))/g, "$1")
+            .trim()
+    );
 }
 
 /** A section of this page, or card furniture inside one? The renderer's rule: prose headings get an id, not a class. */

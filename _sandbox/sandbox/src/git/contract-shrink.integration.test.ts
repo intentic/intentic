@@ -48,11 +48,13 @@ afterEach(async () => {
 });
 
 // A fake runner standing in for `git show HEAD:<path>` — the only call the detector makes.
-const gitShowing = (locks: Record<string, string>): GitRunner => (_dir, args) => {
-    const path = String(args[1] ?? ``).replace(/^HEAD:/, ``);
-    const lock = locks[path];
-    return lock === undefined ? Promise.reject(new Error(`no such blob`)) : Promise.resolve({ stdout: lock, stderr: `` });
-};
+const gitShowing =
+    (locks: Record<string, string>): GitRunner =>
+    (_dir, args) => {
+        const path = String(args[1] ?? ``).replace(/^HEAD:/, ``);
+        const lock = locks[path];
+        return lock === undefined ? Promise.reject(new Error(`no such blob`)) : Promise.resolve({ stdout: lock, stderr: `` });
+    };
 
 test("claimedContractShrink compares only lock files among the claimed paths, worktree against HEAD", async () => {
     const dir = await mkdtemp(join(tmpdir(), `shrink-`));

@@ -9,7 +9,19 @@ import {
     capabilityEffects,
 } from "@intentic-app/capability-catalog";
 import { type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
-import { BrandMark, cmp, ConfirmDialog, FilterBar, type IconName, Notice, type NoticeModel, RowGroup, Segmented, SplitView, StatusBadge } from "@intentic/ui";
+import {
+    BrandMark,
+    cmp,
+    ConfirmDialog,
+    FilterBar,
+    type IconName,
+    Notice,
+    type NoticeModel,
+    RowGroup,
+    Segmented,
+    SplitView,
+    StatusBadge,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { type CapabilityKind, type ForticlientConnection } from "@intentic/sandbox-contract";

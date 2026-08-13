@@ -109,7 +109,11 @@ it(`names the accounts a card holds, and picks it by id`, () => {
 // puts on its row, so a card recognised there is the same card here.
 it(`says how bounded a card is`, () => {
     personas.value = [
-        { id: `visitor`, capabilities: [`reddit-work`], powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false } },
+        {
+            id: `visitor`,
+            capabilities: [`reddit-work`],
+            powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false },
+        },
     ];
     expect(text(mount())).toContain(`Read-only`);
 });

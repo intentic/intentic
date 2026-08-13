@@ -61,17 +61,15 @@ test("the default request is the commit, the branch, and the link a reviewer wou
 test("outputs serialize schema-valid verdicts whole, multi-line reasons included", () => {
     const verdict = { outcome: "fail" as const, reason: "line one\nline two", runId: "run-9", value: "almost" };
     expect(GateVerdictSchema.safeParse(verdict).success).toBe(true);
-    expect(outputLines(verdict, "D")).toBe(
-        "outcome<<D\nfail\nD\nreason<<D\nline one\nline two\nD\nrun-id<<D\nrun-9\nD\nvalue<<D\nalmost\nD\n",
-    );
+    expect(outputLines(verdict, "D")).toBe("outcome<<D\nfail\nD\nreason<<D\nline one\nline two\nD\nrun-id<<D\nrun-9\nD\nvalue<<D\nalmost\nD\n");
     // No judged value ⇒ no value line, rather than an empty one pretending the workflow produced "".
     expect(outputLines({ outcome: "pass", reason: "r", runId: "run-1" }, "D")).not.toContain("value");
 });
 
 test("the summary carries the verdict, its reason and the run id", () => {
-    const summary = summaryOf({ outcome: "blocked", reason: "\"Judge\" failed.", runId: "run-3" });
+    const summary = summaryOf({ outcome: "blocked", reason: '"Judge" failed.', runId: "run-3" });
     expect(summary).toContain("blocked");
-    expect(summary).toContain("\"Judge\" failed.");
+    expect(summary).toContain('"Judge" failed.');
     expect(summary).toContain("run-3");
 });
 
@@ -85,8 +83,7 @@ test("fail annotates as error, blocked follows the setting, pass stays quiet —
 });
 
 test("the step's exit is the CLI's: pass 0, fail 1, blocked per the setting", () => {
-    const of = (outcome: "pass" | "fail" | "blocked", blockedAsFailure: boolean) =>
-        stepExitOf({ outcome, reason: "", runId: "r" }, blockedAsFailure);
+    const of = (outcome: "pass" | "fail" | "blocked", blockedAsFailure: boolean) => stepExitOf({ outcome, reason: "", runId: "r" }, blockedAsFailure);
     expect(of("pass", true)).toBe(0);
     expect(of("fail", false)).toBe(1);
     expect(of("blocked", false)).toBe(0);

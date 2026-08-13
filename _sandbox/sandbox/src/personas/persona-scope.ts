@@ -108,7 +108,9 @@ export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent
                     }
                     const workspaceRelative = relative(scope.cwd, target);
                     const sandboxPath =
-                        !scope.sandbox && WRITE_TOOLS.has(input.tool_name) && SANDBOX_PATHS.some((prefix) => inside(target, resolve(scope.cwd, prefix)));
+                        !scope.sandbox &&
+                        WRITE_TOOLS.has(input.tool_name) &&
+                        SANDBOX_PATHS.some((prefix) => inside(target, resolve(scope.cwd, prefix)));
                     const outsideFolders = scope.folders.length > 0 && !scope.folders.some((folder) => inside(target, resolve(scope.cwd, folder)));
                     if (!sandboxPath && !outsideFolders) {
                         return {};

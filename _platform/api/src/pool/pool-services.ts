@@ -160,7 +160,12 @@ export const forwardToService = async (
             return { kind: `failed` };
         }
         if (response.status < 200 || response.status >= 300) {
-            return { kind: `answered`, status: response.status, body: await response.text(), contentType: response.headers.get(`content-type`) ?? `application/json` };
+            return {
+                kind: `answered`,
+                status: response.status,
+                body: await response.text(),
+                contentType: response.headers.get(`content-type`) ?? `application/json`,
+            };
         }
         if (response.body === null) {
             return { kind: `failed` };

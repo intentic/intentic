@@ -53,12 +53,7 @@ onScopeDispose(() => clearTimeout(timer));
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
         <span class="sr-only">Loading conversation…</span>
         <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2">
-            <div
-                v-for="(turn, index) in OUTLINE"
-                :key="index"
-                class="flex shrink-0 animate-pulse flex-col gap-1"
-                aria-hidden="true"
-            >
+            <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 animate-pulse flex-col gap-1" aria-hidden="true">
                 <!-- The prompt bubble, carrying .chat-prompt's own vertical padding so the turn keeps its rhythm. -->
                 <div class="flex justify-end pt-3 pb-2">
                     <div class="chat-surface flex flex-col gap-1.5 rounded-lg px-3 py-2" :class="turn.bubble">

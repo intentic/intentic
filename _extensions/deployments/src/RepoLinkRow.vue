@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeployRepoLink } from "./contract";
-import { Button, cmp, Icon, Picker, type PickerOption, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Notice, noticeOf, Picker, StatusBadge, type PickerOption } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 
 /* One workspace repo that ships a compose file, and the Komodo stack it belongs to. A hairline row inside the
@@ -91,6 +91,6 @@ const apply = (stack: string | undefined): void => {
             </span>
         </div>
 
-        <div v-if="error" :class="cmp.alertDanger(`mt-2 break-words`)">{{ error }}</div>
+        <Notice v-if="error" :of="noticeOf(error)" class="mt-2" />
     </div>
 </template>

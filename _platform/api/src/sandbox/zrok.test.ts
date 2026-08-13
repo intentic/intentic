@@ -30,7 +30,9 @@ afterEach(() => {
 
 describe(`zrok`, () => {
     it(`mints one account per sandbox under the synthetic email, x-token authed, v2 path, hub media type`, async () => {
-        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/api/v2/account`), respond: () => json({ accountToken: `acct-1` }, 201) }]);
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/api/v2/account`), respond: () => json({ accountToken: `acct-1` }, 201) },
+        ]);
         const created = await createSandboxAccount(config, { sandboxId: `abcdefabcdef`, password: `p` });
         expect(created).toEqual({ accountToken: `acct-1` });
         expect(calls[0]?.body).toEqual({ email: `sandbox-abcdefabcdef@sbx.test`, password: `p` });

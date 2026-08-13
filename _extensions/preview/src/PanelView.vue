@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, cmp, Icon, Notice, noticeOf, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -177,9 +177,7 @@ watch(
         </div>
 
         <!-- Errors overlay the top edge instead of pushing the preview around. -->
-        <div v-if="listError || actionError" :class="cmp.alertDanger('absolute inset-x-3 top-16 z-10')">
-            {{ listError ?? actionError }}
-        </div>
+        <Notice v-if="listError ?? actionError" :of="noticeOf(listError ?? actionError ?? ``)" class="absolute inset-x-3 top-16 z-10" />
 
         <!-- Unknown repo (bad URL) or the panels list hasn't loaded yet. -->
         <div v-if="panel === undefined && !isLoading" class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-muted">

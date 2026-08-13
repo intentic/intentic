@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Picker, type PickerOptions, SearchBar, useNarrow } from "@intentic/extension-ui";
+import { Button, cmp, Icon, InfoHint, Notice, noticeOf, Picker, SearchBar, type PickerOptions, useNarrow } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
 import NoteIndex from "./NoteIndex.vue";
@@ -137,7 +137,7 @@ const startVault = async (): Promise<void> => {
 <template>
     <!-- A HUB SECTION BODY — no page header and no frame of its own: the hub draws both. -->
     <div ref="body" class="flex min-h-0 flex-col gap-3">
-        <div v-if="error" :class="cmp.alertDanger(`px-4 py-3 text-sm`)">{{ error }}</div>
+        <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The section's one row of chrome: what this is, how to ask it something, and what it amounts to. -->
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">

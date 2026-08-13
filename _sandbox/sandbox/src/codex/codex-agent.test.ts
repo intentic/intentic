@@ -6,8 +6,7 @@ import { fakeCodexRunner } from "../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
 
-const createTestAgent = (runner: CodexRunner, codexHome = "/home") =>
-    createCodexAgent({ codexHome, runner });
+const createTestAgent = (runner: CodexRunner, codexHome = "/home") => createCodexAgent({ codexHome, runner });
 
 const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
@@ -162,13 +161,9 @@ test("a plan turn sends attached images on the first planning turn only — the 
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    await collect(
-        createTestAgent(runner),
-        { ...request, permissionMode: "plan" as const, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] },
-        () => ({
-            approve: true,
-        }),
-    );
+    await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] }, () => ({
+        approve: true,
+    }));
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toEqual(["/work/a/shot.png"]);
     expect(calls[1]!.images).toBeUndefined();
@@ -438,10 +433,7 @@ test("a compaction doesn't stand in for the real failure when the turn then dies
 
 test("turn failures and thrown runners become error events followed by done", async () => {
     const failing = fakeCodexRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
-    expect(await collect(createTestAgent(failing.runner), request)).toEqual([
-        { kind: "error", message: "usage limit reached" },
-        { kind: "done" },
-    ]);
+    expect(await collect(createTestAgent(failing.runner), request)).toEqual([{ kind: "error", message: "usage limit reached" }, { kind: "done" }]);
 
     const throwing: CodexRunner = async function* () {
         yield { type: "thread.started", thread_id: "thr-4" } as CodexEvent;

@@ -14,7 +14,10 @@ const userEnv = (suffix: string, overrides: Record<string, string> = {}): Record
     ...overrides,
 });
 
-const SERVICE_KEY = JSON.stringify({ client_email: "bot@proj.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----" });
+const SERVICE_KEY = JSON.stringify({
+    client_email: "bot@proj.iam.gserviceaccount.com",
+    private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----",
+});
 
 describe("connectionsFrom", () => {
     it("finds one connection per GOOGLE_MODE_* and names it after the suffix", () => {
@@ -36,7 +39,11 @@ describe("connectionsFrom", () => {
             GOOGLE_ACCESS_CO: "write",
             GOOGLE_SERVICE_ACCOUNT_KEY_CO: SERVICE_KEY,
         });
-        expect(connection?.credential).toMatchObject({ mode: "domain", clientEmail: "bot@proj.iam.gserviceaccount.com", tokenUri: "https://oauth2.googleapis.com/token" });
+        expect(connection?.credential).toMatchObject({
+            mode: "domain",
+            clientEmail: "bot@proj.iam.gserviceaccount.com",
+            tokenUri: "https://oauth2.googleapis.com/token",
+        });
     });
 
     // A card the owner half-filled must be VISIBLE with its reason, not absent — "no Google account is
