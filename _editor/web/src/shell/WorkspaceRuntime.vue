@@ -8,6 +8,7 @@ import { startBackgroundLoader, stopBackgroundLoader } from "../composables/pref
 import { startDraftingReceipts } from "../composables/workspace/draftingReceipts";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
+import LocalShortcutNotice from "./LocalShortcutNotice.vue";
 import PoppablePanels from "./PoppablePanels.vue";
 import PushNotice from "./PushNotice.vue";
 import ReceiptBar from "./ReceiptBar.vue";
@@ -82,4 +83,8 @@ startDraftingReceipts();
          the same event to the user and must not depend on which view raised it. It is deliberately NOT cleared
          on navigation: "3 files deleted" is still true on the next screen, and it is gone in seconds anyway. -->
     <ReceiptBar />
+    <!-- The offer to reach this sandbox over the loopback shortcut, asked before the browser's own permission
+         dialog can ask it worse. Up here because the stream is: the probe that raises it runs on every connect,
+         and a connect happens on /setup and behind an invite link as readily as in the workspace. -->
+    <LocalShortcutNotice />
 </template>

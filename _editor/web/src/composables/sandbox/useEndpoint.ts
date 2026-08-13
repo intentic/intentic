@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { isLocalPosture } from "../../environments/posture";
-import { type Endpoint, selectEndpoint } from "./endpoint";
+import { couldBeOnThisMachine, type Endpoint, selectEndpoint } from "./endpoint";
+import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { setStreamCapacity, streamCapacity } from "./streamBudget";
 import { useSandbox } from "./useSandbox";
 
@@ -30,6 +31,7 @@ const demoted = new Set<string>();
 const resolving = new Map<string, Promise<void>>();
 
 const { active, activeSandboxId, daemonUrl } = useSandbox();
+const { ask } = useLocalShortcut();
 
 /* The base every daemon call is appended to: the resolved endpoint when there is one, else the public URL.
  * Falling back to the tunnel rather than to `undefined` is what keeps resolution off the critical path — a
@@ -69,7 +71,26 @@ const resolve = async (): Promise<void> => {
     }
     const id = activeSandboxId.value;
     const url = daemonUrl.value;
-    if (id === undefined || url === undefined || url === `` || endpoints.value[id] !== undefined || demoted.has(id)) {
+    const sandbox = active.value;
+    if (id === undefined || sandbox === undefined || url === undefined || url === `` || endpoints.value[id] !== undefined || demoted.has(id)) {
+        return;
+    }
+    /* Nothing to qualify: the platform put this sandbox's machine somewhere this browser demonstrably is not
+     * (endpoint.ts), so the probe could only spend a Local Network Access prompt on an address that will never
+     * answer. Checked HERE as well as inside `candidatesFor` — that call would correctly return the tunnel
+     * alone, but only after this module had already decided to ask the user about a shortcut that does not
+     * exist for them. */
+    if (!couldBeOnThisMachine(sandbox)) {
+        return;
+    }
+    /* The probe is the app's only reach for the machine this browser runs on, and the browser interrupts with a
+     * permission dialog the first time it happens. So the app asks first, in its own words, and this returns
+     * without probing until the answer is yes — the notice calls back in (localShortcut.ts). */
+    const answer = shortcutAnswer(id);
+    if (answer !== `allowed`) {
+        if (answer === `unasked`) {
+            ask(id);
+        }
         return;
     }
     const pending = resolving.get(id);
@@ -77,7 +98,7 @@ const resolve = async (): Promise<void> => {
         return pending;
     }
     const attempt = (async (): Promise<void> => {
-        const endpoint = await selectEndpoint({ daemonUrl: url, token: active.value?.token });
+        const endpoint = await selectEndpoint({ daemonUrl: url, token: sandbox.token, cloud: sandbox.cloud, hosted: sandbox.hosted });
         // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
         // we probed FOR — never under whatever is active now — is what keeps it off the wrong sandbox.
         if (!demoted.has(id)) {

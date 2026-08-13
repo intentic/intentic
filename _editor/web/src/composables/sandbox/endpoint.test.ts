@@ -1,10 +1,14 @@
 import { localDaemonUrl, localDaemonUrlInsecure } from "@intentic/sandbox-run";
 import { expect, it, vi } from "vitest";
-import { candidatesFor, probeEndpoint, sandboxIdOf, selectEndpoint } from "./endpoint";
+import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf, selectEndpoint } from "./endpoint";
 
 const TUNNEL = `https://sandbox-abc.example.com`;
 const ZONE = `example.com`;
 const TOKEN = `connect-token`;
+
+// A sandbox with no machine record: the ordinary self-hosted lane, which is the one that might be a loopback
+// hop away. The two records are what the cases below vary.
+const anywhere = { cloud: null, hosted: null };
 
 // The daemon's answer to GET /health. `id` undefined models a daemon too old to name itself.
 const health = (id: string | undefined): Response =>
@@ -22,7 +26,7 @@ it(`derives the sandbox id from the connect TOKEN, matching what the container p
 
 it(`orders candidates certified, plain, tunnel — the last one always dialable`, async () => {
     const id = await sandboxIdOf(TOKEN);
-    const withToken = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN });
+    const withToken = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere });
     // HTTPS leads because it is the only form Safari will touch; plain http follows for the window before a
     // certificate exists, where Chrome and Firefox still take the shortcut.
     expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `local-insecure`, `tunnel`]);
@@ -33,12 +37,38 @@ it(`orders candidates certified, plain, tunnel — the last one always dialable`
     expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[1]!.base).port);
 
     // No token ⇒ no derivable id ⇒ no address to guess. The tunnel is the only way in.
-    expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined })).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+    expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, ...anywhere })).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+});
+
+it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
+    // The two lanes where the platform created the machine itself and knows where it is. Probing either would
+    // spend the browser's Local Network Access prompt — the "is this app looking around my computer" dialog —
+    // on an address that could never have answered.
+    const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } });
+    expect(hosted).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+    const cloud = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: { provider: `hetzner` }, hosted: null });
+    expect(cloud).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
+
+    // …and the verdict itself, which is a cheap NO and never a yes: no machine record means the sandbox MIGHT
+    // be a loopback hop away, which is the whole reason the probe still exists.
+    expect(couldBeOnThisMachine(anywhere)).toBe(true);
+    expect(couldBeOnThisMachine({ cloud: null, hosted: { state: `started` } })).toBe(false);
+    expect(couldBeOnThisMachine({ cloud: { provider: `hetzner` }, hosted: null })).toBe(false);
+});
+
+it(`never reaches for the machine when the sandbox cannot be on it`, async () => {
+    const fetchMock = vi.fn();
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } }, fetchMock)).toEqual({
+        kind: `tunnel`,
+        base: TUNNEL,
+    });
+    // The point of the gate: not merely that the tunnel wins, but that nothing was fetched to decide it.
+    expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it(`drops the certified candidate when the sandbox's URL carries no zone to certify under`, async () => {
     // A two-label host has no zone suffix to strip — an attached sandbox behind someone's own bare domain.
-    const candidates = await candidatesFor({ daemonUrl: `https://example.com`, token: TOKEN });
+    const candidates = await candidatesFor({ daemonUrl: `https://example.com`, token: TOKEN, ...anywhere });
     expect(candidates.map((candidate) => candidate.kind)).toEqual([`local-insecure`, `tunnel`]);
 });
 
@@ -108,7 +138,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     const id = await sandboxIdOf(TOKEN);
     expect(
         await selectEndpoint(
-            { daemonUrl: TUNNEL, token: TOKEN },
+            { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
             vi.fn(async () => health(id)),
         ),
     ).toEqual({
@@ -124,7 +154,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
         }
         return health(id);
     }) as unknown as typeof fetch;
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN }, httpOnly)).toEqual({
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, httpOnly)).toEqual({
         kind: `local-insecure`,
         base: localDaemonUrlInsecure(id),
     });
@@ -133,7 +163,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     // is a working address, so selection still returns one rather than erroring.
     expect(
         await selectEndpoint(
-            { daemonUrl: TUNNEL, token: TOKEN },
+            { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
             vi.fn(async () => {
                 throw new TypeError(`Failed to fetch`);
             }),

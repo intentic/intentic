@@ -46,6 +46,30 @@ export interface Endpoint {
     readonly base: string;
 }
 
+/* What the selection needs to know about a sandbox: its public address, the token the loopback port derives
+ * from, and the two machine records that answer where it runs. Deliberately shaped as the fields a
+ * `SandboxSummary` already carries, so a caller forwards facts rather than computing a verdict. */
+export interface Addressing {
+    readonly daemonUrl: string;
+    readonly token: string | undefined;
+    readonly cloud: object | null;
+    readonly hosted: object | null;
+}
+
+/* Could the machine that runs this sandbox be the one this browser is on? NOT "is it" — that is the question
+ * the module header refuses, and it stays refused. This is the cheap NO: in two of the creation lanes the
+ * platform built the machine itself and knows exactly where it is — its own hosted VM, or a machine in the
+ * user's cloud provider account — and neither is ever a loopback hop from a browser.
+ *
+ * Worth its own gate rather than being left to the probe, because a probe here is not free. It is the app's
+ * only reach for the machine the browser runs on, and Chrome answers that reach with a Local Network Access
+ * prompt — so probing a sandbox that provably cannot be local spends the user's permission dialog, and their
+ * reading of what this app does with their computer, on an address that could never have answered.
+ *
+ * Every other lane genuinely might be local: a `docker run` on the desktop in front of them, a sandbox
+ * attached behind their own domain. Those keep the probe. */
+export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "cloud" | "hosted">): boolean => sandbox.cloud === null && sandbox.hosted === null;
+
 /* The sandbox's 12-hex id, from the connect token this browser already holds — the WebCrypto twin of the
  * daemon/CLI/platform's `sandboxIdFromToken` (@intentic/sandbox-contract/tunnel-ids, which is node-only
  * because it reaches for node:crypto). hostnames.ts documents this split as the design: the id builders are
@@ -57,12 +81,13 @@ export interface Endpoint {
 export const sandboxIdOf = async (connectToken: string): Promise<string> => (await sha256Hex(connectToken)).slice(0, 12);
 
 // The addresses worth trying for a sandbox, best first. Without a connect token there is no id, hence no
-// derivable port and no local candidate at all — the tunnel is the only way in. The certified form leads; the
-// plain one follows for the window before issuance lands, and forever where it cannot happen (no zone, an
+// derivable port and no local candidate at all — and a sandbox on a machine the platform placed elsewhere has
+// nothing to reach for either, so both collapse to the tunnel being the only way in. The certified form leads;
+// the plain one follows for the window before issuance lands, and forever where it cannot happen (no zone, an
 // own-Cloudflare sandbox, a CA that refused).
-export const candidatesFor = async (sandbox: { readonly daemonUrl: string; readonly token: string | undefined }): Promise<Endpoint[]> => {
+export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> => {
     const tunnel: Endpoint = { kind: `tunnel`, base: sandbox.daemonUrl };
-    if (sandbox.token === undefined || sandbox.token === ``) {
+    if (sandbox.token === undefined || sandbox.token === `` || !couldBeOnThisMachine(sandbox)) {
         return [tunnel];
     }
     const id = await sandboxIdOf(sandbox.token);
@@ -102,10 +127,7 @@ export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: strin
 
 // The first candidate that answers as the sandbox we mean. The tunnel closes the list and is never probed, so
 // this always resolves to something dialable — a sandbox with no working local shortcut is not a failure.
-export const selectEndpoint = async (
-    sandbox: { readonly daemonUrl: string; readonly token: string | undefined },
-    fetchImpl: typeof fetch = fetch,
-): Promise<Endpoint> => {
+export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetch = fetch): Promise<Endpoint> => {
     const candidates = await candidatesFor(sandbox);
     const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
     for (const candidate of candidates) {
