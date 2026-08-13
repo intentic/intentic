@@ -21,6 +21,10 @@
 export interface MermaidTheme {
     readonly theme: "base" | "default" | "dark";
     readonly themeVariables?: Readonly<Record<string, string>>;
+    // Spacing is not a colour, so it rides along even on the fallback path below — a diagram in mermaid's own
+    // palette should still be the size this column can hold.
+    readonly flowchart: Readonly<Record<string, number>>;
+    readonly sequence: Readonly<Record<string, number>>;
 }
 
 // A colour no token holds, used to tell "the canvas rejected this string" from "the canvas painted it". An
@@ -106,9 +110,30 @@ const folded = (count: number, palette: readonly string[], fold: string): string
 const numbered = (prefix: string, from: number, values: readonly string[]): Record<string, string> =>
     Object.fromEntries(values.map((value, index) => [`${prefix}${index + from}`, value]));
 
-// A diagram's own type size. A step under the prose it sits in — a flowchart's labels are glanced at, not
-// read in paragraphs, and matching the body size makes a five-box diagram wider than the column holding it.
-const FONT_SIZE = `13px`;
+/* A diagram's own type size — a real step under the prose it sits in (13.2px in a chat bubble). At 13 it was
+ * nominally smaller and read as the same size, which is the worst of both: no hierarchy, and a five-box diagram
+ * as wide as the column holding it. A flowchart's labels are glanced at, not read in paragraphs. */
+const FONT_SIZE = `12px`;
+
+/* HOW MUCH ROOM A DIAGRAM TAKES. Mermaid's defaults are drawn for a diagram that owns its page; these are read
+ * in a chat bubble or a file preview, in a column beside prose, and at the defaults one four-box flowchart ran
+ * past 500px tall — the reader scrolls past the picture to get back to the sentence it belongs to.
+ *
+ * Every number is a fraction of what mermaid would have used, and none of them touches the label: text stays
+ * legible and the AIR around it is what shrinks. `padding` is the box's own inset (it spends double
+ * horizontally, which is where the widest boxes came from), `nodeSpacing` the gap between siblings and
+ * `rankSpacing` the gap between one row of the graph and the next — kept the roomiest of the three, because an
+ * edge label sits in exactly that gap and must not touch the boxes at either end. `diagramPadding` is the
+ * margin outside the whole drawing, which the figure's own block spacing already provides.
+ *
+ * A sequence diagram is trimmed on the same principle and stops where the risk starts: its margins and the gap
+ * between actors are pure air, and an actor's box height is generous for one line of a label a step smaller
+ * than it used to be. Its WIDTH is left alone deliberately — that box is a fixed size an actor's name has to
+ * fit inside, so narrowing it trades space for a clipped name, which is not a trade a reader benefits from. */
+const LAYOUT = {
+    flowchart: { padding: 10, nodeSpacing: 32, rankSpacing: 36, diagramPadding: 4 },
+    sequence: { diagramMarginX: 16, diagramMarginY: 6, actorMargin: 32, height: 44 },
+} as const;
 
 /* The mermaid config fragment for the CURRENT scheme, read off the live DOM rather than passed in: the tokens
  * are the truth, and `scheme` only says which set of them is in force (the caller re-renders when it flips).
@@ -140,7 +165,7 @@ export const mermaidTheme = (scheme: "light" | "dark", font: string): MermaidThe
         line === undefined ||
         stroke === undefined
     ) {
-        return { theme: scheme === `dark` ? `dark` : `default` };
+        return { theme: scheme === `dark` ? `dark` : `default`, ...LAYOUT };
     }
 
     /* The chart palette, resolved as a set. Partial is not useful — five slots minus one is a diagram where a
@@ -202,6 +227,7 @@ export const mermaidTheme = (scheme: "light" | "dark", font: string): MermaidThe
      * Every other diagram type still derives from the seeds, which is why they are set at all. */
     return {
         theme: `base`,
+        ...LAYOUT,
         themeVariables: {
             darkMode: String(scheme === `dark`),
             background,

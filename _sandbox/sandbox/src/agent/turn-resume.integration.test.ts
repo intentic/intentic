@@ -81,6 +81,20 @@ const settle = async (conversationId: string): Promise<void> => {
     await turnRunOf(conversationId)?.waitUntilFinished();
 };
 
+/* HOW LONG A WAIT ON THE FILESYSTEM IS GIVEN. The waits in this file come in two kinds: most watch an array
+ * this file owns in memory, which is true on the next tick or never, and a few read back through a STORE —
+ * the journal, the automations file, the transcript record — which is true only once a write has landed on
+ * disk and been re-read.
+ *
+ * vitest gives a wait one second by default. That is generous for those writes on an idle machine and not
+ * generous at all under `pnpm verify`, which runs this suite alongside fifty-eight other tasks on the same
+ * cores: two of these failed a land there while passing every time the package was run on its own. The budget
+ * is the one the rest of this package already uses for the same reason.
+ *
+ * It buys PATIENCE, not leniency — the assertion is unchanged and still has to come true, so a real
+ * regression fails exactly as it did, five seconds later. */
+const READ_BACK = { timeout: 5_000 } as const;
+
 /* startConversationTurn is THE one way a conversation's turn starts, which is why the transcript hangs off it:
  * every provider goes through here, so every provider's conversation is readable afterwards. Run on codex/native
  * on purpose — the pair with no Claude Code session store behind it, whose chats opened blank for exactly as
@@ -95,7 +109,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         harness: "native",
     });
     expect(started).toBeDefined();
-    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2));
+    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), READ_BACK);
     // The user row is stamped with when it was sent; this suite is about which rows a settled turn records, so
     // it asserts the shape and lets the clock be a number.
     expect(await record.read("tr-record")).toEqual([
@@ -670,7 +684,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
-    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2));
+    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), READ_BACK);
 
     const runs = (await services.automations.get("hook"))?.runs ?? [];
     // Newest first: the completed re-fire sits above the interrupted record of the fire it replaced.
@@ -800,7 +814,7 @@ test("a parked turn is rehydrated at boot — the cards go back up as they stood
     await vi.waitFor(async () => {
         const [entry] = await services.turnJournal.list();
         expect(entry?.kind === "turn" ? (entry.parked ?? []).map((card) => card.requestId) : []).toEqual(["r-up"]);
-    });
+    }, READ_BACK);
 
     // Stop works on the rehydrated park like on any live turn: the cards freeze cancelled — resolved WITHOUT a
     // reply — and nothing resumes. The journal entry drains with the settled turn, as any settled turn's does.
@@ -809,7 +823,7 @@ test("a parked turn is rehydrated at boot — the cards go back up as they stood
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-up" });
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]));
+    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), READ_BACK);
 });
 
 test("approving the restored plan resumes the session in the posture a live approval grants", async () => {
@@ -887,7 +901,7 @@ test("dismissing the restored question ends the turn quietly, exactly as a live 
     await settle("pk-dis");
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]));
+    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), READ_BACK);
 });
 
 test("allowing the restored permission resumes the turn told to run the tool", async () => {
