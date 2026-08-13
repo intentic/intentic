@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { Browser } from "playwright";
+import type { Browser, CDPSession } from "playwright";
 import { expect, test } from "vitest";
 import {
     applySelect,
@@ -149,6 +149,62 @@ test("a page where nothing is happening settles into silence", { timeout: 120_00
             expect(frames.length).toBeLessThanOrEqual(4);
             // And the last word is the sharp one — a blurry echo arriving after it is the flicker itself.
             expect(frames.at(-1)?.format).toBe("webp");
+        } finally {
+            await screencast.stop();
+        }
+    } finally {
+        await browser.close();
+    }
+});
+
+/* PAUSED MEANS SILENT, AND CHROMIUM CANNOT BE THE ONE TO PROMISE IT. `Page.stopScreencast` is a request, not a
+ * barrier: a frame captured a moment before it is still being encoded on a worker thread and turns up
+ * afterwards — on an idle box a few milliseconds later, on a loaded one well over a second later. A view whose
+ * tab went to the background therefore went on pushing pictures down the tunnel at nobody, which is the single
+ * thing pausing exists to prevent, and the suite that noticed read as a browser bug that was really a stopwatch.
+ *
+ * The late frame is delivered BY HAND because "after the stop" is the one arrival a test cannot schedule: same
+ * listener, same payload shape, and what is pinned is our half of it — that the frame is dropped rather than
+ * forwarded no matter how it got here. */
+const deliverLateFrame = (session: CDPSession | undefined): void => {
+    (session as unknown as { readonly emit: (event: string, payload: unknown) => boolean } | undefined)?.emit("Page.screencastFrame", {
+        data: "late",
+        sessionId: 1,
+        metadata: {},
+    });
+};
+
+test("a paused view stays silent even when a frame arrives after the stop", { timeout: 120_000 }, async () => {
+    const browser = await launch();
+    if (browser === undefined) {
+        return; // no browser on this box
+    }
+    try {
+        const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
+        const page = await context.newPage();
+        await page.goto(`data:text/html,${encodeURIComponent("<body style='margin:0'><h1>watch this</h1></body>")}`);
+
+        const frames: ScreencastFrame[] = [];
+        const screencast = await startScreencast(context, (frame) => frames.push(frame));
+        try {
+            // Pause from a settled stream, so nothing below can be blamed on the view still starting up.
+            await settle(() => frames.some((frame) => frame.format === "webp"));
+            await screencast.setPaused(true);
+            frames.length = 0;
+
+            // The page really does move while nobody is watching — that is the frame Chromium had in hand when
+            // the stop arrived, and the one it delivers late.
+            await page.evaluate(() => {
+                document.body.style.background = "rebeccapurple";
+            });
+            deliverLateFrame(screencast.attached());
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            expect(frames).toHaveLength(0);
+
+            // And the binding survived being silent: coming back is one frame away, not a reconnect.
+            await screencast.setPaused(false);
+            await settle(() => frames.length > 0);
+            expect(frames.length).toBeGreaterThan(0);
         } finally {
             await screencast.stop();
         }

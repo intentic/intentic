@@ -426,6 +426,18 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             // Acked whatever happens to it: an unacked frame stops the stream, including the ones below that
             // are dropped precisely because nothing has changed.
             session.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+            /* SILENCE IS OURS TO KEEP, NOT CHROMIUM'S. `Page.stopScreencast` is a request, not a barrier: a
+             * frame it captured a moment earlier is still being encoded on a worker thread, and it arrives
+             * afterwards — on a loaded machine, a second or more afterwards. So a paused view went on pushing
+             * pictures down the tunnel at a tab nobody was looking at, which is the one thing pausing exists to
+             * stop, and a stopped one called back into a route that had already closed its socket.
+             *
+             * Acked above and dropped here, in that order, because the two halves answer different owners: the
+             * ack is Chromium's bookkeeping (an unacked frame leaves a slot in flight and the stream never
+             * restarts on resume), the drop is ours. */
+            if (paused || stopped) {
+                return;
+            }
             if (capturing || Date.now() < echoUntil) {
                 // Probably our own still shaking the page it photographed — forwarding it would undo the sharp
                 // frame we just sent, which is the flicker. But it may equally be the page answering a click,
