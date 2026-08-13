@@ -3,3 +3,7 @@ node_modules/
 # dist/ is deliberately NOT ignored. An intentic extension ships its PREBUILT bundle: the daemon clones the sha
 # the owner approved and runs what is in it, with no install-time build step, so the commit that gets listed has
 # to contain dist/extension.js.
+
+# This repo is pnpm. An accidental `npm install` leaves one of these behind; committing it gives
+# the next person two lockfiles disagreeing about the same tree.
+package-lock.json

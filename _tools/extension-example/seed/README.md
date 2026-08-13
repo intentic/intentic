@@ -38,10 +38,10 @@ skill telling it when to reach for it) and the owner's side (a view, a badge, a 
 ## Build, test, install
 
 ```sh
-npm install
-npm run typecheck        # vue-tsc over src/
-npm test                 # node --test against dist/ — build first
-npm run build            # → dist/extension.js, one file, 5 kB
+pnpm install
+pnpm typecheck        # vue-tsc over src/
+pnpm test                 # node --test against dist/ — build first
+pnpm build            # → dist/extension.js, one file, 5 kB
 
 git add -f dist/extension.js && git commit -m "release 1.0.0" && git push
 git rev-parse HEAD       # this sha is what you install
