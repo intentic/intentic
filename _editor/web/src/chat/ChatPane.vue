@@ -1998,17 +1998,29 @@ watch(
                      who wants it decided once). A pane has no header to hang it off, so it joins the readouts
                      under the composer: the strip that already says what this chat is doing. Pressed-in when the
                      calls are showing, so the control states which reading is in force rather than only offering
-                     the other one. -->
+                     the other one.
+
+                     It is the only CONTROL among readouts, and it has to be found rather than glanced at — so it
+                     is drawn as one: a chip with a border and a label, a tier brighter than the strip around it.
+                     Bare, at the strip's own weight, it was a glyph the size of the text and the colour of the
+                     faintest thing on screen, between two readouts that carry numbers — indistinguishable from a
+                     smudge, which is exactly how it was reported. The label never hides: a chip that thins to an
+                     icon on a narrow pane is unfindable again precisely where the transcript is tightest. -->
                 <button
                     type="button"
-                    class="inline-flex cursor-pointer items-center transition-colors"
-                    :class="showToolCalls ? 'text-content' : 'hover:text-content'"
+                    class="-my-0.5 inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 transition-colors"
+                    :class="
+                        showToolCalls
+                            ? 'border-line-strong bg-overlay text-content'
+                            : 'border-line text-muted hover:border-line-strong hover:bg-overlay hover:text-content'
+                    "
                     :aria-pressed="showToolCalls"
                     :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
                     v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
                     @click="showToolCalls = !showToolCalls"
                 >
                     <Icon :name="showToolCalls ? 'eye' : 'eye-slash'" class="text-2xs" />
+                    Tools
                 </button>
                 <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                     <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />

@@ -246,6 +246,20 @@
     padding-block: 0.25rem;
 }
 @container (min-width: 58rem) {
+    /* THE ROW HAS TO REACH THE MARGIN BEFORE THE MARK CAN STAND IN IT. Every message row is
+       `content-visibility: auto` (see .chat-message — it is what keeps a long transcript's scrollbar honest),
+       and that paints with containment: anything outside the row's own box is not clipped-with-a-scrollbar, it
+       is silently not drawn. Positioned out in the margin, the mark laid out correctly and was never painted —
+       leaving the bare line the mark was the whole point of.
+       So the row that carries a run grows outward by the mark's reach and gives the width straight back as
+       padding. The content box does not move — the reading measure, the bubbles and the line are all exactly
+       where they were — but the clip edge now sits past the mark. A quarter-rem more than the mark asks for, so
+       the two are never flush at fractional zoom. Only rows that HAVE a mark pay it; nothing else in a turn is
+       drawn outside its row, so nothing else needs the room. */
+    .chat-pane .chat-message:has(.chat-run-bar) {
+        margin-right: -3.75rem;
+        padding-right: 3.75rem;
+    }
     .chat-pane .chat-run-bar {
         padding-block: 0.375rem;
     }
