@@ -103,6 +103,9 @@ export { default as Segmented } from "./components/Segmented.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
 // authored accents (a documentation map's components, say) has to paint them the way a figure would.
 export { seriesColor } from "./components/seriesAccent.js";
+// The shape of a list that is still loading, built out of real <Row>s so it cannot drift from the list it
+// stands in for. The single-bar case needs no component — that is the `skeleton` class on any box.
+export { default as SkeletonRows } from "./components/SkeletonRows.vue";
 // The index-and-body screen — five views were four implementations of it, and the one that had solved it
 // (HubLayout) lived in the web app where no extension could reach it.
 export { default as SplitView } from "./components/SplitView.vue";

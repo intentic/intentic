@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
@@ -11,6 +11,7 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { identityHue } from "../../composables/identityHue";
 import { FULL_POWERS, grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 
 /* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written — the accounts
  * it speaks through, what it may do, where it works. (A folder's own personas can also be named and bounded from
@@ -32,6 +33,7 @@ import { usePersonas } from "../../composables/sandbox/usePersonas";
  * the Reddit wrong. */
 
 const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
+const outline = useSandboxOutline(isLoading);
 // The list query reports a bare message; this page knows the user came to see their personas.
 const listNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your personas.`, detail: error.value },
@@ -247,7 +249,16 @@ const confirmRemove = async (): Promise<void> => {
         </p>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
-        <div v-if="isLoading" :class="cmp.emptyState('py-6')"><Icon name="spinner" spin /> Reading your sandbox's personas…</div>
+        <!-- The empty state below is a real one — it explains what NOT having a persona costs — so it must not
+             be shown to somebody who simply has not been told yet. The list's own shape stands in meanwhile. -->
+        <template v-if="isLoading">
+            <RowGroup v-if="outline" label="Your personas">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">Reading your sandbox's personas…</span>
+                    <SkeletonRows :rows="2" description control />
+                </div>
+            </RowGroup>
+        </template>
 
         <template v-else>
             <!-- Nothing to name a persona after yet. Said once, up front, because every card below would

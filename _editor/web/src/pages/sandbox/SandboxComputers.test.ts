@@ -31,13 +31,16 @@ vi.hoisted(() => {
 });
 
 const computers = ref<Computer[]>([]);
+// The FIRST read, not the ten-second poll. Every test below is about a list that has already arrived, so this
+// stays false for them; the pair at the bottom drives it to pin what the tab may say before it has.
+const computersLoading = ref(false);
 vi.mock(`../../composables/sandbox/useComputers`, async () => {
     // reportStale is a plain function of the row and the clock — real, so a row's staleness line is decided the
     // way it is in the app rather than by this file's idea of it.
     const real = await import(`../../composables/sandbox/useComputers`);
     return {
         ...real,
-        useComputers: () => ({ computers, error: ref(undefined), refetch: () => {} }),
+        useComputers: () => ({ computers, error: ref(undefined), isLoading: computersLoading, refetch: () => {} }),
     };
 });
 // `sandboxKey` is reached at module eval by the real useComputers above, which is why it is here as well as the
@@ -72,6 +75,7 @@ const mount = (rows: Computer[]): HTMLElement => {
 
 afterEach(() => {
     latest.value = `1.183.0`;
+    computersLoading.value = false;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -232,4 +236,19 @@ it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     expect(text).toContain(`0.1.0`);
     expect(text).not.toContain(`available`);
     expect(text).not.toContain(`intentic-sync upgrade`);
+});
+
+/* THE PAIRING INVITATION IS A CLAIM ABOUT THE READER, and an unread list is not grounds for it. The empty state
+ * says "no computer is paired with this sandbox yet" and then tells them how to pair one — so the person it
+ * reached first was the person who had already done it, on every cold load, until the list arrived and replaced
+ * it with their laptop. An empty `computers` means that only once the read is done. */
+it(`does not offer to pair a first computer while the list is still being read`, () => {
+    computersLoading.value = true;
+    expect(mount([]).textContent ?? ``).not.toContain(`No computer is paired`);
+});
+
+// Deferred, not lost: once the read lands empty, the invitation is the right thing to say and is said.
+it(`offers to pair a first computer once the read lands empty`, () => {
+    computersLoading.value = false;
+    expect(mount([]).textContent ?? ``).toContain(`No computer is paired`);
 });

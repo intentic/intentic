@@ -1,5 +1,5 @@
 import { type Computer, type MachineSandboxOp, ComputersListSchema, SyncStatusSchema } from "@intentic/sandbox-contract";
-import { computed, type ComputedRef } from "vue";
+import { computed, type ComputedRef, type Ref } from "vue";
 import { sandboxError, sandboxJson, sandboxRequest } from "./sandboxClient";
 import { readIntenticLines } from "../intenticStream";
 import { COMPUTERS, SYNC_HEALTH } from "../queryKeys";
@@ -18,7 +18,12 @@ import { useSandboxQuery } from "./useSandboxQuery";
 const QUERY_KEY = COMPUTERS.of();
 const POLL_MS = 10_000;
 
-export function useComputers(): { computers: ComputedRef<Computer[]>; error: ComputedRef<string | undefined>; refetch: () => void } {
+export function useComputers(): {
+    computers: ComputedRef<Computer[]>;
+    error: ComputedRef<string | undefined>;
+    isLoading: Ref<boolean>;
+    refetch: () => void;
+} {
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async () => ComputersListSchema.parse(await sandboxJson(`/system/computers`)),
@@ -27,6 +32,9 @@ export function useComputers(): { computers: ComputedRef<Computer[]>; error: Com
     return {
         computers: computed(() => query.data.value?.computers ?? []),
         error,
+        // The FIRST read only — a poll every ten seconds must never blank the list it is refreshing. An empty
+        // `computers` is "no machine is paired" once this is false, and says nothing at all while it is true.
+        isLoading: query.isLoading,
         refetch: () => void query.refetch(),
     };
 }

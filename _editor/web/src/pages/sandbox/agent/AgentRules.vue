@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Rule } from "@intentic-app/api-contract";
-import { cmp, ContextMenu, Icon, Row, RowGroup, timeAgo } from "@intentic/ui";
+import { cmp, ContextMenu, Icon, Row, RowGroup, SkeletonRows, timeAgo } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useRules } from "../../../composables/sandbox/useRules";
+import { useSandboxOutline } from "../../../composables/sandbox/useSandboxOutline";
 import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
@@ -27,6 +28,7 @@ import { momentOf, type RuleDraft } from "./ruleWords";
  * history. Before this, changing a command meant deleting the rule and typing all of it again. */
 
 const { settings, listed, firings, upsert, remove, setEnabled, move, freeId } = useRules();
+const outline = useSandboxOutline(computed(() => settings.value === undefined));
 
 // Which row is a form right now: a rule's id while editing it, `undefined` otherwise. `adding` is its own flag
 // rather than a sentinel id, because a rule may legitimately be called anything.
@@ -155,8 +157,16 @@ const firedOf = (rule: Rule): string => {
             </Row>
         </template>
 
+        <!-- Same read, same rule as the skills list above it: an unanswered /settings has no rules to show and
+             nothing true to say about their absence. -->
+        <div v-if="settings === undefined" role="status" aria-busy="true">
+            <template v-if="outline">
+                <span class="sr-only">Reading this sandbox's rules…</span>
+                <SkeletonRows :rows="2" density="compact" description control />
+            </template>
+        </div>
         <Row
-            v-if="listed.length === 0 && !adding"
+            v-else-if="listed.length === 0 && !adding"
             icon="shield"
             density="compact"
             description="No rules yet — the three above are the common ones, written the same way."

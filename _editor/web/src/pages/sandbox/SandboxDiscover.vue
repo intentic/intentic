@@ -11,6 +11,7 @@ import { useExtensions } from "../../composables/extensions/useExtensions";
 import { useRegistry } from "../../composables/extensions/useRegistry";
 import { useMembership } from "../../composables/membership/useMembership";
 import { useRole } from "../../composables/sandbox/useRole";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import { auditBrief, updateBrief } from "./extensionBrief";
@@ -46,6 +47,7 @@ const route = useRoute();
 const router = useRouter();
 const { isOwner } = useRole();
 const { entries, registryName, url, token, isOfficial, isLoading, isFetching, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
+const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
 // Re-read the credit balance the moment a premium install has spent from it — see the install handler.
@@ -306,7 +308,26 @@ const emptyNote = computed<string | undefined>(() => {
             <p class="text-2xs text-subtle">A token is only needed for a private registry. It's kept for this session and never put in a link.</p>
         </div>
 
-        <div v-if="isLoading" :class="cmp.emptyState(`py-8`)">Reading the registry…</div>
+        <!-- A registry read is a git clone, so this is the longest wait in the hub and the one most worth
+             drawing. The outline is the CARD GRID at the same breakpoints, because that is what makes the
+             catalogue recognisable before a single name has landed — a centred sentence in an empty pane made
+             the slowest tab also look like the emptiest. -->
+        <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
+            <span class="sr-only">Reading the registry…</span>
+            <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
+                <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg border border-line bg-card px-3 py-2.5">
+                    <div class="flex w-full items-start gap-2.5">
+                        <span class="skeleton block h-7 w-7 shrink-0 rounded-md" />
+                        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                            <span class="skeleton block h-3.5" :class="[`w-28`, `w-36`, `w-24`][card % 3]" />
+                            <span class="skeleton block h-2 w-20" />
+                        </div>
+                    </div>
+                    <span class="skeleton block h-2.5 w-full" />
+                    <span class="skeleton block h-2.5 w-3/5" />
+                </div>
+            </div>
+        </div>
 
         <!-- THE TWO GROUPS, and their captions. Verified leads because it is the only claim on this page a
              human made; the second heading says what it is NOT, in the same size type, for the same reason. -->

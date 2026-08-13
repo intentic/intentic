@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { Avatar, cmp, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented } from "@intentic/ui";
+import { Avatar, cmp, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Select from "primevue/select";
@@ -11,6 +11,7 @@ import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { apiClient } from "../../composables/useApi";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { identityHue } from "../../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../../composables/usePresence";
 
@@ -62,9 +63,16 @@ const badge = (status: InviteRecord["status"]): { label: string; class: string }
     return { label: `Pending`, class: `bg-overlay text-muted` };
 };
 
+/* THE FIRST READ ONLY, and only the one on mount. Every other call here follows a write whose response IS the
+ * new roster, so the list is never blank across them — outlining a re-grade would flash a placeholder over rows
+ * that are already correct. `listing` starts true because the fetch is armed in onMounted: starting it false
+ * would paint one frame of "no members" first, which is the whole thing this is here to stop. */
+const listing = ref(true);
+
 const load = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined) {
+        listing.value = false;
         return;
     }
     error.value = undefined;
@@ -72,14 +80,24 @@ const load = async (): Promise<void> => {
         members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
         error.value = noticeFrom(err, `Couldn't load the access list.`);
+    } finally {
+        listing.value = false;
     }
 };
+
+/* An owner's roster is a network read and looked blank until it landed — a page that opens claiming you have
+ * invited nobody, on the tab whose subject is who else is in here. The rows below stand in for it meanwhile. */
+const outline = useSandboxOutline(listing);
 
 // The invite list is owner-only (the API 403s a member) — only load it when the viewer owns this sandbox.
 onMounted(() => {
     if (isOwner.value) {
         void load();
+        return;
     }
+    // A member never fetches, so nothing is pending for them: leaving this armed would outline a list that is
+    // never coming.
+    listing.value = false;
 });
 
 const invite = async (): Promise<void> => {
@@ -200,6 +218,12 @@ const revoke = async (target: string): Promise<void> => {
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
                     <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
+                </div>
+                <div v-if="listing" role="status" aria-busy="true">
+                    <template v-if="outline">
+                        <span class="sr-only">Reading who has access…</span>
+                        <SkeletonRows :rows="2" control />
+                    </template>
                 </div>
                 <div v-for="member in members" :key="member.email" class="flex items-center gap-2.5 px-4 py-3">
                     <Icon name="user" class="text-muted" />

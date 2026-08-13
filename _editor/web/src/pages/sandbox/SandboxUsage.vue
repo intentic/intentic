@@ -5,6 +5,7 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
 import { relativeTime } from "../../composables/chat/catalog";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
@@ -62,6 +63,7 @@ import {
 const route = useRoute();
 const router = useRouter();
 const { rows, isLoading, isFetching, refetch, error } = useUsage();
+const outline = useSandboxOutline(isLoading);
 const usageNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this sandbox's usage.`, detail: error.value },
 );
@@ -218,13 +220,45 @@ const hasSpend = computed(() => current.value.length > 0);
         <!-- A refetch holds the previous render at reduced opacity rather than swapping in skeletons: no
              layout jump, and the numbers you were reading stay readable while the new ones land. -->
         <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-            <p v-if="isLoading" :class="cmp.emptyState()">Reading the ledger…</p>
+            <!-- THE TILES AND THE CHART UNDER THEM, in their own grid at their own breakpoints. This tab's
+                 layout is its most recognisable feature — one hero figure, three tiles, a column chart — and
+                 the shape alone tells a returning reader they are in the right place while the ledger is still
+                 being summed. The figures are deliberately NOT stood in for at their real size: a big grey bar
+                 where a number goes reads as a number that failed to load. -->
+            <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
+                <span class="sr-only">Reading the ledger…</span>
+                <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4" aria-hidden="true">
+                    <Card v-for="tile in 4" :key="tile" class="flex min-w-0 flex-col gap-2">
+                        <span class="skeleton block h-2.5 w-16" />
+                        <span class="skeleton block" :class="tile === 1 ? `h-8 w-32` : `h-5 w-20`" />
+                        <span class="skeleton mt-auto block h-2 w-24" />
+                    </Card>
+                </div>
+                <Card class="flex flex-col gap-3" aria-hidden="true">
+                    <div class="flex items-baseline justify-between gap-3">
+                        <span class="skeleton block h-3.5 w-32" />
+                        <span class="skeleton block h-3.5 w-16" />
+                    </div>
+                    <!-- Columns of uneven height: a flat row of equal bars is the one thing a real chart never
+                         looks like. -->
+                    <div class="flex h-28 items-end gap-1.5">
+                        <span
+                            v-for="(height, index) in [`h-1/3`, `h-2/3`, `h-1/2`, `h-full`, `h-1/4`, `h-3/5`, `h-4/5`, `h-2/5`, `h-3/4`, `h-1/2`]"
+                            :key="index"
+                            class="skeleton block min-w-0 flex-1"
+                            :class="height"
+                        />
+                    </div>
+                </Card>
+            </div>
 
-            <p v-else-if="rows.length === 0" :class="cmp.emptyState(`py-8`)">
+            <!-- `!isLoading`, not just "the outline isn't up": a ledger still being read has not yet earned the
+                 right to tell anyone they have never run an agent. -->
+            <p v-else-if="!isLoading && rows.length === 0" :class="cmp.emptyState(`py-8`)">
                 No turns have been billed on this sandbox yet. Spend is recorded at the end of every turn — run an agent and this fills in.
             </p>
 
-            <template v-else>
+            <template v-else-if="!isLoading">
                 <!-- The hero and its supporting tiles. Spend is the one number this screen is about, so it is the
                      only figure at hero size; the rest are stat tiles.
                      Every figure is sized against ITS OWN tile (@container + cqi), not the viewport — the grid

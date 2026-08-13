@@ -53,5 +53,20 @@ export function useSandboxVersion() {
     // without an overlay). HostRecreate turns this into a button in the desktop app and a command elsewhere.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { info, installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, runtimeIssue, serverManaged, slug };
+    return {
+        info,
+        installed,
+        latest,
+        updateAvailable,
+        updateNotes,
+        moreUpdateNotes,
+        breakingNotes,
+        runtimeIssue,
+        serverManaged,
+        slug,
+        // The /info read is out. Everything above reads as "the sandbox didn't say" until it lands, which is
+        // indistinguishable from "the sandbox says nothing" — so a surface that draws a block only when a fact
+        // is present needs this to tell the two apart.
+        isLoading: query.isLoading,
+    };
 }

@@ -7,6 +7,7 @@ import {
     Notice,
     type NoticeModel,
     RowGroup,
+    SkeletonRows,
     StatusBadge,
     type StatusVariant,
     timeAgo,
@@ -21,6 +22,7 @@ import DesktopSyncCard from "./DesktopSyncCard.vue";
 import MachineRunLog from "./MachineRunLog.vue";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
@@ -46,7 +48,12 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 
 const route = useRoute();
 const highlight = ref(false);
-const { computers, error, refetch } = useComputers();
+const { computers, error, isLoading, refetch } = useComputers();
+/* Until the list lands, "no computer is paired" is a guess dressed as a fact — and the wrong one for anybody who
+ * has a laptop paired, who then reads an invitation to pair the laptop they already paired. The outline holds
+ * the row's shape instead. Only the first read: this query polls, and an outline that returned every ten
+ * seconds would be worse than the empty state ever was. */
+const outline = useSandboxOutline(isLoading);
 // The list query's bare message, in the words of the page that asked for it.
 const computersNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your computers.`, detail: error.value },
@@ -229,6 +236,12 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                 </InfoHint>
             </template>
             <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
+            <div v-else-if="isLoading" role="status" aria-busy="true">
+                <template v-if="outline">
+                    <span class="sr-only">Reading your computers…</span>
+                    <SkeletonRows :rows="2" description />
+                </template>
+            </div>
             <div v-else-if="sorted.length === 0" class="px-4 py-6 text-center text-xs text-muted">
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC
                 from Capabilities to let the agent work there.

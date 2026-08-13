@@ -2,12 +2,13 @@
 import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, StatusBadge, timeAgo } from "@intentic/ui";
+import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows, StatusBadge, timeAgo } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { type ExtensionSection, sectionsOf } from "../../composables/extensions/extensionCategories";
 import { useExtensionList } from "../../composables/extensions/useExtensionList";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { reloadExtensions } from "../../extension-host/useExtensionHost";
 import ExtensionRow from "./ExtensionRow.vue";
 import { extensionBrief } from "./extensionBrief";
@@ -39,6 +40,7 @@ import NewExtensionDialog from "./NewExtensionDialog.vue";
  *     and above the sections for it: they narrow the whole tab, and each section is now only a part of it. */
 
 const { entries, invalid, unlisted, setEnabled, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, isLoading, error } = useExtensionList();
+const outline = useSandboxOutline(isLoading);
 // The list query's own message, in the words of the page that asked for it.
 const listNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's extensions.`, detail: error.value },
@@ -244,7 +246,16 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             />
         </RowGroup>
 
-        <div v-if="isLoading" :class="cmp.emptyState(`py-6`)">Reading this sandbox's extensions…</div>
+        <!-- `sections` is empty while the read is out, so the groups above render nothing and this is the only
+             thing on the tab. The outline gives it the shape of the list instead of a sentence about it. -->
+        <template v-if="isLoading">
+            <RowGroup v-if="outline" label="Installed">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">Reading this sandbox's extensions…</span>
+                    <SkeletonRows :rows="3" description control />
+                </div>
+            </RowGroup>
+        </template>
         <div v-else-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
             <span>{{ emptyNote }}</span>
             <!-- An empty tab is the one moment a reader is unambiguously asking where extensions come from, so

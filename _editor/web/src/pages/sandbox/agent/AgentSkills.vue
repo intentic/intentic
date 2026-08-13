@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { Icon, Row, RowGroup, SearchBar } from "@intentic/ui";
+import { Icon, Row, RowGroup, SearchBar, SkeletonRows } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../composables/extensions/useCapabilities";
 import { useExtensions } from "../../../composables/extensions/useExtensions";
+import { useSandboxOutline } from "../../../composables/sandbox/useSandboxOutline";
 import { useSkills } from "../../../composables/sandbox/useSkills";
 import SkillForm from "./SkillForm.vue";
 import SkillRow from "./SkillRow.vue";
@@ -57,6 +58,7 @@ const FILTERABLE_FROM = 8;
 const FOLD_FROM = 6;
 
 const { skills, settings, error, save, remove, setEnabled, readBody, forgetBody } = useSkills();
+const outline = useSandboxOutline(computed(() => settings.value === undefined));
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 
@@ -179,6 +181,15 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
         />
 
         <Row v-if="error !== undefined" icon="exclamation-triangle" density="compact" :description="error" />
+        <!-- `settings` is this section's read: until it lands there are no skills to list AND no grounds to say
+             so, and the invitation below is written for someone who has none rather than for someone who has
+             not been told yet. -->
+        <div v-else-if="settings === undefined" role="status" aria-busy="true">
+            <template v-if="outline">
+                <span class="sr-only">Reading this sandbox's skills…</span>
+                <SkeletonRows :rows="3" density="compact" description control />
+            </template>
+        </div>
         <Row
             v-else-if="skills.length === 0 && !adding"
             icon="book"

@@ -7,6 +7,7 @@ import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
@@ -29,7 +30,8 @@ import SandboxUpdateCard from "./SandboxUpdateCard.vue";
  * the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's life. */
 
 const sandbox = useSandbox();
-const { info, installed, latest, updateAvailable } = useSandboxVersion();
+const { info, installed, latest, updateAvailable, isLoading: infoLoading } = useSandboxVersion();
+const outline = useSandboxOutline(infoLoading);
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
@@ -292,9 +294,26 @@ const save = async (): Promise<void> => {
                 </div>
             </div>
 
+            <!-- The same block's outline while /info is still out. It is drawn at all because this panel
+                 APPEARS rather than fills: the identity above it comes from the platform and is on screen
+                 instantly, so without this the card silently grows a second half a moment after the reader has
+                 settled on it, moving everything below. Reserving the shape is what keeps the page still. -->
+            <div
+                v-if="sandbox.reachable.value && infoLoading && outline"
+                role="status"
+                aria-busy="true"
+                class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5"
+            >
+                <span class="sr-only">Reading what this sandbox reports about itself…</span>
+                <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
+                    <span class="skeleton block h-2 w-16" />
+                    <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
+                </div>
+            </div>
+
             <!-- What the sandbox reports about itself (relayed via /info, never stored by the platform). -->
             <dl
-                v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
+                v-else-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
                 class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
             >
                 <div v-if="info?.image" class="flex items-start justify-between gap-3">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, FilterBar, type NoticeModel, NoticeStack, RowGroup, Segmented } from "@intentic/ui";
+import { cmp, FilterBar, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -11,6 +11,7 @@ import { useExtensions } from "../../composables/extensions/useExtensions";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSecretInventory } from "../../composables/secrets/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 
@@ -43,6 +44,7 @@ const FILTERABLE_FROM = 8;
 const FOLD_FROM = 8;
 
 const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
+const outline = useSandboxOutline(inventoryPending);
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 const router = useRouter();
@@ -153,7 +155,22 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[pushError]" />
 
-        <div v-if="inventoryPending" :class="cmp.emptyState('py-6')"><Icon name="spinner" spin /> Reading your sandbox's secrets…</div>
+        <!-- TWO GATES, NOT ONE, and every loading state in this hub is built the same way. The CONTENT waits on
+             the read itself (`inventoryPending`), so a half-read inventory never renders as "no secrets"; the
+             OUTLINE waits on the reveal, so a warm daemon paints a blank beat and then the list rather than a
+             skeleton nobody had time to read. Collapsing them into one flag gives up whichever half you drop. -->
+        <template v-if="inventoryPending">
+            <!-- The shape of the list that is coming, rather than a spinner over an empty column. A credential
+                 list is long and uniform, so its outline is the one thing a placeholder here can honestly
+                 promise: rows, each with a key and the control that reveals it. The label rides INSIDE the
+                 reveal: an empty bordered surface with a heading over it is its own flash. -->
+            <RowGroup v-if="outline" label="Your secrets">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">Reading your sandbox's secrets…</span>
+                    <SkeletonRows :rows="4" density="compact" control />
+                </div>
+            </RowGroup>
+        </template>
 
         <template v-else>
             <!-- The tab's instrument, not any one group's: the filter and the scope narrow everything below and

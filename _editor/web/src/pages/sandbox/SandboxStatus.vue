@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Row, RowGroup, SkeletonRows, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { computed } from "vue";
 import VpnCard from "../../components/VpnCard.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { useRunning } from "../../composables/sandbox/useRunning";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { detectActivations, extensionPath } from "../../core-views/registry";
 
 /* The Sandbox hub's "Status" tab: live things across both classes — operator-panel dev servers (with port +
  * preview) and active services — plus the VPN card, which is where a tunnel is connected and disconnected.
  * The only at-a-glance view of what is actually up right now. */
 
-const { panels } = usePanels();
-const { capabilities } = useCapabilities();
+const { panels, isLoading: panelsLoading } = usePanels();
+const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
 const { runningPanels, activeServices } = useRunning();
+
+/* THE EMPTY STATE HERE IS A CLAIM, and until both reads land it is one this tab cannot make. "Nothing running"
+ * and "nothing read yet" are the same shape — two empty arrays — and drawing the first for the second told
+ * everyone with a cold cache that their dev servers were down, on the one tab whose whole job is saying what is
+ * up. The outline says the honest thing instead: this list is coming.
+ *
+ * Both reads, because the list spans both classes and either one landing alone still leaves half the answer
+ * missing. */
+const reading = computed(() => panelsLoading.value || capabilitiesLoading.value);
+const outline = useSandboxOutline(reading);
 
 // The rail element that serves a repo (its claiming extension activation, fallback included), for deep-linking
 // a running dev server's row to its UI; undefined when nothing serves it.
@@ -32,7 +44,15 @@ const stateVariant = (state: string): StatusVariant =>
         <VpnCard />
 
         <RowGroup label="Running now">
-            <div v-if="runningPanels.length === 0 && activeServices.length === 0" class="px-4 py-6 text-center text-xs text-muted">
+            <!-- One status region for the group, with the rows themselves aria-hidden inside it. Drawn only
+                 once the wait is worth showing; while it isn't, this group is simply empty for a beat. -->
+            <div v-if="reading" role="status" aria-busy="true">
+                <template v-if="outline">
+                    <span class="sr-only">Reading what's running…</span>
+                    <SkeletonRows :rows="2" control />
+                </template>
+            </div>
+            <div v-else-if="runningPanels.length === 0 && activeServices.length === 0" class="px-4 py-6 text-center text-xs text-muted">
                 Nothing running — open a panel from the sidebar.
             </div>
             <template v-else>
