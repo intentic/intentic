@@ -665,7 +665,18 @@ if (process.argv.includes("--checks-only")) {
  * test ran. A built artifact that is not a module belongs to `build`, not here.
  *
  * `tsgo -b` orders the set itself from the project references, and is incremental — a no-op pass is ~1s. */
-const needsDeclarations = packages.filter(({ pkg }) => /"\.\/dist\/[^"]+\.js"/.test(JSON.stringify(pkg.exports ?? "")));
+/* AND ONE PACKAGE IS EXEMPT, for the same Vue-SFC reason spelled out above, arriving from the other direction.
+ * `@intentic/extension-ui` has no `.vue` file of its own — it is a curated re-export of `@intentic/ui`, which is
+ * nothing but a component graph — so `tsgo -b` walks straight into it and reports a TS2307 for every one, on a
+ * package whose own `vue-tsc` typecheck is clean. Its declarations are built by its own `build` script (which
+ * runs vue-tsc, then narrows the result to the slice it re-exports), and NOTHING in this repo reads them: every
+ * in-repo consumer resolves the `@intentic/src` condition to source, and the dist exists for the npm consumers
+ * that are the whole point of publishing it. So there is nothing here for this pass to do, and attempting it
+ * kills the gate before a test runs. */
+const BUILT_BY_VUE_TSC = new Set(["_editor/extension-ui"]);
+const needsDeclarations = packages.filter(
+    ({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && /"\.\/dist\/[^"]+\.js"/.test(JSON.stringify(pkg.exports ?? "")),
+);
 
 /* A package whose sources are themselves GENERATED has nothing for `tsgo -b` to read until its generator has
  * run: `_platform/prisma` is one re-export of `./generated/client.js`, which `prisma generate` writes and git

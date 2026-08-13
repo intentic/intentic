@@ -95,6 +95,17 @@ export const sourceAliases = (): Record<string, string> => ({
     // every boot — and through the barrel, asking a column how wide it should be would boot Picker.vue.
     "@intentic/ui/text-size": fromRoot("_editor/ui/src/composables/useTextSize.ts"),
     "@intentic/ui": fromRoot("_editor/ui/src/index.ts"),
+    /* THE EXTENSION KIT MUST RESOLVE TO SOURCE HERE, and unlike its neighbours above that is not a convenience
+     * — it is the difference between an app and an infinite regress. `@intentic/extension-ui` is PUBLISHED, so
+     * its default export condition points at `dist/index.js`, and that file is the host BRIDGE: it hands back
+     * `globalThis.__intenticHost.modules["@intentic/extension-ui"]`, which is the object this app fills in by
+     * importing the kit. Let the app resolve its own published artifact and it asks itself for the components
+     * it was about to provide.
+     *
+     * Subpath before barrel, per the note at the top of this file. */
+    "@intentic/extension-ui/names": fromRoot("_editor/extension-ui/names.mjs"),
+    "@intentic/extension-ui/format": fromRoot("_editor/extension-ui/src/format.ts"),
+    "@intentic/extension-ui": fromRoot("_editor/extension-ui/src/index.ts"),
     "@intentic-app/api-contract": fromRoot("_platform/api-contract/src/index.ts"),
     // The "+" grid's card and category data. It was the ONE first-party lib missing from this map, and the
     // cost was a silent wrong answer rather than a build error: the app resolved its `dist` instead, so a new

@@ -25,13 +25,23 @@ Building it surfaced three things that no amount of reading would have:
    release set in `_tools/scripts/packages.sh`. `npm i @intentic/sandbox-contract` — step one of the published
    build guide — failed for everyone. Fixed by adding `_sandbox/registry` (and `_tools/registry-scan`, whose absence left
    the registry's own nightly job with no `@intentic/registry-scan` to `npx`) to `PUB`.
-2. **A third-party view cannot use Tailwind utilities.** The app's Tailwind build scans its own sources and the
-   first-party extension packages; it cannot scan a bundle it does not build, so a utility class in an installed
-   extension resolves only when the app happens to use it elsewhere. The design system's shipped `.ui-*` classes
-   and role tokens are the reliable surface, and `seed/src/ExampleView.vue` uses only those.
-3. **`@intentic/extension-ui` has no npm artifact**, so an outside author has no types for the component kit the
-   host provides at runtime. Publishing it needs `@intentic/ui` published or a rolled-up `.d.ts`; until then,
-   plain markup is the honest example.
+2. ~~**A third-party view cannot use Tailwind utilities.**~~ **Fixed — the host now promises them.** The app's
+   Tailwind build used to scan its own sources and the first-party extension packages, so a utility class in an
+   installed extension resolved only when the app happened to use it elsewhere. Layout, typography, spacing and
+   colour are now DECLARED by the core design system (`_editor/ui/src/styles/extension-surface.css`) and
+   generated whether or not anything uses them, and the app no longer scans extension sources at all — which is
+   what makes that promise honest rather than incidental. `seed/src/ExampleView.vue` is written against it, and
+   `extensionSurface.test.ts` fails the build if a first-party screen ever uses a class the promise omits.
+
+   Two things the promise still cannot cover, both by construction: **arbitrary values** (`w-[37px]`,
+   `max-w-[64ch]`) are infinite, so no enumeration reaches them — use the scale, a kit component, or your own
+   stylesheet; and the invented half of **`group/<name>`**, for which the surface offers a fixed set of slots.
+3. ~~**`@intentic/extension-ui` has no npm artifact.**~~ **Fixed — it publishes.** Its build emits declarations
+   for the whole component graph, then prunes the design system's barrel to the slice the kit re-exports, which
+   drops `shiki` and `@primeuix/themes` out of the reachable types and leaves `vue` + `primevue` as the only
+   external requirements. The runtime it ships is the host bridge, so an author who forgets to mark the kit
+   external still lands on the shell's own components instead of bundling a second, unthemed copy. `@intentic/ui`
+   itself stays private: the point was always to promise the curated slice, not the whole design system.
 
 ## It is published, and the chain has been walked
 

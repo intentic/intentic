@@ -7,7 +7,20 @@ import DocsRelated from "../../components/DocsRelated.astro";
 const install = `mkdir acme-incidents && cd acme-incidents
 npm init -y
 npm i -D vite @vitejs/plugin-vue vue typescript
-npm i @intentic/extension-api @intentic/sandbox-contract`;
+npm i @intentic/extension-api @intentic/sandbox-contract @intentic/extension-ui`;
+
+const styling = `<!-- Layout, type and colour come from the host. Name a ROLE, not a colour: the
+     theme decides what "danger" or "card" is in light and dark, and your view follows. -->
+<div class="flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
+    <span class="truncate text-sm text-content">{{ incident.title }}</span>
+    <span class="ml-auto shrink-0 text-2xs text-muted">{{ incident.age }}</span>
+</div>
+
+<!-- A pane is not a window: size against the CONTAINER, so a reader who drags your
+     panel narrow gets the narrow layout. -->
+<div class="@container">
+    <div class="flex flex-col gap-2 @lg:flex-row @lg:items-center"></div>
+</div>`;
 
 const manifest = `{
     "publisher": "acme",
@@ -181,10 +194,34 @@ const workspace = `.intentic/workspace-extensions/
     </p>
     <DocsCodeBlock code={viteConfig} lang="typescript" title="vite.config.ts" />
     <p>
-        <code>@intentic/extension-ui</code>, the shell's own buttons, inputs, cards and icons, is resolved by the host at runtime today, and its typed npm artifact lands with the marketplace. Until then render with plain Vue and the shell's CSS variables, or mark it external and import it untyped.
+        <code>@intentic/extension-ui</code> is the shell's own buttons, inputs, cards, rows and icons. Install it for the types and mark it
+        external: the components themselves come from the running app, so your view is built from the same parts the rest of the app is and
+        follows the reader's theme without being told. Marking it external is the tidier route; if you forget, the package's own entry
+        forwards to the host anyway rather than bundling a second, unthemed copy.
     </p>
 
-    <h2>6 · Install it</h2>
+    <h2>6 · Style it</h2>
+    <p>
+        The classes for layout, typography, spacing and colour are <strong>provided by the host</strong>, and they are a promise rather than
+        a side effect: the whole spacing scale, every step of the type scale and every colour role exist whether or not anything is currently
+        using one. Nothing scans your bundle for class names — nobody builds it but you — so a class only works if the host promised it.
+    </p>
+    <DocsCodeBlock code={styling} lang="typescript" title="src/IncidentsView.vue" />
+    <p>
+        Two rules follow from that, and they are the whole of it. <strong>Name a colour role</strong> — <code>text-muted</code>,{" "}
+        <code>bg-card</code>, <code>border-line</code>, <code>text-danger</code> — rather than a literal colour, so your view reads correctly
+        in light and dark and picks up the reader's accent. And <strong>size against the container</strong>, with{" "}
+        <code>@container</code> and <code>@lg:</code> rather than <code>lg:</code>, because your view renders into a pane that can be dragged,
+        popped out or stacked under a chat, and the window's width is not the question.
+    </p>
+    <p>
+        What the promise cannot cover is one-off values: <code>w-[37px]</code>, <code>max-w-[64ch]</code>, <code>text-[0.65rem]</code>. They
+        are infinite, so no promise reaches them, and they render as nothing. Use the scale, reach for a kit component (<code>Page</code>{" "}
+        already owns the reading column, <code>SplitView</code> the index-beside-body layout), or ship the rule in your own stylesheet —
+        added by <code>activate()</code> and removed when your extension is switched off.
+    </p>
+
+    <h2>7 · Install it</h2>
     <p>Commit the built bundle. The sha you push is the identity your extension installs under.</p>
     <DocsCodeBlock code={ship} lang="bash" title="Your machine" />
     <p>
