@@ -1,15 +1,16 @@
-import { type CiRunsResponse, CiRunsResponseSchema, CiSeenResponseSchema } from "@intentic/sandbox-contract";
+import { type CiRunsResponse, CiSeenResponseSchema } from "@intentic/sandbox-contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { ref } from "vue";
 import { failureStreaks, streakTooltip, unseenStreaks } from "./ciStreaks";
+import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
 /* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updates while
  * you are already looking at Pipelines would never tell you anything you didn't know.
  *
- * That rules out the view's vue-query — it stops when the component unmounts — so this keeps its own timer.
- * The cost is one extra GET per minute while the view happens to be open, against a poll the view runs far
- * faster; the alternative is threading a cache handle out of a component context, which buys nothing.
+ * That rules out the view's observer — it stops when the component unmounts — so this keeps its own timer. The
+ * timer reads THROUGH the host's vue-query cache, though: the latest badge poll is therefore also the board's
+ * first paint, and concurrent reads coalesce instead of opening a second request beside it.
  */
 
 // Slow on purpose. This drives a glance, not a screen: a breakage that surfaces within the minute is timely,
@@ -27,7 +28,7 @@ const refresh = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        runs.value = CiRunsResponseSchema.parse(await api.sandbox.json(`/ci/runs`));
+        runs.value = await api.sandbox.fetch(ciRunsQuery());
     } catch {
         // A refused or unreachable daemon leaves the last known state standing rather than blanking the badge:
         // "we can't reach CI" is not "CI is fine", and a flapping tile is worse than a slightly stale one.

@@ -1,5 +1,6 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { ciBadge, startCiAttention } from "./ciAttention";
+import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
 
 /* ext-pipelines activation: bind the host handle, start the badge's background poll, then register the
@@ -29,6 +30,10 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     : [],
             // Unacknowledged breakages only — see ciStreaks.ts for why this counts streaks and not failures.
             badge: () => ciBadge(),
+            /* The board's opening read, into the same entry observed by usePipelines and filled by the badge's
+             * poll. The host schedules it at the rail band: a wish for spare time, never competition for work
+             * the user actually asked for. */
+            warm: () => [ciRunsQuery()],
             view: async () => (await import(`./PipelinesView.vue`)).default,
         }),
     );

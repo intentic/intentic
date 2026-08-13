@@ -1,7 +1,8 @@
-import { type CiFixResponse, CiFixResponseSchema, type CiRunsResponse, CiRunsResponseSchema, type PipelineRun } from "@intentic/sandbox-contract";
+import { type CiFixResponse, CiFixResponseSchema, type PipelineRun } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
 /* CI runs across the workspace repos' github/gitlab remotes, via the daemon's /ci routes. The daemon serves a
@@ -20,12 +21,12 @@ const body = (run: PipelineRun): RequestInit => ({
 export function usePipelines() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`ci-runs`);
+    const spec = ciRunsQuery();
+    const queryKey = spec.queryKey;
     const enabled = computed(() => api.sandbox.reachable());
 
     const query = useQuery({
-        queryKey,
-        queryFn: async (): Promise<CiRunsResponse> => CiRunsResponseSchema.parse(await api.sandbox.json(`/ci/runs`)),
+        ...spec,
         enabled,
         refetchInterval: POLL_MS,
     });
