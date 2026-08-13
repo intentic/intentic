@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { expect, test } from "vitest";
@@ -72,6 +72,29 @@ test("createWorkspaceWatch emits visible root-relative paths and never announces
     } finally {
         await watch.close();
         await rm(root, { recursive: true, force: true });
+    }
+});
+
+/* Fly mounts one persistent volume at /data and the hosted entrypoint keeps the product's canonical /work
+ * path as a symlink onto /data/work. The native watcher refuses a symlink as its inotify root unless the
+ * factory resolves it first; writes must still emerge in /work's root-relative namespace. */
+test("createWorkspaceWatch follows a hosted-style symlink root", async () => {
+    const temp = await mkdtemp(join(tmpdir(), "ws-watch-link-"));
+    const volumeRoot = join(temp, "data", "work");
+    const root = join(temp, "work");
+    await mkdir(volumeRoot, { recursive: true });
+    await symlink(volumeRoot, root, "dir");
+    const watch = createWorkspaceWatch(root);
+    const batches: string[][] = [];
+    watch.subscribe((paths) => batches.push(paths));
+    try {
+        await delay(500);
+        await writeFile(join(root, "hosted.txt"), "ready");
+        await waitFor(() => batches.flat().includes("hosted.txt"), 5000);
+        expect(batches.flat()).toContain("hosted.txt");
+    } finally {
+        await watch.close();
+        await rm(temp, { recursive: true, force: true });
     }
 });
 

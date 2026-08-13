@@ -19,7 +19,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
             flyApiToken: `fly`,
             flyOrg: `intentic`,
             region: `iad`,
-            regionEu: `waw`,
+            regionEu: `arn`,
             appPrefix: `intentic-sbx`,
             image: `ghcr.io/intentic/sandbox:stable`,
             cpus: 2,
@@ -97,7 +97,7 @@ describe(`reconcileHostedPool`, () => {
         const machines = calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`));
         expect(machines).toHaveLength(2);
         const regions = machines.map((entry) => (entry.body as { region: string }).region).toSorted();
-        expect(regions).toEqual([`iad`, `waw`]);
+        expect(regions).toEqual([`arn`, `iad`]);
         // The pull is the point; the sandbox must not run — real image, no-op exec, and no identity at all.
         const posted = machines[0]?.body as { config: { image: string; init: { exec: string[] }; env: Record<string, string> } };
         expect(posted.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
@@ -118,7 +118,7 @@ describe(`reconcileHostedPool`, () => {
             hostedPoolMachine: {
                 findMany: vi
                     .fn()
-                    .mockResolvedValue([poolRow({ state: `building` }), poolRow({ id: `p2`, appName: `intentic-sbx-pool-waw`, region: `waw` })]),
+                    .mockResolvedValue([poolRow({ state: `building` }), poolRow({ id: `p2`, appName: `intentic-sbx-pool-arn`, region: `arn` })]),
                 update,
             },
         });

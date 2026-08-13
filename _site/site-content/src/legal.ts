@@ -105,7 +105,7 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "Where a hosted sandbox lives",
             paragraphs: [
-                "If you provision a hosted sandbox from the European Economic Area, the United Kingdom or Switzerland, the machine and its disk are created in the European Union (Warsaw) and your workspace content stays there. Everyone else's is created in the United States (Ashburn, Virginia). The region is decided when the machine is created, from the country of that request, and it is recorded on the machine; the country itself is not stored.",
+                "If you provision a hosted sandbox from the European Economic Area, the United Kingdom or Switzerland, the machine and its disk are created in the European Union (Stockholm) and your workspace content stays there. Everyone else's is created in the United States (Ashburn, Virginia). The region is decided when the machine is created, from the country of that request, and it is recorded on the machine; the country itself is not stored.",
                 ...(PLATFORM_HOSTING_LOCATION === ``
                     ? []
                     : [`The rest of the platform — the account database and the API — runs on servers in ${PLATFORM_HOSTING_LOCATION}.`]),
@@ -458,7 +458,7 @@ export const subprocessorsDoc: LegalDoc = {
                     [
                         "Fly.io, Inc. (US)",
                         "Runs the virtual machine and disk of a sandbox we host, and only those",
-                        "European Union (Warsaw) for users in the EEA, UK and Switzerland; United States (Ashburn) for everyone else",
+                        "European Union (Stockholm) for users in the EEA, UK and Switzerland; United States (Ashburn) for everyone else",
                         "Standard Contractual Clauses",
                     ],
                     [

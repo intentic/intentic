@@ -87,6 +87,7 @@ services:
             HOSTED_FLY_API_TOKEN: ${HOSTED_FLY_API_TOKEN:-}
             HOSTED_FLY_ORG: ${HOSTED_FLY_ORG:-}
             HOSTED_REGION: ${HOSTED_REGION:-iad}
+            HOSTED_REGION_EU: ${HOSTED_REGION_EU:-arn}
             HOSTED_APP_PREFIX: ${HOSTED_APP_PREFIX:-intentic-sbx}
             HOSTED_IMAGE: ${HOSTED_IMAGE:-ghcr.io/intentic/sandbox:stable}
             HOSTED_CPUS: ${HOSTED_CPUS:-4}

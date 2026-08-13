@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
-import { createApp, createMachine, createVolume, deleteApp, FlyError, getMachine, listAppNames, startMachine } from "./fly.js";
+import { createApp, createMachine, createVolume, deleteApp, FlyError, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
 
 // The cloud.test.ts fetch stub: route by method + URL substring, record calls for payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
@@ -71,6 +71,19 @@ describe(`fly`, () => {
         expect(await getMachine(`tok`, `app`, `m1`)).toEqual({ state: `stopped` });
         await startMachine(`tok`, `app`, `m1`);
         expect(calls).toHaveLength(2);
+    });
+
+    it(`updates a stopped machine without launching it — callers own the one explicit start`, async () => {
+        const config = flyMachineConfig({
+            name: `app`,
+            image: `ghcr.io/intentic/sandbox:stable`,
+            baseImage: `ghcr.io/intentic/sandbox:stable`,
+            guest: { cpus: 2, memoryMb: 4096 },
+            volumeId: `vol_1`,
+        });
+        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ ok: true }) }]);
+        await updateMachine(`tok`, `app`, `m1`, config);
+        expect(calls[0]?.body).toEqual({ config, skip_launch: true });
     });
 
     it(`names the operator's problem on 401 and relays Fly's refusal otherwise`, async () => {

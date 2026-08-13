@@ -4,6 +4,7 @@ import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
 import { hostedEnabled, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { forgetNamespace } from "../zrok-provision.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -20,7 +21,7 @@ const config = (over?: Record<string, unknown>): Config =>
             flyApiToken: `fly`,
             flyOrg: `intentic`,
             region: `iad`,
-            regionEu: `waw`,
+            regionEu: `arn`,
             appPrefix: `intentic-sbx`,
             image: `ghcr.io/intentic/sandbox:stable`,
             cpus: 2,
@@ -75,6 +76,7 @@ const json = (payload: unknown, status = 200) => new Response(JSON.stringify(pay
 
 afterEach(() => {
     vi.unstubAllGlobals();
+    forgetNamespace();
 });
 
 describe(`hostedEnabled`, () => {
@@ -169,12 +171,14 @@ describe(`provisionHosted`, () => {
         // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[] };
+            skip_launch: boolean;
         };
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
         expect(update.config.init).toBeUndefined();
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
+        expect(update.skip_launch).toBe(true);
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
         // The user's clock starts here — the pool's own no-op boot was the platform's cost, not theirs.
         expect(created).toHaveBeenCalledWith({
@@ -198,10 +202,10 @@ describe(`provisionHosted`, () => {
         ]);
         const findMany = vi.fn().mockResolvedValue([]);
         const prisma = fakePrisma({ hostedMachine: { create: vi.fn().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
-        await provisionHosted(prisma as never, config(), logger, { ...args, region: `waw` });
+        await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
         // The pool was asked ONLY for the caller's region (and the current image) — never "anything warm".
         expect(findMany).toHaveBeenCalledWith({
-            where: { region: `waw`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
+            where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
             orderBy: { createdAt: `asc` },
         });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
@@ -369,6 +373,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         token: `tok`,
         tunnelToken: `tt`,
         tunnelHostname: `sandbox-a.sbx.test`,
+        zrokToken: `acct-1`,
         daemonUrl: null,
         lastSeenAt: null,
         setupCodeClaimedAt: null,
@@ -435,6 +440,44 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma: live }) })).rejects.toMatchObject({
             code: `BAD_REQUEST`,
         });
+    });
+
+    it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => json({ ok: true }) },
+        ]);
+        const hosted = {
+            id: `h1`,
+            appName: `intentic-sbx-a`,
+            machineId: `m1`,
+            volumeId: `vol_1`,
+            region: `iad`,
+            wokeAt: null,
+        };
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(hosted), update: vi.fn().mockResolvedValue({}) },
+        });
+
+        expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        const update = calls.find((entry) => entry.url.endsWith(`/machines/m1`))?.body as {
+            config: { image: string; mounts: { volume: string; path: string }[]; env: Record<string, string> };
+            skip_launch: boolean;
+        };
+        expect(update.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
+        expect(update.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
+        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`tok`);
+        expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        expect(update.skip_launch).toBe(true);
+        expect(calls.findIndex((entry) => entry.url.endsWith(`/machines/m1`))).toBeLessThan(
+            calls.findIndex((entry) => entry.url.endsWith(`/machines/m1/start`)),
+        );
     });
 
     it(`wake 404s for a sandbox that is not hosted (or not the caller's)`, async () => {

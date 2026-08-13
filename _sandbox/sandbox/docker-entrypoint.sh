@@ -7,6 +7,11 @@ set -e
 # machine's root filesystem is rebuilt from the image on every start and only /data survives. The layout
 # mirrors @intentic/sandbox-run/fly (FLY_VOLUME_LAYOUT) — change one, change both.
 if [ "${SANDBOX_VM:-}" = "1" ]; then
+    # The image's WORKDIR is /work, so PID 1 starts with its cwd inside the directory this block replaces.
+    # Removing that directory in place leaves the process holding an unlinked cwd: the first Node call then
+    # dies in process.cwd() with ENOENT (uv_cwd), and Fly exhausts the machine's restart allowance. Step out
+    # before replacing it, then enter the persistent target once the link exists.
+    cd /
     mkdir -p /data/work /data/history /data/docker
 
     # The image bakes /work (its WORKDIR) and /history as plain, EMPTY directories (nothing is seeded at
@@ -33,6 +38,7 @@ if [ "${SANDBOX_VM:-}" = "1" ]; then
         fs.writeFileSync(path, JSON.stringify({ ...current, "data-root": "/data/docker" }, null, 4) + "\n");
     '
 
+    cd /work
 fi
 
 # ── HOW THIS SANDBOX IS REACHED ──────────────────────────────────────────────────────────────────────────

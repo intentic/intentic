@@ -12,7 +12,7 @@
  *
  * UNKNOWN FALLS BACK TO THE DEFAULT, not to Europe. A missing or `XX` header means the platform is running
  * without Cloudflare in front of it (self-hosters do), and quietly treating "I could not tell" as "European"
- * would put every self-hosted platform's machines in Warsaw for a reason nobody could see. The users this
+ * would put every self-hosted platform's machines in Stockholm for a reason nobody could see. The users this
  * promise is for reach a Cloudflare-fronted intentic.dev, where the header is always present. */
 
 // The countries whose users get the EEA region: the EU 27, the rest of the EEA, plus the UK and Switzerland —

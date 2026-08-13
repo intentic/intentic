@@ -183,6 +183,25 @@ export const wakeHosted = async (config: Config, hosted: { appName: string; mach
     }
 };
 
+/* An explicit "start it over" is also the hosted lane's repair/update boundary. A plain stop/start keeps the
+ * rootfs Fly resolved when the Machine was first created, so a corrected image behind the configured tag can
+ * never repair a boot-crashing machine: every click simply runs the same broken bytes again. Replace the full
+ * config while the machine is stopped, preserving its volume id and identity, then take the ordinary wake
+ * path. `updateMachine` uses skip_launch, so the start remains one explicit, metered transition. */
+export const refreshHosted = async (
+    config: Config,
+    args: HostedProvisionArgs,
+    hosted: { appName: string; machineId: string; volumeId: string },
+): Promise<void> => {
+    await updateMachine(
+        config.hosted.flyApiToken,
+        hosted.appName,
+        hosted.machineId,
+        hostedMachineConfig(config, args, hosted.appName, hosted.volumeId),
+    );
+    await wakeHosted(config, hosted);
+};
+
 // Tear the whole app down (machines + volume ride with it). 404-tolerant by fly.ts's contract.
 export const destroyHosted = async (config: Config, appName: string): Promise<void> => deleteApp(config.hosted.flyApiToken, appName);
 

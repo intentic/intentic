@@ -110,7 +110,7 @@ const configSchema = z.object({
              * crossing to Ashburn — so the pick is a data-protection commitment, not a latency tweak, and
              * emptying this knob breaks a published statement rather than merely a default.
              * HOSTED_REGION_EU. */
-            regionEu: z.string().default(`waw`),
+            regionEu: z.string().default(`arn`),
             // Fly app names are GLOBALLY unique: <appPrefix>-<sandbox id> keeps ours claimable and lets the
             // reaper recognize our apps by prefix. HOSTED_APP_PREFIX.
             appPrefix: z.string().default(`intentic-sbx`),

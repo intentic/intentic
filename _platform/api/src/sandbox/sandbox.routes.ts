@@ -20,7 +20,7 @@ import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, stopMachine } from "./hosted/fly.js";
-import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
+import { destroyHosted, hostedEnabled, provisionHosted, refreshHosted, wakeHosted } from "./hosted/hosted.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -410,10 +410,10 @@ export const sandboxRoutes = {
         const known = MACHINE_STATES.find((candidate) => candidate === state?.state);
         return { machine: known ?? (`unknown` as const) };
     }),
-    /* Boot a hosted machine again — the setup wait's one recovery, for the two failures a rerun actually
-     * fixes: a daemon that never came up, and a tunnel that never bound (the entrypoint retries both from
-     * scratch on every boot). Stop then start; a stop that refuses because the machine is already down is
-     * exactly the state we wanted, so only the START is allowed to fail the call.
+    /* Boot a hosted machine again — the setup wait's one recovery, for a daemon that never came up, a tunnel
+     * that never bound, or a machine pinned to a broken image. Stop, refresh its full config from the current
+     * hosted image while preserving its volume, then start; a stop that refuses because the machine is already
+     * down is exactly the state we wanted, so only the refresh/start is allowed to fail the call.
      *
      * Owner-only, and nothing is destroyed — the volume, the files and the address all survive, which is what
      * separates this from hostedRelease and what makes it safe to put under a failure message somebody is
@@ -424,6 +424,7 @@ export const sandboxRoutes = {
         if (hosted === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
         }
+        const user = requireUser(context);
         await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
             context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
         );
@@ -438,7 +439,18 @@ export const sandboxRoutes = {
             });
         }
         try {
-            await wakeHosted(context.config, hosted);
+            const grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
+            await refreshHosted(
+                context.config,
+                {
+                    sandboxId: sandbox.id,
+                    connectToken: decryptSecret(context.config, sandbox.token),
+                    grant,
+                    ownerEmail: user.email.toLowerCase(),
+                    region: hosted.region,
+                },
+                hosted,
+            );
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }

@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { realpathSync } from "node:fs";
 import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
 import { type AsyncSubscription, subscribe } from "@parcel/watcher";
@@ -158,6 +159,11 @@ export const createIsolatedWorkspaceWatch = (root: string, logger: Logger): Work
 };
 
 export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWatch => {
+    /* Hosted VM mode keeps the public contract at /work with a symlink onto its one persistent Fly volume
+     * (/data/work). @parcel/watcher rejects a symlink as the root it hands to inotify even though ordinary
+     * reads and writes through it are valid. Resolve only the backend's watch target: callers and emitted
+     * paths stay in the configured root's relative namespace, while inotify receives a real directory. */
+    const watchedRoot = realpathSync(root);
     const listeners = new Set<(paths: string[]) => void>();
     const batcher = createPathBatcher((paths) => {
         for (const listener of listeners) {
@@ -177,7 +183,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
     let subscription: AsyncSubscription | undefined;
     let closed = false;
     const started = subscribe(
-        root,
+        watchedRoot,
         (err, events) => {
             // A watch hiccup (inotify limit, transient EACCES) must not take the daemon down — the manual
             // Refresh still works, so degrade rather than throw. Logged, not swallowed: a dead watcher means
@@ -187,7 +193,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
                 return;
             }
             for (const event of events) {
-                const relPath = toRelPath(root, event.path);
+                const relPath = toRelPath(watchedRoot, event.path);
                 if (!isWatchIgnoredRel(relPath)) {
                     batcher.add(relPath);
                 }

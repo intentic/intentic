@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { callerIsEuropean, hostedRegionFor } from "./region.js";
 
-const config = { region: `iad`, regionEu: `waw` };
+const config = { region: `iad`, regionEu: `arn` };
 const from = (country?: string): Headers => new Headers(country === undefined ? {} : { "cf-ipcountry": country });
 
 describe(`hostedRegionFor`, () => {
     it(`keeps a European caller's machine in the EEA region`, () => {
-        expect(hostedRegionFor(config, from(`PL`))).toBe(`waw`);
-        expect(hostedRegionFor(config, from(`DE`))).toBe(`waw`);
+        expect(hostedRegionFor(config, from(`PL`))).toBe(`arn`);
+        expect(hostedRegionFor(config, from(`DE`))).toBe(`arn`);
         // The UK and Switzerland are outside the EEA but inside the promise.
-        expect(hostedRegionFor(config, from(`GB`))).toBe(`waw`);
-        expect(hostedRegionFor(config, from(`CH`))).toBe(`waw`);
+        expect(hostedRegionFor(config, from(`GB`))).toBe(`arn`);
+        expect(hostedRegionFor(config, from(`CH`))).toBe(`arn`);
     });
 
     it(`sends everyone else to the default region`, () => {
