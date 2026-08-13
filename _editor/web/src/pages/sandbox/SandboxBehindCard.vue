@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, StatusBadge } from "@intentic/ui";
+import { Card, Code, CopyButton } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
@@ -35,9 +35,10 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 // hole in the list.
 const areas = (names: readonly string[]): string[] => [...new Set(names.map((name) => name.split(`.`)[0] ?? name))].toSorted();
 // Shown to a person, so the area reads as a name (`Agent`), not a raw route prefix (`agent`).
-const capitalize = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1);
-const missingLabel = computed(() => areas(missingRoutes.value).map(capitalize).join(`, `));
-const driftedLabel = computed(() => areas(driftedRoutes.value).map(capitalize).join(`, `));
+const AREA_LABEL: Readonly<Record<string, string>> = { ci: `CI`, vpn: `VPN` };
+const areaLabel = (name: string): string => AREA_LABEL[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
+const missingLabel = computed(() => areas(missingRoutes.value).map(areaLabel).join(`, `));
+const driftedLabel = computed(() => areas(driftedRoutes.value).map(areaLabel).join(`, `));
 // The developer's remedy is the one the dev loop already documents; a user's is the update card's path.
 const isDev = import.meta.env.DEV;
 const { slug } = useEnvironment();
@@ -54,43 +55,43 @@ const { slug } = useEnvironment();
  * which sandbox it is looking at, so it says so; the slug is omitted only while /environment hasn't answered
  * yet, where the detect is right anyway. */
 const reloadCommand = computed(() => `sh _sandbox/sandbox/scripts/dev-reload.sh${slug.value === undefined ? `` : ` ${slug.value}`}`);
+const reloadPage = (): void => location.reload();
 </script>
 
 <template>
-    <Card v-if="daemonBehind || daemonDrifted" class="flex flex-col gap-4">
+    <Card v-if="daemonBehind || daemonDrifted" class="flex flex-col gap-3">
         <div class="flex items-start gap-2.5">
-            <Icon name="info-circle" class="mt-0.5 text-lg text-muted" />
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-lg text-warning" />
             <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between gap-3">
-                    <h2 class="font-semibold leading-tight">
-                        {{ daemonBehind ? `This sandbox is behind the app` : `This sandbox and the app disagree` }}
-                    </h2>
-                    <StatusBadge
-                        variant="warning"
-                        :label="daemonBehind ? `${missingRoutes.length} missing` : `${driftedRoutes.length} changed`"
-                        dot
-                    />
-                </div>
+                <h2 class="font-semibold leading-tight">
+                    {{ daemonBehind ? `Sandbox is behind the app` : `App and sandbox are out of sync` }}
+                </h2>
+                <p v-if="daemonBehind" class="mt-1 text-2xs text-subtle">{{ missingLabel }} won't work until the sandbox is reloaded.</p>
+                <p v-else class="mt-1 text-2xs text-subtle">{{ driftedLabel }} may show blank values or fail to save.</p>
             </div>
         </div>
 
-        <p v-if="daemonBehind" class="text-2xs text-subtle">{{ missingLabel }} won't work here. Everything else works.</p>
-
-        <p v-if="daemonDrifted" class="text-2xs text-subtle">{{ driftedLabel }} may show blank values or fail to save. Everything else works.</p>
-
-        <template v-if="isDev">
-            <p class="text-xs font-medium text-content">
-                {{ daemonBehind ? `Reload the sandbox to catch it up:` : `Reload the sandbox first:` }}
-            </p>
-            <Code :code="reloadCommand" lang="bash" :wrap="true" />
-            <p v-if="!daemonBehind" class="text-2xs text-subtle">Still showing? Reload this page instead.</p>
-        </template>
-        <p v-else class="text-2xs text-subtle">
-            {{
-                daemonBehind
-                    ? `Update the sandbox to a newer image to restore this.`
-                    : `Reload this page, or update the sandbox to a newer image.`
-            }}
-        </p>
+        <div v-if="isDev" class="flex flex-wrap items-center gap-2 sm:pl-7">
+            <Button v-if="daemonDrifted" label="Reload page" size="small" @click="reloadPage" />
+            <span class="text-2xs text-subtle">{{ daemonDrifted ? `Still here? Run` : `Run` }}</span>
+            <div class="sandbox-reload-command flex min-w-0 flex-1 items-center rounded-md border border-line bg-canvas">
+                <Code class="min-w-0 flex-1" :code="reloadCommand" lang="bash" :copyable="false" />
+                <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
+            </div>
+        </div>
+        <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2 sm:pl-7">
+            <Button label="Reload page" size="small" @click="reloadPage" />
+            <span class="text-2xs text-subtle">If it stays, update the sandbox image.</span>
+        </div>
+        <p v-else class="text-2xs text-subtle sm:pl-7">Update the sandbox image.</p>
     </Card>
 </template>
+
+<style scoped>
+/* Keep Code's Bash grammar and theme switching, but let the compact row own the one border and its copy action. */
+.sandbox-reload-command :deep(.shiki),
+.sandbox-reload-command :deep(pre) {
+    border: 0;
+    background-color: transparent !important;
+}
+</style>

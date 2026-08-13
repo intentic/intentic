@@ -44,6 +44,13 @@ const mount = (): HTMLElement => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxBehindCard) });
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.component(
+        `Button`,
+        defineComponent({
+            props: { label: String },
+            setup: (props) => () => h(`button`, props.label),
+        }),
+    );
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
@@ -65,7 +72,8 @@ it(`says nothing at all while the two builds agree`, () => {
 it(`names the sandbox as behind only when a missing route proves it`, () => {
     setDaemonRoutes(withoutVpn, SHAPES);
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`This sandbox is behind the app`);
+    expect(text).toContain(`Sandbox is behind the app`);
+    expect(text).toContain(`VPN won't work until the sandbox is reloaded.`);
     // Direction is known here, so nothing hedges — a page reload would not bring a route back.
     expect(text).not.toMatch(/reload this page/i);
 });
@@ -76,9 +84,21 @@ it(`refuses to name a side when only the payloads disagree`, () => {
      * be the stale one — so the heading states the disagreement and the page is offered as the other suspect. */
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`This sandbox and the app disagree`);
-    expect(text).not.toContain(`This sandbox is behind the app`);
-    expect(text).toMatch(/reload this page/i);
+    expect(text).toContain(`App and sandbox are out of sync`);
+    expect(text).toContain(`Settings may show blank values or fail to save.`);
+    expect(text).not.toContain(`Sandbox is behind the app`);
+    expect(text).toMatch(/reload page/i);
+});
+
+it(`keeps the warning to the problem, impact, and fixes`, () => {
+    const agentRoute = Object.keys(SHAPES).find((name) => name.startsWith(`agent.`));
+    expect(agentRoute).toBeDefined();
+    setDaemonRoutes(LEVEL, reshaped(agentRoute!));
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`Agent may show blank values or fail to save.`);
+    expect(text).not.toContain(`Everything else works`);
+    expect(text).not.toContain(`1 changed`);
+    expect(text).not.toContain(`Still showing`);
 });
 
 it(`prints the reload for THIS sandbox, not an image rebuild`, () => {
@@ -86,7 +106,9 @@ it(`prints the reload for THIS sandbox, not an image rebuild`, () => {
     // minutes spent reaching the same place. The slug is what keeps a machine running several sandboxes from
     // reloading the wrong one.
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
-    const text = mount().textContent ?? ``;
+    const el = mount();
+    const text = el.textContent ?? ``;
     expect(text).toContain(`dev-reload.sh sandbox-abc123`);
     expect(text).not.toContain(`build:sandbox`);
+    expect(el.querySelector(`.ui-code`)).not.toBeNull();
 });
