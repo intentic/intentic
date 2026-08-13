@@ -240,3 +240,51 @@ it(`only names the source when it is not already saying the row's own name`, () 
     // What nobody could have guessed from the row survives.
     expect(facts).toContain(`workspace extension`);
 });
+
+/* THE LONGEST WAIT IN THE HUB, and until now the least drawn: this view's read asks every tool on the overlay
+ * for its version, one process spawn each, so it is measured in seconds where the other tabs pay a round-trip.
+ * It showed a spinner and "Checking installed versions…" over an empty card for all of it.
+ *
+ * Mounted with `loading` rather than through the parent, because the prop IS the state under test — what the
+ * card does with the query is EnvironmentCard's business. */
+const mountLoading = (): HTMLElement => {
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ render: () => h(EnvironmentContents, { groups: [], awaiting: 0, loading: true }) });
+    app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    return el;
+};
+
+it(`draws the list's outline while it is checking installed versions`, async () => {
+    vi.useFakeTimers();
+    try {
+        const el = mountLoading();
+        vi.advanceTimersByTime(250);
+        await nextTick();
+        expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
+        // The sentence is not lost — it is what the wait is announced as, to the readers who need it said.
+        expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Checking installed versions…`);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// The quiet side of the same gate: a sandbox that answers quickly must paint no placeholder at all.
+it(`paints no outline for a probe that answers within the reveal delay`, async () => {
+    vi.useFakeTimers();
+    try {
+        const el = mountLoading();
+        vi.advanceTimersByTime(150);
+        await nextTick();
+        expect(el.querySelector(`.skeleton`)).toBeNull();
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// And the loaded view never draws one, which is what keeps a refetch from blanking a list already on screen.
+it(`draws no outline once the versions are in`, () => {
+    expect(mount().querySelector(`.skeleton`)).toBeNull();
+});

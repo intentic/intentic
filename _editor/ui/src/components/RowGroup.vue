@@ -17,13 +17,22 @@ import { cmp } from "../cmp.js";
  * environment contents) is a frame, three inner frames and a hairline per row — four levels of stroke saying
  * one thing. Flat keeps the label, the count and the row dividers and lets the CARD be the only frame; the
  * uppercase label plus the gap between sections is what groups them, which is all a reader was using anyway. */
+/* `#label` REPLACES the text label for the one case that has no text yet: a group being drawn as a loading
+ * outline, whose heading is a bar like the rows under it. It exists so a skeleton can use this component rather
+ * than re-typing its label box and row dividers — which is how an outline drifts from the group it stands in
+ * for, the failure every other note in this file is about. */
 defineProps<{ label?: string; count?: string | number; caption?: string; flat?: boolean }>();
 </script>
 
 <template>
     <section>
-        <div v-if="label !== undefined || $slots[`info`] || $slots[`actions`]" class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
-            <span v-if="label !== undefined" :class="cmp.sectionLabel()">{{ label }}</span>
+        <div
+            v-if="label !== undefined || $slots[`label`] || $slots[`info`] || $slots[`actions`]"
+            class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5"
+        >
+            <slot name="label"
+                ><span v-if="label !== undefined" :class="cmp.sectionLabel()">{{ label }}</span></slot
+            >
             <!-- Butted against the label (like PageHeader's own #info) so an <InfoHint>/<InfoDialog> reads as
                  belonging to the group's NAME, not to the first row under it. -->
             <slot name="info" />

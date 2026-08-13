@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic-app/api-contract";
-import { BrandMark, Code, Notice, Row, RowGroup, SearchBar, cmp } from "@intentic/ui";
+import { BrandMark, Code, Notice, Row, RowGroup, SearchBar, SkeletonRows, cmp } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { environmentVisual } from "./environmentVisual";
 
 /* THE SANDBOX AS CONTENTS rather than as a build recipe — the answer to "what can this thing do?", which is what
@@ -52,6 +53,10 @@ const { groups, awaiting, loading, error } = defineProps<{
     loading: boolean;
     error?: string;
 }>();
+
+// Whether the wait has lasted long enough to be worth drawing. Wrapped in a computed because the gate watches a
+// source that can change, and a destructured prop is a reactive REFERENCE rather than a ref it can watch.
+const outline = useSandboxOutline(computed(() => loading));
 
 // Which rows are open, and which of those have been asked for the whole of their prose. Ids, not a flag per
 // item, so both sets survive a refetch replacing the objects.
@@ -344,8 +349,40 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         </RowGroup>
 
         <!-- Four different sentences, and telling them apart matters: still asking, could not ask, asked and
-             there is genuinely nothing, and a filter that matched nothing. -->
-        <div v-if="loading" :class="cmp.emptyState(`py-8`)"><Icon name="spinner" class="mr-1.5 animate-spin" />Checking installed versions…</div>
+             there is genuinely nothing, and a filter that matched nothing.
+
+             THE FIRST OF THE FOUR IS DRAWN, NOT SAID, and this is the longest wait in the hub to draw: the read
+             behind it asks every tool on the overlay for its version, one process spawn each, so it is measured
+             in seconds rather than in the round-trip the other tabs pay. A spinner over an empty card for that
+             long is the view at its least informative exactly when it is on screen the longest — and what is
+             coming is highly regular (labelled sections of name-and-version rows, then the staples strip), so
+             the shape is worth far more here than the sentence was. -->
+        <div v-if="loading && outline" class="flex flex-col gap-5" role="status" aria-busy="true">
+            <span class="sr-only">Checking installed versions…</span>
+            <!-- Two sections rather than the three that can appear: the outline promises the shape, and a
+                 sandbox with nothing added on top has only the base group — over-promising sections is how a
+                 placeholder ends up taller than the answer. -->
+            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat>
+                <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
+                <SkeletonRows :rows="section" density="compact" />
+            </RowGroup>
+            <!-- The staples strip: thirteen pills of a name and a version, which is a different shape from a
+                 row and reads as one at a glance. -->
+            <RowGroup flat>
+                <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+                <div class="flex flex-wrap gap-1.5 px-4" aria-hidden="true">
+                    <span
+                        v-for="(width, index) in [`w-24`, `w-20`, `w-28`, `w-16`, `w-24`, `w-20`, `w-32`, `w-20`]"
+                        :key="index"
+                        class="skeleton block h-6 rounded-full"
+                        :class="width"
+                    />
+                </div>
+            </RowGroup>
+        </div>
+        <!-- The sentence survives for the beat before the outline is allowed to appear: nothing at all is drawn
+             then, and `loading` still owns which of the four states this is. -->
+        <template v-else-if="loading" />
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
         <div v-else-if="groups.length === 0" :class="cmp.emptyState(`py-8`)">
             Nothing added on top of the stock image yet — and nothing in it answered, which usually means the sandbox is still starting.

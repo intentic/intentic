@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
 import { refreshConnections } from "../../composables/chat/useChat";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import {
     formatAge,
     formatReset,
@@ -52,6 +53,10 @@ import {
  * before answering it), so arriving on this tab is exactly the moment to ask. AiAccountSection does the same
  * for the rings it draws. */
 onMounted(() => void refreshConnections());
+
+// The connection read is a module-level flag rather than a query, but the wait is the same one and gets the same
+// gate: nothing is drawn for a read that lands in the first beat.
+const outline = useSandboxOutline(computed(() => !accountsLoaded.value));
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
 const groups = computed(() => planLimitGroups(rows.value, providerRefusals.value));
@@ -411,13 +416,30 @@ const roster = computed(() => {
         </p>
     </RowGroup>
 
-    <!-- An unread state is not an empty one: until the connection read lands, this says nothing rather than
-         claiming the sandbox has no accounts and taking it back a moment later. -->
-    <p v-else :class="cmp.emptyState()">
-        {{
-            accountsLoaded
-                ? `No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.`
-                : `Reading your connections…`
-        }}
+    <!-- An unread state is not an empty one: until the connection read lands, this says nothing about having no
+         accounts. It used to say that in words ("Reading your connections…"), which is a sentence where a panel
+         goes — so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
+         its legend, which is the whole of what lands here. -->
+    <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
+        <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
+        <span class="sr-only">Reading your connections…</span>
+        <div class="flex flex-col gap-2 px-4 py-3" aria-hidden="true">
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="skeleton block h-4 w-52" />
+                <span class="skeleton ml-auto block h-2.5 w-32" />
+            </div>
+            <!-- The band strip is a single 1.5px-tall rule of segments, so its outline is one bar of that
+                 height rather than blocks — a placeholder thicker than the thing it stands for is a promise the
+                 panel then breaks. -->
+            <span class="skeleton block h-1.5 w-full rounded-full" />
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
+            </div>
+        </div>
+    </RowGroup>
+
+    <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
+    <p v-else-if="accountsLoaded" :class="cmp.emptyState()">
+        No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.
     </p>
 </template>
