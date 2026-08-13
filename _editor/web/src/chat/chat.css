@@ -221,9 +221,12 @@
    three nestings drift: the app's column ran at 0.25rem while the shared page and the subagent view — the same
    column, drawn from the same sheet — ran at 0.75rem, and inside a turn an answer's bubble and a question card
    under it met at 4px, which at that distance reads as one surface split by a seam rather than as two cards.
-   0.75rem because it has to beat the padding INSIDE the surfaces it separates (a bubble is 0.625rem top and
-   bottom): a gap narrower than a card's own inset reads as part of that card. It is the number the other two
-   columns already stood at, so standardizing on it left them where they were.
+   0.5rem is the narrowest value that still reads as a boundary. The floor is set by the padding INSIDE the
+   surfaces it separates (a bubble is 0.625rem top and bottom): much under half a rem and the gap is a seam in
+   one card rather than the space between two. The ceiling is the panel — this is a dense column read beside
+   the code it is about, and every step of air is spent on every boundary in a long turn at once, so the
+   roomier 0.75rem the other two columns happened to stand at reads as loose here. Between the two, the tighter
+   one, and the other columns come down to it: one number, and the chat is what it has to suit.
    Inherited from the column rather than restated, so a stack nested at any depth resolves to the same value —
    and one edit moves the whole transcript, which is the property the per-block values did not have.
    Only the GAP is set here: the column is borrowed by the subagent view for its reading width alone (a
@@ -231,7 +234,7 @@
    whereas a display declared here would silently reflow it. Every stack still says it is one in its own
    markup. */
 .chat-turns {
-    --chat-gap: 0.75rem;
+    --chat-gap: 0.5rem;
 }
 .chat-turns,
 .chat-stack {
