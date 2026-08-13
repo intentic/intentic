@@ -29,7 +29,7 @@ import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { DESKTOP_DOWNLOADS, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
+import { desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../environments/scriptCommand";
 import SetupCloud from "./SetupCloud.vue";
@@ -437,10 +437,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * price is read to settle; the honest answer is that a membership lifts the limit (and the
                    * two rungs beside this one never had it). Members and ceiling-less platforms send no hours
                    * at all and read the old way. */
-                  meta:
-                      hostedHours.value === null
-                          ? `Free · ready in seconds`
-                          : `Free · ${hostedHours.value.allowance}h a month, then membership`,
+                  meta: hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, then membership`,
                   note: `Nothing to install`,
               },
           ]
@@ -478,7 +475,7 @@ const ladderShown = computed(() => !desktop.value && ladderOptions.value.length 
 
 /* The label column of step 1's two facts. A fixed width is what makes "Name" and "Address" one grid rather
  * than two sentences that happen to be stacked — and the width is the reason the VALUES line up, which is the
- * only alignment on the card that carries meaning. Muted and small against a mono value in content colour:
+ * only alignment on the card that carries meaning. Muted and small against a value in content colour:
  * the name used to sit in the step's own heading, in the heading's weight and the heading's colour, where the
  * one word on the card worth changing read as the label in front of it. */
 const factLabel = `w-16 shrink-0 text-xs text-muted`;
@@ -489,7 +486,7 @@ const factLabel = `w-16 shrink-0 text-xs text-muted`;
  * would start the name a few pixels right of an address that has none, and the two facts on this card would
  * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
  * first attempt and it hard-codes a spacing token the theme is free to change. */
-const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 font-mono text-sm text-content`;
+const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-sm text-content`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
 // chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
@@ -525,11 +522,7 @@ const commandReady = computed(() => setup.value !== null && mintedFor.value === 
  * run no command of the reader's at all — a cloud machine boots with its own copy, a hosted one was born
  * holding everything. It survives the command being FOLDED away in the app, where it rides the handoff too. */
 const syncOffered = computed(
-    () =>
-        commandReady.value &&
-        !composeShown.value &&
-        (commandVisible.value || desktop.value) &&
-        !(machine.value === `cloud` && cloudOffered.value),
+    () => commandReady.value && !composeShown.value && (commandVisible.value || desktop.value) && !(machine.value === `cloud` && cloudOffered.value),
 );
 // `.title` rather than the NoticeModel itself — interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
@@ -1576,7 +1569,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="sandbox.example.com"
-                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    :class="cmp.input('w-full text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <!-- `attaching` is in the disabled expression, not left to the loading prop: the
@@ -1594,7 +1587,7 @@ watch(commandReady, (ready) => {
                             </div>
                             <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
                             <span v-else-if="normalizedDomain" class="text-xs text-muted"
-                                >We'll connect to <span class="font-mono">{{ normalizedDomain }}</span
+                                >We'll connect to <span>{{ normalizedDomain }}</span
                                 >.</span
                             >
                             <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
@@ -1610,7 +1603,7 @@ watch(commandReady, (ready) => {
                                 autocomplete="off"
                                 spellcheck="false"
                                 placeholder="e.g. work, staging, my-laptop"
-                                :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                :class="cmp.input('w-full text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
                             <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
@@ -1621,7 +1614,7 @@ watch(commandReady, (ready) => {
                             <span>Nothing answered at that address.</span>
                             <span class="text-2xs opacity-80">
                                 Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
-                                <span class="font-mono">{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
+                                <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
                             </span>
                         </div>
@@ -1660,7 +1653,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                                    :class="cmp.input('w-full text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <span class="text-xs text-muted">
@@ -1745,7 +1738,7 @@ watch(commandReady, (ready) => {
                                  it is also where it is changed — and the change is a pencil, not a sentence: the
                                  card used to spend a paragraph explaining that the name was a default and a link
                                  saying so again, which is three lines of apology for a word the user can simply
-                                 overwrite. The label is muted and the name is mono, so the value is the thing the
+                                 overwrite. The label is muted, so the value is the thing the
                                  eye lands on. Never a gate: the command below is ready whether or not this is
                                  ever touched. -->
                             <!-- STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
@@ -1803,7 +1796,7 @@ watch(commandReady, (ready) => {
                                             v-tooltip.bottom="`Rename sandbox`"
                                             @click="startRename"
                                         >
-                                            <Icon name="pencil" />
+                                            <Icon name="pencil" class="text-xs" />
                                         </button>
                                     </div>
                                     <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
@@ -1957,14 +1950,13 @@ watch(commandReady, (ready) => {
                                             autocapitalize="off"
                                             spellcheck="false"
                                             placeholder="sandbox"
-                                            :class="cmp.input('w-full font-mono text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                            :class="cmp.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
                                         />
-                                        <span class="font-mono text-sm break-words text-subtle">.{{ selectedZone }}</span>
+                                        <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>
                                     <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
                                     <span v-else class="text-xs text-success"
-                                        >✓ Your sandbox will be reachable at
-                                        <span class="font-mono break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                                        >✓ Your sandbox will be reachable at <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
                                         >.</span
                                     >
                                 </label>
@@ -2067,27 +2059,6 @@ watch(commandReady, (ready) => {
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>
                             </button>
                         </div>
-                        <!-- THE APP, UNDER THE ROW AND UNDER EVERY RUNG. It used to live at the foot of the
-                             command card, addressed only to the reader who had already chosen to paste
-                             something — which is the reader least in need of an installer. It is a fourth
-                             answer to the same question the row asks, so it belongs with the row: whichever
-                             rung is selected, "or don't use a terminal at all" is still on the table.
-                             Never on a phone: every link here is a Windows or Linux installer, and a phone that
-                             follows one downloads a file it cannot open. And never inside the app itself, where
-                             it would offer the reader what they are already running. -->
-                        <p v-if="!desktop && !mobile" class="px-1 text-2xs text-subtle">
-                            Rather not use a terminal?
-                            <button type="button" class="cursor-pointer text-link hover:underline" @click="runHere">Open the Intentic app</button>,
-                            or download it for <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Windows</a>,
-                            <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux AppImage</a>,
-                            <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a> or
-                            <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>.
-                            <!-- Local dev: these point at the local site's /desktop/ assets, so the links serve
-                                 YOUR build once staged. -->
-                            <span v-if="platformUrlOverride" class="text-warning">
-                                Local dev: stage installers with <code>pnpm --filter @intentic/desktop-app stage:downloads</code> first.
-                            </span>
-                        </p>
                     </div>
 
                     <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
@@ -2180,9 +2151,7 @@ watch(commandReady, (ready) => {
                                     </template>
                                     <template v-else>
                                         It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep
-                                        your work in a git remote.<template v-if="hostedHours">
-                                            Unopened for a few weeks, it's removed.</template
-                                        >
+                                        your work in a git remote.<template v-if="hostedHours"> Unopened for a few weeks, it's removed.</template>
                                     </template>
                                 </p>
                             </template>
@@ -2220,7 +2189,7 @@ watch(commandReady, (ready) => {
                                 <p v-else-if="cloudMachine" class="flex items-start gap-2 text-xs text-muted">
                                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                                     <span class="min-w-0">
-                                        <span class="font-mono text-content">{{ cloudMachine.serverName }}</span> was created in your
+                                        <span class="text-content">{{ cloudMachine.serverName }}</span> was created in your
                                         {{ cloudProviderLabel }} account ({{ cloudMachine.location }}). It sets itself up from first boot.
                                     </span>
                                 </p>
@@ -2385,10 +2354,6 @@ watch(commandReady, (ready) => {
                                      survives the command being folded away there. Only the compose tab drops it
                                      outright — that file declares its own env. -->
                                 <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
-
-                                <!-- The app's offer used to close this card. It is under the ladder now, beside the
-                                     other answers to "which machine" — where it reaches the reader who has not
-                                     already committed to pasting something, which is the one it was written for. -->
                             </template>
                         </template>
 

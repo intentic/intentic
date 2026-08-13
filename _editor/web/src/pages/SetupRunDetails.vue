@@ -14,6 +14,8 @@
      forms). This is the third time, so the content moved out to where both surfaces can share it. -->
 <script setup lang="ts">
 import { CopyButton } from "@intentic/ui";
+import Button from "primevue/button";
+import { DESKTOP_DOWNLOADS } from "../environments/desktop";
 
 // `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself. Nothing else
 // here varies: this panel used to take the sync opt-in too, to name the folder the command writes outside
@@ -38,6 +40,21 @@ const { cleanup } = defineProps<{ cleanup: string }>();
                 <span class="min-w-0">Opens a <span class="text-content">private Cloudflare tunnel</span>, no inbound ports</span>
             </li>
         </ul>
+
+        <!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed
+             before somebody commits to the command. The Linux vanity URL serves the AppImage, which works
+             across distributions without asking the reader to choose a package format here. -->
+        <div class="flex flex-col gap-2 border-t border-line pt-3">
+            <p class="text-2xs text-subtle">Or use the desktop app</p>
+            <div class="grid grid-cols-2 gap-2">
+                <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" size="small" severity="secondary">
+                    <template #icon><Icon name="download" /></template>
+                </Button>
+                <Button as="a" :href="DESKTOP_DOWNLOADS.linuxAppImage" label="Linux" size="small" severity="secondary">
+                    <template #icon><Icon name="download" /></template>
+                </Button>
+            </div>
+        </div>
 
         <div class="border-t border-line pt-3 text-2xs text-subtle">
             <p>Installs Docker if you haven't got it, asking first.</p>
