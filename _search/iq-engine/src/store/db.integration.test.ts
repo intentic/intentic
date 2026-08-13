@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,22 @@ test("new indexes use incremental auto-vacuum and reclaim a materially fragmente
         expect(compactIndex(db)).toBe(true);
         expect(pragma(db.get("PRAGMA page_count"), "page_count")).toBeLessThan(pagesBefore);
         expect(pragma(db.get("PRAGMA freelist_count"), "freelist_count")).toBeLessThan(freeBefore);
+    } finally {
+        db.close();
+    }
+});
+
+// Opening an index makes the index dir (nothing else would) and NOTHING ELSE. The spool used to be made here
+// too, which left an empty `spool/` sitting in every workspace from its first search onwards — and the explorer,
+// rightly, offers to sweep folders with nothing in them. writeSpool makes it when it has something to write.
+test("opening an index creates the index dir, and no empty spool beside it", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "iq-db-"));
+    dirs.push(parent);
+    const dir = join(parent, "cache", "iq");
+    const db = openIndex(dir, "write");
+    try {
+        expect(existsSync(join(dir, "index.db"))).toBe(true);
+        expect(existsSync(join(dir, "spool"))).toBe(false);
     } finally {
         db.close();
     }

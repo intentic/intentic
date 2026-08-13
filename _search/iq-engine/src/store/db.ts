@@ -170,7 +170,11 @@ const open = (dir: string, mode: IndexMode): IndexDb => {
         // point was told by the lock that a live writer owns the file — which means the schema is that writer's.
         return wrap(readOnly);
     }
-    mkdirSync(join(dir, "spool"), { recursive: true });
+    // The index dir itself, so the open below has somewhere to put index.db — and ONLY that. The spool used to be
+    // created here too, which left every workspace holding an empty `spool/` from its first search until its
+    // first continuation cursor, and holding one again after each prune; writeSpool creates it when it has
+    // something to write, which is the only moment it means anything.
+    mkdirSync(dir, { recursive: true });
     const db = new DatabaseSync(join(dir, "index.db"), { allowExtension: true });
     // busy_timeout FIRST, alone: everything after it wants the write lock (journal_mode rewrites the header, the
     // DDL takes a schema lock), and until the timeout is set the default is zero — so an index another process

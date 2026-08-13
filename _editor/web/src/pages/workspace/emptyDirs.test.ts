@@ -49,14 +49,42 @@ describe(`barrenDirs`, () => {
         const tree = [dir(`refs`, []), dir(`public`, [dir(`public/x`, [])])];
         expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set());
     });
+
+    // The daemon remakes each of these on its next converge, so an offer to sweep one is a loop the owner
+    // cannot win. `.claude` reads as empty for a second reason worth stating: it holds one SYMLINK per loaded
+    // skill, and the tree walk lists no symlinks at all — so a folder full of skills arrives as `children: []`.
+    it(`leaves the daemon's own folders alone — its state dir and the skill projections`, () => {
+        const tree = [
+            dir(`.intentic`, [dir(`.intentic/cache`, [dir(`.intentic/cache/iq`, [dir(`.intentic/cache/iq/spool`, [])])])]),
+            dir(`.claude`, [dir(`.claude/skills`, [])]),
+            dir(`.agents`, [dir(`.agents/skills`, [])]),
+        ];
+        expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set());
+    });
+
+    // What a brand-new workspace IS: the daemon's furniture and nothing else. Nobody's first minute in the
+    // product should open on a cleanup chore for folders they never made.
+    it(`finds nothing to sweep in a fresh workspace`, () => {
+        const tree = [
+            dir(`.agents`, [dir(`.agents/skills`, [])]),
+            dir(`.claude`, [dir(`.claude/skills`, [])]),
+            dir(`.intentic`, [dir(`.intentic/cache`, [dir(`.intentic/cache/iq`, [file(`.intentic/cache/iq/index.db`)])])]),
+            dir(`refs`, []),
+        ];
+        expect(barrenRoots(tree, NO_LAZY, barrenDirs(tree, NO_LAZY))).toEqual([]);
+    });
+
+    // A repo of the owner's that happens to carry these names is ordinary content: the rule is root-relative,
+    // like every other path rule here.
+    it(`still sweeps a repo's own .claude/skills`, () => {
+        const tree = [dir(`app`, [dir(`app/.claude`, [dir(`app/.claude/skills`, [])])])];
+        expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set([`app`, `app/.claude`, `app/.claude/skills`]));
+    });
 });
 
 describe(`barrenRoots`, () => {
     it(`returns the top of each branch, once, in tree order`, () => {
-        const tree = [
-            dir(`a`, [dir(`a/b`, [])]),
-            dir(`src`, [file(`src/app.ts`), dir(`src/old`, [])]),
-        ];
+        const tree = [dir(`a`, [dir(`a/b`, [])]), dir(`src`, [file(`src/app.ts`), dir(`src/old`, [])])];
         const barren = barrenDirs(tree, NO_LAZY);
         expect(barrenRoots(tree, NO_LAZY, barren).map((entry) => entry.path)).toEqual([`a`, `src/old`]);
     });

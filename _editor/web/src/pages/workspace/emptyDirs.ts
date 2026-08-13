@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import { STATE_DIR } from "@intentic/constants";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 
@@ -14,10 +15,20 @@ import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants"
  * The honesty rule is structural: `children: []` is a dir the walk actually listed and found empty, while
  * `undefined` means it never looked (ignored, locked, or deferred past the entry budget) — and UNKNOWN MUST
  * NEVER RENDER AS EMPTY. Ignored territory is off-limits outright (nobody wants an offer to tidy build
- * output), as are the daemon's locked dirs, the reference shelf, and the public outbox — those two are
- * deliberate fixtures, empty or not. */
+ * output), as are the daemon's locked dirs and the FIXTURES below. */
 
-const FIXTURES = [REFERENCE_DIR, PUBLIC_DIR];
+/* FIXTURES — folders whose existence is nobody's chore, empty or not. Two are the user's own furniture (the
+ * reference shelf and the public outbox, whose emptiness is a state they chose); the rest belong to the daemon:
+ * its state dir, and the two folders it projects every loaded skill into.
+ *
+ * Machine-owned folders are excluded because sweeping one is a LOOP, not a chore. The daemon recreates each of
+ * these the next time it converges, so the offer would come back — and the one workspace where the debris the
+ * sweep exists for cannot possibly have accumulated yet is a BRAND NEW ONE, which is exactly where these folders
+ * are all there is. A first-run explorer opening on "2 empty folders — Clean up", for folders the owner never
+ * made and cannot keep swept, reads as a mess the product shipped with.
+ *
+ * Root-relative, like every other path rule around here: a repo's own `public/` or `.claude/` is content. */
+const FIXTURES = [REFERENCE_DIR, PUBLIC_DIR, STATE_DIR, `.agents/skills`, `.claude/skills`];
 const isFixturePath = (path: string): boolean => FIXTURES.some((dir) => path === dir || path.startsWith(`${dir}/`));
 
 // Children as the explorer knows them: the eager walk's inline listing, else the lazily-fetched one. `undefined`
@@ -30,10 +41,7 @@ const knownChildren = (
 /* Every barren dir path in the snapshot — a dir whose entire KNOWN subtree holds no files, with unknowns
  * poisoning the branch rather than passing silently. One bottom-up pass; the set answers both the row dimming
  * (any barren dir dims) and the root/chain arithmetic below. */
-export const barrenDirs = (
-    tree: readonly WorkspaceTreeEntry[],
-    lazy: ReadonlyMap<string, readonly WorkspaceTreeEntry[]>,
-): ReadonlySet<string> => {
+export const barrenDirs = (tree: readonly WorkspaceTreeEntry[], lazy: ReadonlyMap<string, readonly WorkspaceTreeEntry[]>): ReadonlySet<string> => {
     const barren = new Set<string>();
     const visit = (entry: WorkspaceTreeEntry): boolean => {
         if (entry.type !== `dir` || entry.ignored === true || isLockedWorkspacePath(entry.path) || isFixturePath(entry.path)) {
