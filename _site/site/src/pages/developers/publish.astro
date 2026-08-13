@@ -44,6 +44,73 @@ const sources = `// A repo of its own
 
 // A subdirectory: one repo, several extensions
 { "source": "git-subdir", "url": "https://github.com/acme/tools.git", "path": "ext/incidents", "sha": "9f2c1ab…" }`;
+
+/* THE SHAPE, DRAWN — two lanes, and which lane the code travels on is the entire argument.
+ *
+ * The top lane is metadata: a pull request puts a pointer in a registry, somebody reads that list. It is drawn
+ * thin and grey because none of it is your extension. The bottom lane is the extension itself, one thick brand
+ * line from your repo to their sandbox, routed UNDER the registry rather than through it — so a reader who never
+ * reads a label still sees that the middle box is not in the path. That is what the three bullets beside it say
+ * in prose, and it is why nobody has to trust a build service.
+ *
+ * The dashed card at the foot reuses ArchitectureFigure's grammar: what stands off the path is dashed, grey, and
+ * touched by no arrow at all. Nothing connects to it because nothing does. */
+const SHAPE = { w: 640, h: 274 };
+// The two outer parties share a row; the registry is taller because it has to SHOW a pointer rather than claim one.
+const shapeSide = { y: 22, h: 74, w: 132 };
+const shapeRepo = { cx: 72 };
+const shapeSandbox = { cx: 568 };
+const shapeRegistry = { cx: 320, w: 196, y: 14, h: 104 };
+const shapeLaneY = shapeSide.y + shapeSide.h / 2;
+const shapeBottom = shapeSide.y + shapeSide.h;
+// Metadata hops run edge to edge, inset so the arrowhead lands off the card rather than on it.
+const HOP_GAP = 8;
+const shapeHops = [
+    { from: shapeRepo.cx + shapeSide.w / 2, to: shapeRegistry.cx - shapeRegistry.w / 2, above: `a pull request`, below: `adds a pointer` },
+    { from: shapeRegistry.cx + shapeRegistry.w / 2, to: shapeSandbox.cx - shapeSide.w / 2, above: `they browse`, below: `and click install` },
+];
+// The code's own route: down out of your repo, along beneath the registry, back up into their sandbox.
+const shapeCodeY = 180;
+const shapeR = 12;
+const shapeCode = [
+    `M ${shapeRepo.cx} ${shapeBottom + 4}`,
+    `L ${shapeRepo.cx} ${shapeCodeY - shapeR}`,
+    `Q ${shapeRepo.cx} ${shapeCodeY} ${shapeRepo.cx + shapeR} ${shapeCodeY}`,
+    `L ${shapeSandbox.cx - shapeR} ${shapeCodeY}`,
+    `Q ${shapeSandbox.cx} ${shapeCodeY} ${shapeSandbox.cx} ${shapeCodeY - shapeR}`,
+    `L ${shapeSandbox.cx} ${shapeBottom + 8}`,
+].join(` `);
+const shapeNever = { x: 110, y: 220, w: 420, h: 42 };
+/* THE ROUTE IN, DRAWN — one column, top to bottom, because getting listed is a funnel and not a topology.
+ *
+ * It flows DOWN where the figure above flows across, which is how the two stay legible on one page: this one is
+ * a process, that one is a map. Two entrances converge on the same pull request — the automatic one and the
+ * hand-written one — and the two reviewers sit SIDE BY SIDE inside one band, because they run independently and
+ * both have to pass. Drawing them in sequence would imply an order and a hand-off that neither has.
+ *
+ * The band says what it refuses in the same breath as what it approves; the page's own honesty about failing
+ * closed belongs on the picture, not only under it. */
+const ROUTE = { w: 640, h: 320 };
+const routeCol = { x: 180, w: 300, cx: 330 };
+const routeStages = [
+    { y: 12, h: 48, label: `YOUR REPO`, sub: `+ the intentic-extension topic` },
+    { y: 84, h: 48, label: `A PULL REQUEST`, sub: `opened for you, at your latest sha` },
+];
+// The hand-written entrance, on the same row as the topic so the two read as alternatives rather than steps.
+const routeManual = { x: 8, y: 12, w: 144, h: 48 };
+const routeBand = { x: 90, y: 156, w: 480, h: 92 };
+const routeCheckBox = { y: 182, w: 224, h: 50 };
+const routeChecks = [
+    { x: 106, label: `Trivy — deterministic`, sub: `dependencies · secrets · deploy config` },
+    { x: 338, label: `an intentic agent — adversarial`, sub: `every executable surface, running none` },
+];
+const routeListed = { y: 272, h: 44 };
+// The same three parties for phone widths, where the lanes would set their labels at a few pixels.
+const shapeParts = [
+    { chip: `YOUR REPO`, what: `The extension itself, at one commit. Nothing is uploaded, packaged, or copied anywhere.` },
+    { chip: `A REGISTRY`, what: `A git repo holding a <strong>pointer</strong> to that commit. A pull request adds it; delisting removes it and nothing else.` },
+    { chip: `THEIR SANDBOX`, what: `Reads the list, then clones your repo at that sha <strong>straight from your git host</strong> — never through us.` },
+];
 ---
 
 <DocsLayout
@@ -78,6 +145,178 @@ const sources = `// A repo of its own
         <li><strong>You keep the code.</strong> Your repo is the artifact. Delisting doesn't delete anything; it only removes a pointer.</li>
         <li><strong>Registries are plural.</strong> The official one is a default, not a gate. A company can run a private registry of internal extensions and never touch ours.</li>
     </ul>
+
+    <div class="docs-embed mt-6">
+        {/* Two lanes on wide screens: the thin grey one carries the listing, the thick one carries the code —
+            under the registry, not through it. */}
+        <figure class="relative hidden overflow-hidden rounded-2xl border border-line bg-canvas/60 sm:block">
+            <div class="grid-overlay"></div>
+            <div
+                class="pointer-events-none absolute top-1/2 left-1/2 h-72 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 13%, transparent), transparent 70%)"
+                aria-hidden="true"
+            >
+            </div>
+            <div class="relative p-4 sm:p-5">
+                <svg
+                    viewBox={`0 0 ${SHAPE.w} ${SHAPE.h}`}
+                    class="h-auto w-full text-link"
+                    role="img"
+                    aria-label="Publishing as two separate lanes. Along the top, metadata only: a pull request adds a pointer to a registry — a git repo holding your repo name and one commit sha — and the person installing browses that list. Along the bottom, the extension itself travels its own path, cloned at that sha from your git host straight into their sandbox, passing underneath the registry rather than through it. intentic never hosts your code, builds it, signs it, or takes a cut, and nothing in the picture connects to it."
+                >
+                    <defs>
+                        <marker id="shape-hop" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="var(--color-line-strong)" />
+                        </marker>
+                        <marker id="shape-code" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                        </marker>
+                    </defs>
+
+                    {/* ── the listing lane: thin, grey, and never carrying an extension ───────────────── */}
+                    {
+                        shapeHops.map((hop) => (
+                            <Fragment>
+                                <path
+                                    d={`M ${hop.from + HOP_GAP} ${shapeLaneY} L ${hop.to - HOP_GAP} ${shapeLaneY}`}
+                                    fill="none"
+                                    stroke="var(--color-line-strong)"
+                                    stroke-width="1.25"
+                                    marker-end="url(#shape-hop)"
+                                />
+                                <text x={(hop.from + hop.to) / 2} y={shapeLaneY - 10} text-anchor="middle" font-size="8.5" style="fill: var(--color-muted)">
+                                    {hop.above}
+                                </text>
+                                <text x={(hop.from + hop.to) / 2} y={shapeLaneY + 17} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">
+                                    {hop.below}
+                                </text>
+                            </Fragment>
+                        ))
+                    }
+
+                    {/* ── the code's own lane, which is the picture's whole point ─────────────────────── */}
+                    <path d={shapeCode} fill="none" stroke="currentColor" stroke-width="2.5" marker-end="url(#shape-code)" />
+                    <text x={shapeRegistry.cx} y={shapeCodeY - 13} text-anchor="middle" font-size="10" font-weight="600" style="fill: var(--color-link)">
+                        the extension itself — cloned at that sha, straight from your git host
+                    </text>
+                    <text x={shapeRegistry.cx} y={shapeCodeY + 22} text-anchor="middle" font-size="9" style="fill: var(--color-subtle)">
+                        a registry is discovery only: a repo URL and a sha install this without one
+                    </text>
+
+                    {/* ── your repo, and their sandbox ────────────────────────────────────────────────── */}
+                    {
+                        [
+                            { cx: shapeRepo.cx, label: `YOUR REPO`, line: `acme/incidents`, sub: `@ 9f2c1ab — one commit`, mine: true },
+                            { cx: shapeSandbox.cx, label: `THEIR SANDBOX`, line: `Discover → Install`, sub: `someone else's machine`, mine: false },
+                        ].map((party) => (
+                            <Fragment>
+                                <rect
+                                    x={party.cx - shapeSide.w / 2}
+                                    y={shapeSide.y}
+                                    width={shapeSide.w}
+                                    height={shapeSide.h}
+                                    rx="12"
+                                    fill={party.mine ? `color-mix(in srgb, var(--color-primary-500) 12%, var(--color-canvas))` : `var(--color-canvas)`}
+                                    stroke={party.mine ? `color-mix(in srgb, var(--color-primary-500) 50%, transparent)` : `var(--color-line-strong)`}
+                                    stroke-width="1.25"
+                                />
+                                <text
+                                    x={party.cx}
+                                    y={shapeSide.y + 21}
+                                    text-anchor="middle"
+                                    font-size="10"
+                                    font-weight="700"
+                                    letter-spacing="0.5"
+                                    style={party.mine ? `fill: var(--color-link)` : `fill: var(--color-content)`}
+                                >
+                                    {party.label}
+                                </text>
+                                <text x={party.cx} y={shapeSide.y + 42} text-anchor="middle" font-size="9.5" style="fill: var(--color-content); font-family: var(--font-mono)">
+                                    {party.line}
+                                </text>
+                                <text x={party.cx} y={shapeSide.y + 60} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">
+                                    {party.sub}
+                                </text>
+                            </Fragment>
+                        ))
+                    }
+
+                    {/* ── the registry, drawn as what it is: a file with a row in it ──────────────────── */}
+                    <rect
+                        x={shapeRegistry.cx - shapeRegistry.w / 2}
+                        y={shapeRegistry.y}
+                        width={shapeRegistry.w}
+                        height={shapeRegistry.h}
+                        rx="12"
+                        fill="var(--color-canvas)"
+                        stroke="var(--color-line-strong)"
+                        stroke-width="1.25"
+                    />
+                    <text x={shapeRegistry.cx} y={shapeRegistry.y + 20} text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.5" style="fill: var(--color-content)">
+                        A REGISTRY
+                    </text>
+                    <text x={shapeRegistry.cx} y={shapeRegistry.y + 36} text-anchor="middle" font-size="8.5" style="fill: var(--color-subtle)">
+                        a git repo · ours by default, or your own
+                    </text>
+                    <rect
+                        x={shapeRegistry.cx - shapeRegistry.w / 2 + 14}
+                        y={shapeRegistry.y + 46}
+                        width={shapeRegistry.w - 28}
+                        height="28"
+                        rx="8"
+                        fill="color-mix(in srgb, var(--color-content) 5%, transparent)"
+                        stroke="var(--color-line)"
+                        stroke-width="1"
+                    />
+                    <text x={shapeRegistry.cx} y={shapeRegistry.y + 64} text-anchor="middle" font-size="9" style="fill: var(--color-content); font-family: var(--font-mono)">
+                        acme.incidents → 9f2c1ab
+                    </text>
+                    <text x={shapeRegistry.cx} y={shapeRegistry.y + 90} text-anchor="middle" font-size="8.5" font-weight="600" style="fill: var(--color-muted)">
+                        a pointer, not a copy
+                    </text>
+
+                    {/* ── and what stands off the path: dashed, grey, and touched by nothing ──────────── */}
+                    <rect
+                        x={shapeNever.x}
+                        y={shapeNever.y}
+                        width={shapeNever.w}
+                        height={shapeNever.h}
+                        rx="12"
+                        fill="transparent"
+                        stroke="var(--color-line-strong)"
+                        stroke-width="1.25"
+                        stroke-dasharray="5 4"
+                    />
+                    <text x={shapeNever.x + 18} y={shapeNever.y + shapeNever.h / 2} dominant-baseline="central" font-size="9" font-weight="700" letter-spacing="0.08em" style="fill: var(--color-subtle)">
+                        INTENTIC NEVER
+                    </text>
+                    <path
+                        d={`M ${shapeNever.x + 122} ${shapeNever.y + 11} V ${shapeNever.y + shapeNever.h - 11}`}
+                        stroke="var(--color-line)"
+                        stroke-width="1"
+                    />
+                    <text x={shapeNever.x + 138} y={shapeNever.y + shapeNever.h / 2} dominant-baseline="central" font-size="9.5" style="fill: var(--color-muted)">
+                        hosts your code · builds it · signs it · takes a cut
+                    </text>
+                </svg>
+            </div>
+            <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
+                The registry carries a name and a sha; your repository carries the code. That split is why publishing costs a pull request, why delisting deletes nothing, and why a private registry is a normal thing to run.
+            </figcaption>
+        </figure>
+
+        {/* Phone: the three parties and what each one holds, where the lanes would be illegible. */}
+        <ul class="flex flex-col gap-3 sm:hidden">
+            {
+                shapeParts.map((part) => (
+                    <li class="flex flex-col gap-1">
+                        <span class="text-2xs font-semibold tracking-wide text-link">{part.chip}</span>
+                        <p class="text-sm leading-relaxed text-muted" set:html={part.what} />
+                    </li>
+                ))
+            }
+        </ul>
+    </div>
 
     <h2>Install without a registry at all</h2>
     <p>
@@ -123,6 +362,164 @@ const sources = `// A repo of its own
         Two ways in, and they end at the same place: a pull request against the{" "}
         <a href="/extensions/">official registry</a>. There is nowhere to sign up.
     </p>
+
+    <div class="docs-embed mt-6">
+        {/* The funnel on wide screens. It carries NO phone fallback on purpose: the ordered list directly below
+            is already the same route in words, and a second copy of it above would be read twice. */}
+        <figure class="relative hidden overflow-hidden rounded-2xl border border-line bg-canvas/60 sm:block">
+            <div class="grid-overlay"></div>
+            <div
+                class="pointer-events-none absolute top-1/2 left-1/2 h-72 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 12%, transparent), transparent 70%)"
+                aria-hidden="true"
+            >
+            </div>
+            <div class="relative p-4 sm:p-5">
+                <svg
+                    viewBox={`0 0 ${ROUTE.w} ${ROUTE.h}`}
+                    class="h-auto w-full text-link"
+                    role="img"
+                    aria-label="The route to a listing, as a funnel. Two entrances converge on one pull request: a nightly job opens it for you once your repo carries the intentic-extension topic, or you open it by hand, which subdirectories and other git hosts must do. That pull request then faces two independent automated reviewers side by side — Trivy, checking dependencies, committed secrets and deployment configuration, and an intentic agent reading every executable surface without running any of your code. Both must pass; a finding or an unjudged audit keeps it unmergeable. Merged, you are listed: a row in the registry, installable in one click."
+                >
+                    <defs>
+                        <marker id="route-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                        </marker>
+                        <marker id="route-alt" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto">
+                            <path d="M0 0 L10 5 L0 10 z" fill="var(--color-line-strong)" />
+                        </marker>
+                    </defs>
+
+                    {/* ── the two entrances, converging ──────────────────────────────────────────────── */}
+                    {
+                        routeStages.map((stage) => (
+                            <Fragment>
+                                <rect
+                                    x={routeCol.x}
+                                    y={stage.y}
+                                    width={routeCol.w}
+                                    height={stage.h}
+                                    rx="12"
+                                    fill="var(--color-canvas)"
+                                    stroke="var(--color-line-strong)"
+                                    stroke-width="1.25"
+                                />
+                                <text x={routeCol.cx} y={stage.y + 19} text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.4" style="fill: var(--color-content)">
+                                    {stage.label}
+                                </text>
+                                <text x={routeCol.cx} y={stage.y + 36} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">
+                                    {stage.sub}
+                                </text>
+                            </Fragment>
+                        ))
+                    }
+
+                    <rect
+                        x={routeManual.x}
+                        y={routeManual.y}
+                        width={routeManual.w}
+                        height={routeManual.h}
+                        rx="12"
+                        fill="transparent"
+                        stroke="var(--color-line-strong)"
+                        stroke-width="1.25"
+                        stroke-dasharray="5 4"
+                    />
+                    <text x={routeManual.x + routeManual.w / 2} y={routeManual.y + 19} text-anchor="middle" font-size="9" font-weight="600" style="fill: var(--color-muted)">
+                        or open it yourself
+                    </text>
+                    <text x={routeManual.x + routeManual.w / 2} y={routeManual.y + 35} text-anchor="middle" font-size="8" style="fill: var(--color-subtle)">
+                        subdirectories · other hosts
+                    </text>
+                    <path
+                        d={`M ${routeManual.x + routeManual.w / 2} ${routeManual.y + routeManual.h} L ${routeManual.x + routeManual.w / 2} ${routeStages[1].y + 12} Q ${routeManual.x + routeManual.w / 2} ${routeStages[1].y + 24} ${routeManual.x + routeManual.w / 2 + 12} ${routeStages[1].y + 24} L ${routeCol.x - 8} ${routeStages[1].y + 24}`}
+                        fill="none"
+                        stroke="var(--color-line-strong)"
+                        stroke-width="1.25"
+                        stroke-dasharray="4 4"
+                        marker-end="url(#route-alt)"
+                    />
+
+                    <path
+                        d={`M ${routeCol.cx} ${routeStages[0].y + routeStages[0].h + 2} L ${routeCol.cx} ${routeStages[1].y - 2}`}
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        marker-end="url(#route-arrow)"
+                    />
+                    <text x={routeCol.cx + 12} y={routeStages[0].y + routeStages[0].h + 16} font-size="8.5" style="fill: var(--color-subtle)">a nightly job, on your latest sha</text>
+
+                    <path d={`M ${routeCol.cx} ${routeStages[1].y + routeStages[1].h + 2} L ${routeCol.cx} ${routeBand.y - 2}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#route-arrow)" />
+
+                    {/* ── the gate: two reviewers, side by side because they run independently ────────── */}
+                    <rect
+                        x={routeBand.x}
+                        y={routeBand.y}
+                        width={routeBand.w}
+                        height={routeBand.h}
+                        rx="12"
+                        fill="color-mix(in srgb, var(--color-primary-500) 7%, transparent)"
+                        stroke="color-mix(in srgb, var(--color-primary-500) 32%, transparent)"
+                        stroke-width="1"
+                        stroke-dasharray="4 4"
+                    />
+                    <text x={routeBand.x + 16} y={routeBand.y + 17} font-size="8.5" font-weight="600" style="fill: var(--color-link)">
+                        both read the exact source in that pull request
+                    </text>
+                    <text x={routeBand.x + routeBand.w - 16} y={routeBand.y + 17} text-anchor="end" font-size="8" style="fill: var(--color-subtle)">
+                        a finding, or an unjudged audit → not mergeable
+                    </text>
+                    {
+                        routeChecks.map((check) => (
+                            <Fragment>
+                                <rect
+                                    x={check.x}
+                                    y={routeCheckBox.y}
+                                    width={routeCheckBox.w}
+                                    height={routeCheckBox.h}
+                                    rx="10"
+                                    fill="var(--color-canvas)"
+                                    stroke="var(--color-line)"
+                                    stroke-width="1"
+                                />
+                                <text x={check.x + routeCheckBox.w / 2} y={routeCheckBox.y + 20} text-anchor="middle" font-size="9.5" font-weight="600" style="fill: var(--color-content)">
+                                    {check.label}
+                                </text>
+                                <text x={check.x + routeCheckBox.w / 2} y={routeCheckBox.y + 36} text-anchor="middle" font-size="8" style="fill: var(--color-subtle)">
+                                    {check.sub}
+                                </text>
+                            </Fragment>
+                        ))
+                    }
+
+                    <path d={`M ${routeCol.cx} ${routeBand.y + routeBand.h + 2} L ${routeCol.cx} ${routeListed.y - 2}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#route-arrow)" />
+                    <text x={routeCol.cx + 12} y={routeBand.y + routeBand.h + 16} font-size="8.5" style="fill: var(--color-subtle)">both pass</text>
+
+                    {/* ── and out the bottom ──────────────────────────────────────────────────────────── */}
+                    <rect
+                        x={routeCol.x}
+                        y={routeListed.y}
+                        width={routeCol.w}
+                        height={routeListed.h}
+                        rx="12"
+                        fill="color-mix(in srgb, var(--color-primary-500) 14%, var(--color-canvas))"
+                        stroke="color-mix(in srgb, var(--color-primary-500) 55%, transparent)"
+                        stroke-width="1.25"
+                    />
+                    <text x={routeCol.cx} y={routeListed.y + 18} text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.4" style="fill: var(--color-link)">
+                        LISTED
+                    </text>
+                    <text x={routeCol.cx} y={routeListed.y + 33} text-anchor="middle" font-size="8.5" style="fill: var(--color-muted)">
+                        a row in the registry · installable in one click
+                    </text>
+                </svg>
+            </div>
+            <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
+                Nothing here is an account or an upload. The only thing you do by hand is add a topic — everything after it happens to a pull request, in the open, against the exact commit you pushed.
+            </figcaption>
+        </figure>
+    </div>
+
     <ol>
         <li>
             <strong>Add the topic.</strong> Put <code>intentic-extension</code> on your GitHub repository, with an{" "}
