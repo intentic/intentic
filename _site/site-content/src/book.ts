@@ -1,7 +1,7 @@
 /* A BOOK is one documentation tree with its own root path, its own rail and its own search scope.
  *
  * There are two, and the split is by WHO IS READING rather than by subject: /docs is written for someone using
- * intentic, /api for someone building on it. That is the same cut code.visualstudio.com makes, and it exists
+ * intentic, /developers for someone building on it. That is the same cut code.visualstudio.com makes, and it exists
  * because the two readers share almost no vocabulary: one is deciding whether to trust an extension, the other
  * is deciding what to put in its manifest, while a single rail forced them to scroll past each other's work.
  *
@@ -49,7 +49,7 @@ export interface BookSection {
 
 export interface Book {
     /** The first path segment, and the word the breadcrumb and the search index use. */
-    id: "docs" | "api";
+    id: "docs" | "developers";
     /** The top bar's label and the breadcrumb's root. */
     label: string;
     sections: BookSection[];

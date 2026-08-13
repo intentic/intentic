@@ -1,7 +1,12 @@
 import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 
-/* /api: written for somebody BUILDING ON intentic, the way code.visualstudio.com/api is. Everything here has
- * one reader: an author. The person installing what they made reads /docs.
+/* /developers: written for somebody BUILDING ON intentic, the way code.visualstudio.com/api is. Everything
+ * here has one reader: an author. The person installing what they made reads /docs.
+ *
+ * THE PATH IS THE MENU LABEL. This book lived at /api/ while the bar above it said "Developers", and the
+ * label is the accurate one: the shelves hold a getting-started guide, registry policy and what the trust
+ * words mean, and only some of it is reference. "API" over that is a promise of reference the book does not
+ * keep, and a reader who clicked "Developers" should not have to notice they landed somewhere else.
  *
  * TWO SHELVES, AND THEY ARE THE TWO JOBS. "Build" is the code: the format, the APIs, a working extension, and
  * the reference you open at a field name. "Ship" is the process: getting a pointer into a registry, what the
@@ -19,7 +24,7 @@ import { type Book, bookDestinations, bookHref, bookPages } from "./book";
  * a field name by someone who already shipped one. The "Reference" group label is what keeps a forty-row
  * route table from making the getting-started guide look like reference material. */
 export const apiBook: Book = {
-    id: "api",
+    id: "developers",
     label: "Developers",
     sections: [
         {

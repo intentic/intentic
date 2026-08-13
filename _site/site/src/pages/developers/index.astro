@@ -281,7 +281,7 @@ const agentPoints = [
         The extension API injects transport auth, and secret settings round-trip as "still set" rather than their value. That reduces routine credential handling; it is not a secrecy boundary from browser code sharing the app realm, which is why the source is audited.
     </p>
     <p>
-        <a href="/api/verify/">Verification &amp; trust</a> explains what those mechanics guarantee and what <strong>listed</strong>,{" "}
+        <a href="/developers/verify/">Verification &amp; trust</a> explains what those mechanics guarantee and what <strong>listed</strong>,{" "}
         <strong>verified</strong> and <strong>blocked</strong> mean. What they look like from the other side, at the
         moment somebody clicks install, is <a href="/docs/extensions/">Install &amp; manage extensions</a>.
     </p>
@@ -302,7 +302,7 @@ const agentPoints = [
         <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
         <li>
             <strong>Written in the workspace</strong>: a directory under <code>.intentic/workspace-extensions/</code>, run straight from
-            where it sits. No clone, no install step, no publishing: see <a href="/api/build/#workspace">Build an extension</a>.
+            where it sits. No clone, no install step, no publishing: see <a href="/developers/build/#workspace">Build an extension</a>.
         </li>
     </ul>
     <p>
@@ -326,14 +326,14 @@ const agentPoints = [
         The line between them is who pays per run. An extension costs you nothing each time it is used, so it is free. A service is for
         when every run costs <em>you</em> real money, such as a paid data API, heavy compute or a licensed corpus, where giving it away per
         run would mean paying to be used. Almost everything should be an extension; if yours is the exception,{" "}
-        <a href="/api/services/">Offer a paid service</a> is the provider's whole side of it.
+        <a href="/developers/services/">Offer a paid service</a> is the provider's whole side of it.
     </p>
 
     <DocsRelated
         links={[
-            { href: "/api/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },
-            { href: "/api/manifest/", title: "Manifest reference", why: "every contribution point and every field." },
-            { href: "/api/publish/", title: "Publish & registries", why: "get yours listed, without an account or an upload." },
+            { href: "/developers/build/", title: "Build an extension", why: "a working rail view, from empty directory to installed." },
+            { href: "/developers/manifest/", title: "Manifest reference", why: "every contribution point and every field." },
+            { href: "/developers/publish/", title: "Publish & registries", why: "get yours listed, without an account or an upload." },
         ]}
     />
 </DocsLayout>

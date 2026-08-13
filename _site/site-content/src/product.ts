@@ -4,8 +4,14 @@ import type { ShotImage } from "./landing";
  *
  * The shelf used to list surfaces (Fleet board, Chat & plan mode, Review & land, the editor…), and half of
  * those read as table stakes any agentic editor has, so the menu undersold the product. It now names five
- * outcomes: Orchestrate, Empower, Automate, Supervise, Delegate, and each page folds the relevant surfaces
- * underneath it as proof. See docs/marketing/landing-blueprint.md ("The feature pages") for the mapping.
+ * outcomes: Run, Connect, Automate, Review, Host, and each page folds the relevant surfaces underneath it as
+ * proof. See docs/marketing/landing-blueprint.md ("The feature pages") for the mapping.
+ *
+ * THE SLUG IS THE LABEL, LOWERCASED, AND THAT IS THE RULE. These pages used to be shelved under /product/
+ * with latinate slugs (orchestrate, empower, supervise, delegate) while the menu above them said Features,
+ * Run, Connect, Review, Host: a visitor clicked one word and the address bar answered with another. A URL is
+ * read: in a search result, in a shared link, in the status bar before the click. Two vocabularies for one
+ * page means one of them is wrong, and the menu's is the one written for a reader.
  *
  * Every `src` here is still a file the screenshot harness wrote from the demo build
  * (`_tools/e2e/shots/capture.mts`), so a claim on these pages is a screen you can open in the live demo.
@@ -69,13 +75,13 @@ export interface ProductPage {
     meta: { title: string; description: string; datePublished: string };
 }
 
-export const productHref = (slug: string): string => `/product/${slug}/`;
+export const productHref = (slug: string): string => `/features/${slug}/`;
 
 const PUBLISHED = "2026-08-09";
 
 export const productPages: ProductPage[] = [
     {
-        slug: "orchestrate",
+        slug: "run",
         navLabel: "Run",
         menuBlurb: "Run ten agents at once and see which one needs you",
         heading: "Run the fleet. Get pulled in only when one needs you.",
@@ -123,7 +129,7 @@ export const productPages: ProductPage[] = [
         },
     },
     {
-        slug: "empower",
+        slug: "connect",
         navLabel: "Connect",
         menuBlurb: "Connect agents to the systems they need",
         heading: "An agent is only as useful as what it can reach.",
@@ -233,7 +239,7 @@ export const productPages: ProductPage[] = [
         },
     },
     {
-        slug: "supervise",
+        slug: "review",
         navLabel: "Review",
         menuBlurb: "It proposes, you approve, and nothing lands unread",
         heading: "It proposes. You approve. Nothing lands until you've read the diff.",
@@ -296,7 +302,7 @@ export const productPages: ProductPage[] = [
         },
     },
     {
-        slug: "delegate",
+        slug: "host",
         navLabel: "Host",
         menuBlurb: "Give it a server of its own and hand off the job",
         heading: "Host the work. Keep control.",

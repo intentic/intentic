@@ -11,7 +11,7 @@ import {
 import fallback from "./registry.fallback.json";
 
 /* The gallery's data, read at BUILD time from the registry repository. So `/extensions/` is a static page
- * cut from a JSON file, exactly like `/product/` and `/compare/`, with no backend, no database and no admin
+ * cut from a JSON file, exactly like `/features/` and `/compare/`, with no backend, no database and no admin
  * panel behind it. Curation happens as pull requests over there; a deploy is how it reaches the web.
  *
  * The build fetches raw from GitHub and falls back to the vendored copy imported above when that fails. A

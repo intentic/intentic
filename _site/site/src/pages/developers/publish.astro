@@ -9,7 +9,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * This page used to carry five jobs: how to list, what the installer sees, how updates behave, the trust model,
  * and money, which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
  * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
- * the trust vocabulary on /api/verify/, the release cycle on /api/maintain/, and the money at /earn/. What is
+ * the trust vocabulary on /developers/verify/, the release cycle on /developers/maintain/, and the money at /earn/. What is
  * left is the one thing an author does here: get a pointer to their repository into a registry. */
 
 const registry = `{
@@ -64,7 +64,7 @@ const sources = `// A repo of its own
     <p>
         <strong>Selling metered runs rather than shipping code?</strong> That is a service rather than an extension: no repo, no bundle
         and no pointer, just one endpoint the platform forwards paid calls to. Take{" "}
-        <a href="/api/services/">Offer a paid service</a> instead. Everything below is the extension's route.
+        <a href="/developers/services/">Offer a paid service</a> instead. Everything below is the extension's route.
     </p>
 
     <h2>The shape of it</h2>
@@ -170,7 +170,7 @@ const sources = `// A repo of its own
         <tbody>
             <tr>
                 <td><strong>Authoring &amp; install</strong></td>
-                <td>Everything in <a href="/api/build/">Build an extension</a>: authoring, sha-pinned install from any git repo (public or private), the manifest gate, per-extension settings, and the on/off switch.</td>
+                <td>Everything in <a href="/developers/build/">Build an extension</a>: authoring, sha-pinned install from any git repo (public or private), the manifest gate, per-extension settings, and the on/off switch.</td>
             </tr>
             <tr>
                 <td><strong>Registry</strong></td>
@@ -178,7 +178,7 @@ const sources = `// A repo of its own
             </tr>
             <tr>
                 <td><strong>Updates</strong></td>
-                <td>The <a href="/api/maintain/">update lifecycle</a>: badges, a powers diff, the kept previous version, one-click revert, the health watch, blocked-listing advisories, and per-extension update policies.</td>
+                <td>The <a href="/developers/maintain/">update lifecycle</a>: badges, a powers diff, the kept previous version, one-click revert, the health watch, blocked-listing advisories, and per-extension update policies.</td>
             </tr>
         </tbody>
     </table>
@@ -187,14 +187,14 @@ const sources = `// A repo of its own
         components with full types.
     </p>
     <p>
-        Building something and want it listed? The <a href="/api/build/">build guide</a> is the whole prerequisite. Add the topic when your
+        Building something and want it listed? The <a href="/developers/build/">build guide</a> is the whole prerequisite. Add the topic when your
         first sha is pushed and the pull request writes itself.
     </p>
 
     <DocsRelated
         links={[
-            { href: "/api/verify/", title: "Verification & trust", why: "what listed, verified and blocked each claim." },
-            { href: "/api/maintain/", title: "Maintain & grow", why: "release two: updates, ranking, and the revenue cadence." },
+            { href: "/developers/verify/", title: "Verification & trust", why: "what listed, verified and blocked each claim." },
+            { href: "/developers/maintain/", title: "Maintain & grow", why: "release two: updates, ranking, and the revenue cadence." },
             { href: "/docs/extensions/", title: "Install & manage extensions", why: "the same listing, read from the other side." },
         ]}
     />

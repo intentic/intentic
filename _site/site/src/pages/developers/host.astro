@@ -85,7 +85,7 @@ const packages = [
         There is no ambient global and no client you construct. The API arrives as the argument to{" "}
         <code>activate()</code>, everything you register comes back as a disposable, and every door to the daemon on it is gated by the
         route allowlist in your manifest. If you are writing your first extension, start with{" "}
-        <a href="/api/build/">Build an extension</a>: this page is the reference it links back to.
+        <a href="/developers/build/">Build an extension</a>: this page is the reference it links back to.
     </p>
 
     <h2>Getting the handle</h2>
@@ -128,7 +128,7 @@ const packages = [
     <DocsCodeBlock code={rpc} lang="typescript" title="A typed read, cached correctly" />
     <p>
         You get the shell's own Vue and vue-query instances, so your components join the app's single query cache and re-theme with it. The
-        routes behind <code>rpc</code> are the ones on the <a href="/api/http/">HTTP API</a> page.
+        routes behind <code>rpc</code> are the ones on the <a href="/developers/http/">HTTP API</a> page.
     </p>
 
     <h2>api.workspace: repos, files and diffs</h2>
@@ -331,9 +331,9 @@ const packages = [
 
     <DocsRelated
         links={[
-            { href: "/api/http/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
-            { href: "/api/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
-            { href: "/api/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
+            { href: "/developers/http/", title: "HTTP API", why: "the routes behind <code>api.sandbox.rpc</code>, and how to call them without a browser." },
+            { href: "/developers/build/", title: "Build an extension", why: "the same surface as a walkthrough, ending in a real install." },
+            { href: "/developers/manifest/", title: "Manifest reference", why: "every contribution point these registrations have to match." },
         ]}
     />
 </DocsLayout>

@@ -28,6 +28,42 @@ const SCRIPTS: Record<string, string> = {
     "/update.ps1": "recreate.ps1",
 };
 
+/* Paths that moved, kept alive as 301s. The site's menu labels and its URLs used to disagree: "Features" over
+ * /product/, "Run" over /product/orchestrate/, "Developers" over /api/. The labels were the accurate half, so
+ * the paths moved to match them.
+ *
+ * These are the ONE compatibility layer this repo keeps, and the reason is that a URL is the only thing here
+ * somebody else has already written down: in a bookmark, a blog post, an answer on a forum, a search index.
+ * We can update every link we own in one commit and none of the links we don't. A 301 is also what tells a
+ * search engine to move the ranking rather than split it, which is the difference between a rename and a
+ * quiet traffic loss.
+ *
+ * The verb map is spelled out rather than derived from productPages: it is the OLD vocabulary, which by
+ * definition no longer appears in the content. Automate kept its name and so needs no entry.
+ *
+ * The /api and /product prefixes are handled as prefixes, so every page under them — including any added
+ * later, and any deep link with a #fragment — follows without a new line here. */
+const MOVED_VERBS: Record<string, string> = {
+    orchestrate: "run",
+    empower: "connect",
+    supervise: "review",
+    delegate: "host",
+};
+
+function movedPath(pathname: string): string | undefined {
+    let moved: string | undefined;
+    if (pathname === "/api" || pathname.startsWith("/api/")) {
+        moved = `/developers${pathname.slice("/api".length)}`;
+    } else if (pathname === "/product" || pathname.startsWith("/product/")) {
+        const [verb = "", ...tail] = pathname.slice("/product".length).replace(/^\//u, "").split("/");
+        moved = ["/features", MOVED_VERBS[verb] ?? verb, ...tail].join("/");
+    }
+    if (moved === undefined) return undefined;
+    // Astro builds with trailingSlash: "always", so a moved page has to land on the slashed form or the asset
+    // layer answers with the 404 page. Real files (the .md mirrors, llms.txt) keep their exact name instead.
+    return /\.[a-z0-9]+$/iu.test(moved) || moved.endsWith("/") ? moved : `${moved}/`;
+}
+
 // The Markdown mirror of /docs/quickstart/ lives at /docs/quickstart.md and is word-for-word the same
 // page, so it needs to say which of the two is the real one. A .md file can't carry <link rel=canonical>,
 // so the header does it — otherwise the pair reads as duplicate content.
@@ -104,6 +140,13 @@ async function resolveDownload(asset: (version: string) => string, key: string):
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
+
+        // Before anything else: a request for a path that moved never reaches the asset layer, which would
+        // answer it with the 404 page. The query string rides along; the fragment never left the browser.
+        const moved = movedPath(url.pathname);
+        if (moved !== undefined) {
+            return Response.redirect(new URL(`${moved}${url.search}`, url).href, 301);
+        }
 
         const download = DESKTOP_FILES[url.pathname.replace(/\/$/, "")];
         if (download !== undefined) {

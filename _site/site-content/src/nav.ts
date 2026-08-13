@@ -62,9 +62,9 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-/* Every feature page as a menu row, in the shelf's own order: five verbs (Orchestrate, Empower, Automate,
- * Supervise, Delegate) rather than a list of surfaces, so the menu reads as what you DO with a fleet, not the
- * furniture any editor has.
+/* Every feature page as a menu row, in the shelf's own order: five verbs (Run, Connect, Automate, Review,
+ * Host) rather than a list of surfaces, so the menu reads as what you DO with a fleet, not the furniture any
+ * editor has. Each row's label is its page's slug, so the word in the menu is the word in the address bar.
  *
  * ONE COLUMN, no group labels: a verb is its own grouping, so the run/environment/extend headers that once
  * sorted seven surfaces would be more scaffolding than the rows under them. What the menu is FOR is the
@@ -81,12 +81,16 @@ const productItems = (): MenuItem[] =>
 export const navEntries: NavEntry[] = [
     {
         /* "Features", not "Product": the site's own copy says free and open source, MIT on GitHub, platform
-         * included, and a bar that then says "Product" is reading from a SaaS vendor's script beside it. The
-         * URLs stay /product/*, because a label is a word and a URL is a promise other people have already
-         * linked to. */
+         * included, and a bar that then says "Product" is reading from a SaaS vendor's script beside it.
+         *
+         * AND THE PATH SAYS IT TOO. The label and the URL used to disagree — "Features" over /product/, "Run"
+         * over /product/orchestrate/ — on the theory that a label is a word while a URL is a promise already
+         * linked to. That gets the trade backwards: a URL is also read, and a visitor who clicks Run and lands
+         * on "orchestrate" has been handed a second vocabulary to learn for no benefit. The old paths are
+         * forwarded (see worker.ts), so the links other people made still arrive. */
         type: "menu",
         label: "Features",
-        prefix: "/product",
+        prefix: "/features",
         // The extension gallery is NOT a row here: it is already "Extensions" in this same bar, two items to
         // the right, and a menu whose neighbour duplicates it teaches the reader that the bar has no shape.
         sections: [{ items: productItems() }],
@@ -112,7 +116,8 @@ export const navEntries: NavEntry[] = [
      * exists to make. Two shelf rows, and the reason a reader picks one over the other is the audience
      * line under each: Build is the code, Ship is the process. "Developers" rather than "API" because the menu
      * holds both jobs, and a bar that says "API" over registry policy is promising reference it isn't holding.
-     * The URLs stay /api/*, because a label is a word and a URL is a promise other people have already linked to.
+     * The path now says "Developers" too, for the same reason the feature pages moved: see the Features entry
+     * above. The old /api/* paths are forwarded in worker.ts.
      *
      * THE THIRD ROW IS A PAGE, not a shelf, and it is the second thing you can ship here. Both artifacts are
      * now named on the one surface every visitor passes: the shelves cover the extension, and the service
@@ -131,7 +136,7 @@ export const navEntries: NavEntry[] = [
     {
         type: "menu",
         label: "Developers",
-        prefix: "/api",
+        prefix: "/developers",
         sections: [{ items: [...apiDestinations, apiServicesDestination] }],
         action: { label: "Browse the gallery", href: "/extensions/" },
     },

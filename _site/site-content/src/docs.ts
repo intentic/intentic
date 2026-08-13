@@ -167,7 +167,7 @@ export const docsBook: Book = {
                              * approving, updating and switching one off were written inside the page for AUTHORS, so
                              * the reader doing the most common thing anyone does with an extension had to read a
                              * publishing guide to find out what the install dialog was telling them. Building one is
-                             * the other half, and it lives in /api. */
+                             * the other half, and it lives in /developers. */
                             id: "extensions",
                             title: "Extensions",
                             blurb: "Find one, read what it may touch, install and keep it",

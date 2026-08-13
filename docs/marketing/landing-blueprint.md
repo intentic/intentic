@@ -26,8 +26,8 @@ automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat re
 bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
 **The environment argument did not die — it was demoted.** It rides in the FAQ's "How is this
-different from a custom GPT", on `/product/supervise/` (the `prompt-vs-environment` figure) and
-`/product/empower/` (the sandbox and its installed tools), and across `/compare/`. What it no longer
+different from a custom GPT", on `/features/review/` (the `prompt-vs-environment` figure) and
+`/features/connect/` (the sandbox and its installed tools), and across `/compare/`. What it no longer
 gets is four bands of the landing page.
 
 **Re-centered 2026-08-07 (recorded decision).** The headline claim moved off the IDE frame and onto
@@ -54,15 +54,15 @@ The core thesis, the ownership/economics/trust/connect objection bank and every 
 unchanged, and the page got shorter (~9,600 → ~8,000 px), not louder. The old loop's best proof is
 kept where it belongs: the full board leads Orchestrate, the review diff is Supervise's card. The
 sandbox "tools really installed" figure that rode in loop beat ② now lives only on the feature pages
-(`/product/empower/`, `/product/delegate/`).
+(`/features/connect/`, `/features/host/`).
 
 **Deliberately not on this page (all of it has a home).** The *detailed* product tour — each surface
-with its own screens and figures — lives on `/product/*`; the home's `#verbs` band is a one-line-per-verb
+with its own screens and figures — lives on `/features/*`; the home's `#verbs` band is a one-line-per-verb
 summary that links there, never a second copy of it. Also off the page: the prompt-vs-environment
-argument (`/product/supervise/`), the four-layer anatomy (same page), the integrations hub
-(`/product/empower/`), the Discord teammate mock (same page), team sharing (`/product/delegate/`), the
+argument (`/features/review/`), the four-layer anatomy (same page), the integrations hub
+(`/features/connect/`), the Discord teammate mock (same page), team sharing (`/features/host/`), the
 workforce triptych and the company topology (`/docs/autonomous-employees/`, `/docs/reference-architecture/`),
-and Doorbell (`/product/empower/`, `/docs/doorbell/`). Adding any of those back as a full band is a
+and Doorbell (`/features/connect/`, `/docs/doorbell/`). Adding any of those back as a full band is a
 regression, not an improvement — the `#verbs` tour carries the link instead.
 
 **Deployment is not part of the product (do not re-add).** The monorepo happens to include a
@@ -86,8 +86,8 @@ this page.
   re-shoot needs no database, API or tunnel. Whole surfaces are captured; a page that wants a detail crops
   in CSS.
 - Feature pages: `_site/site-content/src/product.ts` — a `productPages` array (five verbs) rendered by
-  `_site/site/src/pages/product/[slug].astro`. Adding a verb there gives it a page, a nav row, a footer
-  link, a card on `/product/`, page meta and an llms.txt entry.
+  `_site/site/src/pages/features/[slug].astro`. Adding a verb there gives it a page, a nav row, a footer
+  link, a card on `/features/`, page meta and an llms.txt entry.
 
 ## Conversion model
 
@@ -180,7 +180,7 @@ the `run-a-fleet` answer with a link to the guide that owns it). It is not part 
 page: a visitor self-selects into a band, the answers carry the arguments the bands no longer make, and
 it is the page's only FAQPage-eligible content. Do not trim it for length.
 
-## The feature pages (`/product/*`)
+## The feature pages (`/features/*`)
 
 The landing page sells the claim; these pages show the product — and **they are named as VERBS, not
 surfaces**, because the old surface names (Fleet board, Chat & plan mode, Review & land, the editor…)
@@ -195,7 +195,7 @@ menu order:
 
 **Recorded decision (2026-08-09): surfaces → verbs (do not quietly revert).** The shelf used to be seven
 surface pages grouped run / environment / extend; those noun names filed us next to ordinary editors and
-buried the differentiators. The `page.group` field is gone — the menu and the `/product/` index are one
+buried the differentiators. The `page.group` field is gone — the menu and the `/features/` index are one
 flat ordered list of verbs, and each verb folds the relevant surfaces underneath it as proof.
 
 **Two positioning guards baked into the cut:**
@@ -205,7 +205,7 @@ flat ordered list of verbs, and each verb folds the relevant surfaces underneath
   (see messaging.md); Delegate never means "ship your app with our deployer", and ownership leads the page
   so the moat stays legible.
 - **Doorbell folded into Empower, not deleted.** A website chat widget is one thing you empower an agent to
-  do, not a product of its own — it is a block on `/product/empower/`, and `/docs/doorbell/` still owns the
+  do, not a product of its own — it is a block on `/features/connect/`, and `/docs/doorbell/` still owns the
   deep guide.
 
 Rules that keep them honest:
@@ -258,8 +258,8 @@ recorded decisions, not omissions.
 ### No new bands (deliberate — the 2026-08-02 cut)
 
 The third recorded no, and the easiest one to undo by accident. **A capability that deserves attention
-belongs on the relevant verb's `/product/*` page and, at most, its verb's line in `#verbs`; it does not
-get a band of its own.** Before adding a section, check whether the thing already has a `/product/*` or
+belongs on the relevant verb's `/features/*` page and, at most, its verb's line in `#verbs`; it does not
+get a band of its own.** Before adding a section, check whether the thing already has a `/features/*` or
 `/docs/*` page: if it does, the honest move is a link. Fourteen bands is what cost this page its meaning.
 
 **The one carve-out, and its boundary.** `#trust` was added later the same day and is not a breach of
@@ -269,7 +269,7 @@ nice-to-have, and it answers a question the page provably was not answering: the
 in the JSON-LD, told to Google and never to the reader. That is the shape of a legitimate exception —
 **an unanswered objection on the path to the CTA, not a feature that wants more room.** A feature never
 qualifies. If a future band cannot be described as "the reader will not act until this is answered",
-it belongs on a `/product/*` page the `#verbs` tour links to, not on a band of its own.
+it belongs on a `/features/*` page the `#verbs` tour links to, not on a band of its own.
 
 ## Conversion checklist
 

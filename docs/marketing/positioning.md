@@ -95,7 +95,7 @@ Ranked for the **landing page**, which gets one claim and about five arguments. 
 — true, and only legible to a reader already inside the agent-tooling debate. Re-centered 2026-08-07:
 #1 now carries persistence and reach — the machine-of-their-own claim — after the brand line moved off the IDE
 frame (see messaging.md's retired-framing list). What is both unique and picturable in one read is #1
-below, so that is what the page now claims and proves; the rest support it or live on `/product/*`,
+below, so that is what the page now claims and proves; the rest support it or live on `/features/*`,
 `/docs/*` and `/compare/`. See
 [landing-blueprint.md](landing-blueprint.md#core-thesis-the-spine) for the whole rationale.
 

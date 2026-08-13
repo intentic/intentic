@@ -7,7 +7,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  * Everything on it was previously written inside the PUBLISHING guide, under headings addressed to an author:
  * "what the person installing sees", "updates". So the reader doing the most common thing anybody does with an
  * extension had to open a page about registry pull requests to find out what the dialog in front of them meant.
- * Authoring is the other half, and it is /api.
+ * Authoring is the other half, and it is /developers.
  *
  * WRITTEN AS A DECISION, not as a feature list. The order is the order the reader meets it: where these come
  * from, what the dialog is telling them, how to read a listing, then living with one: updates, withdrawal,
@@ -129,7 +129,7 @@ const policies = [
         A separate <strong>✓ loads</strong> mark means a nightly job re-checked the pinned commit and it would install. That is evidence, not endorsement: "it loads" and "somebody read it" are different claims, and the gallery keeps them apart. Stars are the source repo's stars.
     </p>
     <p>
-        <a href="/api/verify/">Verification &amp; trust</a> is precise about what each of those words guarantees, and what none of them do. The short version: installing an extension is trusting its author, like installing an editor plugin. Source-bound automated review and a declaration of host access reduce risk; they do not isolate extension code from the app or sandbox.
+        <a href="/developers/verify/">Verification &amp; trust</a> is precise about what each of those words guarantees, and what none of them do. The short version: installing an extension is trusting its author, like installing an editor plugin. Source-bound automated review and a declaration of host access reduce risk; they do not isolate extension code from the app or sandbox.
     </p>
 
     <h2>Living with one</h2>
@@ -205,7 +205,7 @@ const policies = [
     <DocsRelated
         links={[
             { href: "/docs/capabilities/", title: "Capabilities", why: "many extensions arrive as a connector card; this is what a connector actually gives the agent." },
-            { href: "/api/", title: "Extension API", why: "build one yourself: a workspace directory is already an extension." },
+            { href: "/developers/", title: "Extension API", why: "build one yourself: a workspace directory is already an extension." },
             { href: "/docs/troubleshooting/", title: "Troubleshooting", why: "an extension that installed but went quiet, and how to tell which half broke." },
         ]}
     />
