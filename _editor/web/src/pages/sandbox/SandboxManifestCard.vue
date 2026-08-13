@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, StatusBadge } from "@intentic/ui";
+import { Card, Row, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useManifestProblems } from "../../composables/sandbox/useManifestProblems";
 
@@ -34,19 +34,15 @@ const describe = (problem: { kind: string; detail: string; suggestion?: string }
 
 <template>
     <Card v-if="hasProblems" class="flex flex-col gap-4">
-        <div class="flex items-start gap-2.5">
-            <Icon name="info-circle" class="mt-0.5 text-lg text-muted" />
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between gap-3">
-                    <h2 class="font-semibold leading-tight">Some settings aren't being applied</h2>
-                    <StatusBadge variant="warning" :label="`${problemCount} to fix`" dot />
-                </div>
-                <p class="text-2xs text-subtle">
-                    This sandbox read its settings files and couldn't make sense of part of them, so it fell back to defaults there. Everything else
-                    is unaffected, and fixing the file puts this right on its own.
-                </p>
-            </div>
-        </div>
+        <Row
+            flush
+            :heading="2"
+            icon="info-circle"
+            title="Some settings aren't being applied"
+            description="This sandbox read its settings files and couldn't make sense of part of them, so it fell back to defaults there. Everything else is unaffected, and fixing the file puts this right on its own."
+        >
+            <template #meta><StatusBadge variant="warning" :label="`${problemCount} to fix`" dot /></template>
+        </Row>
 
         <div v-for="report in reports" :key="report.path" class="flex flex-col gap-1">
             <p class="font-mono text-2xs text-content">{{ report.path }}</p>

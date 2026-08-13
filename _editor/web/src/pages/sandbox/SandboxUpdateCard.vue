@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, StatusBadge, useOsPreference } from "@intentic/ui";
+import { Card, Row, StatusBadge, useOsPreference } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
@@ -46,35 +46,33 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 
 <template>
     <Card v-if="updateAvailable || rollbackTo" class="flex flex-col gap-4">
-        <div class="flex items-start gap-2.5">
-            <Icon
-                :name="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `history`"
-                class="mt-0.5 text-lg"
-                :class="breaking ? `text-danger` : `text-muted`"
-            />
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between gap-3">
-                    <h2 class="font-semibold leading-tight">
-                        {{ breaking ? `Update available — changes how things work` : updateAvailable ? `Update available` : `Sandbox image` }}
-                    </h2>
-                    <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
-                    <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
-                </div>
-                <p v-if="breaking" class="text-2xs text-subtle">
+        <Row
+            flush
+            :heading="2"
+            :icon="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `history`"
+            :tone="breaking ? `danger` : `default`"
+            :title="breaking ? `Update available — changes how things work` : updateAvailable ? `Update available` : `Sandbox image`"
+        >
+            <template #description>
+                <template v-if="breaking">
                     This update removes or changes things you may rely on — read what changes below before taking it. Your files (in /work) are kept
                     either way, and you can roll back afterwards —
                     <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
                         >what updates never break</a
                     >.
-                </p>
-                <p v-else-if="updateAvailable" class="text-2xs text-subtle">
+                </template>
+                <template v-else-if="updateAvailable">
                     A newer sandbox image has been released. Updating pulls it and recreates your sandbox — your files (in /work) are kept.
-                </p>
-                <p v-else class="text-2xs text-subtle">
+                </template>
+                <template v-else>
                     You are on the newest image for this channel. If the last update caused trouble, you can go back to the one before it.
-                </p>
-            </div>
-        </div>
+                </template>
+            </template>
+            <template #meta>
+                <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
+                <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
+            </template>
+        </Row>
 
         <!-- WHAT STOPS WORKING, before anything else on the card and never truncated: a warning that fell off
              the end of a capped list is a breaking update taken unwarned. Each line was written in the commit

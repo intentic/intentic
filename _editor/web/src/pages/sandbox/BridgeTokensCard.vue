@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton, formatDate, Notice } from "@intentic/ui";
+import { Card, Code, CopyButton, formatDate, Notice, Row } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useControlTokens } from "../../composables/sandbox/useControlTokens";
@@ -38,16 +38,13 @@ const zedSnippet = computed(() =>
 
 <template>
     <Card class="flex flex-col gap-4">
-        <div class="flex items-center gap-2.5">
-            <Icon name="code" class="text-lg text-muted" />
-            <div>
-                <h2 class="font-semibold leading-tight">Editor bridge (ACP)</h2>
-                <p class="text-2xs text-subtle">
-                    Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent
-                    settings, and open your synced folder as the project so edits and diffs line up.
-                </p>
-            </div>
-        </div>
+        <Row
+            flush
+            :heading="2"
+            icon="code"
+            title="Editor bridge (ACP)"
+            description="Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent settings, and open your synced folder as the project so edits and diffs line up."
+        />
         <p class="text-2xs text-warning">
             An editor token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
             here if it leaks.

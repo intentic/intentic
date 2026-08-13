@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, CopyButton, Notice, type NoticeModel } from "@intentic/ui";
+import { Card, cmp, CopyButton, Notice, type NoticeModel, Row } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
@@ -40,17 +40,12 @@ const importMemory = async (): Promise<void> => {
 
 <template>
     <Card class="flex flex-col gap-3">
-        <div class="flex items-center gap-2.5">
-            <Icon name="sparkles" class="text-lg text-muted" />
-            <div>
-                <h2 class="font-semibold leading-tight">Import memory</h2>
-                <p class="text-xs text-muted">
-                    Bring context from another AI assistant into
-                    <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> so Claude and ChatGPT remember
-                    it.
-                </p>
-            </div>
-        </div>
+        <Row flush :heading="2" icon="sparkles" title="Import memory">
+            <template #description>
+                Bring context from another AI assistant into
+                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> so Claude and ChatGPT remember it.
+            </template>
+        </Row>
 
         <Notice v-if="importError" :of="importError" />
 

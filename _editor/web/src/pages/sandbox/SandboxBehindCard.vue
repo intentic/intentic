@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Code, CopyButton } from "@intentic/ui";
+import { Card, Code, CopyButton, Row } from "@intentic/ui";
 import { computed } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../../composables/sandbox/useDaemonRoutes";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
@@ -60,16 +60,16 @@ const reloadPage = (): void => location.reload();
 
 <template>
     <Card v-if="daemonBehind || daemonDrifted" class="flex flex-col gap-3">
-        <div class="flex items-start gap-2.5">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-lg text-warning" />
-            <div class="min-w-0 flex-1">
-                <h2 class="font-semibold leading-tight">
-                    {{ daemonBehind ? `Sandbox is behind the app` : `App and sandbox are out of sync` }}
-                </h2>
-                <p v-if="daemonBehind" class="mt-1 text-2xs text-subtle">{{ missingLabel }} won't work until the sandbox is reloaded.</p>
-                <p v-else class="mt-1 text-2xs text-subtle">{{ driftedLabel }} may show blank values or fail to save.</p>
-            </div>
-        </div>
+        <Row
+            flush
+            :heading="2"
+            icon="exclamation-triangle"
+            tone="warning"
+            :title="daemonBehind ? `Sandbox is behind the app` : `App and sandbox are out of sync`"
+            :description="
+                daemonBehind ? `${missingLabel} won't work until the sandbox is reloaded.` : `${driftedLabel} may show blank values or fail to save.`
+            "
+        />
 
         <div v-if="isDev" class="flex flex-wrap items-center gap-2 sm:pl-7">
             <Button v-if="daemonDrifted" label="Reload page" size="small" @click="reloadPage" />

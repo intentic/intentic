@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, Code } from "@intentic/ui";
+import { Card, cmp, Code, Row } from "@intentic/ui";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -88,18 +88,14 @@ onUnmounted(stop);
 <template>
     <Card id="desktop-sync" class="@container flex flex-col gap-4 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
         <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-            <div class="flex items-center gap-2.5">
-                <Icon name="sync" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Desktop sync</h2>
-                    <p class="text-2xs text-subtle">
-                        <template v-if="isOwner">
-                            Edit your sandbox in your own editor, and reach its dev servers on your own localhost — same ports, cookies, and CORS.
-                        </template>
-                        <template v-else>Mirror this sandbox's dev servers onto your own localhost — same ports, cookies, and CORS.</template>
-                    </p>
-                </div>
-            </div>
+            <Row flush :heading="2" icon="sync" title="Desktop sync">
+                <template #description>
+                    <template v-if="isOwner">
+                        Edit your sandbox in your own editor, and reach its dev servers on your own localhost — same ports, cookies, and CORS.
+                    </template>
+                    <template v-else>Mirror this sandbox's dev servers onto your own localhost — same ports, cookies, and CORS.</template>
+                </template>
+            </Row>
             <!-- The pill follows the HEARTBEAT, not the enrollment record: a green "Enabled" over a machine that
                  stopped polling hours ago is the exact lie that let a lost pairing go unnoticed. -->
             <span

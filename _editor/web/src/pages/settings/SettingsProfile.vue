@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Card, cmp } from "@intentic/ui";
+import { Avatar, Card, cmp, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -69,13 +69,7 @@ const saveProfile = async (): Promise<void> => {
 <template>
     <Card>
         <form @submit.prevent="saveProfile">
-            <div class="flex items-center gap-2.5">
-                <Icon name="user" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Profile</h2>
-                    <p class="text-xs text-muted">Your display name and avatar on this platform.</p>
-                </div>
-            </div>
+            <Row flush :heading="2" icon="user" title="Profile" description="Your display name and avatar on this platform." />
             <div class="mt-3 flex items-center gap-3">
                 <Avatar :size="56" :src="avatarImage" />
                 <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">

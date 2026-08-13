@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ClaimChallenge, CreatorState } from "@intentic-app/api-contract";
-import { Card, Icon } from "@intentic/ui";
+import { Card, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
@@ -139,13 +139,7 @@ const connect = async (): Promise<void> => {
 
 <template>
     <Card>
-        <div class="flex items-center gap-2.5">
-            <Icon name="credit-card" class="text-lg text-muted" />
-            <div>
-                <h2 class="font-semibold leading-tight">Getting paid</h2>
-                <p class="text-xs text-muted">Claim what you publish, and connect where the money goes.</p>
-            </div>
-        </div>
+        <Row flush :heading="2" icon="credit-card" title="Getting paid" description="Claim what you publish, and connect where the money goes." />
 
         <div class="mt-3 flex flex-col gap-4">
             <p v-if="loadError" class="text-2xs text-danger">{{ loadError }}</p>

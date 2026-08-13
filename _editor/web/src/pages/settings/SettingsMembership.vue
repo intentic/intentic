@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Icon, Notice } from "@intentic/ui";
+import { Card, Icon, Notice, Row } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -171,13 +171,7 @@ const assurances = computed(() => [
         <Notice v-if="loadError" :of="{ tone: `danger`, title: `Couldn't load your membership.`, detail: loadError }" />
 
         <Card v-else-if="membership && !membership.enabled">
-            <div class="flex items-center gap-2.5">
-                <Icon name="star" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Membership</h2>
-                    <p class="text-xs text-muted">This platform doesn't offer memberships.</p>
-                </div>
-            </div>
+            <Row flush :heading="2" icon="star" title="Membership" description="This platform doesn't offer memberships." />
         </Card>
 
         <!-- ══ MEMBER ══════════════════════════════════════════════════════════════════════════════════════
@@ -185,11 +179,11 @@ const assurances = computed(() => [
              room arguing is settled: what is left today, when it comes back, and where the money went. -->
         <template v-else-if="membership && membership.member">
             <Card>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <Icon name="check-circle" class="text-lg text-success" />
-                    <h2 class="font-semibold leading-tight">{{ onTrial ? `You're on trial` : `You're a member` }}</h2>
-                    <span v-if="renewsOn" class="ml-auto text-xs text-subtle">{{ onTrial ? `trial ends` : `renews` }} {{ renewsOn }}</span>
-                </div>
+                <Row flush :heading="2" icon="check-circle" tone="success" :title="onTrial ? `You're on trial` : `You're a member`">
+                    <template #meta>
+                        <span v-if="renewsOn">{{ onTrial ? `trial ends` : `renews` }} {{ renewsOn }}</span>
+                    </template>
+                </Row>
 
                 <!-- The meter. The number is the headline because it is the answer; the bar exists to make
                      "a lot left" and "nearly out" readable without reading, and carries no colour meaning of
@@ -235,32 +229,35 @@ const assurances = computed(() => [
              A member whose card stopped working. One thing to do, said warmly and without a sales pitch: this
              reader has already decided, and the only question left is a payment method. -->
         <Card v-else-if="membership && lapsed" class="border-warning/40 bg-warning/[0.07]">
-            <div class="flex gap-3">
-                <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-lg text-warning" />
-                <div class="min-w-0 flex-1">
-                    <h2 class="font-semibold leading-tight">Your membership needs a working card</h2>
-                    <p class="mt-1.5 text-sm text-muted">
-                        Stripe couldn't take the last payment, so premium extensions are switched off until one goes through. Nothing else has changed
-                        — what you've installed stays installed, and your allowance comes back the moment the charge clears.
-                    </p>
-                    <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Row
+                flush
+                :heading="2"
+                icon="exclamation-circle"
+                tone="warning"
+                title="Your membership needs a working card"
+                description="Stripe couldn't take the last payment, so premium extensions are switched off until one goes through. Nothing else has changed — what you've installed stays installed, and your allowance comes back the moment the charge clears."
+            >
+                <template #below>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Button label="Update payment on Stripe" :loading="working" class="ui-button-loud" @click="open(`portal`)" />
                         <p class="text-2xs text-subtle">Stripe reports this membership as “{{ lapsed }}”.</p>
                     </div>
-                </div>
-            </div>
+                </template>
+            </Row>
         </Card>
 
         <!-- ══ ACTIVATING ══════════════════════════════════════════════════════════════════════════════════
              The webhook's few seconds, owned by the app rather than handed back to the person who just paid. -->
         <Card v-else-if="membership && justJoined && activating" class="border-primary-fill/25 bg-primary-fill/5">
-            <div class="flex items-center gap-3">
-                <Icon name="spinner" class="animate-spin text-lg text-link" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Payment received — activating your membership</h2>
-                    <p class="mt-0.5 text-xs text-muted">This takes a few seconds. The page updates itself; there's nothing to click.</p>
-                </div>
-            </div>
+            <Row
+                flush
+                :heading="2"
+                icon="spinner"
+                spin
+                tone="info"
+                title="Payment received — activating your membership"
+                description="This takes a few seconds. The page updates itself; there's nothing to click."
+            />
         </Card>
 
         <!-- ══ THE OFFER ═══════════════════════════════════════════════════════════════════════════════════

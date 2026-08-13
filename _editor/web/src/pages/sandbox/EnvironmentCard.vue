@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Card, Code, Notice, type NoticeModel, Segmented, StatusBadge } from "@intentic/ui";
+import { Card, Code, Notice, type NoticeModel, Row, Segmented, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
@@ -86,18 +86,14 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
 <template>
     <Card v-if="proposal || pending || applied" class="flex flex-col gap-4">
-        <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2.5">
-                <Icon name="box" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Environment</h2>
-                    <p class="text-2xs text-subtle">
-                        What this sandbox has installed, and the recipe it was built from. The agent proposes changes; you approve them, and a rebuild
-                        applies the result.
-                    </p>
-                </div>
-            </div>
-            <div class="flex shrink-0 items-center gap-2">
+        <Row
+            flush
+            :heading="2"
+            icon="box"
+            title="Environment"
+            description="What this sandbox has installed, and the recipe it was built from. The agent proposes changes; you approve them, and a rebuild applies the result."
+        >
+            <template #control>
                 <Segmented v-if="!unsupported" v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
@@ -105,8 +101,8 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <Button size="small" severity="secondary" :text="true" aria-label="Refresh" @click="load">
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
-            </div>
-        </div>
+            </template>
+        </Row>
 
         <!-- What the sandbox has, in plain language. Leads in every state — including a pending proposal, whose
              incoming entries appear here marked as awaiting approval, above the buttons that decide them. -->
