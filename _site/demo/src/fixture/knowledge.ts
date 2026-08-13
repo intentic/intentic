@@ -1,20 +1,20 @@
 import type { Graph, Note, NoteSummary, Overview, SearchHit } from "@intentic/ext-knowledge";
-import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "@intentic/ext-knowledge/vault";
+import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "@intentic/ext-knowledge/notes";
 
-/* THE KNOWLEDGE VAULT for acme-shop — the things around the code that no file in the repository records: who
+/* THE KNOWLEDGE BASE for acme-shop — the things around the code that no file in the repository records: who
  * the people are, what the projects are for, and what was decided and why.
  *
  * It is the demo's argument for the surface. Every note here is the kind of fact a colleague picks up in a
  * first month and nobody writes down, and the notes are DELIBERATELY INTERCONNECTED: the point of the section
  * is not that it holds notes but that following one gets you to the next. One link points at a note nobody has
- * written, because that is the ordinary state of a real vault and the panel is meant to show it as an
+ * written, because that is the ordinary state of a real knowledge base and the panel is meant to show it as an
  * invitation rather than as damage.
  *
  * Written as raw markdown and indexed by the extension's own engine, so the demo's backlinks, graph and counts
  * are computed exactly as the product computes them — a fixture that hand-authored those answers would be
  * showing visitors behaviour the product does not have.
  *
- * MUTABLE: save, delete and starting the vault off really write here, so the red pen works and the list
+ * MUTABLE: save, delete and starting it off really writes here, so the red pen works and the list
  * updates. It resets on reload, like every other piece of demo state. */
 
 const md = (path: string, content: string, minutesAgo: number, now: number): NoteFile => ({
@@ -35,8 +35,8 @@ relations: [works_on, knows, owns, decided_by, supersedes, about]
 
 # Vocabulary
 
-The words this vault has agreed on. Reuse one before inventing another — four names for one relationship means
-the vault can no longer answer questions by relationship.
+The words this knowledge base has agreed on. Reuse one before inventing another — four names for one relationship means
+it can no longer answer questions by relationship.
 
 - \`person\` — someone real. How to work with them matters as much as what they do.
 - \`project\` — a body of work with an owner.
@@ -164,11 +164,11 @@ carts, and Stripe correctly returned the first charge for the second cart.
     ),
 ];
 
-let vault: NoteFile[] | undefined;
+let seeded: NoteFile[] | undefined;
 
-const knowledgeVault = (now: number): NoteFile[] => {
-    vault ??= seed(now);
-    return vault;
+const noteFiles = (now: number): NoteFile[] => {
+    seeded ??= seed(now);
+    return seeded;
 };
 
 // Save (and create). Returns false for a path the real backend would refuse, so the demo's error state is the
@@ -177,7 +177,7 @@ export const saveKnowledgeNote = (now: number, path: string, content: string): b
     if (path.split(`/`).includes(`..`) || path.startsWith(`/`) || !path.toLowerCase().endsWith(`.md`)) {
         return false;
     }
-    const notes = knowledgeVault(now);
+    const notes = noteFiles(now);
     const existing = notes.findIndex((candidate) => candidate.path === path);
     const written = { path, content, modifiedAt: now, sizeBytes: content.length };
     if (existing === -1) {
@@ -189,7 +189,7 @@ export const saveKnowledgeNote = (now: number, path: string, content: string): b
 };
 
 export const deleteKnowledgeNote = (now: number, path: string): boolean => {
-    const notes = knowledgeVault(now);
+    const notes = noteFiles(now);
     const at = notes.findIndex((candidate) => candidate.path === path);
     if (at === -1) {
         return false;
@@ -198,16 +198,16 @@ export const deleteKnowledgeNote = (now: number, path: string): boolean => {
     return true;
 };
 
-// Where the demo's vault "is" — the folder the panel names, and the same default a real sandbox uses.
-const KNOWLEDGE_VAULT_DIR = `knowledge`;
+// Where the demo's notes "are" — the folder the panel names, and the same default a real sandbox uses.
+const KNOWLEDGE_DIR = `knowledge`;
 
 /* THE ANSWERS, computed by the extension's own engine over the notes above — not hand-authored. The backlinks,
  * the map and the drift report a visitor sees are the ones the product computes; a fixture that wrote them out
  * by hand would be showing behaviour the product does not have, and would go quietly wrong the first time the
  * engine improved. Everything below is one index build and one shaping call, exactly as the backend does it. */
-const index = (now: number) => buildIndex(knowledgeVault(now));
+const index = (now: number) => buildIndex(noteFiles(now));
 
-export const knowledgeOverview = (): Overview => overviewFor(index(Date.now()), KNOWLEDGE_VAULT_DIR);
+export const knowledgeOverview = (): Overview => overviewFor(index(Date.now()), KNOWLEDGE_DIR);
 
 export const knowledgeNotes = (): NoteSummary[] => {
     const built = index(Date.now());

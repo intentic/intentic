@@ -1,6 +1,6 @@
-import type { VaultNote } from "./note.js";
+import type { ParsedNote } from "./note.js";
 
-/* THE VAULT'S DECLARED VOCABULARY — which kinds of thing and which relationships this vault has agreed to use.
+/* THE DECLARED VOCABULARY — which kinds of thing and which relationships this knowledge base has agreed to use.
  *
  * It is a NOTE, not a config file and not a schema the tools enforce. That is the whole design decision, and
  * it is the difference between a knowledge base an agent fills and one it stalls against:
@@ -8,7 +8,7 @@ import type { VaultNote } from "./note.js";
  *   - An agent meets a new kind of thing MID-TASK. If declaring it first were required, the capture would fail
  *     at the moment the fact was in hand, and the fact is what we were trying to keep. So an undeclared type
  *     works immediately.
- *   - Left at that, the vault silently accumulates `person`, `people`, `Person` and `human` as four kinds. So
+ *   - Left at that, the knowledge base silently accumulates `person`, `people`, `Person` and `human` as four kinds. So
  *     everything undeclared is REPORTED — in the panel's overview and in `kb check` — as drift to adopt or
  *     rename. The vocabulary is a habit the tools help keep, not a gate they enforce.
  *
@@ -16,23 +16,23 @@ import type { VaultNote } from "./note.js";
  * is a choice we made and won't revisit without cause" gets said, and no field on a schema would carry that. */
 
 // The note that declares it. Any note may claim the role by its type; the underscore keeps the conventional one
-// at the top of a sorted vault listing, out of the way of the notes that are about something.
+// at the top of a sorted knowledge base listing, out of the way of the notes that are about something.
 export const VOCABULARY_TYPE = "vocabulary";
 export const VOCABULARY_PATH = "_vocabulary.md";
 
 export interface Vocabulary {
     readonly types: readonly string[];
     readonly relations: readonly string[];
-    // The note it was read from, so the panel can offer to open it. Undefined ⇒ this vault has declared none,
+    // The note it was read from, so the panel can offer to open it. Undefined ⇒ this knowledge base has declared none,
     // which is a legitimate state: everything is then simply undeclared, and nothing is reported as drift.
     readonly path: string | undefined;
 }
 
-// A vault that has declared none — a legitimate state, not a missing one: everything is then simply
+// A knowledge base that has declared none — a legitimate state, not a missing one: everything is then simply
 // undeclared, and nothing is reported as drift.
 const EMPTY_VOCABULARY: Vocabulary = { types: [], relations: [], path: undefined };
 
-export const readVocabulary = (notes: readonly VaultNote[]): Vocabulary => {
+export const readVocabulary = (notes: readonly ParsedNote[]): Vocabulary => {
     const note = notes.find((candidate) => candidate.type === VOCABULARY_TYPE);
     if (note === undefined) {
         return EMPTY_VOCABULARY;
@@ -44,12 +44,12 @@ export const readVocabulary = (notes: readonly VaultNote[]): Vocabulary => {
     };
 };
 
-// A word this vault has not adopted, and how many notes use it — the drift report, in the shape both the
+// A word this knowledge base has not adopted, and how many notes use it — the drift report, in the shape both the
 // overview panel and `kb check` render. Sorted by weight: the one used twelve times is the one worth a decision.
 export interface Drift {
     readonly word: string;
     readonly uses: number;
-    // Which notes use it, capped by the caller — enough to go look, not a second copy of the vault.
+    // Which notes use it, capped by the caller — enough to go look, not a second copy of the knowledge base.
     readonly notes: readonly string[];
 }
 
@@ -63,10 +63,10 @@ const tally = (entries: readonly (readonly [string, string])[]): Drift[] => {
         .toSorted((a, b) => b.uses - a.uses || a.word.localeCompare(b.word));
 };
 
-/* Types in use that the vocabulary does not list. A vault with NO vocabulary reports nothing — there is nothing
- * to have drifted from, and a fresh vault flagging every note it holds would be noise on the day it is least
+/* Types in use that the vocabulary does not list. A knowledge base with NO vocabulary reports nothing — there is nothing
+ * to have drifted from, and a fresh knowledge base flagging every note it holds would be noise on the day it is least
  * useful. The vocabulary note's own type is never drift, however it is spelled. */
-export const typeDrift = (notes: readonly VaultNote[], vocabulary: Vocabulary): Drift[] => {
+export const typeDrift = (notes: readonly ParsedNote[], vocabulary: Vocabulary): Drift[] => {
     if (vocabulary.path === undefined) {
         return [];
     }
@@ -76,7 +76,7 @@ export const typeDrift = (notes: readonly VaultNote[], vocabulary: Vocabulary): 
 
 // Relationship names in use that the vocabulary does not list — the same rule, over the header fields that
 // carry links.
-export const relationDrift = (notes: readonly VaultNote[], vocabulary: Vocabulary): Drift[] => {
+export const relationDrift = (notes: readonly ParsedNote[], vocabulary: Vocabulary): Drift[] => {
     if (vocabulary.path === undefined) {
         return [];
     }

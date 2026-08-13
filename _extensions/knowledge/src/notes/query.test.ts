@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIndex } from "./index-vault.js";
+import { buildIndex } from "./index-notes.js";
 import type { NoteFile } from "./note.js";
 import { neighbourhood, search } from "./query.js";
 

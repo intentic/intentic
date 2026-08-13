@@ -12,12 +12,12 @@
         "files": [{ "path": "knowledge/", "invalidates": ["knowledge"] }],
         "settings": [
             {
-                "key": "vault",
+                "key": "folder",
                 "type": "string",
-                "title": "Vault folder",
-                "description": "Workspace folder holding the notes. Point it at a vault you already sync if you have one. Live refresh follows the default folder; elsewhere the view catches up on its own poll.",
+                "title": "Knowledge folder",
+                "description": "Workspace folder holding the notes. Point it at a folder of notes you already sync if you have one. Live refresh follows the default folder; elsewhere the view catches up on its own poll.",
                 "default": "knowledge",
-                "env": "KB_VAULT"
+                "env": "KB_FOLDER"
             }
         ],
         "bin": "dist/bin",

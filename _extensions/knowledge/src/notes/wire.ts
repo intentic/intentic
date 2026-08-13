@@ -1,6 +1,6 @@
 import type { Graph, Note, NoteLink, NoteSummary, Overview, SearchHit } from "../contract.js";
-import { overviewOf, type VaultIndex } from "./index-vault.js";
-import { factsOf, type VaultNote } from "./note.js";
+import { overviewOf, type KnowledgeIndex } from "./index-notes.js";
+import { factsOf, type ParsedNote } from "./note.js";
 import type { GraphView, SearchHit as EngineHit } from "./query.js";
 
 /* THE INDEX, AS THE WIRE DECLARES IT — the one place the engine's answers are turned into the contract's
@@ -15,7 +15,7 @@ import type { GraphView, SearchHit as EngineHit } from "./query.js";
  * declared in mutable ones, so a copy is needed either way — and being explicit about it means a field the
  * engine grows cannot arrive on the wire undeclared. */
 
-export const summaryOf = (note: VaultNote, index: VaultIndex): NoteSummary => ({
+export const summaryOf = (note: ParsedNote, index: KnowledgeIndex): NoteSummary => ({
     path: note.path,
     title: note.title,
     type: note.type,
@@ -29,21 +29,21 @@ export const summaryOf = (note: VaultNote, index: VaultIndex): NoteSummary => ({
 
 // A connection, resolved for a reader: the panel renders a link, so it needs a destination and a name. An
 // unresolved target keeps its raw text as the name — "Charles Babbage (not written yet)" is a real answer.
-const outgoing = (index: VaultIndex, path: string): NoteLink[] =>
+const outgoing = (index: KnowledgeIndex, path: string): NoteLink[] =>
     (index.outgoing.get(path) ?? []).map((edge) => ({
         relation: edge.relation,
         path: edge.to,
         title: edge.to === undefined ? edge.target : (index.byPath.get(edge.to)?.title ?? edge.to),
     }));
 
-const incoming = (index: VaultIndex, path: string): NoteLink[] =>
+const incoming = (index: KnowledgeIndex, path: string): NoteLink[] =>
     (index.backlinks.get(path) ?? []).map((edge) => ({
         relation: edge.relation,
         path: edge.from,
         title: index.byPath.get(edge.from)?.title ?? edge.from,
     }));
 
-export const noteOf = (note: VaultNote, index: VaultIndex): Note => ({
+export const noteOf = (note: ParsedNote, index: KnowledgeIndex): Note => ({
     summary: summaryOf(note, index),
     content: note.content,
     body: note.body,
@@ -71,12 +71,12 @@ export const graphOf = (view: GraphView): Graph => ({
     omitted: view.omitted,
 });
 
-// `vault` is workspace-relative — where the notes actually are, which is the one thing about this report the
+// `folder` is workspace-relative — where the notes actually are, which is the one thing about this report the
 // index cannot know.
-export const overviewFor = (index: VaultIndex, vault: string): Overview => {
+export const overviewFor = (index: KnowledgeIndex, folder: string): Overview => {
     const report = overviewOf(index);
     return {
-        vault,
+        folder,
         noteCount: report.noteCount,
         linkCount: report.linkCount,
         types: report.types.map((entry) => ({ name: entry.name, count: entry.count })),

@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { folderOf, linkifyVaultRefs, toneOfType } from "./knowledgeNote.js";
+import { folderOf, linkifyNoteRefs, toneOfType } from "./knowledgeNote.js";
 
 const decorate = (html: string, links: Record<string, string> = {}): HTMLDivElement => {
     const holder = document.createElement(`div`);
     holder.innerHTML = html;
     const fragment = document.createDocumentFragment();
     fragment.append(...holder.childNodes);
-    linkifyVaultRefs(fragment, (target) => links[target]);
+    linkifyNoteRefs(fragment, (target) => links[target]);
     const out = document.createElement(`div`);
     out.append(fragment);
     return out;
 };
 
-describe(`linkifyVaultRefs`, () => {
+describe(`linkifyNoteRefs`, () => {
     it(`turns a link into something the view can act on`, () => {
         const out = decorate(`<p>Works on [[Intentic]] most days.</p>`, { Intentic: `project/intentic.md` });
         const anchor = out.querySelector(`a`);
@@ -27,7 +27,7 @@ describe(`linkifyVaultRefs`, () => {
         expect(out.querySelector(`a`)?.textContent).toBe(`Charles`);
     });
 
-    /* A link to a note nobody has written is the vault's to-do list, not an error — so it reads as unfinished
+    /* A link to a note nobody has written is the knowledge base's to-do list, not an error — so it reads as unfinished
      * and, crucially, is not clickable: there is nothing on the other side of it. */
     it(`marks a link to a note nobody has written, and gives it nowhere to go`, () => {
         const anchor = decorate(`<p>See [[Nowhere]].</p>`).querySelector(`a`);
@@ -61,7 +61,7 @@ describe(`linkifyVaultRefs`, () => {
         const paragraph = document.createElement(`p`);
         paragraph.append(document.createTextNode(`[[x|<img src=x onerror=alert(1)>]]`));
         fragment.append(paragraph);
-        linkifyVaultRefs(fragment, () => `x.md`);
+        linkifyNoteRefs(fragment, () => `x.md`);
         const out = document.createElement(`div`);
         out.append(fragment);
         expect(out.querySelectorAll(`img`)).toHaveLength(0);

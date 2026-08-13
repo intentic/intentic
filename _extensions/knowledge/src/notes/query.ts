@@ -1,10 +1,10 @@
-import type { VaultEdge, VaultIndex } from "./index-vault.js";
-import { factsOf, type VaultNote } from "./note.js";
+import type { NoteEdge, KnowledgeIndex } from "./index-notes.js";
+import { factsOf, type ParsedNote } from "./note.js";
 
-/* ASKING THE VAULT THINGS — search, filter, and the neighbourhood around one note.
+/* ASKING THE KNOWLEDGE BASE THINGS — search, filter, and the neighbourhood around one note.
  *
  * The ranking is deliberately explainable rather than clever, and there is no second retrieval engine behind
- * it. A vault is a few hundred short notes the owner or the agent WROTE, so what someone types is nearly always
+ * it. A knowledge base is a few hundred short notes the owner or the agent WROTE, so what someone types is nearly always
  * the name of a thing they know is in there — and for that, "the note actually called that, then the note that
  * says it goes by that, then the notes that mention it" is both the best answer and the one a reader can
  * predict. Fuzzy prose search over the same folder is already a tool the agent has (`iq`), and pointing it here
@@ -63,7 +63,7 @@ const plainly = (line: string): string =>
         .replace(/^[-*+]\s+/, "")
         .trim();
 
-const bodyHit = (note: VaultNote, needle: string): { hits: number; line: string | undefined } => {
+const bodyHit = (note: ParsedNote, needle: string): { hits: number; line: string | undefined } => {
     const lines = note.body.split(/\r?\n/);
     let hits = 0;
     let line: string | undefined;
@@ -76,7 +76,7 @@ const bodyHit = (note: VaultNote, needle: string): { hits: number; line: string 
     return { hits, line };
 };
 
-const scoreNote = (note: VaultNote, needle: string): { score: number; matched: string; snippet: string | undefined } | undefined => {
+const scoreNote = (note: ParsedNote, needle: string): { score: number; matched: string; snippet: string | undefined } | undefined => {
     const title = note.title.toLowerCase();
     if (title === needle || note.slug.toLowerCase() === needle) {
         return { score: TITLE_EXACT, matched: "title", snippet: undefined };
@@ -105,7 +105,7 @@ const scoreNote = (note: VaultNote, needle: string): { score: number; matched: s
     return hits === 0 ? undefined : { score: BODY + Math.min(hits, 8), matched: "body", snippet: line };
 };
 
-export const search = (index: VaultIndex, filters: SearchFilters): readonly SearchHit[] => {
+export const search = (index: KnowledgeIndex, filters: SearchFilters): readonly SearchHit[] => {
     const needle = filters.query?.trim().toLowerCase() ?? "";
     const linkedTo = filters.linkedTo === undefined ? undefined : index.resolve(filters.linkedTo)?.path;
     const linked = linkedTo === undefined ? undefined : new Set((index.backlinks.get(linkedTo) ?? []).map((edge) => edge.from));
@@ -155,7 +155,7 @@ export interface GraphNode {
 export interface GraphView {
     readonly focus: string | undefined;
     readonly nodes: readonly GraphNode[];
-    readonly edges: readonly VaultEdge[];
+    readonly edges: readonly NoteEdge[];
     // Neighbours that did not fit the cap. Said out loud rather than silently dropped: a map that quietly
     // omits half the graph is worse than one that admits it.
     readonly omitted: number;
@@ -166,7 +166,7 @@ const MAX_NODES = 60;
 /* Everything within `depth` steps of one note, links followed in BOTH directions — because "what is connected
  * to this" does not care which note happens to hold the link. Breadth-first, so the cap cuts the far ring
  * rather than an arbitrary branch, and the first ring is always complete. */
-export const neighbourhood = (index: VaultIndex, focus: string, depth: number): GraphView => {
+export const neighbourhood = (index: KnowledgeIndex, focus: string, depth: number): GraphView => {
     const start = index.resolve(focus) ?? index.byPath.get(focus);
     if (start === undefined) {
         return { focus: undefined, nodes: [], edges: [], omitted: 0 };

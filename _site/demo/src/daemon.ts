@@ -495,7 +495,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`PUT`, `${MEMORY_BASE}/memory/file`, memoryWrite],
     [`DELETE`, `${MEMORY_BASE}/memory/file`, memoryForget],
 
-    /* Knowledge: the vault of things around the code — people, projects, decisions, words — and the graph they
+    /* Knowledge: the notes about things around the code — people, projects, decisions, words — and the graph they
      * already form. Served under the extension's own namespace, like memory above.
      *
      * The answers are computed by the extension's OWN engine over the fixture's raw markdown (fixture/knowledge.ts),
@@ -508,8 +508,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `${KNOWLEDGE_BASE}/graph`, ({ url }) => json(knowledgeGraph(url.searchParams))],
     [`PUT`, `${KNOWLEDGE_BASE}/note`, knowledgeWrite],
     [`DELETE`, `${KNOWLEDGE_BASE}/note`, knowledgeForget],
-    // The demo vault is already started, so this only ever answers "nothing to write" — which is the honest
-    // answer and the same one a real started vault gives.
+    // The demo knowledge base is already started, so this only ever answers "nothing to write" — which is the honest
+    // answer and the same one a real started knowledge base gives.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
     /* Browsing a registry — what the Sandbox screen's Discover row renders. The real route clones a git repo
@@ -702,14 +702,14 @@ const knowledgeRead = (url: URL): Response => {
     return note === undefined ? refuse(`No such note.`, 404) : json(note);
 };
 
-// Refuses exactly what the real backend refuses — a path that leaves the vault, or one that is not a note — so
+// Refuses exactly what the real backend refuses — a path that leaves the knowledge folder, or one that is not a note — so
 // the demo's error state is the product's rather than an optimistic success.
 function knowledgeWrite({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
         const { path, content } = body as { path?: string; content?: string };
         return saveKnowledgeNote(Date.now(), path ?? ``, content ?? ``)
             ? json({ ok: true })
-            : refuse(`That is not a markdown note inside the vault.`, 400);
+            : refuse(`That is not a markdown note inside the knowledge folder.`, 400);
     });
 }
 

@@ -13,9 +13,9 @@ import { z } from "zod";
 export const KNOWLEDGE_BASE = "/x/intentic.knowledge";
 
 // A note as the LIST needs it — everything the panel draws a row from, and nothing that would make listing a
-// vault mean shipping the whole vault.
+// a knowledge base mean shipping every note in it.
 export const NoteSummarySchema = z.object({
-    // Vault-relative, forward-slash, with the extension: "person/ada-lovelace.md". A note's identity.
+    // Relative to the knowledge folder, forward-slash, with the extension: "person/ada-lovelace.md". A note's identity.
     path: z.string(),
     title: z.string(),
     type: z.string().optional(),
@@ -78,10 +78,10 @@ export type SearchHit = z.infer<typeof SearchHitSchema>;
 const CountSchema = z.object({ name: z.string(), count: z.number() });
 const DriftSchema = z.object({ word: z.string(), uses: z.number(), notes: z.array(z.string()) });
 
-// What the vault amounts to and what is unfinished about it — the overview strip, in one call.
+// What the knowledge base amounts to and what is unfinished about it — the overview strip, in one call.
 export const OverviewSchema = z.object({
     // Workspace-relative, so the panel can say where the notes actually are.
-    vault: z.string(),
+    folder: z.string(),
     noteCount: z.number(),
     linkCount: z.number(),
     types: z.array(CountSchema),
@@ -114,7 +114,7 @@ export type Graph = z.infer<typeof GraphSchema>;
 export const NoteWriteSchema = z.object({ path: z.string().min(1), content: z.string().max(1_048_576) });
 export const OkSchema = z.object({ ok: z.literal(true) });
 
-// What starting a vault off wrote, so the panel can open the note rather than announce a success. Empty means
-// the vault already had a vocabulary and nothing was touched — never an error, since two browsers pressing the
+// What starting a knowledge base off wrote, so the panel can open the note rather than announce a success. Empty means
+// the knowledge base already had a vocabulary and nothing was touched — never an error, since two browsers pressing the
 // same button is an ordinary race and the second one has nothing to apologise for.
 export const SeedResultSchema = z.object({ written: z.array(z.string()) });

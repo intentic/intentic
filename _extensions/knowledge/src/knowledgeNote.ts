@@ -2,7 +2,7 @@
  * small vocabulary of colour the list and the pane share. Pure apart from the DOM the decorator is handed —
  * unit-tested in knowledgeNote.test.ts. */
 
-// `[[target]]` / `[[target|what to call it]]`. The same syntax the vault engine reads, and the same one the
+// `[[target]]` / `[[target|what to call it]]`. The same syntax the knowledge base engine reads, and the same one the
 // memory notes already use between themselves.
 const WIKI_LINK = /\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g;
 
@@ -19,7 +19,7 @@ const WIKI_LINK = /\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g;
  * a URL a browser could visit; one delegated listener on the prose turns a click into a selection. This runs on
  * the sanitized fragment (the markdown pipeline's contract) and only ever authors its own markup — anchor text
  * is written as a text node, never as HTML. */
-export const linkifyVaultRefs = (fragment: DocumentFragment, resolve: (target: string) => string | undefined): void => {
+export const linkifyNoteRefs = (fragment: DocumentFragment, resolve: (target: string) => string | undefined): void => {
     // Collected before rewriting: replacing a text node mid-walk invalidates the walker's position. Text inside
     // a link or a code span is left alone — a wiki link there is either already a link or deliberately literal,
     // which is how the vocabulary note documents the syntax without every example becoming a link.
@@ -47,7 +47,7 @@ export const linkifyVaultRefs = (fragment: DocumentFragment, resolve: (target: s
             const anchor = document.createElement(`a`);
             anchor.append(match[2]?.trim() ?? target);
             if (path === undefined) {
-                // A link to a note nobody has written yet is ordinary and deliberate — the vault's own to-do
+                // A link to a note nobody has written yet is ordinary and deliberate — the knowledge base's own to-do
                 // list. It reads as unfinished rather than as broken, and it is not clickable, because there is
                 // nothing on the other side of it.
                 anchor.className = `text-subtle underline decoration-dotted underline-offset-2`;
@@ -66,7 +66,7 @@ export const linkifyVaultRefs = (fragment: DocumentFragment, resolve: (target: s
 
 /* ONE COLOUR PER KIND, decided from the word itself rather than from a table.
  *
- * A table would have to be written for a vocabulary that belongs to the vault, not to this app — every owner
+ * A table would have to be written for a vocabulary that belongs to the knowledge base, not to this app — every owner
  * has different kinds, and an unlisted one would fall to grey while its neighbours were coloured, which reads
  * as "this one is somehow lesser". Hashing the word means every kind gets a colour, the same colour every time,
  * for free; what the colour MEANS is only ever "same as that other one", which is the whole job here. */

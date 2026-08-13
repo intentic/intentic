@@ -74,7 +74,7 @@ describe(`the knowledge backend`, () => {
         const note = await json<Note>(`/note?path=${encodeURIComponent(`project/intentic.md`)}`);
         expect(note.summary.title).toBe(`Intentic`);
         expect(note.linkedFrom).toEqual([{ relation: `works_on`, path: `person/ada-lovelace.md`, title: `Ada Lovelace` }]);
-        // A link to a note nobody has written keeps its name and has nowhere to go — the vault's to-do list.
+        // A link to a note nobody has written keeps its name and has nowhere to go — the knowledge base's to-do list.
         expect(note.linksTo).toEqual([{ relation: undefined, path: undefined, title: `nowhere` }]);
     });
 
@@ -103,10 +103,10 @@ describe(`the knowledge backend`, () => {
         expect(graph.edges).toEqual([{ from: `person/ada-lovelace.md`, to: `project/intentic.md`, relation: `works_on` }]);
     });
 
-    it(`reports what the vault amounts to and what is unfinished about it`, async () => {
+    it(`reports what the knowledge base amounts to and what is unfinished about it`, async () => {
         const overview = await json<Overview>(`/overview`);
         expect(overview).toMatchObject({
-            vault: `knowledge`,
+            folder: `knowledge`,
             noteCount: 3,
             broken: [{ from: `project/intentic.md`, target: `nowhere` }],
             vocabulary: { types: [`person`, `project`], relations: [`works_on`], path: `_vocabulary.md` },
@@ -138,8 +138,8 @@ describe(`the knowledge backend`, () => {
         expect((await json<{ notes: { path: string }[] }>(`/notes`)).notes.map((note) => note.path)).toContain(`decision/why-extensions.md`);
     });
 
-    // The route is reachable by anyone the daemon lets through; the vault boundary is enforced here, not there.
-    it(`refuses to write outside the vault or as anything but a note`, async () => {
+    // The route is reachable by anyone the daemon lets through; the knowledge base boundary is enforced here, not there.
+    it(`refuses to write outside the knowledge base or as anything but a note`, async () => {
         for (const path of [`../escaped.md`, `run.sh`]) {
             const response = await call(`/note`, {
                 method: `PUT`,
@@ -161,18 +161,18 @@ describe(`the knowledge backend`, () => {
         expect((await remove()).status).toBe(404);
     });
 
-    it(`follows the vault folder the owner chose`, async () => {
+    it(`follows the knowledge base folder the owner chose`, async () => {
         await mkdir(join(workspace, `.intentic`), { recursive: true });
-        await writeFile(join(workspace, `.intentic/extension-settings.json`), JSON.stringify({ "intentic.knowledge": { vault: `my-notes` } }));
+        await writeFile(join(workspace, `.intentic/extension-settings.json`), JSON.stringify({ "intentic.knowledge": { folder: `my-notes` } }));
         await mkdir(join(workspace, `my-notes`), { recursive: true });
         await writeFile(join(workspace, `my-notes/only.md`), `---\ntype: term\n---\n`);
         const overview = await json<Overview>(`/overview`);
-        expect(overview).toMatchObject({ vault: `my-notes`, noteCount: 1 });
+        expect(overview).toMatchObject({ folder: `my-notes`, noteCount: 1 });
     });
 
-    /* Owner-pressed, never on a read: a vault appearing in somebody's workspace because they looked at a panel
+    /* Owner-pressed, never on a read: a knowledge base appearing in somebody's workspace because they looked at a panel
      * is a surprise, and one that overwrote a vocabulary they had written would be worse than a surprise. */
-    it(`starts an empty vault off with a vocabulary, and touches a started one never again`, async () => {
+    it(`starts an empty knowledge base off with a vocabulary, and touches a started one never again`, async () => {
         await rm(join(workspace, `knowledge`), { recursive: true, force: true });
         const first = await call(`/seed`, { method: `POST` });
         expect(first.status).toBe(200);
@@ -182,19 +182,19 @@ describe(`the knowledge backend`, () => {
         expect(overview.noteCount).toBe(1);
         expect(overview.vocabulary.types).toContain(`person`);
         // The vocabulary explains the link syntax in a fenced example — which must not become real links, or a
-        // brand-new vault opens with a to-do list it invented about itself.
+        // brand-new knowledge base opens with a to-do list it invented about itself.
         expect(overview.broken).toEqual([]);
 
         const again = await call(`/seed`, { method: `POST` });
         expect(await again.json()).toEqual({ written: [] });
     });
 
-    it(`leaves a vault that already has a vocabulary alone`, async () => {
+    it(`leaves a knowledge base that already has a vocabulary alone`, async () => {
         expect(await (await call(`/seed`, { method: `POST` })).json()).toEqual({ written: [] });
         expect((await json<Note>(`/note?path=_vocabulary.md`)).body).toContain(`What the words mean.`);
     });
 
-    it(`serves an empty vault as empty rather than as an error`, async () => {
+    it(`serves an empty knowledge base as empty rather than as an error`, async () => {
         await rm(join(workspace, `knowledge`), { recursive: true, force: true });
         expect(await json<Overview>(`/overview`)).toMatchObject({ noteCount: 0, linkCount: 0, orphans: [] });
         expect((await json<{ notes: unknown[] }>(`/notes`)).notes).toEqual([]);

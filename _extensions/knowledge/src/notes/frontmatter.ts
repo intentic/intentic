@@ -1,4 +1,4 @@
-/* THE FRONTMATTER SUBSET A VAULT NOTE IS ALLOWED TO USE, and its total parser.
+/* THE FRONTMATTER SUBSET A NOTE IS ALLOWED TO USE, and its total parser.
  *
  * Deliberately not YAML. Three reasons, in order of how much they cost:
  *
@@ -147,7 +147,7 @@ export const formatFrontmatter = (fields: ReadonlyMap<string, readonly string[]>
             continue;
         }
         // A single value stays a scalar: `type: person` rather than `type: [person]`, because that is what a
-        // human writes and what every other vault would render. Multi-valued keys use the flow form, which is
+        // human writes and what every other knowledge base would render. Multi-valued keys use the flow form, which is
         // one line per key and survives a round trip through this parser unchanged.
         lines.push(values.length === 1 ? `${key}: ${emit(values[0] ?? "")}` : `${key}: [${values.map(emit).join(", ")}]`);
     }

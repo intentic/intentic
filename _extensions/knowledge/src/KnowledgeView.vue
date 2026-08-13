@@ -17,20 +17,20 @@ import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch }
 import NoteIndex from "./NoteIndex.vue";
 import NotePane from "./NotePane.vue";
 
-/* THE KNOWLEDGE SECTION — the owner's vault of notes about the world this work happens in, and the graph those
- * notes already form.
+/* THE KNOWLEDGE SECTION — the owner's knowledge base: notes about the world this work happens in, and the graph
+ * those notes already form.
  *
  * SEARCH IS THE NAVIGATION. There is no tree of folders here and deliberately so: a knowledge base is reached
  * by asking it something, and every other way in (by kind, by tag, by what links to a thing) is the same query
  * with a filter set rather than a different screen. One route answers all of them, so the list can never
- * disagree with itself about what the vault holds.
+ * disagree with itself about what the knowledge base holds.
  *
  * A HUB SECTION, so this file draws neither a page title nor a frame — the hub draws both. That constraint is
  * what shapes the layout: the section is a wide band rather than a page, so the chrome is one row, the index is
  * a narrow column beside the note rather than a second rail in front of it, and in a narrow body it folds above
  * the note instead of hiding it.
  *
- * WHAT IS UNFINISHED ABOUT THE VAULT gets a strip, and only when there IS something — links pointing at notes
+ * WHAT IS UNFINISHED ABOUT THE KNOWLEDGE BASE gets a strip, and only when there IS something — links pointing at notes
  * nobody wrote, kinds the vocabulary has not adopted, notes that fell out of the graph. A permanent panel
  * reading "0 problems" would spend the same space to say nothing, and would train the reader to stop looking at
  * the place where the real thing eventually appears. */
@@ -112,7 +112,7 @@ watch(q, () => (linkedTo.value = undefined));
 const linkedToTitle = computed(() => hits.value.find((hit) => hit.path === linkedTo.value)?.title ?? linkedTo.value);
 
 /* THE TWO STANDING FACTS THIS SECTION REPORTS ARE <Notice>S, not strips of its own. Both were hand-rolled
- * bordered rows — one for "the list is aimed at a note's neighbours", one for "the vault has loose ends" — and
+ * bordered rows — one for "the list is aimed at a note's neighbours", one for "there are loose ends" — and
  * a hand-rolled strip is the first thing to disagree with the app about tone, weight and where the way out
  * sits. `info` is the tone for a fact the reader may want and never has to act on, which is what both are. */
 const linkedNotice = computed<NoticeModel | undefined>(() =>
@@ -150,12 +150,12 @@ const health = computed<NoticeModel | undefined>(() => {
 
 const error = computed(() => overviewError.value ?? searchError.value);
 
-/* Starting the vault off writes ONE note — the vocabulary — and opens it. Not a folder of example people: a
+/* Starting it off writes ONE note — the vocabulary — and opens it. Not a folder of example people: a
  * knowledge base seeded with facts about nobody has to be emptied before it can say anything true. What a new
- * vault actually lacks is the handful of words it is going to use, which is also the one thing the owner and
+ * knowledge base actually lacks is the handful of words it is going to use, which is also the one thing the owner and
  * the agent cannot each guess at consistently on their own. */
 const { seed } = useNoteMutations();
-const startVault = async (): Promise<void> => {
+const startKnowledge = async (): Promise<void> => {
     const { written } = await seed.mutateAsync();
     selected.value = written[0] ?? selected.value;
 };
@@ -173,8 +173,8 @@ const startVault = async (): Promise<void> => {
              above them. The pickers are `ghost` because the track is already the box. -->
         <FilterBar
             v-model="q"
-            placeholder="Search the vault…"
-            aria-label="Search the vault"
+            placeholder="Search the knowledge base…"
+            aria-label="Search the knowledge base"
             clearable
             :count="hits.length"
             :busy="isFetching && !isLoading"
@@ -206,9 +206,9 @@ const startVault = async (): Promise<void> => {
                     {{ overview.types.length === 1 ? `kind` : `kinds` }}
                 </span>
                 <InfoHint label="Knowledge">
-                    <span class="block text-sm font-medium text-content">The knowledge vault</span>
+                    <span class="block text-sm font-medium text-content">The knowledge base</span>
                     <span class="mt-1 block text-xs text-muted">
-                        A folder of markdown notes — <b>{{ overview?.vault ?? `knowledge/` }}</b> in your workspace — where each note is a
+                        A folder of markdown notes — <b>{{ overview?.folder ?? `knowledge/` }}</b> in your workspace — where each note is a
                         <i>thing</i>
                         (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before
                         answering questions about your world and writes to it when it learns something durable; you read, correct and delete here.
@@ -226,15 +226,21 @@ const startVault = async (): Promise<void> => {
              the next one off screen with it. -->
         <div v-if="overview?.noteCount === 0 && !filtered" :class="cmp.emptyState(`flex flex-col items-center gap-2 px-6 py-12 text-sm`)">
             <Icon name="sitemap" class="text-base text-subtle" />
-            <p class="text-content">Nothing in the vault yet.</p>
+            <p class="text-content">Nothing here yet.</p>
             <p class="max-w-md text-xs text-muted">
                 Notes appear here as the agent learns durable things about your world — who you work with, what a project is for, what was decided and
                 why. Ask it to remember something, or drop your own markdown into
-                <b>{{ overview?.vault ?? `knowledge/` }}</b> and it will be read the same way.
+                <b>{{ overview?.folder ?? `knowledge/` }}</b> and it will be read the same way.
             </p>
-            <!-- One note, not a folder of example people: what a new vault lacks is the handful of words it is
+            <!-- One note, not a folder of example people: what a new knowledge base lacks is the handful of words it is
                  going to use, and that is the one thing neither side can guess at consistently alone. -->
-            <Button label="Start it off with a vocabulary" size="small" severity="secondary" :loading="seed.isPending.value" @click="startVault" />
+            <Button
+                label="Start it off with a vocabulary"
+                size="small"
+                severity="secondary"
+                :loading="seed.isPending.value"
+                @click="startKnowledge"
+            />
             <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
         </div>
 
@@ -260,12 +266,12 @@ const startVault = async (): Promise<void> => {
                 @forgotten="selected = undefined"
             />
 
-            <!-- The same dashed placeholder the empty vault above uses, from the same helper — it was spelled
+            <!-- The same dashed placeholder the empty state above uses, from the same helper — it was spelled
                  out by hand here, two elements away from the call that produces it. -->
             <section v-else :class="cmp.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
                 <Icon name="sitemap" class="text-base text-subtle" />
                 <p class="text-sm text-muted">Pick a note to read it.</p>
-                <p class="max-w-xs text-xs text-subtle">Follow its links to move through the vault the way the agent does.</p>
+                <p class="max-w-xs text-xs text-subtle">Follow its links to move through your knowledge the way the agent does.</p>
             </section>
         </div>
     </div>

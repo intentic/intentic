@@ -21,8 +21,8 @@ const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path)
  * an extension that grows a second entry does not have to be remembered here.
  *
  * Subpaths are emitted BEFORE barrels for the reason the hand-written entries below state: a string alias also
- * matches `<key>/…`, so `@intentic/ext-knowledge` would swallow `@intentic/ext-knowledge/vault` and resolve it
- * to `src/index.ts/vault`, a path that cannot exist. That failure is a dev server (and only a dev server) that
+ * matches `<key>/…`, so `@intentic/ext-knowledge` would swallow `@intentic/ext-knowledge/notes` and resolve it
+ * to `src/index.ts/notes`, a path that cannot exist. That failure is a dev server (and only a dev server) that
  * cannot start — invisible to a typecheck, invisible to the tests, and confusing out of all proportion to its
  * cause. */
 const extensionEntries = readdirSync(fromRoot(`_extensions`), { withFileTypes: true })

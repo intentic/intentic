@@ -14,14 +14,14 @@ import {
 } from "./contract";
 import { host } from "./host";
 
-/* The vault, through this extension's OWN backend at its /x namespace — no `permissions.sandbox` entry, because
+/* The knowledge base, through this extension's OWN backend at its /x namespace — no `permissions.sandbox` entry, because
  * an extension's own backend is its own code. All daemon access goes through the host api, which injects auth
  * and scopes the cache per sandbox.
  *
  * EVERY QUERY KEY STARTS WITH `knowledge`, and that is load-bearing rather than tidy: the manifest's
  * `contributes.files` declares `knowledge/` → invalidates `knowledge`, so when the agent writes a note with its
  * own file tools the daemon's watcher pushes the change and these queries refetch. The poll below is the
- * fallback for a vault the owner has pointed somewhere else, where no static path could have been declared. */
+ * fallback for a knowledge base the owner has pointed somewhere else, where no static path could have been declared. */
 
 const POLL_MS = 30_000;
 
@@ -55,7 +55,7 @@ export interface Filters {
 
 /* THE LIST IS THE SEARCH — one route, whether or not anything has been typed. An empty query with no filters is
  * "every note, newest first", which is exactly what a browse surface wants, so there is no second code path for
- * browsing and no chance of the two disagreeing about what the vault contains. */
+ * browsing and no chance of the two disagreeing about what the knowledge base contains. */
 export function useSearch(filters: Ref<Filters>) {
     const api = host();
     const hits = useQuery({
@@ -143,7 +143,7 @@ export function useNoteMutations() {
             }),
         onSuccess: () => void invalidate(),
     });
-    // Starting the vault off — owner-pressed, from the empty state, never on a read. It answers with what it
+    // Starting the knowledge base off — owner-pressed, from the empty state, never on a read. It answers with what it
     // wrote so the panel can open the note rather than announce a success nobody can see.
     const seed = useMutation({
         mutationFn: async () => SeedResultSchema.parse(await api.sandbox.json(`${KNOWLEDGE_BASE}/seed`, { method: `POST` })),
@@ -152,7 +152,7 @@ export function useNoteMutations() {
     return { save, remove, seed };
 }
 
-// Everything the filter controls offer, read off the overview so the vault's own words are the vocabulary —
+// Everything the filter controls offer, read off the overview so the knowledge base's own words are the vocabulary —
 // never a hardcoded list that could disagree with what is in the folder.
 export const filterOptions = (overview: Overview | undefined): { types: readonly string[]; tags: readonly string[] } => ({
     types: (overview?.types ?? []).map((entry) => entry.name),

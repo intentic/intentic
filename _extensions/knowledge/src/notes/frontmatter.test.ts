@@ -72,7 +72,7 @@ country: NO
         expect(parseFrontmatter(`---\n: : :\n---\nbody`).body).toBe(`body`);
     });
 
-    it(`tolerates windows line endings, which a synced vault will have`, () => {
+    it(`tolerates windows line endings, which a synced knowledge base will have`, () => {
         expect(fields(`---\r\ntype: person\r\n---\r\nbody`)).toEqual({ type: [`person`] });
     });
 });

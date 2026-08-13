@@ -7,8 +7,8 @@ import { useGraph } from "./useKnowledge";
 /* THE MAP AROUND ONE NOTE — everything within a couple of steps of it, and what each connection is called.
  *
  * This is the picture a folder of files cannot give you: which people touch which projects, what a decision was
- * about, what supersedes what. It is drawn around the OPEN NOTE rather than over the whole vault, because a
- * whole-vault picture of anything past fifty notes is a hairball — pretty, and unable to answer a question. The
+ * about, what supersedes what. It is drawn around the OPEN NOTE rather than over everything, because a picture
+ * of a whole knowledge base past fifty notes is a hairball — pretty, and unable to answer a question. The
  * neighbourhood answers the question you actually have, which is "what is this connected to".
  *
  * Laid out left-to-right by the same dagre renderer the pipeline graphs use. A knowledge graph is not a DAG —

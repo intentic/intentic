@@ -12,7 +12,7 @@ describe(`parseNote`, () => {
         expect(note(`no header at all`).title).toBe(`Ada lovelace`);
     });
 
-    /* THE ONTOLOGY, READ OUT OF THE FORMAT THE VAULT ALREADY HAD. A link in a header field is a typed edge; the
+    /* THE ONTOLOGY, READ OUT OF THE FORMAT THE NOTES ALREADY HAD. A link in a header field is a typed edge; the
      * same link in the prose is an untyped one. Nothing else distinguishes them, which is why no sidecar and no
      * schema is needed to have a graph. */
     it(`reads a link in a header field as a relationship named by that field`, () => {
@@ -32,7 +32,7 @@ describe(`parseNote`, () => {
         expect(note(`---\ntitle: "[[not a link]]"\ntags: ["[[nor this]]"]\n---\n`).links).toEqual([]);
     });
 
-    it(`ignores links and tags shown as examples in code, so the vault can document its own format`, () => {
+    it(`ignores links and tags shown as examples in code, so the knowledge base can document its own format`, () => {
         const parsed = note(`---\ntype: term\n---\nWrite it as \`[[Intentic]]\` or:\n\n\`\`\`\n[[Example]] #demo\n\`\`\`\n`);
         expect(parsed.links).toEqual([]);
         expect(parsed.tags).toEqual([]);
@@ -46,7 +46,7 @@ describe(`parseNote`, () => {
         expect(note(`---\ntype: person\n---\n# Ada\n\n## Notes\n`).tags).toEqual([]);
     });
 
-    it(`carries the unreadable keys through so the vault can report them`, () => {
+    it(`carries the unreadable keys through so the knowledge base can report them`, () => {
         expect(note(`---\ntype: person\nemployment:\n  company: Acme\n---\n`).unreadable).toEqual([`employment`]);
     });
 

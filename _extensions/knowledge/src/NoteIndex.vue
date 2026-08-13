@@ -51,7 +51,7 @@ interface NoteRow {
 const rows = computed<NoteRow[]>(() =>
     hits.map((hit) => {
         // The folder is only worth the line when it says something the badge does not. `kb new` files a note
-        // under its own kind, so for most of the vault the folder IS the kind — printed here it read as the
+        // under its own kind, so for most notes the folder IS the kind — printed here it read as the
         // word "person" twice on one row, which is how a reader learns to stop reading the second line.
         const folder = folderOf(hit.path);
         return {
@@ -106,7 +106,7 @@ const groups = computed<NavGroup<NoteRow>[]>(() => (rows.value.length === 0 ? []
         <template #empty>
             <p v-if="isLoading" class="px-2 py-4 text-xs text-subtle">Looking…</p>
             <p v-else-if="filtered" class="px-2 py-4 text-xs text-muted">
-                Nothing in the vault matches. The agent's <b>kb</b> command searches the same notes — and a link to a note nobody has written yet is a
+                Nothing here matches. The agent's <b>kb</b> command searches the same notes — and a link to a note nobody has written yet is a
                 perfectly good way to leave a gap for later.
             </p>
             <p v-else class="px-2 py-4 text-xs text-muted">No notes yet.</p>

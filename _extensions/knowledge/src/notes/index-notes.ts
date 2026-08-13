@@ -1,35 +1,35 @@
-import { type NoteFile, parseNote, type VaultNote } from "./note.js";
+import { type NoteFile, parseNote, type ParsedNote } from "./note.js";
 import { type Drift, relationDrift, type Vocabulary, readVocabulary, typeDrift, VOCABULARY_TYPE } from "./vocabulary.js";
 
-/* THE VAULT, RESOLVED — the one place a pile of files becomes a graph.
+/* THE KNOWLEDGE BASE, RESOLVED — the one place a pile of files becomes a graph.
  *
  * Everything here is derived and nothing is stored. There is no index file to rebuild, go stale, or disagree
- * with the notes: a vault of a few thousand small markdown files parses in milliseconds, so the honest answer
- * is to read it. The backend builds one per request and the CLI builds one per run (read-vault.ts); both
+ * with the notes: a knowledge base of a few thousand small markdown files parses in milliseconds, so the honest answer
+ * is to read it. The backend builds one per request and the CLI builds one per run (read-notes.ts); both
  * end at exactly the same object, which is what keeps the panel and the agent from telling different stories. */
 
-export interface VaultEdge {
+export interface NoteEdge {
     readonly from: string;
     // The resolved note, or undefined when the link points at something that isn't there yet. BOTH are kept:
-    // an unresolved link is not an error, it is a note somebody has not written — the vault's own to-do list.
+    // an unresolved link is not an error, it is a note somebody has not written — the knowledge base's own to-do list.
     readonly to: string | undefined;
     readonly target: string;
     readonly relation: string | undefined;
 }
 
-export interface VaultIndex {
-    readonly notes: readonly VaultNote[];
-    readonly byPath: ReadonlyMap<string, VaultNote>;
-    readonly edges: readonly VaultEdge[];
+export interface KnowledgeIndex {
+    readonly notes: readonly ParsedNote[];
+    readonly byPath: ReadonlyMap<string, ParsedNote>;
+    readonly edges: readonly NoteEdge[];
     // Incoming edges per note path — what links HERE, which is the half a plain file tree cannot show you.
-    readonly backlinks: ReadonlyMap<string, readonly VaultEdge[]>;
-    readonly outgoing: ReadonlyMap<string, readonly VaultEdge[]>;
+    readonly backlinks: ReadonlyMap<string, readonly NoteEdge[]>;
+    readonly outgoing: ReadonlyMap<string, readonly NoteEdge[]>;
     readonly vocabulary: Vocabulary;
-    // A link target that matches more than one note. Reported so the vault can be disambiguated; resolution
+    // A link target that matches more than one note. Reported so the knowledge base can be disambiguated; resolution
     // picks the first in path order so behaviour stays deterministic either way.
     readonly ambiguous: ReadonlyMap<string, readonly string[]>;
-    // Resolve a link target the way a vault does: by path, then filename, then title, then alias.
-    resolve(target: string): VaultNote | undefined;
+    // Resolve a link target the way a knowledge base does: by path, then filename, then title, then alias.
+    resolve(target: string): ParsedNote | undefined;
 }
 
 const normalise = (value: string): string => value.trim().toLowerCase();
@@ -42,23 +42,23 @@ const pathKeys = (path: string): string[] => {
 };
 
 /* The lookup table, built in FOUR passes so that a stronger kind of match always wins over a weaker one however
- * the vault happens to be ordered: a note whose title is "Ada" beats a different note that merely lists "Ada"
+ * the knowledge base happens to be ordered: a note whose title is "Ada" beats a different note that merely lists "Ada"
  * as an alias, whichever of them the directory walk reached first. Within one pass the first note in path order
  * wins and the collision is recorded.
  *
  * Path before title before alias, because that is the order of how deliberate the name is: a filename was
  * chosen for this note, an alias is a convenience that may be shared. */
-const buildLookup = (notes: readonly VaultNote[]): { lookup: Map<string, VaultNote>; ambiguous: Map<string, string[]> } => {
-    const lookup = new Map<string, VaultNote>();
+const buildLookup = (notes: readonly ParsedNote[]): { lookup: Map<string, ParsedNote>; ambiguous: Map<string, string[]> } => {
+    const lookup = new Map<string, ParsedNote>();
     const ambiguous = new Map<string, string[]>();
-    const passes: ((note: VaultNote) => readonly string[])[] = [
+    const passes: ((note: ParsedNote) => readonly string[])[] = [
         (note) => pathKeys(note.path),
         (note) => [normalise(note.slug)],
         (note) => [normalise(note.title)],
         (note) => note.aliases.map(normalise),
     ];
     for (const keysOf of passes) {
-        const claimed = new Map<string, VaultNote>();
+        const claimed = new Map<string, ParsedNote>();
         for (const note of notes) {
             for (const key of keysOf(note)) {
                 if (key === "") {
@@ -81,20 +81,20 @@ const buildLookup = (notes: readonly VaultNote[]): { lookup: Map<string, VaultNo
     return { lookup, ambiguous };
 };
 
-export const buildIndex = (files: readonly NoteFile[]): VaultIndex => {
+export const buildIndex = (files: readonly NoteFile[]): KnowledgeIndex => {
     // Path order, so every tie above is broken the same way on every machine and every run.
     const notes = files.map(parseNote).toSorted((a, b) => a.path.localeCompare(b.path));
     const { lookup, ambiguous } = buildLookup(notes);
-    const resolve = (target: string): VaultNote | undefined => {
+    const resolve = (target: string): ParsedNote | undefined => {
         const key = normalise(target.split("#")[0] ?? target);
         return lookup.get(key) ?? lookup.get(key.replace(/\.md$/i, ""));
     };
 
-    const edges: VaultEdge[] = notes.flatMap((note) =>
+    const edges: NoteEdge[] = notes.flatMap((note) =>
         note.links.map((link) => ({ from: note.path, to: resolve(link.target)?.path, target: link.target, relation: link.relation })),
     );
-    const backlinks = new Map<string, VaultEdge[]>();
-    const outgoing = new Map<string, VaultEdge[]>();
+    const backlinks = new Map<string, NoteEdge[]>();
+    const outgoing = new Map<string, NoteEdge[]>();
     for (const edge of edges) {
         outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
         if (edge.to !== undefined && edge.to !== edge.from) {
@@ -113,9 +113,9 @@ export const buildIndex = (files: readonly NoteFile[]): VaultIndex => {
     };
 };
 
-// ---- what the vault amounts to, and what is wrong with it -------------------------------------------------
+// ---- what the knowledge base amounts to, and what is wrong with it -------------------------------------------------
 
-export interface VaultCount {
+export interface NameCount {
     readonly name: string;
     readonly count: number;
 }
@@ -126,13 +126,13 @@ export interface BrokenLink {
     readonly relation: string | undefined;
 }
 
-export interface VaultOverview {
+export interface KnowledgeOverview {
     readonly noteCount: number;
     readonly linkCount: number;
-    readonly types: readonly VaultCount[];
-    readonly tags: readonly VaultCount[];
+    readonly types: readonly NameCount[];
+    readonly tags: readonly NameCount[];
     readonly vocabulary: Vocabulary;
-    // Links pointing at a note nobody has written. The vault's to-do list, not its error list.
+    // Links pointing at a note nobody has written. The knowledge base's to-do list, not its error list.
     readonly broken: readonly BrokenLink[];
     // Notes nothing links to and which link to nothing — knowledge that fell out of the graph and will never
     // be found again by following anything.
@@ -146,7 +146,7 @@ export interface VaultOverview {
     readonly ambiguous: readonly { readonly name: string; readonly notes: readonly string[] }[];
 }
 
-const counted = (values: readonly string[]): VaultCount[] => {
+const counted = (values: readonly string[]): NameCount[] => {
     const counts = new Map<string, number>();
     for (const value of values) {
         counts.set(value, (counts.get(value) ?? 0) + 1);
@@ -154,14 +154,14 @@ const counted = (values: readonly string[]): VaultCount[] => {
     return [...counts].map(([name, count]) => ({ name, count })).toSorted((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 };
 
-export const overviewOf = (index: VaultIndex): VaultOverview => ({
+export const overviewOf = (index: KnowledgeIndex): KnowledgeOverview => ({
     noteCount: index.notes.length,
     linkCount: index.edges.length,
     types: counted(index.notes.flatMap((note) => (note.type === undefined ? [] : [note.type]))),
     tags: counted(index.notes.flatMap((note) => note.tags)),
     vocabulary: index.vocabulary,
     broken: index.edges.flatMap((edge) => (edge.to === undefined ? [{ from: edge.from, target: edge.target, relation: edge.relation }] : [])),
-    /* The vocabulary note is never an orphan however few links it holds — it is the vault's structure, not a
+    /* The vocabulary note is never an orphan however few links it holds — it is the knowledge base's structure, not a
      * fact that fell out of it, and reporting it would put a permanent entry in a list whose whole value is
      * being empty most of the time. */
     orphans: index.notes

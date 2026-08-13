@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildIndex, overviewOf } from "./index-vault.js";
+import { buildIndex, overviewOf } from "./index-notes.js";
 import type { NoteFile } from "./note.js";
 
 const file = (path: string, content: string): NoteFile => ({ path, content, modifiedAt: 1_700_000_000_000, sizeBytes: content.length });
 
-const VAULT: NoteFile[] = [
+const NOTES: NoteFile[] = [
     file(
         `_vocabulary.md`,
         `---
@@ -39,7 +39,7 @@ Lean core, everything else an extension.`,
     file(`stray-thought.md`, `Nothing links here and it links nowhere.`),
 ];
 
-const index = buildIndex(VAULT);
+const index = buildIndex(NOTES);
 
 describe(`buildIndex`, () => {
     it(`resolves a link by filename, by title, by alias and by full path`, () => {
@@ -50,7 +50,7 @@ describe(`buildIndex`, () => {
         expect(index.resolve(`decisions/why-extensions`)?.path).toBe(`decisions/why-extensions.md`);
     });
 
-    it(`resolves case-insensitively, the way every vault does`, () => {
+    it(`resolves case-insensitively, the way every knowledge base does`, () => {
         expect(index.resolve(`CHARLES BABBAGE`)?.path).toBe(`people/charles-babbage.md`);
     });
 
@@ -96,7 +96,7 @@ describe(`buildIndex`, () => {
 describe(`overviewOf`, () => {
     const overview = overviewOf(index);
 
-    it(`counts the kinds of thing in the vault, commonest first`, () => {
+    it(`counts the kinds of thing in the knowledge base, commonest first`, () => {
         expect(overview.types).toEqual([
             { name: `person`, count: 2 },
             { name: `decision`, count: 1 },
@@ -120,7 +120,7 @@ describe(`overviewOf`, () => {
     /* The vocabulary is a habit, not a gate: an undeclared word is REPORTED and the note holding it is still
      * perfectly readable. This is what lets an agent capture something new mid-task without stalling. */
     it(`reports a kind and a relationship the vocabulary has not adopted`, () => {
-        const drifted = buildIndex([...VAULT, file(`vendors/acme.md`, `---\ntype: vendor\ninvoices: ["[[Intentic]]"]\n---\n`)]);
+        const drifted = buildIndex([...NOTES, file(`vendors/acme.md`, `---\ntype: vendor\ninvoices: ["[[Intentic]]"]\n---\n`)]);
         const report = overviewOf(drifted);
         expect(report.typeDrift).toEqual([{ word: `vendor`, uses: 1, notes: [`vendors/acme.md`] }]);
         expect(report.relationDrift).toEqual([
@@ -129,7 +129,7 @@ describe(`overviewOf`, () => {
         ]);
     });
 
-    it(`reports nothing as drift in a vault that has declared no vocabulary`, () => {
+    it(`reports nothing as drift in a knowledge base that has declared no vocabulary`, () => {
         const undeclared = overviewOf(buildIndex([file(`a.md`, `---\ntype: whatever\nlinks_to: ["[[b]]"]\n---\n`)]));
         expect(undeclared.typeDrift).toEqual([]);
         expect(undeclared.relationDrift).toEqual([]);
@@ -140,7 +140,7 @@ describe(`overviewOf`, () => {
         expect(mangled.unreadable).toEqual([{ path: `a.md`, keys: [`employment`] }]);
     });
 
-    it(`handles an empty vault without inventing anything`, () => {
+    it(`handles an empty knowledge base without inventing anything`, () => {
         expect(overviewOf(buildIndex([]))).toMatchObject({ noteCount: 0, linkCount: 0, types: [], orphans: [], broken: [] });
     });
 });

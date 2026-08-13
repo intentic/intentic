@@ -1,6 +1,6 @@
 {
     "name": "knowledge",
-    "description": "Give a coding agent a personal knowledge base: a markdown vault that is also a typed graph of the people, projects, decisions and terms it works among. Teaches it to look the vault up before answering and to capture what it learns as a correctly shaped, connected note. Ships the `knowledge` skill; the `kb` CLI arrives on PATH from the same extension.",
+    "description": "Give a coding agent a personal knowledge base: a markdown folder that is also a typed graph of the people, projects, decisions and terms it works among. Teaches it to look it up before answering and to capture what it learns as a correctly shaped, connected note. Ships the `knowledge` skill; the `kb` CLI arrives on PATH from the same extension.",
     "version": "1.0.0",
     "author": { "name": "intentic" },
     "homepage": "https://github.com/intentic/intentic",

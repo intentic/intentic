@@ -15,7 +15,7 @@ import {
     type StatusVariant,
 } from "@intentic/extension-ui";
 import { computed, ref, toRef, watch } from "vue";
-import { linkifyVaultRefs, toneOfType } from "./knowledgeNote";
+import { linkifyNoteRefs, toneOfType } from "./knowledgeNote";
 import NoteGraph from "./NoteGraph.vue";
 import { freshness } from "./noteTime";
 import { useNote, useNoteMutations } from "./useKnowledge";
@@ -99,7 +99,7 @@ const facts = computed<string[][]>(() => (note.value?.facts ?? []).map((fact) =>
  * already resolved, so the prose decorator is a lookup over that. A target that isn't in it is a note nobody
  * has written — drawn as unfinished rather than as a link that goes nowhere. */
 const resolved = computed(() => new Map((note.value?.linksTo ?? []).map((link) => [link.title, link.path])));
-const decorate = (fragment: DocumentFragment): void => linkifyVaultRefs(fragment, (target) => resolved.value.get(target));
+const decorate = (fragment: DocumentFragment): void => linkifyNoteRefs(fragment, (target) => resolved.value.get(target));
 const onProseClick = (event: MouseEvent): void => {
     const target = (event.target as HTMLElement | null)?.closest<HTMLElement>(`[data-kb]`)?.dataset[`kb`];
     if (target !== undefined) {

@@ -85,7 +85,14 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
                     <span :class="cmp.sectionLabel(`min-w-0 truncate text-2xs`)">{{ group.label }}</span>
                     <span v-if="group.count !== undefined" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle">{{ group.count }}</span>
                 </h3>
-                <slot v-for="(item, index) in group.items" name="row" :item="item" :index="index" :group="group" />
+                <!-- A HAIRLINE BETWEEN ROWS, because these rows are ROUNDED AND TINTED. Butted together, the
+                     selected row and the one under the pointer paint two tints that touch along a straight
+                     edge, and the pair reads as one taller block with a colour change in it rather than as two
+                     rows — the rounding says "separate object" and the shared edge says the opposite. 2px is
+                     enough to part them and is not enough to loosen a fifty-row column into a list of cards. -->
+                <div class="flex flex-col gap-0.5">
+                    <slot v-for="(item, index) in group.items" name="row" :item="item" :index="index" :group="group" />
+                </div>
             </section>
 
             <slot v-if="groups.length === 0" name="empty" />

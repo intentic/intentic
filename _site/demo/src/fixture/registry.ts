@@ -114,7 +114,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`77aa10ce4b2f9d0e6c8b13f5a4d92e07`), manifest: `ok`, bundle: `ok` },
         },
-        // Already here: the demo sandbox runs the knowledge vault, so this row reads "installed" rather than
+        // Already here: the demo sandbox runs the knowledge extension, so this row reads "installed" rather than
         // offering to add a second copy of something the visitor already has.
         {
             name: `intentic.knowledge`,
@@ -123,7 +123,7 @@ export const demoRegistry = (): Marketplace => ({
             admitted: true,
             trustReason: `First-party, and read at this commit like any other listing.`,
             tier: `free`,
-            description: `The owner's knowledge vault: markdown notes that are also a typed graph of people, projects and decisions.`,
+            description: `The owner's knowledge base: markdown notes that are also a typed graph of people, projects and decisions.`,
             version: `1.4.0`,
             icon: `book`,
             install: { url: `https://github.com/intentic/intentic.git`, ref: sha(`b41c9e75d208af36e5107cb92da4f8e3`), path: `_extensions/knowledge` },

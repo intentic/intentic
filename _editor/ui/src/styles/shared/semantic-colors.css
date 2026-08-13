@@ -62,8 +62,15 @@
     --color-warning-600: var(--color-amber-600);
     --color-warning-700: var(--color-amber-700);
     --color-warning-800: var(--color-amber-800);
+    /* `info` carries a 400 step like the others because the dark scheme needs one: every other status role
+     * lightens to ~72–74% L on a near-black canvas, and info had nothing above blue-500 (64% L) to lighten
+     * TO — so the one tone with no bright step was also the one tone that read as unreadable on its own
+     * tinted panel. Blue at a given lightness reads darker than red or amber besides. */
+    --color-info-400:    var(--color-blue-400);
     --color-info-500:    var(--color-blue-500);
     --color-info-600:    var(--color-blue-600);
+    --color-info-700:    var(--color-blue-700);
+    --color-info-800:    var(--color-blue-800);
 
     /* Terminal surface — deliberately dark in BOTH modes. Must stay a hex literal: xterm.js reads it
      * via getComputedStyle and its color parser rejects oklch(). */
@@ -134,10 +141,18 @@
     --role-muted:       var(--color-surface-600);
     --role-subtle:      var(--color-surface-500);
     --role-link:        var(--color-primary-700);
-    --role-danger:      var(--color-danger-600);
-    --role-success:     var(--color-success-600);
-    --role-warning:     var(--color-warning-600);
-    --role-info:        var(--color-info-600);
+    /* THE STATUS ROLES ARE TEXT COLOURS FIRST, so they sit where `--role-link` already does — the 700s — and
+     * not one step up. At 600 every one of them failed WCAG AA as text on its own 10% tint: warning measured
+     * 2.8:1, danger 3.8:1, and the pattern is not the alert box's, it is the vocabulary's — <StatusBadge>,
+     * <CountBar> and every `text-danger` in the app paint the same colour on the same wash.
+     *
+     * WARNING TAKES 800 BECAUSE AMBER'S SCALE RUNS LIGHT, not because warnings deserve a different rule:
+     * amber-700 is 55% L where red-700 is 50%, green-700 48% and blue-700 48%, so amber-800 (46%) is the step
+     * that puts the four roles at ONE lightness. Matching the number would have meant not matching the colour. */
+    --role-danger:      var(--color-danger-700);
+    --role-success:     var(--color-success-700);
+    --role-warning:     var(--color-warning-800);
+    --role-info:        var(--color-info-700);
     /* Deep fill, white label — used solid by checkboxes/toggles, used as a tint source by buttons.
      * Hover darkens the fill, so the label only gains contrast in solid contexts. */
     --role-primary-fill:       var(--color-primary-700);
@@ -171,7 +186,9 @@
     --role-danger:      var(--color-danger-400);
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
-    --role-info:        var(--color-info-500);
+    /* One step brighter than the other statuses' 500, which is where `danger` already sits — the four roles
+     * then land within a couple of points of each other in lightness instead of info trailing them by ten. */
+    --role-info:        var(--color-info-400);
     /* Bright fill, surface-900 label — used solid by checkboxes/toggles, used as a tint source by
      * buttons. Inverted from the light scheme (bright fill + dark label) because a deep fill under
      * white clears AA by a hair (~4.5:1) and this is the shade PrimeVue's controls already paint

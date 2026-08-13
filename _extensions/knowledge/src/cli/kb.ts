@@ -1,19 +1,19 @@
-import { formatFrontmatter } from "../vault/frontmatter.js";
-import { buildIndex, type BrokenLink, overviewOf, type VaultEdge, type VaultIndex } from "../vault/index-vault.js";
-import { factsOf, type VaultNote } from "../vault/note.js";
-import { neighbourhood, search } from "../vault/query.js";
-import { configuredVault, readVault, vaultRoot, writeNote } from "../vault/read-vault.js";
-import { type Drift, VOCABULARY_PATH, VOCABULARY_TYPE } from "../vault/vocabulary.js";
+import { formatFrontmatter } from "../notes/frontmatter.js";
+import { buildIndex, type BrokenLink, overviewOf, type NoteEdge, type KnowledgeIndex } from "../notes/index-notes.js";
+import { factsOf, type ParsedNote } from "../notes/note.js";
+import { neighbourhood, search } from "../notes/query.js";
+import { configuredFolder, readNotes, knowledgeRoot, writeNote } from "../notes/read-notes.js";
+import { type Drift, VOCABULARY_PATH, VOCABULARY_TYPE } from "../notes/vocabulary.js";
 import { type Args, flag, flagAll, has, number, parseArgs } from "./args.js";
 import { linkFields, slugify, wikiLink } from "./note-shape.js";
 
-/* `kb` — the knowledge vault on the AGENT's path (contributes.bin), and the half of this extension that gets
+/* `kb` — the knowledge base on the AGENT's path (contributes.bin), and the half of this extension that gets
  * used every turn rather than every so often.
  *
  * IT DRIVES THE SAME ENGINE THE PANEL DOES. One parser, one link resolver, one index, one set of tests over
- * them — so "what does the vault say about Ada" has exactly one answer whether a person asked it or the agent
+ * them — so "what does the knowledge base say about Ada" has exactly one answer whether a person asked it or the agent
  * did. That is why this is built from the extension's TypeScript rather than hand-written as a second plain-ESM
- * implementation: a duplicated reader is a vault that quietly disagrees with itself.
+ * implementation: a duplicated reader is a knowledge base that quietly disagrees with itself.
  *
  * WHAT THE AGENT NEEDS FROM AN ANSWER is a path it can open and a fact it can use, so every line here leads
  * with the note's path and the prose stays out of the way. `--json` is the same content for anything parsing it.
@@ -21,7 +21,7 @@ import { linkFields, slugify, wikiLink } from "./note-shape.js";
  * Exit codes follow the workspace's search tool, because the agent already reasons in them: 0 found something,
  * 1 found nothing, 2 could not run. */
 
-const USAGE = `kb — the knowledge vault: notes, the things in them, and how they connect.
+const USAGE = `kb — the knowledge base: notes, the things in them, and how they connect.
 
   kb find <words…>            search names, facts and prose        [--type --tag --linked-to --limit]
   kb list                     every note, newest first             [--type --tag --limit]
@@ -32,30 +32,30 @@ const USAGE = `kb — the knowledge vault: notes, the things in them, and how th
   kb set <name> <field> [v…]  replace a header field (no value clears it)
   kb link <name> <rel> <to>   connect two notes by a named relationship
   kb check                    broken links, orphans, vocabulary drift, unreadable headers
-  kb vocab                    the kinds and relationships this vault has adopted
+  kb vocab                    the kinds and relationships this knowledge base has adopted
 
 A <name> is anything that names a note: its title, an alias, its filename or its path.
-Add --json to any of these. Vault folder: $KB_VAULT (default "knowledge/" in the workspace).`;
+Add --json to any of these. Knowledge folder: $KB_FOLDER (default "knowledge/" in the workspace).`;
 
 // ---- shaping an answer -------------------------------------------------------------------------------------
 
-const chips = (note: VaultNote): string =>
+const chips = (note: ParsedNote): string =>
     [note.type, ...note.tags.map((tag) => `#${tag}`)].filter((chip) => chip !== undefined && chip !== "").join(" ");
 
-const arrow = (edge: VaultEdge, index: VaultIndex, direction: "out" | "in"): string => {
+const arrow = (edge: NoteEdge, index: KnowledgeIndex, direction: "out" | "in"): string => {
     const other = direction === "out" ? edge.to : edge.from;
     const name = other === undefined ? `${edge.target} (not written yet)` : (index.byPath.get(other)?.title ?? other);
     const relation = edge.relation ?? "mentions";
     return `  ${direction === "out" ? "→" : "←"} ${relation}  ${name}${other === undefined ? "" : `  ${other}`}`;
 };
 
-const connections = (note: VaultNote, index: VaultIndex): string[] => {
+const connections = (note: ParsedNote, index: KnowledgeIndex): string[] => {
     const out = (index.outgoing.get(note.path) ?? []).map((edge) => arrow(edge, index, "out"));
     const back = (index.backlinks.get(note.path) ?? []).map((edge) => arrow(edge, index, "in"));
     return [...(out.length === 0 ? [] : ["links to:", ...out]), ...(back.length === 0 ? [] : ["linked from:", ...back])];
 };
 
-const noteText = (note: VaultNote, index: VaultIndex, body: boolean): string =>
+const noteText = (note: ParsedNote, index: KnowledgeIndex, body: boolean): string =>
     [
         note.path,
         [note.title, chips(note)].filter((part) => part !== "").join("  ·  "),
@@ -65,7 +65,7 @@ const noteText = (note: VaultNote, index: VaultIndex, body: boolean): string =>
     ].join("\n");
 
 // The JSON shape of one note — the same facts the text form carries, for anything reading this with a program.
-const noteJson = (note: VaultNote, index: VaultIndex): unknown => ({
+const noteJson = (note: ParsedNote, index: KnowledgeIndex): unknown => ({
     path: note.path,
     title: note.title,
     type: note.type,
@@ -92,15 +92,15 @@ const out = (value: string): void => {
 const emit = (run: Run, json: unknown, text: string): void => out(run.json ? JSON.stringify(json, undefined, 2) : text);
 
 // Resolving a <name> is the one failure the agent must be able to act on, so it never resolves silently to
-// nothing: what was asked for is repeated back, with the closest names the vault does hold.
-const findNote = (index: VaultIndex, name: string): VaultNote | { readonly missing: string; readonly near: readonly string[] } => {
+// nothing: what was asked for is repeated back, with the closest names the knowledge base does hold.
+const findNote = (index: KnowledgeIndex, name: string): ParsedNote | { readonly missing: string; readonly near: readonly string[] } => {
     const found = index.resolve(name) ?? index.byPath.get(name);
     return found ?? { missing: name, near: search(index, { query: name, limit: 5 }).map((hit) => `${hit.title}  ${hit.path}`) };
 };
 
-const isNote = (value: VaultNote | { missing: string }): value is VaultNote => !("missing" in value);
+const isNote = (value: ParsedNote | { missing: string }): value is ParsedNote => !("missing" in value);
 
-const findVerb = (run: Run, index: VaultIndex): number => {
+const findVerb = (run: Run, index: KnowledgeIndex): number => {
     const hits = search(index, {
         query: run.args.positionals.join(" "),
         type: flag(run.args, "type"),
@@ -109,7 +109,7 @@ const findVerb = (run: Run, index: VaultIndex): number => {
         limit: number(run.args, "limit", 25),
     });
     if (hits.length === 0) {
-        emit(run, { hits: [] }, "nothing in the vault matches.");
+        emit(run, { hits: [] }, "nothing in the knowledge base matches.");
         return 1;
     }
     emit(
@@ -130,7 +130,7 @@ const findVerb = (run: Run, index: VaultIndex): number => {
     return 0;
 };
 
-const readVerb = (run: Run, index: VaultIndex, withBody: boolean): number => {
+const readVerb = (run: Run, index: KnowledgeIndex, withBody: boolean): number => {
     const name = run.args.positionals.join(" ");
     if (name === "") {
         emit(run, { error: "which note?" }, "which note? kb read <name>");
@@ -151,7 +151,7 @@ const readVerb = (run: Run, index: VaultIndex, withBody: boolean): number => {
     return 0;
 };
 
-const graphVerb = (run: Run, index: VaultIndex): number => {
+const graphVerb = (run: Run, index: KnowledgeIndex): number => {
     const view = neighbourhood(index, run.args.positionals.join(" "), number(run.args, "depth", 2));
     if (view.focus === undefined) {
         emit(run, view, "no such note.");
@@ -183,11 +183,11 @@ const graphVerb = (run: Run, index: VaultIndex): number => {
 const brokenLine = (link: BrokenLink): string => `  ${link.from} → [[${link.target}]]${link.relation === undefined ? "" : ` (${link.relation})`}`;
 const driftLine = (drift: Drift): string => `  ${drift.word}  ×${drift.uses}  ${drift.notes.join(" ")}`;
 
-// One named block of the report, or nothing at all when it is empty — so a clean vault prints one line rather
+// One named block of the report, or nothing at all when it is empty — so a clean knowledge base prints one line rather
 // than seven headings with nothing under them.
 const section = (heading: string, lines: readonly string[]): string[] => (lines.length === 0 ? [] : ["", heading, ...lines]);
 
-const checkVerb = (run: Run, index: VaultIndex): number => {
+const checkVerb = (run: Run, index: KnowledgeIndex): number => {
     const report = overviewOf(index);
     const body = [
         ...section(`links to notes nobody has written (${report.broken.length}):`, report.broken.map(brokenLine)),
@@ -212,15 +212,19 @@ const checkVerb = (run: Run, index: VaultIndex): number => {
     ];
     const tally = `${report.noteCount} notes, ${report.linkCount} links.`;
     emit(run, report, body.length === 0 ? `${tally} Nothing to fix.` : [tally, ...body].join("\n"));
-    // Never a failure exit: drift and unwritten notes are the vault's to-do list, not a broken build, and an
-    // agent that read a non-zero code here would start "fixing" a vault that is working as intended.
+    // Never a failure exit: drift and unwritten notes are the knowledge base's to-do list, not a broken build, and an
+    // agent that read a non-zero code here would start "fixing" a knowledge base that is working as intended.
     return 0;
 };
 
-const vocabVerb = (run: Run, index: VaultIndex): number => {
+const vocabVerb = (run: Run, index: KnowledgeIndex): number => {
     const { vocabulary } = index;
     if (vocabulary.path === undefined) {
-        emit(run, vocabulary, `this vault has adopted no vocabulary yet — write ${VOCABULARY_PATH} with type: ${VOCABULARY_TYPE} to start one.`);
+        emit(
+            run,
+            vocabulary,
+            `this knowledge base has adopted no vocabulary yet — write ${VOCABULARY_PATH} with type: ${VOCABULARY_TYPE} to start one.`,
+        );
         return 1;
     }
     const note = index.byPath.get(vocabulary.path);
@@ -240,7 +244,7 @@ const vocabVerb = (run: Run, index: VaultIndex): number => {
 
 // ---- the verbs that write ------------------------------------------------------------------------------------
 
-const newVerb = async (run: Run, index: VaultIndex): Promise<number> => {
+const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     const title = run.args.positionals.join(" ").trim();
     if (title === "") {
         emit(run, { error: "what is it called?" }, `what is it called? kb new "Ada Lovelace" --type person`);
@@ -263,7 +267,7 @@ const newVerb = async (run: Run, index: VaultIndex): Promise<number> => {
     ]);
     const body = flag(run.args, "body") ?? "";
     if (!(await writeNote(run.root, path, formatFrontmatter(fields, body === "" ? "" : `${body}\n`)))) {
-        emit(run, { error: "bad path", path }, `${path} is not a markdown file inside the vault.`);
+        emit(run, { error: "bad path", path }, `${path} is not a markdown file inside the knowledge base.`);
         return 2;
     }
     emit(run, { path, title, type }, `wrote ${path}`);
@@ -272,7 +276,7 @@ const newVerb = async (run: Run, index: VaultIndex): Promise<number> => {
 
 // Rewrite one header field in place. The body and every other field are untouched — an edit to a fact must
 // never reflow somebody's prose or reorder the header they wrote.
-const writeField = async (run: Run, index: VaultIndex, name: string, field: string, values: readonly string[]): Promise<number> => {
+const writeField = async (run: Run, index: KnowledgeIndex, name: string, field: string, values: readonly string[]): Promise<number> => {
     const found = findNote(index, name);
     if (!isNote(found)) {
         emit(run, found, `no note named "${found.missing}".`);
@@ -292,7 +296,7 @@ const writeField = async (run: Run, index: VaultIndex, name: string, field: stri
     return 0;
 };
 
-const setVerb = async (run: Run, index: VaultIndex): Promise<number> => {
+const setVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     const [name, field, ...values] = run.args.positionals;
     if (name === undefined || field === undefined) {
         emit(run, { error: "usage" }, `kb set <name> <field> [value…]`);
@@ -301,7 +305,7 @@ const setVerb = async (run: Run, index: VaultIndex): Promise<number> => {
     return writeField(run, index, name, field, values);
 };
 
-const linkVerb = async (run: Run, index: VaultIndex): Promise<number> => {
+const linkVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     const [name, relation, ...targets] = run.args.positionals;
     if (name === undefined || relation === undefined || targets.length === 0) {
         emit(run, { error: "usage" }, `kb link <name> <relationship> <other note…>`);
@@ -330,12 +334,12 @@ const main = async (): Promise<number> => {
         return args.verb === "" && !has(args, "help") ? 2 : 0;
     }
     const workspace = workspaceRoot();
-    const root = vaultRoot(workspace, process.env["KB_VAULT"] ?? (await configuredVault(workspace)));
+    const root = knowledgeRoot(workspace, process.env["KB_FOLDER"] ?? (await configuredFolder(workspace)));
     const run: Run = { args, root, json: has(args, "json") };
-    // `new` is the one verb that must work on a vault that does not exist yet, so it does not require notes.
-    const files = await readVault(root);
+    // `new` is the one verb that must work on a knowledge base that does not exist yet, so it does not require notes.
+    const files = await readNotes(root);
     if (files.length === 0 && args.verb !== "new") {
-        emit(run, { vault: root, notes: 0 }, `no notes yet in ${root} — kb new "Something" --type term starts one.`);
+        emit(run, { folder: root, notes: 0 }, `no notes yet in ${root} — kb new "Something" --type term starts one.`);
         return 1;
     }
     const index = buildIndex(files);
@@ -379,7 +383,7 @@ const main = async (): Promise<number> => {
     }
 };
 
-// A crash must still say which vault and which verb, and must not look like "found nothing" (exit 1) — an
+// A crash must still say which knowledge base and which verb, and must not look like "found nothing" (exit 1) — an
 // agent acts very differently on those two.
 main().then(
     (code) => {
