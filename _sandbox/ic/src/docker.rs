@@ -340,18 +340,6 @@ pub fn logs_into(container: &str, tail: &str, log: &Log) {
     }
 }
 
-/// The container's log tail as text, both streams merged — cloudflared writes to stderr, and the doctor's
-/// connector check classifies whatever the process actually said. None when the container is gone.
-pub fn logs_tail(container: &str, tail: &str) -> Option<String> {
-    let out = docker(&["logs", "--tail", tail, container]).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&out.stderr));
-    Some(text)
-}
-
 /// Pull a published image, with the two recoveries the scripts learned: an existing local copy beats a
 /// failed pull, and a stale `docker login ghcr.io` (Docker Desktop's credential store) makes docker present
 /// a dead token instead of pulling anonymously — clear it and retry once. After that, "denied" means the

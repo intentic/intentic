@@ -19,8 +19,8 @@ once, here, in Rust — a single static binary with no runtime to ship.
   any failure, with its fix — is also POSTed to the platform's `/setup/report` (authenticated by the setup
   code), so the browser's setup wizard names why a setup failed instead of guessing from elapsed time.
 - `ic sandbox doctor` — the same reachability chain as a read-only diagnosis of an existing sandbox:
-  container → daemon → platform registration → tunnel connector → DNS → public URL, every broken link named
-  with its fix, exit 1 when anything is broken.
+  container → daemon → platform registration → the sandbox's own tunnel agent → DNS → public URL, every
+  broken link named with its fix, exit 1 when anything is broken.
 - `ic sandbox update / rebuild / rollback / dev` — swap the container onto a different image, preserving
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
   A swap that cannot read the approved environment out of a sandbox built from one stops there: dropping an

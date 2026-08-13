@@ -4,25 +4,37 @@ use std::time::{Duration, Instant};
 use crate::checks::{self, Finding, Outcome};
 use crate::docker;
 use crate::health;
-use crate::sandbox::{CONTAINER_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::CONTAINER_PREFIX;
 use crate::util::{bail, kv_lines, Result};
 
-/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and edge → connector → browser.
+/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and hub → in-box agent → browser.
  *
  * connect used to stop at "the daemon answers /health inside the container", which proves the first half of
- * the chain and none of the second: a connector whose token Cloudflare rejects, a DNS record still
- * propagating, or a daemon that cannot reach the platform to register all looked like success in the
- * terminal — and then like a dead workspace in the browser, with nothing anywhere naming the broken link.
- * This module probes every link and names the one that is broken, with its fix.
+ * the chain and none of the second: a grant the hub refuses, a name still propagating, or a daemon that
+ * cannot reach the platform to register all looked like success in the terminal — and then like a dead
+ * workspace in the browser, with nothing anywhere naming the broken link. This module probes every link and
+ * names the one that is broken, with its fix.
  *
- * Two callers, one chain. connect runs it as a postflight WITH PATIENCE: a just-minted DNS record and a
- * connector still dialing are ordinary states of a fresh setup, so inconclusive links are re-probed until
- * the deadline and only then reported as failures. `ic sandbox doctor` runs it with none: a diagnosis of an
+ * THE SECOND HALF MOVED INSIDE THE SANDBOX. Reachability used to be a cloudflared sidecar container beside
+ * the sandbox, so its link was probed by inspecting that container; the tunnel fabric is the platform's own
+ * hub now, and what holds the share is the `zrok2` agent the entrypoint starts INSIDE the sandbox. The
+ * sidecar is not merely a different name for the same thing — nothing creates one any more, so a probe that
+ * looked for it reported every healthy sandbox as broken.
+ *
+ * Two callers, one chain. connect runs it as a postflight WITH PATIENCE: a just-claimed name and an agent
+ * still coming up are ordinary states of a fresh setup, so inconclusive links are re-probed until the
+ * deadline and only then reported as failures. `ic sandbox doctor` runs it with none: a diagnosis of an
  * existing sandbox wants the state of this moment, not a two-minute wait.
  *
  * Classification is pure and tested; the probes beside it do the IO. The chain's order is its dependency
  * order — a daemon that is down makes "registered with the platform?" unknowable, and the report says
  * exactly that instead of piling three consequences onto one cause. */
+
+/// The environment `zrok2 enable` writes and the log every zrok call appends to, both on /history — the
+/// volume that outlives a recreate, so a rebuilt sandbox re-attaches the same names. docker-entrypoint.sh
+/// owns these paths; change one, change both.
+const ZROK_ENVIRONMENT: &str = "/history/zrok/environment.json";
+const ZROK_LOG: &str = "/history/logs/zrok.log";
 
 /// A link's verdict this round: settled, or worth re-probing while patience remains — carrying the outcome
 /// to report if it runs out.
@@ -35,14 +47,14 @@ const LINKS: [&str; 6] = [
     "Sandbox container",
     "Daemon health",
     "Platform registration",
-    "Tunnel connector",
+    "Tunnel agent",
     "Public DNS",
     "Public URL",
 ];
 const CONTAINER: usize = 0;
 const DAEMON: usize = 1;
 const ANNOUNCE: usize = 2;
-const CONNECTOR: usize = 3;
+const AGENT: usize = 3;
 const DNS: usize = 4;
 const URL: usize = 5;
 
@@ -50,7 +62,10 @@ const URL: usize = 5;
 /// is None when the container does not carry one — the reachability links then say so rather than guess.
 pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) -> Vec<Finding> {
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    let tunnel_container = format!("{TUNNEL_PREFIX}{slug}");
+    // Whether this sandbox is on the hub at all: an attached one (its owner's own domain in front of it)
+    // carries no grant, and the agent link says so instead of failing a sandbox that was never meant to
+    // enable. Read once — a container's env is fixed for its life.
+    let has_grant = container_env(&container, "ZROK_TOKEN").is_some();
     let deadline = Instant::now() + patience;
     let mut settled: [Option<Outcome>; 6] = [const { None }; 6];
 
@@ -98,13 +113,16 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                 }
             }
         }
-        if settled[CONNECTOR].is_none() {
-            settle(
-                &mut settled,
-                CONNECTOR,
-                probe_connector(&tunnel_container),
-                last_round,
-            );
+        // The agent lives INSIDE the sandbox, so a container that is down makes its state unknowable for the
+        // same reason the daemon's is — one cause, one verdict.
+        if settled[AGENT].is_none() {
+            let verdict = match &settled[CONTAINER] {
+                Some(Outcome::Fail { .. }) => Verdict::Settled(Outcome::Skip {
+                    why: "unknowable while the container is down".to_string(),
+                }),
+                _ => probe_agent(&container, has_grant),
+            };
+            settle(&mut settled, AGENT, verdict, last_round);
         }
         match public_url.and_then(host_of) {
             None => {
@@ -310,53 +328,41 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
     }
 }
 
-fn probe_connector(tunnel_container: &str) -> Verdict {
-    let status = docker::inspect(tunnel_container, "{{.State.Status}}");
-    match status.as_deref() {
-        None => Verdict::Settled(Outcome::Fail {
-            problem: format!("no tunnel connector container ({tunnel_container}) on this machine."),
-            remedy: "re-run the connect one-liner — it recreates the connector.".to_string(),
-        }),
-        Some("running") => classify_connector_logs(
-            docker::logs_tail(tunnel_container, "40").as_deref(),
-            tunnel_container,
-        ),
-        Some(other) => Verdict::Settled(Outcome::Fail {
-            problem: format!("the tunnel connector container is {other}, not running."),
-            remedy: format!("start it: docker start {tunnel_container}"),
-        }),
-    }
+/// The in-box agent, asked the two questions that have different answers: did this sandbox ENABLE against
+/// the hub (its environment, written once by the entrypoint onto the volume that outlives a recreate), and
+/// is the agent that holds its shares RUNNING now.
+fn probe_agent(container: &str, has_grant: bool) -> Verdict {
+    let enabled = docker::exec_ok(container, &["test", "-f", ZROK_ENVIRONMENT]);
+    let running = docker::exec_ok(container, &["zrok2", "agent", "status"]);
+    classify_agent(has_grant, enabled, running, container)
 }
 
-/// What cloudflared's own log says about its connection — the difference between "your token is dead"
-/// (re-mint) and "your network blocks it" (firewall) lives only in these lines.
-fn classify_connector_logs(tail: Option<&str>, tunnel_container: &str) -> Verdict {
-    let Some(tail) = tail else {
-        return Verdict::Pending(Outcome::Fail {
-            problem: "could not read the connector's log.".to_string(),
-            remedy: format!("read it directly: docker logs --tail 40 {tunnel_container}"),
-        });
-    };
-    let lower = tail.to_lowercase();
-    // Order matters: a log can hold an old success ABOVE a fresh auth failure, so refusals win.
-    if lower.contains("unauthorized")
-        || lower.contains("invalid tunnel")
-        || lower.contains("failed to get tunnel")
-    {
-        return Verdict::Settled(Outcome::Fail {
-            problem:
-                "Cloudflare rejects the tunnel token — the tunnel was deleted or the token rotated."
-                    .to_string(),
-            remedy: "re-run the connect one-liner to mint a fresh tunnel.".to_string(),
+/// The two failures are different problems with different fixes, and the environment file tells them apart:
+/// a grant the hub refused never wrote one (no amount of waiting fixes that — the platform mints a new one
+/// with a new setup code), while an environment without a live agent is a process that has not come up yet,
+/// which patience often settles on a fresh setup.
+fn classify_agent(has_grant: bool, enabled: bool, running: bool, container: &str) -> Verdict {
+    if !has_grant {
+        return Verdict::Settled(Outcome::Skip {
+            why: "this sandbox carries no hub grant — it is reached however its own domain is"
+                .to_string(),
         });
     }
-    if lower.contains("registered tunnel connection") {
+    if running {
         return Verdict::Settled(Outcome::Pass);
     }
+    if !enabled {
+        return Verdict::Pending(Outcome::Fail {
+            problem: "the sandbox never enabled against the tunnel hub — its grant was refused.".to_string(),
+            remedy: format!(
+                "re-open the sandbox's setup screen for a fresh command; the refusal is in its log: docker exec {container} tail -40 {ZROK_LOG}"
+            ),
+        });
+    }
     Verdict::Pending(Outcome::Fail {
-        problem: "the connector has not established a connection to Cloudflare.".to_string(),
+        problem: "the sandbox enabled against the hub, but its tunnel agent is not running.".to_string(),
         remedy: format!(
-            "check this machine's outbound network (cloudflared dials out on 7844/443), and the log: docker logs --tail 40 {tunnel_container}"
+            "read its log: docker exec {container} tail -40 {ZROK_LOG} (the agent is restarted with the container: docker restart {container})"
         ),
     })
 }
@@ -384,7 +390,7 @@ fn probe_dns(host: &str) -> Verdict {
     }
     Verdict::Pending(Outcome::Fail {
         problem: format!("DNS for {host} does not resolve from this machine."),
-        remedy: "a fresh record can take a minute to propagate; if this persists, check the DNS record in your Cloudflare dashboard.".to_string(),
+        remedy: "a fresh name can take a minute to propagate; if this persists, check this machine's DNS — every sandbox name is served by the hub's one wildcard record.".to_string(),
     })
 }
 
@@ -404,11 +410,11 @@ fn probe_public(url: &str, host: &str) -> Verdict {
 fn classify_public(result: &std::result::Result<u16, String>, host: &str) -> Verdict {
     match result {
         Ok(200) => Verdict::Settled(Outcome::Pass),
-        // Cloudflare's own "edge is up, nothing serves this hostname" answers — the connector link is the
-        // cause, this is its symptom from outside.
+        // The hub's own "edge is up, nothing serves this name" answers — the agent link is the cause, this
+        // is its symptom from outside.
         Ok(status @ (502 | 503 | 530)) => Verdict::Pending(Outcome::Fail {
-            problem: format!("Cloudflare answers HTTP {status} for {host} — the edge is up but no connector serves it."),
-            remedy: "usually the tunnel connector — see that check's verdict.".to_string(),
+            problem: format!("the hub answers HTTP {status} for {host} — its edge is up but no share serves this name."),
+            remedy: "usually the sandbox's tunnel agent — see that check's verdict.".to_string(),
         }),
         Ok(status) => Verdict::Pending(Outcome::Fail {
             problem: format!("https://{host} answered HTTP {status} instead of the daemon's health."),
@@ -449,10 +455,16 @@ pub fn run(slug: Option<String>) -> Result<()> {
 /// SANDBOX_PUBLIC_URL from the container's own env — inspect works on a stopped container too, so the
 /// doctor can name the URL of a sandbox that is down.
 pub fn container_public_url(container: &str) -> Option<String> {
+    container_env(container, "SANDBOX_PUBLIC_URL")
+}
+
+/// One value out of the container's own env, empty read as absent — the run that created this container is
+/// the only record of what it was given, and it answers for a stopped one too.
+fn container_env(container: &str, key: &str) -> Option<String> {
     let env = docker::container_env_nul(container).ok()?;
     let text = String::from_utf8_lossy(&env).replace('\0', "\n");
-    let url = kv_lines(&text)("SANDBOX_PUBLIC_URL");
-    url.filter(|url| !url.is_empty())
+    let value = kv_lines(&text)(key);
+    value.filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]
@@ -539,40 +551,45 @@ mod tests {
     }
 
     #[test]
-    fn connector_logs_tell_a_dead_token_from_a_blocked_network() {
-        let rejected = "ERR Unauthorized: Failed to get tunnel";
-        match classify_connector_logs(Some(rejected), "t") {
-            Verdict::Settled(Outcome::Fail { remedy, .. }) => {
-                assert!(remedy.contains("mint a fresh tunnel"))
-            }
-            _ => panic!("a rejected token is settled — no retry fixes it"),
-        }
-
-        let connected = "INF Registered tunnel connection connIndex=0";
+    fn the_agent_link_tells_a_refused_grant_from_an_agent_still_coming_up() {
         assert!(matches!(
-            classify_connector_logs(Some(connected), "t"),
+            classify_agent(true, true, true, "c"),
             Verdict::Settled(Outcome::Pass)
         ));
 
-        // A stale success above a fresh refusal: the refusal wins.
-        let both = "INF Registered tunnel connection\nERR Unauthorized: Failed to get tunnel";
-        assert!(matches!(
-            classify_connector_logs(Some(both), "t"),
-            Verdict::Settled(Outcome::Fail { .. })
-        ));
-
-        let dialing = "INF Retrying connection in up to 1s";
-        match classify_connector_logs(Some(dialing), "t") {
-            Verdict::Pending(Outcome::Fail { remedy, .. }) => assert!(remedy.contains("7844")),
-            _ => panic!("still dialing is pending — patience may settle it"),
+        // Enabled once, no agent answering now: a process to bring back, not a grant to re-mint.
+        match classify_agent(true, true, false, "c") {
+            Verdict::Pending(Outcome::Fail { problem, remedy }) => {
+                assert!(problem.contains("not running"));
+                assert!(remedy.contains("docker restart c"));
+            }
+            _ => panic!("an agent that is down is pending — patience may settle it"),
         }
+
+        // Never enabled: the hub refused the grant, and only a fresh one from the setup screen fixes it.
+        match classify_agent(true, false, false, "c") {
+            Verdict::Pending(Outcome::Fail { remedy, .. }) => {
+                assert!(remedy.contains("setup screen"))
+            }
+            _ => panic!("a refused grant must name the setup screen"),
+        }
+    }
+
+    #[test]
+    fn a_sandbox_without_a_grant_skips_the_agent_link_rather_than_failing_it() {
+        assert!(matches!(
+            classify_agent(false, false, false, "c"),
+            Verdict::Settled(Outcome::Skip { .. })
+        ));
     }
 
     #[test]
     fn public_probe_separates_edge_up_from_edge_unreachable() {
         match classify_public(&Ok(530), "sandbox-x.example.com") {
-            Verdict::Pending(Outcome::Fail { remedy, .. }) => assert!(remedy.contains("connector")),
-            _ => panic!("530 is the no-connector symptom"),
+            Verdict::Pending(Outcome::Fail { remedy, .. }) => {
+                assert!(remedy.contains("tunnel agent"))
+            }
+            _ => panic!("530 is the no-share symptom"),
         }
         assert!(matches!(
             classify_public(&Ok(200), "h"),

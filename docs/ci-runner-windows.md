@@ -74,7 +74,7 @@ code path with different correct answers. So the tier refuses a machine that alr
 to mean a person had to go and clean it whenever a run was cancelled or a box rebooted mid-install.
 
 It does not any more. **Every Windows tier tears down before it asserts, as well as after.** The teardown
-uninstalls the app, clears its `intentic://` registration and removes the sandbox container and its sidecar; it
+uninstalls the app, clears its `intentic://` registration and removes the sandbox container; it
 is idempotent and cannot fail, so a clean machine walks straight through it. Whatever `doctor` objects to after
 that is a state the teardown could not reach, which is worth a human.
 

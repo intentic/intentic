@@ -210,8 +210,8 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
       - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
       # Reconcile before asserting, for the reason ci.yml's desktop-verify-windows spells out. More is at stake
-      # here than an install: these tiers create a sandbox container, a network and a cloudflared sidecar, and
-      # a nightly cut short between the install and the teardown below leaves all of it on the machine.
+      # here than an install: these tiers create a sandbox container and a network, and a nightly cut short
+      # between the install and the teardown below leaves all of it on the machine.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
       # --keep-installed: tiers 2 and 3 run the scripts the INSTALLER put on the machine, so the install has to
@@ -219,8 +219,8 @@ jobs:
       - run: node _tools/desktop-smoke-windows/dist/main.js install --installer (Resolve-Path windows-artifacts/Intentic-*-x64-setup.exe) --keep-installed
       - run: node _tools/desktop-smoke-windows/dist/main.js setup --sandbox-image $env:SANDBOX_E2E_IMAGE --ic-bin windows-artifacts/ic-windows-amd64.exe
       - run: node _tools/desktop-smoke-windows/dist/main.js agents
-      # Always: the sandbox this created holds a container, a network and a sidecar, and the install it ran on
-      # is deliberately left in place by --keep-installed.
+      # Always: the sandbox this created holds a container and a network, and the install it ran on is
+      # deliberately left in place by --keep-installed.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
         if: always()
 

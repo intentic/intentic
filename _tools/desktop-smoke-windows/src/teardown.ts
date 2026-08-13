@@ -24,10 +24,6 @@ export const runTeardown = async (harness: Harness): Promise<void> => {
     await removeContainer(container);
     harness.pass(`${container} is gone`);
 
-    // The sidecar the setup starts beside the sandbox. Named off the same slug, and left behind it would hold
-    // the container network the next run's setup tries to create.
-    await removeContainer(`${container}-cloudflared`);
-
     const installed = await findInstalledApp(PRODUCT_NAME);
     if (installed === undefined) {
         harness.pass(`${PRODUCT_NAME} is not installed`);

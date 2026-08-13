@@ -291,7 +291,8 @@ fn connect(
 
     println!("intentic: starting sandbox…");
     reporter.stage("starting-sandbox");
-    // cloudflared (the sidecar below) reaches the sandbox by name on this shared network; create it first.
+    // The sandbox's own network, created first because the container joins it: a Windows self-host target
+    // (the dind container above) is reached by name on it, and nothing else on this machine is.
     if !docker::ok(&["network", "inspect", &network]) {
         docker::capture(&["network", "create", &network])?;
     }
@@ -387,11 +388,11 @@ fn connect(
     health::wait_answering(&container, &log, "")?;
 
     /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. The other half is
-     * exactly where a setup used to die invisibly: a connector whose token Cloudflare rejects, a DNS record
-     * that never lands, a daemon that cannot register with the platform — the terminal said started, the
-     * browser showed a dead workspace, and nothing anywhere named the broken link. Verify end to end, with
-     * patience (a fresh record propagating and a connector still dialing are ordinary states of a new
-     * setup), and fail NAMING the link rather than let it look set up when it is not. */
+     * exactly where a setup used to die invisibly: a grant the hub refuses, a name that never answers, a
+     * daemon that cannot register with the platform — the terminal said started, the browser showed a dead
+     * workspace, and nothing anywhere named the broken link. Verify end to end, with patience (a name still
+     * propagating and an in-box agent still coming up are ordinary states of a new setup), and fail NAMING
+     * the link rather than let it look set up when it is not. */
     println!("intentic: verifying the sandbox is reachable end to end…");
     reporter.stage("verifying");
     let findings = doctor::verify_chain(
