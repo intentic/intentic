@@ -2,13 +2,12 @@
 //
 // jsdom because the subject is an AFFORDANCE. The logo used to be reachable only from inside name-edit mode — a
 // tile that looked decorative until you pressed a button labelled "Edit" — so the properties worth pinning are
-// all about what the tile offers before anything is typed: that an owner can reach it at rest, that a member
-// cannot reach it at all, that picking a file is the whole save, and that a logo already set can be taken back
-// off. None of those can be read off the code, and the first of them is the bug this file exists to prevent
-// coming back.
+// about both identity controls: the logo is live at rest, while rename is a compact affordance attached to the
+// name rather than a separate card-level form. The writes stay independent even though the controls share one
+// identity row.
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
@@ -92,6 +91,9 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
 const logoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label$="logo"]`)!;
 const anyLogoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button`)!;
 const fileField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="file"]`)!;
+const renameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Rename sandbox"]`)!;
+const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Sandbox name"]`)!;
+const saveNameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Save sandbox name"]`)!;
 
 // The pick arrives as a change event on a file input, which jsdom will not let a test assign `files` on.
 const pickFile = async (el: HTMLElement): Promise<void> => {
@@ -117,6 +119,39 @@ it(`offers the logo to an owner at rest, with no edit mode to enter first`, () =
     const tile = logoTile(mount(sandboxRow()));
     expect(tile.disabled).toBe(false);
     expect(tile.getAttribute(`aria-label`)).toBe(`Add a logo`);
+});
+
+// Rename reads as an affordance on the title, not as a page action: its visible control is only a labelled
+// pencil icon and entering the mode reveals an icon-only commit pair beside the same field.
+it(`keeps rename controls compact and attached to the name`, async () => {
+    const el = mount(sandboxRow());
+    const rename = renameButton(el);
+    expect(rename.textContent).toBe(``);
+    expect(rename.querySelector(`[data-icon="pencil"]`)).not.toBeNull();
+
+    rename.click();
+    await nextTick();
+
+    expect(nameField(el).value).toBe(`radarsu-intentic`);
+    expect(saveNameButton(el).textContent).toBe(``);
+    expect(saveNameButton(el).querySelector(`[data-icon="check"]`)).not.toBeNull();
+    expect(el.querySelector(`button[aria-label="Cancel rename"] [data-icon="times"]`)).not.toBeNull();
+});
+
+it(`renames from the inline field without sending the logo`, async () => {
+    const el = mount(sandboxRow());
+    renameButton(el).click();
+    await nextTick();
+
+    const field = nameField(el);
+    field.value = `workbench`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    expect(saveNameButton(el).disabled).toBe(false);
+    saveNameButton(el).click();
+
+    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`s1`, { name: `workbench` }));
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`image`);
 });
 
 // An empty tile has exactly one thing to do, so pressing it does it. Charging a menu for the first-run case —

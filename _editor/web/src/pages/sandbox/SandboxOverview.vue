@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card, StatusBadge } from "@intentic/ui";
+import { Card, cmp, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Button from "primevue/button";
 import Popover from "primevue/popover";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
@@ -40,8 +39,9 @@ const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // already is rather than only on a setup page they finished.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 
-// Inline renaming (owner only), strictly in place: the title box and the action cell already occupy their slots
-// in the header, so entering edit mode reveals affordances without reflowing a single pixel below.
+// Inline renaming (owner only), strictly in place: its pencil and commit pair belong to the name, not to a
+// second page-level action column. The field and title share their box, and the controls remain no larger than
+// the text line they operate on, so entering edit mode cannot change the card's height.
 //
 // THE LOGO IS NOT PART OF THIS FORM, and that is the correction. It used to be reachable only from inside
 // name-edit mode — press Edit, then discover that the decorative-looking tile had become a file picker — so the
@@ -233,37 +233,82 @@ const save = async (): Promise<void> => {
 
                     <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
-                            <!-- Title and field share one box — same height, padding and type scale — so switching
-                                 modes only paints a border; the glyphs never move. In edit mode a hidden sizer
-                                 span mirrors the name in the same cell, so the input is as wide as the text it
-                                 holds instead of claiming the whole row. -->
-                            <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
-                                <template v-if="editing">
-                                    <span
-                                        aria-hidden="true"
-                                        class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-lg font-semibold"
-                                        >{{ name === `` ? ` ` : name }}</span
+                            <div class="flex min-w-0 items-center">
+                                <!-- Title and field share one box — same height, padding and type scale — so
+                                     switching modes only paints a border; the glyphs never move. The hidden
+                                     sizer keeps the field proportional to its text instead of turning rename
+                                     into a full-width form. -->
+                                <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
+                                    <template v-if="editing">
+                                        <span
+                                            aria-hidden="true"
+                                            class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-lg font-semibold"
+                                            >{{ name === `` ? ` ` : name }}</span
+                                        >
+                                        <input
+                                            ref="nameInput"
+                                            v-model="name"
+                                            type="text"
+                                            aria-label="Sandbox name"
+                                            autocomplete="off"
+                                            maxlength="60"
+                                            class="col-start-1 row-start-1 h-8 w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2 text-lg font-semibold text-content outline-none"
+                                            :class="nameTouched && nameError ? 'ui-field-input-error' : ''"
+                                            @blur="nameTouched = true"
+                                            @keydown.enter.prevent="save"
+                                            @keydown.esc.prevent="cancelEdit"
+                                        />
+                                    </template>
+                                    <h2
+                                        v-else
+                                        class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
                                     >
-                                    <input
-                                        ref="nameInput"
-                                        v-model="name"
-                                        type="text"
-                                        aria-label="Sandbox name"
-                                        autocomplete="off"
-                                        maxlength="60"
-                                        class="col-start-1 row-start-1 h-8 w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2 text-lg font-semibold text-content outline-none"
-                                        :class="nameTouched && nameError ? 'ui-field-input-error' : ''"
-                                        @blur="nameTouched = true"
-                                        @keydown.enter.prevent="save"
-                                        @keydown.esc.prevent="cancelEdit"
-                                    />
-                                </template>
-                                <h2
-                                    v-else
-                                    class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
-                                >
-                                    <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
-                                </h2>
+                                        <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
+                                    </h2>
+                                </div>
+
+                                <!-- Rename is a property of the name, so its controls sit directly beside it: a
+                                     quiet pencil at rest, then compact check/cancel icons while editing. Labels
+                                     and key hints stay in accessibility text and tooltips rather than becoming
+                                     large buttons across the card. -->
+                                <div v-if="isOwner" class="flex shrink-0 items-center gap-1">
+                                    <template v-if="editing">
+                                        <button
+                                            type="button"
+                                            :class="
+                                                cmp.iconButton(
+                                                    `h-8 w-8 text-subtle hover:text-success disabled:cursor-not-allowed disabled:opacity-40`,
+                                                )
+                                            "
+                                            :disabled="busy || !canSave"
+                                            aria-label="Save sandbox name"
+                                            v-tooltip.bottom="`Save · Enter`"
+                                            @click="save"
+                                        >
+                                            <Icon :name="busy ? `spinner` : `check`" :spin="busy" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            :class="cmp.iconButton(`h-8 w-8 text-subtle disabled:cursor-not-allowed disabled:opacity-40`)"
+                                            :disabled="busy"
+                                            aria-label="Cancel rename"
+                                            v-tooltip.bottom="`Cancel · Esc`"
+                                            @click="cancelEdit"
+                                        >
+                                            <Icon name="times" />
+                                        </button>
+                                    </template>
+                                    <button
+                                        v-else
+                                        type="button"
+                                        :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                        aria-label="Rename sandbox"
+                                        v-tooltip.bottom="`Rename sandbox`"
+                                        @click="startEdit"
+                                    >
+                                        <Icon name="pencil" class="text-xs" />
+                                    </button>
+                                </div>
                             </div>
                             <StatusBadge
                                 class="shrink-0"
@@ -273,23 +318,6 @@ const save = async (): Promise<void> => {
                             />
                         </div>
                         <p class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                    <!-- Edit and Cancel/Save are stacked in one grid cell: the cell is as wide as the widest
-                         state, so revealing Save can never reflow the header. The inactive layer is
-                         `invisible`, which keeps its size while dropping out of the tab order and the a11y
-                         tree. Save sits where Edit sat — the same corner keeps meaning "commit". -->
-                    <div v-if="isOwner" class="grid grid-cols-1 grid-rows-1 items-center">
-                        <div class="col-start-1 row-start-1 flex items-center justify-end" :class="editing ? 'invisible' : ''">
-                            <Button label="Edit" size="small" severity="secondary" :text="true" @click="startEdit">
-                                <template #icon><Icon name="pencil" /></template>
-                            </Button>
-                        </div>
-                        <div class="col-start-1 row-start-1 flex items-center justify-end gap-2" :class="editing ? '' : 'invisible'">
-                            <Button label="Cancel" size="small" severity="secondary" :text="true" :disabled="busy" @click="cancelEdit" />
-                            <Button label="Save" size="small" class="min-w-[5.5rem]" :loading="busy" :disabled="busy || !canSave" @click="save" />
-                        </div>
                     </div>
                 </div>
             </div>
