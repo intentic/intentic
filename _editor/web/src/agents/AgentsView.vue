@@ -8,7 +8,7 @@ import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { startAgent } from "../composables/agents/agentActions";
+import { composeAgent, startAgent } from "../composables/agents/agentActions";
 import { markAgentStarted } from "../composables/agents/firstRun";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -22,6 +22,7 @@ import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, win
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
+import { offerOnBoard } from "../composables/chat/connectOffer";
 import { openRunInChat } from "../composables/chat/openRun";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { summonChat } from "../composables/chat/summon";
@@ -30,6 +31,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
+import ConnectOffer from "../chat/ConnectOffer.vue";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
@@ -106,7 +108,10 @@ const {
     busyIds,
     agentById,
 } = useAgents();
-const { active, panes, closeTabs } = useChat();
+// The whole store rather than a destructure: the first screen's connect offer acts on the FOCUSED chat, and
+// the card takes that conversation's view (provider, harness, the press that re-points it) as one object.
+const chat = useChat();
+const { active, panes, closeTabs, connected, accountsLoaded } = chat;
 const { popOut: popOutChat, poppedOut } = useChatPopout();
 // A refusal lands on the board's notice strip — the preparation refuses whole (a running source, a transcript
 // that couldn't be captured), and a press that does nothing visible reads as a button that broke.
@@ -676,18 +681,26 @@ const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.v
 const clearable = computed(() => lanes.value.finished.length);
 
 /* --- The first run --------------------------------------------------------------------------------------
- * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. On a fresh workspace this is where the desktop now lands
- * (router/index.ts), straight out of setup, and what stood here was a sentence describing the board and a
- * button that opened an empty composer somewhere else — which hands the whole burden of imagination to
- * somebody who has been using the product for four seconds. So the empty state IS a composer: one question,
- * one box, and a few tasks worth pressing, which is the shape every tool that solves this problem converges on.
+ * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. On a fresh workspace this is where the desktop lands
+ * (router/index.ts), straight out of setup, so what stands here is somebody's whole first impression.
  *
- * A chip FILLS the box, it does not send. One rule for all of them, because they are not all complete: "bring
- * in my code" ends mid-sentence waiting for a repository, and a chip that sometimes dispatches an agent and
- * sometimes doesn't is a control nobody can predict. It also leaves the text there to be edited, which is the
- * point of suggesting it rather than doing it. */
-const firstTask = ref(``);
-const firstTaskField = ref<HTMLTextAreaElement | undefined>(undefined);
+ * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen — its
+ * own box, its own send — and it was wrong twice over. There is exactly one composer in this product and it is
+ * the chat: docked on the right, or popped out into its own window. A second one an inch from the first, in a
+ * column that is otherwise a board, teaches a shape the app does not have. And on the screen it was built for
+ * it could not even send: a brand-new sandbox has no AI account connected yet, so the first thing the first
+ * user ever met was a box that swallows a sentence and a button that goes nowhere.
+ *
+ * So this screen answers the question the user is actually at: what do I need before an agent can run. With
+ * nothing connected it IS the connect offer — the same card the chat's own gate shows (ConnectOffer), taken
+ * over from it while this stands (connectOffer.ts), because two copies of one offer side by side read as two
+ * different offers. Once something can send, it goes back to asking for the task, and the suggestions write
+ * themselves into the real composer one column over.
+ *
+ * A chip FILLS that composer, it does not send. One rule for all of them, because they are not all complete:
+ * "bring in my code" ends mid-sentence waiting for a repository, and a chip that sometimes dispatches an agent
+ * and sometimes doesn't is a control nobody can predict. It also leaves the text there to be edited, which is
+ * the point of suggesting it rather than doing it. */
 // The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -725,22 +738,16 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
         },
     ];
 });
-// Fill and focus, caret at the end — an unfinished prompt has to leave the user typing where the sentence stops.
-const useStarter = async (prompt: string): Promise<void> => {
-    firstTask.value = prompt;
-    await nextTick();
-    const field = firstTaskField.value;
-    field?.focus();
-    field?.setSelectionRange(prompt.length, prompt.length);
-};
-const sendFirstTask = (): void => {
-    const task = firstTask.value.trim();
-    if (task.length === 0) {
-        return;
-    }
-    firstTask.value = ``;
-    startAgent(task);
-};
+/* WHETHER THIS SCREEN IS THE ONE ANSWERING "what can this chat send with" — which is what the chat's own gate
+ * stands down for. It covers the WAIT as well as the offer: "you have nothing connected" is a claim, and until
+ * the daemon has answered neither surface may make it (accountsLoaded, below) — but two "Checking your AI
+ * accounts…" lines a hand's width apart are the same duplication as two offers, so the board takes both halves.
+ *
+ * Held while that screen is up and dropped the moment it isn't — this route left, something connected, an agent
+ * started — so the docked gate comes back on its own without anything having to remember to hand it back. */
+const offering = computed(() => !started.value && !archiveOpen.value && !connected.value);
+watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
+onUnmounted(() => (offerOnBoard.value = false));
 /* AGENTS ON THE BOARD MEAN THIS IS NOT A FIRST RUN, whatever this browser's storage says — a workspace driven
  * from another machine, or from before the flag existed, has already been delegated to, and the desktop should
  * go back to opening on the workspace for it. startAgent records the same fact on the press; this is the other
@@ -1091,14 +1098,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
              the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
         <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
-            <!-- THE FIRST RUN: nothing has ever happened here, so the screen asks for a task. The question
-                 comes first, and it is a QUESTION — this screen's job is to be answered, not read. -->
+            <!-- THE FIRST RUN. One heading and one sentence, whichever half of the screen follows them: what
+                 comes next depends on a daemon read that lands a beat later, and a title that rewrote itself
+                 mid-glance would make the first screen of the product look unsure of itself. -->
             <template v-if="!started">
                 <div class="flex w-full max-w-xl flex-col gap-2">
-                    <h2 class="text-sm font-semibold text-content">What should the first agent do?</h2>
+                    <h2 class="text-sm font-semibold text-content">Start your first agent</h2>
                     <p class="text-2xs text-muted">
-                        Describe a task and it runs on its own branch while you carry on — you review what it did before anything lands in your
-                        workspace.
+                        Agents work on their own branch while you carry on — you review what they did before anything lands in your workspace.
                     </p>
                 </div>
             </template>
@@ -1112,34 +1119,27 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </p>
             </template>
             <template v-if="!started">
-                <!-- The composer. Enter sends and Shift+Enter breaks the line, which is the docked chat's contract
-                     one column over; a first box that answered those two keys differently would teach the wrong
-                     reflex on the very first press. -->
-                <div class="flex w-full max-w-xl flex-col gap-2 rounded-xl border border-line bg-card p-2 text-left focus-within:border-primary-500">
-                    <textarea
-                        ref="firstTaskField"
-                        v-model="firstTask"
-                        rows="3"
-                        aria-label="What should the first agent do?"
-                        placeholder="e.g. Explain this codebase and point me at the entry points"
-                        class="scrollbar-thin block max-h-40 w-full resize-none bg-transparent px-2 pt-1 text-xs leading-relaxed text-content placeholder:text-subtle focus:outline-none"
-                        @keydown.enter.exact.prevent="sendFirstTask"
-                    ></textarea>
-                    <div class="flex items-center justify-end">
-                        <Button size="small" :disabled="firstTask.trim().length === 0" @click="sendFirstTask">
-                            <Icon name="sparkles" />Start agent
-                        </Button>
-                    </div>
+                <!-- THE WAY IN, on the screen a fresh sandbox actually lands on: the chat's own card, in the
+                     middle of the board rather than tucked into a side panel, because until it is answered
+                     nothing else on this screen can happen. The chat drops its copy while this stands — the
+                     wait in front of it included, which is why the spinner is inside this branch and not
+                     beside it. -->
+                <div v-if="offering" class="w-full max-w-sm rounded-xl border border-line bg-card px-4 py-5">
+                    <p v-if="!accountsLoaded" class="flex items-center justify-center gap-2 text-xs text-muted">
+                        <Icon name="spinner" spin />Checking your AI accounts…
+                    </p>
+                    <ConnectOffer v-else :view="chat" />
                 </div>
-                <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill the
-                     box rather than dispatching, so the user sends their own first turn. -->
-                <div class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+                <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill
+                     the chat's composer rather than dispatching, so the user sends their own first turn — and
+                     the caret lands where the sentence stops, which for "bring in my code" is mid-sentence. -->
+                <div v-else class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
                     <button
                         v-for="starter in starters"
                         :key="starter.label"
                         type="button"
                         class="rounded-full border border-line px-2.5 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-                        @click="useStarter(starter.prompt)"
+                        @click="composeAgent(starter.prompt)"
                     >
                         {{ starter.label }}
                     </button>

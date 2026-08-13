@@ -3,7 +3,7 @@ import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sa
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../chat/conversation";
 import { summonChat } from "../chat/summon";
-import { draftConversation, useChat } from "../chat/useChat";
+import { composingConversation, draftConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -56,6 +56,24 @@ export const startAgent = (prompt?: string): void => {
     if (prompt !== undefined) {
         void conversation.enqueue(prompt);
     }
+};
+
+/* THE SAME PRESS WITH THE TURN WRITTEN BUT NOT SENT — what a surface offering a SUGGESTION does (the empty
+ * board's starters). Every step of `startAgent` except the send, and that difference is the whole point: the
+ * suggestions are not all complete sentences ("bring in my code" stops where the repository goes), and one that
+ * sometimes dispatched an agent and sometimes didn't would be a control nobody can predict. Leaving the text in
+ * the composer is also what makes it editable, which is the point of suggesting rather than doing.
+ *
+ * Nothing is marked started, because nothing has been delegated: the first-run screen stays up until a turn is
+ * actually sent, which is the fact it exists to track (firstRun.ts).
+ *
+ * The composer it writes into is the focused chat when nothing has been sent there yet, so trying a second
+ * suggestion REPLACES the first rather than opening a second tab (composingConversation). */
+export const composeAgent = (prompt: string): void => {
+    const conversation = composingConversation();
+    conversation.draft.value = prompt;
+    summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
+    revealConversation(conversation);
 };
 
 // The navigation half of a summons, in the window that was pressed: mobile has no docked panel, so the agent's

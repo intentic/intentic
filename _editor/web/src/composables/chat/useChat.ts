@@ -1354,6 +1354,19 @@ export const openAgentConversation = (agent: AgentTabSeed): Conversation =>
  * visible tab switch when it was pressed from another tab. */
 export const draftConversation = (): Conversation => conversations.value.find(untouchedDraft) ?? new Conversation();
 
+/* The conversation a SUGGESTION is written into — the empty board's starters, which fill a composer rather than
+ * sending anything (agentActions.composeAgent).
+ *
+ * Deliberately looser than `untouchedDraft`: text in the box makes a draft touched, so asking for one twice
+ * would mint a second tab, and a user trying three starters in a row would end up with three chats they never
+ * sent. What matters here is only that nothing has been SENT on the focused chat — no transcript, no session,
+ * not on the fleet — because then rewriting its composer replaces a suggestion the user has not acted on. Once
+ * anything has been sent it is somebody's conversation, and a suggestion opens its own draft instead. */
+export const composingConversation = (): Conversation => {
+    const focused = active.value;
+    return !focused.registered.value && focused.messages.value.length === 0 && focused.session.value === undefined ? focused : draftConversation();
+};
+
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
 // the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a popped-out
 // window), and only that component holds the textarea. A counter, not a flag — two "New agent" presses in a

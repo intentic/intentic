@@ -1249,7 +1249,12 @@ watch(composerFocus, () => {
     }
     void nextTick(() => {
         grow();
-        input.value?.focus();
+        const field = input.value;
+        field?.focus();
+        // A composer that arrives ALREADY FILLED — a board starter's suggestion, deliberately left mid-sentence
+        // where the repository goes — has to leave the caret where the sentence stops rather than in front of
+        // it. A no-op on the empty draft every other summons focuses.
+        field?.setSelectionRange(field.value.length, field.value.length);
     });
 });
 

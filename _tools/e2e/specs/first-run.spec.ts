@@ -10,25 +10,27 @@ import { expect, test } from "@playwright/test";
  * asserting against a workspace that is no longer new. */
 test.describe.configure({ mode: `serial` });
 
-test(`the desktop's first landing is the agent board, asking for a task`, async ({ page }) => {
+test(`the desktop's first landing is the agent board, offering the way in`, async ({ page }) => {
     // The shell's own entry, not /agents directly: the redirect IS what is under test.
     await page.goto(`/`);
 
     await expect(page).toHaveURL(/\/agents$/);
-    await expect(page.getByRole(`heading`, { name: `What should the first agent do?` })).toBeVisible();
+    await expect(page.getByRole(`heading`, { name: `Start your first agent` })).toBeVisible();
 
-    // The composer is empty and its send is inert until there is something to send.
-    const composer = page.getByRole(`textbox`, { name: `What should the first agent do?` });
-    await expect(composer).toBeVisible();
-    await expect(composer).toHaveValue(``);
-    await expect(page.getByRole(`button`, { name: `Start agent` })).toBeDisabled();
+    /* NOTHING IS CONNECTED ON A FRESH SANDBOX, so the first screen is the way in rather than a task box that
+     * could not send. It is the chat's own card (ConnectOffer), and it stands in the middle of the board — the
+     * free channel as the headline, the subscriptions as a quiet row under it. */
+    await expect(page.getByText(`Try free with Google`)).toBeVisible();
+    await expect(page.getByRole(`button`, { name: /Continue with Google/ })).toBeVisible();
+    await expect(page.getByRole(`button`, { name: /Claude — Connect Claude subscription/ })).toBeVisible();
 
-    // A starter FILLS the box rather than dispatching an agent — the one rule every chip follows.
-    await page.getByRole(`button`, { name: `Bring in my code` }).click();
-    await expect(composer).toHaveValue(/Clone my repository into this workspace/);
-    await expect(page.getByRole(`button`, { name: `Start agent` })).toBeEnabled();
-    // Still the empty board: filling the composer is not starting anything.
-    await expect(page.getByRole(`heading`, { name: `What should the first agent do?` })).toBeVisible();
+    // THE ONE COMPOSER IN THIS PRODUCT IS THE CHAT'S. The board used to carry a second one here.
+    await expect(page.getByRole(`textbox`, { name: `What should the first agent do?` })).toHaveCount(0);
+    await expect(page.getByRole(`button`, { name: `Start agent` })).toHaveCount(0);
+
+    // And the docked chat drops its copy of the same card while the board is making the offer — one offer on
+    // screen, not two a hand's width apart.
+    await expect(page.getByText(`Try free with Google`)).toHaveCount(1);
 });
 
 test(`an empty workspace offers every way of getting code in, repository first`, async ({ page }) => {
