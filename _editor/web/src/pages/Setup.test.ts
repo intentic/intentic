@@ -43,6 +43,9 @@ const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
 const hostedProvision = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSummary>>();
+// The 3s poll's read. Named (rather than inline) because the wait card is driven entirely by what it returns:
+// what the sandbox has said about its own boot, and whether we have been refusing its check-ins.
+const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
 vi.mock(`../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
@@ -51,7 +54,7 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
         hostedProvision,
         hostedRelease,
         update,
-        refresh: vi.fn().mockResolvedValue([]),
+        refresh,
         select: vi.fn(),
         attach: vi.fn(),
         remove: vi.fn().mockResolvedValue(undefined),
@@ -63,7 +66,11 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
 // keep describing the world without the hosted rung.
 const setupCode = vi.fn(() => new Promise<never>(() => {}));
 const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
-vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer } } }));
+// The wait's two extra calls: the machine's power state (polled while waiting) and the restart its failures
+// offer. Both answer harmlessly by default — a wait that cannot ask falls back to its plain step list.
+const hostedStatus = vi.fn().mockResolvedValue({ machine: `unknown` });
+const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
+vi.mock(`../composables/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, hostedStatus, hostedRestart } } }));
 vi.mock(`../composables/sandbox/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
 vi.mock(`../composables/analytics`, () => ({ track: vi.fn() }));
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
@@ -162,6 +169,9 @@ const nameRow = (): string => {
 beforeEach(() => {
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
+    refresh.mockReset().mockResolvedValue([]);
+    hostedStatus.mockReset().mockResolvedValue({ machine: `unknown` });
+    hostedRestart.mockReset().mockResolvedValue({ ok: true });
     hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad` } }));
     hostedRelease.mockReset().mockImplementation(async (id: string) => sandboxRow({ id }));
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
@@ -234,7 +244,9 @@ it(`auto-starts a hosted machine on arrival when the platform offers one`, async
     // The row is created the ordinary way — the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
     expect(hostedProvision).toHaveBeenCalledWith(`new`);
-    expect(el.textContent).toContain(`Starting your machine`);
+    // The wait names its steps rather than asserting one sentence at every problem — see hostedWait.ts.
+    expect(el.textContent).toContain(`Starting the machine`);
+    expect(el.textContent).toContain(`Putting it on the internet`);
     // Nothing pasteable on the zero-click path: the wait is the whole step.
     expect(el.textContent).not.toContain(`Copy`);
 });
@@ -261,7 +273,36 @@ it(`resumes a hosted sandbox onto the wait card, not the command lane`, async ()
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
     expect(hostedProvision).not.toHaveBeenCalled();
-    expect(el.textContent).toContain(`Starting your machine`);
+    expect(el.textContent).toContain(`Starting the machine`);
+});
+
+/* WHAT THE WAIT SAYS WHEN IT GOES WRONG, which is the reason any of this exists. The card used to show one
+ * sentence — "Starting your machine" — to a machine that never booted, a sandbox nobody could reach, and a
+ * sandbox we were refusing every time it spoke. People sat through a wedged tunnel because nothing on screen
+ * distinguished it from a slow boot.
+ *
+ * The refused check-in is the shape a half-migrated sandbox takes: alive, talking, and turned away every time.
+ * Waiting can never fix it, so the card has to say so and offer the one thing that can. */
+it(`names a refused check-in on the wait card, with a way out`, async () => {
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    refresh.mockResolvedValue([{ ...hosted, announceRefusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } }]);
+    const el = await mount();
+
+    // The poll is what learns this — the row the page was mounted with knew nothing. It runs every 3s, so the
+    // wait here is for one tick of it rather than for a render.
+    await vi.waitFor(() => expect(el.textContent).toContain(`old.example.dev`), { timeout: 6_000, interval: 50 });
+    expect(el.textContent).toContain(`sandbox-abc.sbx.test`);
+    // …and the step list is gone: a list still ticking beside "here is what broke" argues with itself.
+    expect(el.textContent).not.toContain(`Putting it on the internet`);
+
+    // The address is built into this machine, so the way out is a new one rather than another boot.
+    const restart = [...el.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.includes(`Start it over`));
+    restart!.click();
+    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    expect(hostedProvision).toHaveBeenCalledWith(`h1`);
+    expect(hostedRestart).not.toHaveBeenCalled();
 });
 
 /* THE LADDER IS CARDS, AND A SWITCH MOVES A MACHINE — NOT THE SANDBOX. Picking another rung on a hosted

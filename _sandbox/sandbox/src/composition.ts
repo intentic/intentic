@@ -169,6 +169,7 @@ import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firing
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
+import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
@@ -232,6 +233,10 @@ export interface Services {
     // The platform registration, same split as `boot`: main starts/stops it, /health reports its state — the
     // one setup link nothing outside the container can probe (see platform/announce.ts).
     readonly announcer: Announcer;
+    // Whether this sandbox's PUBLIC address actually answers, established by the box probing itself and
+    // reported to the platform (see platform/reach-report.ts). The announce's missing other half: registering
+    // proves the daemon started, this proves somebody can reach it.
+    readonly reach: ReachReporter;
     readonly workspace: WorkspacePaths;
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
@@ -903,6 +908,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // for a test or the host-internal preview has nothing to wait for.
         boot: createBootTracker(logger),
         announcer: createAnnouncer(config, logger),
+        reach: createReachReporter(config, logger),
         workspace,
         processes,
         dependencies,

@@ -17,6 +17,8 @@ const summary = (id: string): SandboxSummary => ({
     lastSeenAt: null,
     setupCodeClaimedAt: null,
     setupReport: null,
+    bootReport: null,
+    announceRefusal: null,
     cloud: null,
     hosted: null,
     token: `token-${id}`,

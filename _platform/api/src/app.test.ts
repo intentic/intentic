@@ -14,7 +14,8 @@ const config = {
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true },
+    zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: false },
 } as Config;
@@ -162,7 +163,9 @@ describe(`POST /sandbox/announce`, () => {
         expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
         expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
-            data: { daemonUrl: `https://sandbox-abc.intentic.dev`, lastSeenAt: expect.any(Date) },
+            // The refusal record is cleared on the way through: it exists to describe a LIVE disagreement, and
+            // a sandbox just accepted at its proper address no longer has one.
+            data: { daemonUrl: `https://sandbox-abc.intentic.dev`, lastSeenAt: expect.any(Date), announceRefusal: Prisma.DbNull },
         });
     });
 
@@ -190,8 +193,13 @@ describe(`POST /sandbox/announce`, () => {
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
         expect(res.status).toBe(409);
-        // Neither the URL nor lastSeenAt moves — an unvetted address must not read as a live sandbox.
-        expect(update).not.toHaveBeenCalled();
+        /* Neither the URL nor lastSeenAt moves — an unvetted address must not read as a live sandbox. What IS
+         * written is the disagreement itself, both halves of it: the refusal used to be a log line only, which
+         * is what made a mis-addressed sandbox look exactly like one that never started. */
+        expect(update).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1` },
+            data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME.replace(`.intentic.dev`, `.sbx.test`) } },
+        });
 
         // The address the platform would derive for this token, under the fabric's own zone.
         const derived = `https://${HOSTNAME.replace(`.intentic.dev`, `.sbx.test`)}`;
@@ -214,6 +222,61 @@ describe(`POST /sandbox/announce`, () => {
     });
 });
 
+const bootReport = (prisma: PrismaClient, token: string | undefined, body: unknown) =>
+    createApp(config, prisma, logger).app.request(`/sandbox/boot-report`, {
+        method: `POST`,
+        headers: { "content-type": `application/json`, ...(token === undefined ? {} : { "x-intentic-connect": token }) },
+        body: JSON.stringify(body),
+    });
+
+/* The announce's other half: whether the sandbox's PUBLIC address answers, as established by the box probing
+ * itself. Separate from the announce because the two claims fail separately — the tunnel migration produced a
+ * fleet that registered perfectly and served nobody, and nothing in the registry could tell them apart. */
+describe(`POST /sandbox/boot-report`, () => {
+    it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const prisma = fakePrisma({ sandbox: { findUnique, update } });
+
+        const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `its tunnel has not come up.` });
+        expect(res.status).toBe(200);
+        // Matched by the token's digest, exactly like the announce — the same secret, the same lookup.
+        expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
+        expect(update).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1` },
+            data: {
+                bootReport: {
+                    reach: `unreachable`,
+                    detail: `its tunnel has not come up.`,
+                    // The platform's own clock: a box with a wrong one must not narrate from the past.
+                    at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+                },
+            },
+        });
+    });
+
+    it(`accepts a bare verdict — the healthy path carries no detail`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }), update } });
+        expect((await bootReport(prisma, `tok`, { reach: `reachable` })).status).toBe(200);
+        expect(update).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1` },
+            data: { bootReport: { reach: `reachable`, at: expect.any(String) } },
+        });
+    });
+
+    it(`refuses a missing token, an unknown one, and a verdict that isn't one`, async () => {
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const prisma = fakePrisma({ sandbox: { findUnique, update: vi.fn() } });
+        expect((await bootReport(prisma, undefined, { reach: `reachable` })).status).toBe(400);
+        expect((await bootReport(prisma, `tok`, { reach: `probably` })).status).toBe(400);
+        // Neither reached the database: both are refusals of the request, not of the sandbox.
+        expect(findUnique).not.toHaveBeenCalled();
+
+        const unknown = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } });
+        expect((await bootReport(unknown, `nope`, { reach: `reachable` })).status).toBe(404);
+    });
+});
 
 // The connect-token host-tunnel mint (the in-sandbox infra panel's path). The CF provisioning itself is the
 // shared provisionHostSshTunnel (covered by cloudflare.test.ts); these lock the auth + guard paths that run

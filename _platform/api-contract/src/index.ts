@@ -10,6 +10,7 @@ import {
     CfZonesSchema,
     DaemonUrlSchema,
     HostedOfferSchema,
+    HostedStatusSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
@@ -92,22 +93,30 @@ export const sandboxContract = {
      * delete dialog and its confirmation. `wake` starts a stopped machine (the idle-stop's other half) and
      * answers immediately — the browser keeps probing the daemon like it always does. */
     hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
-    hostedProvision: oc
-        .route({ method: "POST", path: "/sandbox/hosted-provision" })
+    hostedProvision: oc.route({ method: "POST", path: "/sandbox/hosted-provision" }).input(sandboxIdInput).output(SandboxSummarySchema),
+    hostedRelease: oc.route({ method: "POST", path: "/sandbox/hosted-release" }).input(sandboxIdInput).output(SandboxSummarySchema),
+    // What the machine itself is doing, asked of the provider — the only part of the wait that exists before
+    // the daemon does. Polled ONLY while the wizard is sitting on a hosted wait, which is what keeps a
+    // per-row provider call out of `list`.
+    hostedStatus: oc.route({ method: "POST", path: "/sandbox/hosted-status" }).input(sandboxIdInput).output(HostedStatusSchema),
+    /* Turn a hosted machine off and on again — the recovery for the failures that are the BOX's rather than
+     * the sandbox's: a daemon that never came up, and a tunnel that never bound. Both are fixed by rerunning
+     * the boot, and neither is fixed by waiting indefinitely, which is what the setup wait offered before.
+     *
+     * Deliberately not `hostedRelease`: that destroys the machine and its volume, so it refuses a sandbox that
+     * has ever connected — correctly, since that is somebody's files. A restart keeps everything and costs the
+     * seconds of a boot, which makes it the one recovery safe enough to put under a failure message. It is
+     * also what the idle-stop does to every hosted sandbox routinely, so it is a well-worn path, not a new
+     * kind of event. */
+    hostedRestart: oc
+        .route({ method: "POST", path: "/sandbox/hosted-restart" })
         .input(sandboxIdInput)
-        .output(SandboxSummarySchema),
-    hostedRelease: oc
-        .route({ method: "POST", path: "/sandbox/hosted-release" })
-        .input(sandboxIdInput)
-        .output(SandboxSummarySchema),
+        .output(z.object({ ok: z.boolean() })),
     wake: oc
         .route({ method: "POST", path: "/sandbox/wake" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
-    setupCode: oc
-        .route({ method: "POST", path: "/sandbox/setup-code" })
-        .input(sandboxIdInput)
-        .output(SetupCodeSchema),
+    setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput).output(SetupCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })
         .input(sandboxIdInput)

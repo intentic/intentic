@@ -210,6 +210,7 @@ const main = async (): Promise<void> => {
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());
+    shutdown.push(() => services.reach.stop());
     shutdown.push(() => services.history.stop());
     // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own in-flight
     // voice transcript on the way down.
@@ -438,6 +439,12 @@ const main = async (): Promise<void> => {
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
         if (role.container) {
             services.announcer.start();
+            /* And immediately: does that public URL actually answer? Started here rather than after the boot
+             * chain for the same reason the announce is — a waiting browser is reading exactly this, and it
+             * has to hear "checking" while the tunnel comes up rather than nothing at all. The two are
+             * separate claims deliberately (see reach-report.ts); registering says the daemon exists,
+             * this says somebody can get to it. */
+            services.reach.start();
         }
     }
 

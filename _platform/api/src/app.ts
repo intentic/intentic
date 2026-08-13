@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { API_BASE_PATH, SetupReportSchema } from "@intentic-app/api-contract";
+import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic-app/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
@@ -247,16 +247,57 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }
-        // The browser trusts this value with the user's Google credential, so it is pinned to the address we
-        // already know this sandbox by (see expectedDaemonHost). A daemon that announces anything else is
-        // refused and the stored URL is left alone — lastSeenAt too, so the sandbox reads as not-phoning-home
-        // rather than quietly alive at an address nobody vetted.
+        /* The browser trusts this value with the user's Google credential, so it is pinned to the address we
+         * already know this sandbox by (see expectedDaemonHost). A daemon that announces anything else is
+         * refused and the stored URL is left alone — lastSeenAt too, so the sandbox reads as not-phoning-home
+         * rather than quietly alive at an address nobody vetted.
+         *
+         * The refused HOST is recorded, though, because the refusal is otherwise a perfect silence: the box
+         * retries, we say no, and the wizard shows the same spinner it shows a machine that never booted. It
+         * is not secret (it is the address the sandbox itself just claimed) and it is the whole diagnosis — a
+         * sandbox announcing somewhere other than where we expect it is a misconfiguration with a name. */
         const expected = expectedDaemonHost(config, sandbox);
         if (expected !== undefined && hostOf(daemonUrl) !== expected) {
             c.get(`logger`).warn({ sandboxId: sandbox.id, announced: hostOf(daemonUrl), expected }, `announce rejected: daemonUrl host mismatch`);
+            await prisma.sandbox.update({
+                where: { id: sandbox.id },
+                data: { announceRefusal: { announced: hostOf(daemonUrl) ?? daemonUrl, expected } },
+            });
             return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { daemonUrl, lastSeenAt: new Date() } });
+        // Cleared on the way through: a stored refusal must describe a LIVE disagreement, and a sandbox that
+        // has just been accepted at its proper address no longer has one.
+        await prisma.sandbox.update({
+            where: { id: sandbox.id },
+            data: { daemonUrl, lastSeenAt: new Date(), announceRefusal: Prisma.DbNull },
+        });
+        return c.json({ ok: true });
+    });
+
+    /* THE DAEMON'S BOOT REPORT — the announce's other half, and the half that was missing. An announce says
+     * "I started"; this says "and my public address answers", which the box establishes by asking that address
+     * itself from the inside. They are separate routes because they are separate claims and they fail
+     * separately: the tunnel migration produced a fleet of sandboxes that announced perfectly and could not be
+     * reached, and nothing in the registry could tell them apart from healthy ones.
+     *
+     * Authenticated by the connect token exactly like the announce — the same secret, the same outbound path,
+     * and deliberately not the tunnel, so the report still arrives when the tunnel is what is broken. `at` is
+     * stamped here; the reporting machine's clock is never trusted. */
+    app.post(`/sandbox/boot-report`, async (c) => {
+        const token = c.req.header(`x-intentic-connect`);
+        if (token === undefined || token === ``) {
+            return c.text(`error: missing token`, 400);
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { reach?: unknown; detail?: unknown } | undefined;
+        const report = BootReportSchema.safeParse({ reach: body?.reach, detail: body?.detail, at: new Date().toISOString() });
+        if (!report.success) {
+            return c.text(`error: malformed report`, 400);
+        }
+        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
+        if (!sandbox) {
+            return c.text(`error: unknown sandbox`, 404);
+        }
+        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { bootReport: report.data } });
         return c.json({ ok: true });
     });
 

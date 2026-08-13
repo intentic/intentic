@@ -41,6 +41,8 @@ import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
+import { hostedWaitView } from "./hostedWait";
+import type { HostedStatus } from "@intentic-app/api-contract";
 
 /* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
  * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
@@ -314,9 +316,26 @@ const hostedHost = computed(() => {
         return undefined;
     }
 });
-// When the hosted wait began — the command lane's fuses are guesses about a clipboard, this is just a boot
-// that should take well under a minute, so one honest "longer than usual" line is all the escalation it needs.
+// When the hosted wait began. The command lane's fuses are guesses about a clipboard; this one is only ever
+// used to escalate a wait that is otherwise progressing — everything the card actually SAYS comes from what
+// the machine and the sandbox report, never from the clock (see hostedWait.ts).
 const hostedSince = ref<number | undefined>(undefined);
+// The machine's own power state, polled from the platform while — and only while — somebody is waiting on it.
+// `undefined` until the first answer, and after any failure to get one: the wait must degrade to its plain
+// spinner when the provider can't be asked, never to a wrong story.
+const hostedMachine = ref<HostedStatus[`machine`] | undefined>(undefined);
+// …once every this many registry polls. The registry is ours and cheap; the machine's state is a provider's
+// and rate-limited, and nothing about a boot is missed by asking every dozen seconds instead of every three.
+const MACHINE_EVERY = 4;
+let machineTick = 0;
+/* The sandbox's own last word about its boot, and any check-in we refused — kept as refs the poll writes,
+ * beside `claimedAt` and `report` and for the same reason: `created` is the row this page CREATED, and the
+ * wait is about what has happened to it since. Both null until they happen, which is also what every sandbox
+ * older than this reporting looks like. */
+const bootReport = ref<SandboxSummary[`bootReport`]>(null);
+const announceRefusal = ref<SandboxSummary[`announceRefusal`]>(null);
+// Whether the daemon has ever checked in. Read off the poll rather than off `created` for the same reason.
+const announced = ref(false);
 // The provisioned machine's display facts (SandboxCloudSchema) — set by the provision response (or a resumed
 // row that was provisioned last visit), and the switch that turns the cloud form into its summary line.
 const cloudMachine = ref<SandboxSummary[`cloud`]>(null);
@@ -551,6 +570,22 @@ watch(commandReady, (ready) => {
     armedAt.value = ready ? Date.now() : undefined;
 });
 
+/* THE HOSTED WAIT, decided in one place off three sources (hostedWait.ts): the machine as the provider sees
+ * it, the sandbox's own verdict on whether its public address answers, and any check-in we refused. This is
+ * what replaced a single sentence that was shown to four different problems.
+ *
+ * Down here with the other fuses because it reads the clock — but it reads it only to escalate a wait that is
+ * otherwise progressing. Everything the card SAYS comes from something somebody established. */
+const hostedWait = computed(() =>
+    hostedWaitView({
+        machine: hostedMachine.value,
+        boot: bootReport.value,
+        refusal: announceRefusal.value,
+        announced: announced.value,
+        waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
+    }),
+);
+
 // When the card stops being polite about the likeliest reason nothing has reached us — the command is still
 // sitting on a clipboard. Long enough to walk to another machine; short enough to catch someone who has
 // settled in to watch this page. The compose path is a file to paste into an editor and edited there, so the
@@ -706,8 +741,42 @@ const check = async (): Promise<void> => {
             }
             report.value = reported;
         }
+        // What the sandbox has said about itself since — the wait card's two other sources.
+        bootReport.value = row?.bootReport ?? null;
+        announceRefusal.value = row?.announceRefusal ?? null;
+        announced.value = (row?.lastSeenAt ?? null) !== null;
+        /* The machine's own state, for the wait card's first steps — the only part of the story that exists
+         * before the daemon does. Asked for ONLY while a hosted wait is on screen, which is why it is a
+         * separate call and not a field on the row every browser polls.
+         *
+         * And asked for a good deal less often than the registry: at the far end of it is somebody else's API
+         * with somebody else's rate limit, and a machine's power state moves on the scale of a boot, not of a
+         * poll. A failure leaves the last answer standing — the card falls back to its plain spinner rather
+         * than telling a different story every few seconds. */
+        if (row !== undefined && (row.hosted ?? null) !== null && machineTick++ % MACHINE_EVERY === 0) {
+            hostedMachine.value =
+                (await apiClient.sandbox.hostedStatus({ sandboxId: pending.id }).catch(() => undefined))?.machine ?? hostedMachine.value;
+        }
         const seen = row?.lastSeenAt ?? null;
-        if (seen !== null && seen !== baseline.value) {
+        /* THE HANDOVER, and the correction at the heart of this screen. A check-in proves the daemon STARTED;
+         * it has never proved anybody can reach it, and taking the first for the second is what walked people
+         * into a workspace that could only spin at them. So a sandbox that is telling us its own address does
+         * not answer is held here — where there is a reason on screen and a button under it — until it says
+         * otherwise.
+         *
+         * Held, not failed: the box keeps probing and this keeps polling, so the ordinary case (a tunnel that
+         * binds a few seconds after the daemon comes up) resolves itself with the reader none the wiser.
+         *
+         * A sandbox that says NOTHING passes straight through, exactly as before. Silence is what every
+         * sandbox older than this reporting looks like, and holding the door against it would wedge the very
+         * flows this is meant to unwedge.
+         *
+         * And ONLY on the hosted lane, because only the hosted lane has a card that can explain the hold. A
+         * silent wait with no reason attached is precisely the thing being fixed here; moving one from the
+         * workspace onto a step that cannot narrate it would not be a fix, it would be a relocation. The other
+         * lanes hand over on the check-in exactly as they always have. */
+        const holding = hostedRow.value !== null && hostedWait.value.reachable === false;
+        if (seen !== null && seen !== baseline.value && !holding) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
             track(`sandbox_connected`, { resuming: resuming.value });
             // Point the workspace at the sandbox this page just set up. The same `reconcileActive` fallback that
@@ -756,10 +825,6 @@ const autoCreate = async (): Promise<void> => {
     }
 };
 
-// One honest escalation for the hosted wait: a machine boot should take well under a minute, so after two it
-// is worth saying so — while the platform keeps trying either way (the machine retries, the poll keeps polling).
-const hostedSlow = computed(() => hostedSince.value !== undefined && now.value - hostedSince.value > 2 * 60_000);
-
 /* Give THIS sandbox a machine the platform runs, then let the ordinary announce watch take over. The row is
  * already there (created on arrival like every lane's), so a refusal — capacity weather, the allowance
  * already spent, a platform whose provider credential is wrong — costs nothing but the attempt: the reason
@@ -784,6 +849,48 @@ const provisionHosted = async (): Promise<boolean> => {
         return false;
     } finally {
         hostedBusy.value = false;
+    }
+};
+
+/* THE WAIT'S ONE RECOVERY, and the reason its failures are worth naming at all: a diagnosis nobody can act on
+ * is a nicer spinner. Which recovery is hostedWait.ts's call, because the two are not interchangeable —
+ * `remake` throws the machine away and builds another (the only thing that fixes an address baked in wrong),
+ * `reboot` boots the one that exists (enough for a daemon that died or a tunnel that never bound, and it
+ * keeps the files). The reader sees one button either way; the difference is which of them is safe.
+ *
+ * The clock restarts with the machine, so the escalations that follow describe THIS attempt rather than
+ * counting from an attempt that has already been abandoned. */
+const restartHosted = async (): Promise<void> => {
+    const row = created.value;
+    if (row === null || hostedBusy.value) {
+        return;
+    }
+    const remake = hostedWait.value.failure?.action === `remake`;
+    let released = false;
+    hostedBusy.value = true;
+    hostedError.value = undefined;
+    try {
+        if (remake) {
+            created.value = await sandbox.hostedRelease(row.id);
+            released = true;
+        } else {
+            await apiClient.sandbox.hostedRestart({ sandboxId: row.id });
+        }
+        // Whatever the machine last said about itself describes the boot we just replaced.
+        bootReport.value = null;
+        announceRefusal.value = null;
+        announced.value = false;
+        hostedMachine.value = undefined;
+        hostedSince.value = Date.now();
+    } catch (err) {
+        hostedError.value = noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
+    } finally {
+        hostedBusy.value = false;
+    }
+    // Outside the busy window on purpose: provisioning takes the same flag, and a machine handed back with
+    // nothing put in its place is the one outcome this button must not leave behind.
+    if (released) {
+        await provisionHosted();
     }
 };
 
@@ -1810,21 +1917,62 @@ watch(commandReady, (ready) => {
                              attempt used to bounce the reader into another lane with the reason already erased. -->
                         <Notice v-if="hostedError" :of="hostedError" />
 
-                        <!-- The hosted wait: nothing to run and nothing to copy — the platform is doing the work,
-                             so for once a spinner is honest. The redirect fires from the same announce watch every
-                             other lane uses. -->
+                        <!-- THE HOSTED WAIT. Nothing to run and nothing to copy — the platform is doing the work
+                             — but "the platform is doing the work" was the entire message for every one of the
+                             several minutes it can take, and for every way it can fail. A spinner is honest
+                             about there being nothing to DO; it was never honest about there being nothing to
+                             KNOW, and people sat through a wedged tunnel because the page could not tell them
+                             apart from a slow boot.
+
+                             So: the steps, ticking, while it is going fine — or what broke and what happens
+                             next, when it isn't. Never both (hostedWait.ts owns that decision, the way
+                             setupReport.ts owns step 2's). -->
                         <template v-if="machine === `hosted`">
                             <template v-if="hostedRow !== null">
-                                <p class="flex items-center gap-2 text-sm text-content">
-                                    <Icon name="spinner" spin class="text-info" />
-                                    Starting your machine. You'll be taken in as soon as it answers.
-                                </p>
-                                <p class="text-xs text-muted">
-                                    <template v-if="hostedSlow">
-                                        Taking longer than usual. It keeps trying on its own, so you can leave this page open or come back later.
-                                    </template>
-                                    <template v-else>Usually under a minute. Nothing to install, nothing to paste.</template>
-                                </p>
+                                <!-- The diagnosis. The step list is deliberately gone from underneath it: a
+                                     list still ticking beside "here is what broke" is the page arguing with
+                                     itself, and the reader has one thing to decide, not two to reconcile. -->
+                                <template v-if="hostedWait.failure">
+                                    <p class="flex items-start gap-2 text-sm text-content">
+                                        <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
+                                        <span>{{ hostedWait.failure.problem }}</span>
+                                    </p>
+                                    <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
+                                    <Button
+                                        label="Start it over"
+                                        class="w-full justify-center md:w-auto"
+                                        :disabled="hostedBusy"
+                                        @click="restartHosted"
+                                    >
+                                        <template #icon><Icon name="refresh" /></template>
+                                    </Button>
+                                </template>
+                                <!-- …and the healthy wait: one row per step, the current one named and
+                                     spinning. Four short lines that say where we are beats one sentence that
+                                     says it is happening. -->
+                                <template v-else>
+                                    <ul class="flex flex-col gap-1.5">
+                                        <li
+                                            v-for="step in hostedWait.steps"
+                                            :key="step.key"
+                                            class="flex items-center gap-2 text-sm"
+                                            :class="step.state === `todo` ? `text-subtle` : `text-content`"
+                                        >
+                                            <Icon
+                                                :name="step.state === `done` ? `check` : step.state === `active` ? `spinner` : `circle`"
+                                                :spin="step.state === `active`"
+                                                class="shrink-0 text-2xs"
+                                                :class="
+                                                    step.state === `done` ? `text-success` : step.state === `active` ? `text-info` : `text-subtle`
+                                                "
+                                            />
+                                            <span>{{ step.label }}</span>
+                                        </li>
+                                    </ul>
+                                    <p class="text-xs text-muted">
+                                        Usually under a minute. Nothing to install, nothing to paste — you'll be taken in as soon as it's ready.
+                                    </p>
+                                </template>
                             </template>
                             <p v-else-if="hostedBusy" class="flex items-center gap-2 text-sm text-content">
                                 <Icon name="spinner" spin class="text-info" />

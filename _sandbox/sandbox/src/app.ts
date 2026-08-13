@@ -447,6 +447,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             profile: services.config.sandbox.profile,
             boot: services.boot.progress(),
             announce: services.announcer.status(),
+            // …and its other half: whether this sandbox's PUBLIC address answers, which the box establishes by
+            // probing itself. Same readers, same reason — except that a broken tunnel is the one failure a
+            // caller cannot learn any other way, because every other route to the answer runs through it.
+            reach: services.reach.status(),
         }),
     );
 

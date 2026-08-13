@@ -23,6 +23,8 @@ export const DEMO_SANDBOX: SandboxSummary = {
     // Null for the same reason `setupCodeClaimedAt` is: the demo's sandbox is already up, so no wizard run
     // ever reported on it.
     setupReport: null,
+    bootReport: null,
+    announceRefusal: null,
     token: `demo-connect-token`,
     role: `owner`,
     providedTunnel: false,

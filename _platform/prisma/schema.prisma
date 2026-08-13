@@ -154,6 +154,16 @@ model Sandbox {
     // code. The wizard renders it so "why did setup fail" has an answer in the browser, not just in a
     // terminal that may be closed. Cleared on every mint, same lifecycle as the claim stamp above.
     setupReport        Json?
+    // The DAEMON's own account of its boot (BootReportSchema): whether the sandbox's PUBLIC address answers,
+    // checked by the box from the inside and posted to /sandbox/boot-report over the connect token. The one
+    // link nothing else can see — a daemon that is up and announcing proves only that it started, not that
+    // anybody can reach it, and the wizard holds its handover on the difference. No mint lifecycle: this
+    // describes the sandbox, not a setup code, so it is simply overwritten by each boot.
+    bootReport         Json?
+    // The last check-in we REFUSED and why — {announced, expected} (see expectedDaemonHost). Written on
+    // refusal, cleared by an accepted announce, so a value here is always a live disagreement. Was a log line
+    // only, which is what made a mis-addressed sandbox look identical to one that never started.
+    announceRefusal    Json?
     // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): {ZROK_TOKEN,
     // ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
     setupPayload       Json?

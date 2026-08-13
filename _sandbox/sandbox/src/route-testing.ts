@@ -34,6 +34,7 @@ import { createLogger } from "./logger.js";
 import type { ManagedProcesses } from "./processes/managed-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
 import { createAnnouncer } from "./platform/announce.js";
+import { createReachReporter } from "./platform/reach-report.js";
 import { createBootTracker } from "./platform/boot.js";
 import { createPerfTracker } from "./platform/perf.js";
 
@@ -320,6 +321,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Real too, and never started: creating one registers nothing and arms no timer, so /health reads the
         // `off` it reports on a daemon that has no platform to announce to — the loopback/test shape.
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
+        // Its other half, on the same terms: never started, so /health reads the `off` it reports on a daemon
+        // with no public address to probe — which is exactly the loopback/test shape.
+        reach: createReachReporter(testConfig, createLogger(testConfig)),
         workspace,
         processes: fakeProcesses(),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

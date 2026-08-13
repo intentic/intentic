@@ -422,6 +422,63 @@ export const SetupReportSchema = z.object({
 });
 export type SetupReport = z.infer<typeof SetupReportSchema>;
 
+/* THE DAEMON'S OWN ACCOUNT OF ITS BOOT — SetupReportSchema's counterpart for the half of the chain no setup
+ * code covers. The hosted lane has no `ic` run to narrate (the machine's first boot IS the sandbox), and the
+ * one link nothing else can see is the one that broke during the tunnel migration: a daemon that is up,
+ * announcing, and whose PUBLIC ADDRESS answers nobody. So the box checks that address from the inside and
+ * POSTs the verdict to /sandbox/boot-report, authenticated by the connect token — the same outbound path the
+ * announce uses, which is exactly why it still works when the tunnel is the broken thing.
+ *
+ * `reach` is that verdict and nothing else:
+ *   • `checking`    — the daemon is up and the probe has not concluded yet
+ *   • `reachable`   — its own public address answered it; the sandbox is genuinely usable from outside
+ *   • `unreachable` — it did not, and `detail` says how (a status, a refusal, a timeout)
+ *
+ * The wizard holds the handover on this: an announce means "the daemon started", which is NOT the same claim
+ * as "you can reach it", and treating the two as one is what dropped people into a workspace spinner. `at`
+ * (ISO) is stamped by the platform on receipt — the reporting machine's clock is never trusted. */
+export const BootReportSchema = z.object({
+    reach: z.enum(["checking", "reachable", "unreachable"]),
+    // Why, for `unreachable` — already in the user's terms, rendered verbatim like a setup failure's problem.
+    detail: z.string().max(2000).optional(),
+    at: z.string(),
+});
+export type BootReport = z.infer<typeof BootReportSchema>;
+
+/* A CHECK-IN WE TURNED AWAY, kept because the refusal is otherwise a perfect silence: the box retries, we say
+ * no, and every screen shows what it shows a machine that never booted. Both halves together or neither —
+ * "it announced at X" is a fact nobody can act on without "and we expect it at Y", and the browser has no way
+ * to derive the second (the zone is the platform's), so the record carries the comparison rather than an
+ * operand of it. Neither is secret: X is what the sandbox itself just claimed, Y is its own public address. */
+export const AnnounceRefusalSchema = z.object({ announced: z.string(), expected: z.string() });
+export type AnnounceRefusal = z.infer<typeof AnnounceRefusalSchema>;
+
+/* THE ONE FACT ABOUT A HOSTED MACHINE THAT COSTS A CALL, which is why it is a route of its own rather than a
+ * field on the summary: the machine's power state has to be asked of the provider, and a list that carries it
+ * would ask once per row on every poll. Everything else the wait needs (the boot report above, a refused
+ * check-in) is already on the row and rides the summary.
+ *
+ * `unknown` covers both "this platform cannot ask" and "the provider answered a state we don't model" — the
+ * wait must degrade to today's honest spinner on an unrecognized state, never break on one. Otherwise this is
+ * the only signal that exists BEFORE the daemon does, which makes it the only way to tell a machine that
+ * never booted from one that booted and went quiet. */
+export const HostedStatusSchema = z.object({
+    machine: z.enum([
+        "unknown",
+        "created",
+        "starting",
+        "started",
+        "stopping",
+        "stopped",
+        "suspended",
+        "replacing",
+        "destroying",
+        "destroyed",
+        "failed",
+    ]),
+});
+export type HostedStatus = z.infer<typeof HostedStatusSchema>;
+
 // The clouds the setup wizard's cloud lane can provision a machine in — each is an adapter in the api's
 // sandbox/cloud/. Hetzner and DigitalOcean are the paid x86 paths; Oracle is the Always-Free ARM path
 // (A1.Flex inside the user's own free-tier allowance).
@@ -471,6 +528,14 @@ export const SandboxSummarySchema = z.object({
     // The machine-side setup run's last word (see SetupReportSchema) — null until a report lands, cleared on
     // every mint like the claim stamp.
     setupReport: SetupReportSchema.nullable(),
+    // The DAEMON's own last word about its boot (see BootReportSchema) — null until the sandbox reports, which
+    // is also what a sandbox running an image older than this feature looks like. Every lane's, not just the
+    // hosted one: a tunnel that never came up strands a pasted run exactly as hard.
+    bootReport: BootReportSchema.nullable(),
+    // The last check-in we refused, and why (see AnnounceRefusalSchema). Null in the overwhelmingly common
+    // case of never having refused one. Cleared by an announce that succeeds, so a value here always
+    // describes a live disagreement rather than one somebody already fixed.
+    announceRefusal: AnnounceRefusalSchema.nullable(),
     token: z.string(),
     // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route

@@ -1,5 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { apiContract, SandboxCloudSchema, SetupReportSchema } from "@intentic-app/api-contract";
+import {
+    apiContract,
+    AnnounceRefusalSchema,
+    BootReportSchema,
+    HostedStatusSchema,
+    SandboxCloudSchema,
+    SetupReportSchema,
+} from "@intentic-app/api-contract";
 import { Prisma } from "@intentic-app/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, sandboxSubdomain } from "@intentic/sandbox-contract";
@@ -12,6 +19,7 @@ import { CloudCredentialError, CloudProviderError } from "./cloud/common.js";
 import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
+import { getMachine, stopMachine } from "./hosted/fly.js";
 import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -23,6 +31,11 @@ const os = implement(apiContract).$context<OrpcContext>();
 // How long a minted setup code stays claimable. Long enough to install Docker mid-run and retry a failed
 // command; short enough that a leaked pasted command goes stale quickly.
 const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
+
+// The machine states the browser knows how to narrate, taken FROM the contract so the two can never drift.
+// Anything Fly answers that isn't in here (a state they add, a shape we don't model) becomes `unknown`, which
+// the wait renders as the plain spinner it has always had.
+const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
 
 // The hub's zone when the tunnel fabric is configured, else undefined — the zone alone defaults even when
 // the fabric is off, so it must not flag sandboxes on its own.
@@ -44,6 +57,8 @@ const toSummary = (
         lastSeenAt: Date | null;
         setupCodeClaimedAt: Date | null;
         setupReport: unknown;
+        bootReport: unknown;
+        announceRefusal: unknown;
         cloud: unknown;
         // The hosted lane's machine record — every query feeding this summary includes the relation, so a
         // rename or an announce can never silently strip the hosted badge from the browser's row. Optional
@@ -59,6 +74,12 @@ const toSummary = (
     // The stored report was validated on write (/setup/report); the parse here only shields the summary from
     // rows written before this schema existed — anything unrecognizable reads as "no report".
     const report = SetupReportSchema.safeParse(sandbox.setupReport);
+    // Same shield, same reason, for the daemon's own boot verdict (/sandbox/boot-report). A sandbox on an
+    // image older than that route simply never writes one, which reads here as "said nothing" — and the
+    // wizard treats saying nothing exactly as it behaved before this existed.
+    const boot = BootReportSchema.safeParse(sandbox.bootReport);
+    // And for the refusal record, which the announce route writes whole.
+    const refusal = AnnounceRefusalSchema.safeParse(sandbox.announceRefusal);
     // Same shield for the cloud stamp (cloudProvision wrote it validated; the stored serverId is dropped by
     // the parse — the browser has no use for it).
     const cloud = SandboxCloudSchema.safeParse(sandbox.cloud);
@@ -70,6 +91,8 @@ const toSummary = (
         lastSeenAt: sandbox.lastSeenAt === null ? null : sandbox.lastSeenAt.toISOString(),
         setupCodeClaimedAt: sandbox.setupCodeClaimedAt === null ? null : sandbox.setupCodeClaimedAt.toISOString(),
         setupReport: report.success ? report.data : null,
+        bootReport: boot.success ? boot.data : null,
+        announceRefusal: refusal.success ? refusal.data : null,
         cloud: cloud.success ? cloud.data : null,
         hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region },
         token: decryptSecret(context.config, sandbox.token),
@@ -143,7 +166,9 @@ export const sandboxRoutes = {
                 await deleteSandboxAccount(context.config.zrok, sandboxId);
             } catch (error) {
                 context.logger.error({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed`);
-                throw new ORPCError(`BAD_GATEWAY`, { message: `couldn't take this sandbox's address down just now — try removing it again in a moment` });
+                throw new ORPCError(`BAD_GATEWAY`, {
+                    message: `couldn't take this sandbox's address down just now — try removing it again in a moment`,
+                });
             }
         }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
@@ -154,7 +179,10 @@ export const sandboxRoutes = {
             try {
                 await destroyHosted(context.config, hosted.appName);
             } catch (error) {
-                context.logger.warn({ err: error, sandboxId: input.sandboxId, app: hosted.appName }, `hosted machine teardown failed; orphaned for the reaper`);
+                context.logger.warn(
+                    { err: error, sandboxId: input.sandboxId, app: hosted.appName },
+                    `hosted machine teardown failed; orphaned for the reaper`,
+                );
             }
         }
         return { ok: true };
@@ -339,6 +367,53 @@ export const sandboxRoutes = {
         }
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
+    }),
+    /* WHAT THE MACHINE ITSELF IS DOING — the only link of the setup chain that exists before the daemon does,
+     * and therefore the only way to tell a machine that never booted from one that booted and went silent.
+     * The setup wait polls this while it waits; nothing else does, which is the whole reason it is a route
+     * rather than a field on the summary (a per-row provider call in `list` would be paid by every browser on
+     * every poll, for a fact only one screen ever reads).
+     *
+     * Every failure answers `unknown` rather than throwing: this is narration for a screen that is ALREADY
+     * waiting, and a provider hiccup must degrade it to the honest spinner it replaced, never break it or
+     * turn a slow boot into an error. An unmodelled state does the same, which is what the enum's `unknown`
+     * is for — Fly's vocabulary is theirs to extend. */
+    hostedStatus: os.sandbox.hostedStatus.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
+        if (hosted === null || !hostedEnabled(context.config)) {
+            return { machine: `unknown` as const };
+        }
+        const state = await getMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
+            context.logger.warn({ err: error, app: hosted.appName }, `hosted status: reading the machine failed`);
+            return undefined;
+        });
+        const known = MACHINE_STATES.find((candidate) => candidate === state?.state);
+        return { machine: known ?? (`unknown` as const) };
+    }),
+    /* Boot a hosted machine again — the setup wait's one recovery, for the two failures a rerun actually
+     * fixes: a daemon that never came up, and a tunnel that never bound (the entrypoint retries both from
+     * scratch on every boot). Stop then start; a stop that refuses because the machine is already down is
+     * exactly the state we wanted, so only the START is allowed to fail the call.
+     *
+     * Owner-only, and nothing is destroyed — the volume, the files and the address all survive, which is what
+     * separates this from hostedRelease and what makes it safe to put under a failure message somebody is
+     * reading in frustration. */
+    hostedRestart: os.sandbox.hostedRestart.handler(async ({ context, input }) => {
+        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
+        if (hosted === null) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
+        }
+        await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
+            context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
+        );
+        try {
+            await wakeHosted(context.config, hosted);
+        } catch (error) {
+            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
+        }
+        return { ok: true };
     }),
     // Power a hosted sandbox's machine back on — the idle-stop's other half, called by any browser (owner or
     // accepted member) that finds the daemon unreachable. Idempotent: waking a running machine is a no-op, so

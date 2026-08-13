@@ -73,6 +73,8 @@ const localSeed = (): SandboxSummary[] | undefined => {
             lastSeenAt: null,
             setupCodeClaimedAt: null,
             setupReport: null,
+            bootReport: null,
+            announceRefusal: null,
             token: ``,
             role: `owner`,
             providedTunnel: false,
@@ -175,14 +177,18 @@ const create = async (name: string): Promise<SandboxSummary> => {
 const hostedProvision = async (sandboxId: string): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.hostedProvision({ sandboxId });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)));
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+    );
     return updated;
 };
 
 const hostedRelease = async (sandboxId: string): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.hostedRelease({ sandboxId });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)));
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+    );
     return updated;
 };
 

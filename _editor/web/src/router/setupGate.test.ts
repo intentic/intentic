@@ -9,6 +9,8 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     lastSeenAt: null,
     setupCodeClaimedAt: null,
     setupReport: null,
+    bootReport: null,
+    announceRefusal: null,
     cloud: null,
     hosted: null,
     token: `token-${overrides.id}`,
