@@ -3,6 +3,7 @@ import { ColorPicker, Row, RowGroup, Segmented, useExplorerStyle, useTextSize, u
 import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
+import { useToolCalls } from "../../composables/chat/useToolCalls";
 import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
 import { useLayout } from "../../composables/useLayout";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
@@ -24,6 +25,9 @@ const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
 // The review lists' reading — the same preference the Changes panel's own header toggle flips.
 const { groupByModule } = useChangeGrouping();
+// How much of an agent's working-out a transcript shows — the same preference the chat's own readout row flips,
+// which is where somebody staring at a run mark will reach for it; this is where they'll look to decide it once.
+const { showToolCalls } = useToolCalls();
 // The explorer's two filters — the same preferences the workspace toolbar's funnel flips, which is where someone
 // already staring at node_modules will reach for them; this is where they'll look for them afterwards.
 // skipImports has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
@@ -170,6 +174,21 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control>
                     <ToggleSwitch :model-value="skipImports" @update:model-value="toggleSkipImports()" />
                 </template>
+            </Row>
+        </RowGroup>
+
+        <!-- Chat — how much of an agent's working-out a transcript shows. Off, each turn's run of calls sits
+             behind one mark you can open; on, every call is a row, which is what someone debugging an agent
+             rather than reading its answer wants. Also flipped from the chat itself, for the same reason the
+             explorer's switches are in both places. -->
+        <RowGroup label="Chat">
+            <Row
+                as="label"
+                icon="eye"
+                title="Show tool calls"
+                description="List every command, file read and edit an agent makes as its own row. Off, a turn's calls fold into one mark between messages that opens when you click it."
+            >
+                <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
         </RowGroup>
 

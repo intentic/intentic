@@ -22,12 +22,12 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { landsByDefault } from "../composables/sandbox/rules";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useWorkTerminals";
+import { useToolCalls } from "../composables/chat/useToolCalls";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatTodoList from "./ChatTodoList.vue";
-import ChatToolCard from "./ChatToolCard.vue";
-import ChatToolGroup from "./ChatToolGroup.vue";
-import { type ToolEntry, groupConsecutiveTools } from "./toolGrouping";
+import ChatToolRows from "./ChatToolRows.vue";
+import ChatToolRun from "./ChatToolRun.vue";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
  * markdown text, plan card, question card, typing loader). Card decisions go straight to the useChat
@@ -525,8 +525,8 @@ const trailer = computed(() => {
     return { label, count: folded.filter((message) => foldedLabel(message) === label).length };
 });
 
-// Consecutive same-name+same-target tool calls collapsed into summary rows (see toolGrouping.ts).
-const groupedTools = computed((): readonly ToolEntry[] => groupConsecutiveTools(props.message.tools ?? []));
+// Whether this transcript draws its tool calls or hides each turn's run behind one mark (see useToolCalls.ts).
+const { showToolCalls } = useToolCalls();
 
 // --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
 // CSS has no way to ask whether a sticky element is currently stuck, and the edge under a prompt must only
@@ -824,10 +824,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  turn is currently writing into. Anywhere else they are a record — frozen mid-flight by a Stop,
                  by the turn moving on, or by the session ending — and must not animate. -->
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                <template v-for="(entry, index) in groupedTools" :key="'kind' in entry ? `g-${index}` : entry.id">
-                    <ChatToolGroup v-if="'kind' in entry" :group="entry" :live="streaming" />
-                    <ChatToolCard v-else :tool="entry" :live="streaming" />
-                </template>
+                <ChatToolRows v-if="showToolCalls" :tools="message.tools" :live="streaming" />
+                <ChatToolRun v-else :tools="message.tools" :live="streaming" />
             </div>
 
             <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />

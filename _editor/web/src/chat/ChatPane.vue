@@ -28,6 +28,7 @@ import { withShortcut } from "../composables/commands/useCommands";
 import { useLoadingReveal } from "../composables/loadingReveal";
 import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
+import { useToolCalls } from "../composables/chat/useToolCalls";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
@@ -166,6 +167,8 @@ provide(
         navigate: (route) => void router.push(route),
     }),
 );
+// How much of an agent's working-out this transcript shows — flipped from the readouts under the composer.
+const { showToolCalls } = useToolCalls();
 const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because
@@ -1989,6 +1992,24 @@ watch(
             </span>
             <span v-else-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
             <div class="ml-auto flex items-center gap-3">
+                <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS. It belongs in the chat because that is where
+                     the question is asked — you want the calls back at the moment you are staring at a run mark
+                     wondering what it did, not two screens away in settings (where it also lives, for the person
+                     who wants it decided once). A pane has no header to hang it off, so it joins the readouts
+                     under the composer: the strip that already says what this chat is doing. Pressed-in when the
+                     calls are showing, so the control states which reading is in force rather than only offering
+                     the other one. -->
+                <button
+                    type="button"
+                    class="inline-flex cursor-pointer items-center transition-colors"
+                    :class="showToolCalls ? 'text-content' : 'hover:text-content'"
+                    :aria-pressed="showToolCalls"
+                    :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
+                    v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
+                    @click="showToolCalls = !showToolCalls"
+                >
+                    <Icon :name="showToolCalls ? 'eye' : 'eye-slash'" class="text-2xs" />
+                </button>
                 <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                     <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                     <span class="@max-xs:hidden">{{ contextRing.label }}</span>
