@@ -206,7 +206,10 @@ export const landingContent: LandingContent = {
     ownership: {
         eyebrow: "Ownership",
         heading: "Your code never leaves your machine.",
-        sub: "What stays on your machine, and everything the platform stores.",
+        // The qualifier is load-bearing, not lawyering: the hosted starter box is a machine WE pay for, so for
+        // that one lane the heading above is not true, and an unqualified version of it is a claim the terms
+        // and the privacy policy would both have to contradict.
+        sub: "What stays on your machine, and everything the platform stores. (Take the sandbox we host instead, and the workspace lives on our provider's disk — /privacy says exactly what that means.)",
         ledger: {
             yours: {
                 label: "Your machine",

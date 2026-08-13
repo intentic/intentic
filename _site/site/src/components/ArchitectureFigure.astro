@@ -167,7 +167,8 @@ const label =
     `so there are no inbound ports to open. The sandbox is one container per agent, running on hardware you own, and it holds the agent ` +
     `itself, your workspace, the capabilities it can operate and the automations that wake it. The intentic platform stands off to the ` +
     `side of that path rather than on it: your browser signs in to it, and the sandbox announces its address when it boots. Nothing else ` +
-    `passes through it, and your code and credentials never leave your machine.`;
+    `passes through it, and your code and credentials never leave your machine. The one exception is the starter sandbox we host for you, ` +
+    `where the container runs on a machine we rent instead of one you own — the command path is identical, but the disk is ours.`;
 ---
 
 {

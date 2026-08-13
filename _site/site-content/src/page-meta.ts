@@ -26,8 +26,23 @@ export const pageMeta: Record<string, PageMeta> = {
     },
     "/terms/": {
         title: "Terms of Service · intentic",
-        description: "The terms governing use of the intentic platform: accounts, acceptable use, and liability.",
+        description: "The terms governing use of the intentic platform: accounts, sandboxes we host, membership, acceptable use and liability.",
         datePublished: "2026-07-03",
+    },
+    "/acceptable-use/": {
+        title: "Acceptable Use Policy · intentic",
+        description: "What you may and may not do with the intentic platform and a sandbox we host for you, and how we enforce it.",
+        datePublished: "2026-08-13",
+    },
+    "/dpa/": {
+        title: "Data Processing Agreement · intentic",
+        description: "The GDPR Article 28 agreement covering personal data we process on your behalf in a sandbox we host.",
+        datePublished: "2026-08-13",
+    },
+    "/subprocessors/": {
+        title: "Sub-processors · intentic",
+        description: "Every provider we use to run the intentic platform, what each one does, where it processes data and under what safeguard.",
+        datePublished: "2026-08-13",
     },
     "/about/": aboutMeta,
     // The desktop app's download page. It is the answer to the objection the quickstart raises, so its

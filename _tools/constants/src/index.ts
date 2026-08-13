@@ -36,8 +36,32 @@ export const HOST_STATE_ROOT = "/opt/intentic";
 // The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
 // to the terms or privacy policy — one edit, both sides move together.
-export const LEGAL_VERSION = "2026-08-06";
+export const LEGAL_VERSION = "2026-08-13";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
+
+/* WHO THE COUNTERPARTY IS, in the words a contract needs. EU e-commerce law (Directive 2000/31 Art. 5, and in
+ * Poland ustawa o świadczeniu usług drogą elektroniczną) requires a service provider to publish its name,
+ * its registered address and its registration number where a recipient can find them without asking — so
+ * these are not decoration on the legal pages, they are the pages' compliance.
+ *
+ * LEGAL_ENTITY_ADDRESS and LEGAL_ENTITY_TAX_ID are BLANK ON PURPOSE and the documents omit the lines they
+ * would fill: publishing a wrong address is worse than publishing none, and an empty string here is a
+ * question waiting for its owner rather than a placeholder that could ship looking like an answer. Fill both
+ * before the hosted lane opens to anyone outside the author's own accounts. */
+export const LEGAL_ENTITY_NAME = "Artur Kurowski, trading as radarsu";
+export const LEGAL_ENTITY_COUNTRY = "Poland";
+export const LEGAL_ENTITY_ADDRESS = "";
+export const LEGAL_ENTITY_TAX_ID = "";
+
+/* Where the platform's OWN servers stand — the account database and the API, as opposed to the hosted
+ * sandboxes, whose region the provisioner decides per user and the privacy policy states outright.
+ *
+ * Blank for the same reason as the two above, and with more at stake: "our database is in the EU" is a
+ * transfer statement a supervisory authority can hold you to, and it is not something the code can find out
+ * about the machine an operator chose to deploy on. Set it to a place you can point at ("the European Union",
+ * "Germany"); leave it empty and the privacy policy simply says nothing about platform server location
+ * rather than guessing. */
+export const PLATFORM_HOSTING_LOCATION = "";
 
 /* The hosted web app's origin — the ONE browser origin a sandbox daemon expects to be called from, and
  * therefore the default its CORS is scoped to (sandbox env.config `webOrigin`).

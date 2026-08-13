@@ -13,6 +13,7 @@ import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
+import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ensureZrokAccount, zrokEnabled } from "./zrok-provision.js";
 import { deleteSandboxAccount } from "./zrok.js";
@@ -307,6 +308,7 @@ export const sandboxRoutes = {
                 connectToken: decryptSecret(context.config, sandbox.token),
                 grant,
                 ownerEmail: user.email.toLowerCase(),
+                region: hostedRegionFor(context.config.hosted, context.headers),
             });
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });

@@ -66,6 +66,8 @@ describe(`provisionHosted`, () => {
         connectToken: `t0k3n`,
         grant: { accountToken: `acct-1`, namespaceToken: `ns-1`, hostname: `sandbox-abc.sbx.test`, apiEndpoint: `https://zrok2.sbx.test` },
         ownerEmail: `owner@example.com`,
+        // The route decides this from the caller's country (region.test.ts covers the pick itself).
+        region: `iad`,
     };
 
     it(`creates app → volume → machine and stamps the row; the env is the contract's vocabulary`, async () => {

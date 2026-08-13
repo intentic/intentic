@@ -367,7 +367,14 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   icon: `bolt` as const,
                   title: `We host it`,
                   meta: `Free · ready in seconds`,
-                  note: `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back.`,
+                  /* The durability sentence is here, on the card, rather than only in the terms: this is the
+                   * moment someone chooses a disk that is ours, and "we don't back it up" is the one fact
+                   * about that disk which changes what a reasonable person does next. It names the remedy in
+                   * the same breath, because a warning with no next step just makes the safe choice look
+                   * scary. Deliberately silent about the provider's own snapshots — they are disaster
+                   * recovery we cannot restore from on request, so mentioning them here would read as a
+                   * safety net the user does not actually have. The terms spell that out. */
+                  note: `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`,
               },
           ]
         : []),

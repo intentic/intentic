@@ -92,7 +92,7 @@ export const aboutHero = {
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "The platform holds only your identity and a URL. It never receives your code, keys or sandbox.",
+        body: "The platform holds only your identity and a URL. Run the sandbox yourself and it never receives your code, keys or sandbox; take the box we host and the workspace sits on our provider's disk, which we cannot read.",
         href: productHref("delegate"),
         linkLabel: "What the platform actually holds",
     },

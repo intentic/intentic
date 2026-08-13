@@ -106,7 +106,7 @@ export default defineConfig({
             name: ORG_NAME,
             summary: landingContent.meta.description,
             details:
-                "intentic runs each coding agent in its own Docker sandbox on hardware you own, with the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. Every page below is also served as Markdown at the same URL with a .md suffix.",
+                "intentic runs each coding agent in its own Docker sandbox on hardware you own, with the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. One free starter sandbox per account can instead be hosted by us on rented infrastructure, in which case that workspace lives on our provider's disk — see /privacy/ and /dpa/. Every page below is also served as Markdown at the same URL with a .md suffix.",
             sections: [
                 // /about/ sits under Overview rather than Optional: "who is behind this" is the question an
                 // answer engine most often has to resolve about a young domain, and the page is the answer.
@@ -123,7 +123,7 @@ export default defineConfig({
                 // write an intentic extension" should be able to reach the eight pages that answer it without
                 // reading the seventeen that do not.
                 { label: "Extension API", paths: apiPages.map((page) => apiHref(page.id)) },
-                { label: "Optional", paths: ["/privacy/", "/terms/"] },
+                { label: "Optional", paths: ["/privacy/", "/terms/", "/acceptable-use/", "/dpa/", "/subprocessors/"] },
             ],
         }),
         /* The search index, rebuilt from the pages that were just written — it replaces the near-empty file the

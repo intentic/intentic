@@ -103,8 +103,14 @@ const configSchema = z.object({
             flyApiToken: z.string().default(``).meta({ secret: true }),
             // The Fly organization slug hosted apps are created in. HOSTED_FLY_ORG.
             flyOrg: z.string().default(``),
-            // Fly region code every v1 machine lands in (geo-pick is a later knob). HOSTED_REGION.
+            // Fly region code a machine lands in when the caller is outside the EEA. HOSTED_REGION.
             region: z.string().default(`iad`),
+            /* Where an EEA caller's machine lands instead. The privacy policy PROMISES this — a European
+             * user's workspace, and every file and secret they put in it, stays inside the EEA rather than
+             * crossing to Ashburn — so the pick is a data-protection commitment, not a latency tweak, and
+             * emptying this knob breaks a published statement rather than merely a default.
+             * HOSTED_REGION_EU. */
+            regionEu: z.string().default(`waw`),
             // Fly app names are GLOBALLY unique: <appPrefix>-<sandbox id> keeps ours claimable and lets the
             // reaper recognize our apps by prefix. HOSTED_APP_PREFIX.
             appPrefix: z.string().default(`intentic-sbx`),

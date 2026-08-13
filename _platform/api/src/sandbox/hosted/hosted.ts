@@ -31,6 +31,10 @@ export interface HostedProvisionArgs {
     // enables with, the namespace its names live under, its derived address, and the hub as the box dials it.
     readonly grant: { accountToken: string; namespaceToken: string; hostname: string; apiEndpoint: string };
     readonly ownerEmail: string;
+    // Decided by the route from the caller's country (region.ts), because only the request knows it — a
+    // European user's machine and volume are both created here, which is what makes the residency promise
+    // in the privacy policy true rather than aspirational.
+    readonly region: string;
 }
 
 /* Create the machine: app (own network) → volume → machine, then stamp the row. The env rides the same
@@ -46,7 +50,8 @@ export const provisionHosted = async (
     logger: Logger,
     args: HostedProvisionArgs,
 ): Promise<{ appName: string; region: string }> => {
-    const { flyApiToken, flyOrg, region, image, cpus, memoryMb, volumeGb, idleStopMinutes } = config.hosted;
+    const { flyApiToken, flyOrg, image, cpus, memoryMb, volumeGb, idleStopMinutes } = config.hosted;
+    const { region } = args;
     const appName = hostedAppName(config, args.sandboxId, args.connectToken);
     await createApp(flyApiToken, flyOrg, appName);
     try {

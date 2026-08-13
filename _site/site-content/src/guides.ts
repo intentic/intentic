@@ -392,7 +392,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Two rules do most of the work. The credential never enters the model's context, and each task gets only the access it needs.",
             "In practice that means tools holding secrets rather than agents holding secrets, plus per-task isolation so the scope of any single mistake is small.",
-            "intentic is built around that. A capability installs a real tool and its credential inside your sandbox, the agent operates the tool, and the value never leaves your machine. The platform stores your identity and your sandbox's address, nothing else.",
+            "intentic is built around that. A capability installs a real tool and its credential inside your sandbox, the agent operates the tool, and the value never leaves that sandbox. Run it on your own machine and the platform stores your identity and your sandbox's address, nothing else; run the starter box we host and the sandbox itself sits on infrastructure we rent.",
         ],
         sections: [
             {
@@ -620,7 +620,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Ask the two questions separately. Whose machine holds the checkout, and whose account holds the credentials. Most of what people mean by privacy here is answered by those two rather than by any policy document.",
             "If the answer has to be your own machine for both, a locally run agent is the baseline, and a container per agent on hardware you own is the version of that which also survives you closing the laptop.",
-            "That is what intentic does. The sandbox runs on your machine, the repository and credentials stay inside it, and the platform stores only your identity and the sandbox's address. It is MIT licensed, so the claim is checkable rather than promised.",
+            "That is what intentic does. The sandbox runs on your machine, the repository and credentials stay inside it, and the platform stores only your identity and the sandbox's address. It is MIT licensed, so the claim is checkable rather than promised. If you would rather not host anything, one free starter box runs on our infrastructure instead — the honest trade, spelled out in the privacy policy, is that its disk is then ours rather than yours.",
         ],
         sections: [
             {
