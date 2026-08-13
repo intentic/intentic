@@ -323,7 +323,7 @@ const confirmRemove = async (): Promise<void> => {
                                 :name="isOpen(persona) ? `chevron-down` : `chevron-right`"
                                 class="w-3 shrink-0 text-2xs text-subtle transition-colors"
                             />
-                            <PersonaFace :seed="persona.id" :size="32" :idle="!ready(persona)" />
+                            <PersonaFace :seed="persona.label ?? persona.id" :size="32" :idle="!ready(persona)" />
                         </span>
                     </template>
 

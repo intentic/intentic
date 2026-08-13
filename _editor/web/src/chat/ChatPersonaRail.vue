@@ -157,7 +157,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                          the tidier idea and is not: the face and the Anyone glyph resolve their percentage
                          against slightly different boxes, so the column came out 44px next to 42px — a
                          mismatch you can see in a vertical list even when you cannot name it. -->
-                    <PersonaFace v-if="row.id !== undefined" :seed="row.id" :size="44" />
+                    <PersonaFace v-if="row.id !== undefined" :seed="row.label" :size="44" />
                     <!-- Anyone is not a person and gets no invented face: the neutral glyph at that same size. -->
                     <span v-else class="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-line bg-content/5">
                         <Icon name="users" class="text-base text-muted" />
