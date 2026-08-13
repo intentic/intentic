@@ -53,15 +53,15 @@ describe("windowFinished", () => {
         const { shown, hidden } = windowFinished(lane(10), undefined, byId);
 
         expect(shown).toHaveLength(FINISHED_WINDOW);
-        expect(hidden).toBe(4);
+        expect(hidden).toBe(3);
     });
 
     it("keeps the selected card whatever its age — pinned at the tail, and counted OUT of the row that hides the rest", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
-        // Seven cards on screen out of ten: the row below them may only claim the three it actually hides.
-        expect(hidden).toBe(3);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
+        // Eight cards on screen out of ten: the row below them may only claim the two it actually hides.
+        expect(hidden).toBe(2);
     });
 
     it("leaves the lane alone when the selection is already inside the window — no card is ever shown twice", () => {
@@ -73,9 +73,9 @@ describe("windowFinished", () => {
     });
 
     it("drops the tail row entirely when the pin was the only card behind it", () => {
-        const { shown, hidden } = windowFinished(lane(7), `a6`, byId);
+        const { shown, hidden } = windowFinished(lane(8), `a7`, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`]);
         expect(hidden).toBe(0);
     });
 
@@ -85,8 +85,8 @@ describe("windowFinished", () => {
         const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
         const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
 
-        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
-        expect(hidden).toBe(3);
+        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
+        expect(hidden).toBe(2);
     });
 });
 
@@ -1069,7 +1069,7 @@ describe("the archive list", () => {
 
 /* THE SWEEP'S OTHER HALF. One agent is a card and a tab, and the two only ever moved together when the press
  * happened in this browser: archiving from the board closed the chat with the card, while the daemon's own
- * retention sweep took the card and left the tab. So the board stayed six deep while the chat list's Finished
+ * retention sweep took the card and left the tab. So the board stayed seven deep while the chat list's Finished
  * lane grew for the life of the sandbox — the thing the user reports as "my popped-out chat never cleans up".
  * Same departure signal as the archive list above, applied to the strip. */
 describe("tabs the daemon retired", () => {

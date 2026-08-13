@@ -133,16 +133,16 @@ const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.
 it(`keeps the card the docked chat is reading, however far down the lane it is`, async () => {
     seed();
     const board = await mountBoard();
-    // Without the pin this is the whole failure: six cards, and the ring on none of them.
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`]);
+    // Without the pin this is the whole failure: seven cards, and the ring on none of them.
+    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`]);
 
     openFromOutside(`a8`);
     await settle();
 
     // Pinned at the TAIL, so the lane's own recency order is otherwise untouched.
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 8`]);
-    // And counted OUT of the row that collapses the rest: seven cards on screen out of ten leaves three behind.
-    expect(tailRow(board)).toBe(`3 earlier`);
+    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`, `agent 8`]);
+    // And counted OUT of the row that collapses the rest: eight cards on screen out of ten leaves two behind.
+    expect(tailRow(board)).toBe(`2 earlier`);
 });
 
 it(`lets the card go again when the chat moves on`, async () => {
@@ -154,8 +154,8 @@ it(`lets the card go again when the chat moves on`, async () => {
     openFromOutside(`a0`);
     await settle();
 
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`]);
-    expect(tailRow(board)).toBe(`4 earlier`);
+    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`]);
+    expect(tailRow(board)).toBe(`3 earlier`);
 });
 
 it(`scrolls to a card selected off the board — a ring drawn outside the scrollport is a board ignoring the click`, async () => {

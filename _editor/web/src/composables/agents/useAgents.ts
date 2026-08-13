@@ -287,10 +287,10 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // to CONFIRM what just completed, not to be the sandbox's permanent record — everything older is still one
 // click away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between
 // the board and a TransitionGroup running FLIP over several hundred cards.
-export const FINISHED_WINDOW = 6;
+export const FINISHED_WINDOW = 7;
 
 /* The window applied, as ONE answer: the cards on screen and the number the row beneath them collapses. They
- * are computed together because they are rendered a line apart — "6 earlier" printed under seven cards is the
+ * are computed together because they are rendered a line apart — "N earlier" miscounting the cards above is the
  * lane contradicting itself — and because of the exception below, which changes both.
  *
  * THE CARD THE USER IS READING IS NEVER CULLED. The window caps BROWSING; it is not a claim about which agents

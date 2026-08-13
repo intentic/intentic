@@ -215,10 +215,10 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
     openFinished(10);
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`]);
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
     // The header still counts the whole lane — the row below is what accounts for the difference.
     expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`4 earlier`);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
 });
 
 it(`opens the rest in place, and folds them back`, async () => {
@@ -236,7 +236,7 @@ it(`opens the rest in place, and folds them back`, async () => {
     tailRow(el)?.click();
 
     await settle();
-    expect(cardsOnScreen(el)).toHaveLength(6);
+    expect(cardsOnScreen(el)).toHaveLength(7);
 });
 
 // The list is the switcher for the panel beside it, so the one card it may never drop is the chat that panel is
@@ -247,12 +247,12 @@ it(`pins the chat being read into the window, however far down the lane it is`, 
     openFinished(10);
     await settle();
 
-    openFromBoard(`done9`); // the oldest finished chat, four rows behind the fold
+    openFromBoard(`done9`); // the oldest finished chat, three rows behind the fold
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done9`]);
-    // Seven on screen out of ten: the row may only claim the three it actually hides.
-    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`, `done9`]);
+    // Eight on screen out of ten: the row may only claim the two it actually hides.
+    expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
 });
 
 // The exit the lane never had. It was reachable only by right-clicking a card — a hunt for a target to perform

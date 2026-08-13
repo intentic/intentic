@@ -239,7 +239,7 @@ const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.
  * cheap to keep things in.
  *
  * A page rather than the Finished lane's fixed window, because the two lists are asked different questions: the
- * lane is confirming what just completed (six is the whole answer), while the archive is browsed and searched.
+ * lane is confirming what just completed (seven is the whole answer), while the archive is browsed and searched.
  * So this GROWS — the tail row adds a page and never takes one back, since a reader who pressed for more has
  * not asked to be walked back up the list.
  *
@@ -304,7 +304,7 @@ const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, 
 //
 // A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep the
 // TransitionGroup off several hundred cards), and a result set is neither — hiding four of a query's six hits
-// behind "6 earlier" would be the board deciding which of the user's own matches they meant.
+// behind an "earlier" row would be the board deciding which of the user's own matches they meant.
 //
 // THE ARCHIVE KEEPS ITS PAGE UNDER A FILTER, which is the opposite call and the same reasoning: the pile it is
 // paging is unbounded, so a query matching four hundred filed-away sessions is exactly the case the cap is for.

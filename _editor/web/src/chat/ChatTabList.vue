@@ -229,7 +229,7 @@ const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key
  * terminal shelf, so without a cap it is the one lane that only ever grows, and this list is the surface where
  * that hurts most — the docked sheet is dismissed between uses, but the popped-out rail is mounted once and
  * read for hours, so its Finished lane was a column of a hundred landed agents by the end of a working day
- * while the board beside it stayed six deep.
+ * while the board beside it stayed seven deep.
  *
  * The window is a cap on BROWSING, not a close: every chat is still open, still cycled by Alt+PageUp/Down and
  * still one click away behind the row. What actually keeps the list short is the retention sweep now closing
