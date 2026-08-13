@@ -335,6 +335,23 @@ jobs:
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
+      # Empty the staging directories BEFORE the downloads land in them, because nothing else empties them any
+      # more. `clean: false` keeps this runner's checkout between jobs (docs/ci-runner.md — it is what keeps
+      # node_modules warm), so these directories still hold whatever the last desktop job on this runner put
+      # there: ci.yml's desktop-verify builds a complete set of `0.0.0` Linux bundles on this same label, and
+      # they sit here until something deletes them. While this job BUILT the release set, build-desktop.sh's
+      # `rm -rf "$OUT"` was that something; assembling stages already-verified bytes into the directory
+      # instead, so it must not — and the leftovers became this job's problem.
+      #
+      # They are not cosmetic. publish-github.sh attaches `dist-bin/*` by glob and the attestation signs the
+      # same four directories, so a stale bundle would be published as part of this release, over the name of
+      # a version it is not; and the assemble step refuses to guess between two artifacts of one kind, which
+      # is what failed run 31697229807 (`2 'deb' artifacts … expected one`).
+      - name: Clear the staging directories
+        shell: bash
+        run: |
+          rm -rf windows-release-candidate \
+            _editor/desktop-app/dist-bin _sandbox/sync/dist-bin _computers/host/dist-bin _sandbox/ic/dist-bin
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: windows-release-candidate

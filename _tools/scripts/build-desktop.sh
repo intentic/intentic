@@ -43,6 +43,11 @@ VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--w
 #                   built, verified and shipped them as an artifact), and the NSIS candidate is staged from
 #                   this directory. What remains is the release-set work only the final job can do — the
 #                   updater manifest, the checksums, and the archive verification over the complete set.
+#                   This is the one mode that cannot empty dist-bin first — its inputs are already in it — so
+#                   the CALLER owes it a directory holding nothing but this release's artifacts. On a runner
+#                   that keeps its checkout, that means deleting the directory before the artifacts are
+#                   downloaded into it (release.yml's publish job), or the previous build's bundles are
+#                   assembled, verified and published alongside this one's.
 #
 # Only a run that ends holding BOTH platforms writes latest.json — a manifest naming a platform whose
 # installer the run did not produce would advertise an update that 404s, and that is true in both directions.
