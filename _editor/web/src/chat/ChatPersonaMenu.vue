@@ -3,7 +3,7 @@ import { type Persona, personaBounds } from "@intentic/sandbox-contract";
 import { Avatar, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { identityHue } from "../composables/identityHue";
+import { personaHue } from "../composables/identityHue";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 
 /* THE COMPOSER'S PERSONA PICKER — "who is this chat when it reaches the outside world".
@@ -84,15 +84,21 @@ const openPersonas = (): void => {
             >
                 <!-- The same mark and the same colour this persona wears on its own page, keyed by id so a
                      rename doesn't recolour somebody you have learned to recognise. -->
-                <Avatar :size="20" :name="persona.label ?? persona.id" :hue="identityHue(persona.id)" :idle="!ready(persona)" class="mt-0.5" />
+                <Avatar :size="20" :name="persona.label ?? persona.id" :hue="personaHue(persona.id)" :idle="!ready(persona)" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     </span>
-                    <span v-if="persona.capabilities.length === 0" class="text-2xs text-warning">No accounts — this persona can't post anywhere</span>
-                    <span v-else-if="!ready(persona)" class="truncate text-2xs text-warning">{{ accountsOf(persona) }} — not signed in yet</span>
-                    <span v-else class="truncate text-2xs text-subtle">{{ accountsOf(persona) }}</span>
+                    <!-- The accounts, and nothing else. A card holding NONE used to be marked here as unable to
+                         post anywhere, which is true and is not the reader's problem at the moment they are
+                         picking who to speak as: an account-less persona still bounds the turn and still names
+                         the speaker, so it is an ordinary row rather than a broken one. What genuinely blocks a
+                         send — a signed-out account, a card that no longer exists — is said by the composer,
+                         once, where the send is about to happen (ChatPane's personaNotice). -->
+                    <span v-if="persona.capabilities.length > 0" class="truncate text-2xs" :class="ready(persona) ? `text-subtle` : `text-muted`">
+                        {{ accountsOf(persona) }}<template v-if="!ready(persona)"> — not signed in yet</template>
+                    </span>
                 </span>
             </button>
 

@@ -939,10 +939,12 @@ const personaNotice = computed<string | undefined>(() => {
     if (pickedPersona.value === undefined) {
         return `This chat acts as “${pinned}”, which no longer exists — it would reach no account and no tools. Pick another persona.`;
     }
-    if (pickedPersona.value.capabilities.length === 0) {
-        return `${personaName.value} holds no accounts, so this chat can work but can't post, reply or send as anyone.`;
-    }
-    return pickedPersona.value.capabilities.some((held) => personaSignedIn(held))
+    /* A CARD HOLDING NO ACCOUNTS IS NOT A NOTICE. It used to raise one — "can work but can't post" — and that
+     * is a strip above the composer, on every turn, about a state the user chose and can see: they named a
+     * persona that has no accounts on it, which still bounds the turn and still says who is speaking. Nothing
+     * is failing, so there is nothing to interrupt for. What remains below is the case where the user asked
+     * for something the chat CANNOT do: an account that exists and is not signed in. */
+    return pickedPersona.value.capabilities.length === 0 || pickedPersona.value.capabilities.some((held) => personaSignedIn(held))
         ? undefined
         : `${personaName.value} isn't signed in yet, so this chat can't act as it. Finish its login under Capabilities.`;
 });

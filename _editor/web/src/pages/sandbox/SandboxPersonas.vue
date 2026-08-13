@@ -8,7 +8,7 @@ import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { createInlineRename } from "../../composables/inlineRename";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
-import { identityHue } from "../../composables/identityHue";
+import { personaHue } from "../../composables/identityHue";
 import { FULL_POWERS, grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -323,7 +323,7 @@ const confirmRemove = async (): Promise<void> => {
                                 :name="isOpen(persona) ? `chevron-down` : `chevron-right`"
                                 class="w-3 shrink-0 text-2xs text-subtle transition-colors"
                             />
-                            <Avatar :size="32" :name="persona.label ?? persona.id" :hue="identityHue(persona.id)" :idle="!ready(persona)" />
+                            <Avatar :size="32" :name="persona.label ?? persona.id" :hue="personaHue(persona.id)" :idle="!ready(persona)" />
                         </span>
                     </template>
 

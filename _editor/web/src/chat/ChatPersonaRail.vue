@@ -22,7 +22,7 @@
      row. A mode whose whole subject is personas, on a workspace with none, has to explain itself — a list of
      one unexplained row is how this feature first shipped, and it read as broken. -->
 <script setup lang="ts">
-import { type Persona, personaBounds } from "@intentic/sandbox-contract";
+import { personaBounds } from "@intentic/sandbox-contract";
 import { Avatar, cmp, Icon, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
@@ -31,7 +31,7 @@ import { blocked } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
-import { identityHue } from "../composables/identityHue";
+import { personaHue } from "../composables/identityHue";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import RailCard from "../components/RailCard.vue";
 
@@ -40,7 +40,7 @@ import RailCard from "../components/RailCard.vue";
 const emit = defineEmits<{ select: [id: string] }>();
 
 const router = useRouter();
-const { personas, isConnected } = usePersonas();
+const { personas } = usePersonas();
 const { conversations, activeId } = useChat();
 const { agentById } = useAgents();
 
@@ -58,12 +58,14 @@ interface PersonaRow {
     readonly key: string;
     readonly id: string | undefined;
     readonly label: string;
-    // The accounts under the name — a mark cannot tell `reddit-work` from `reddit-personal`, and those being
-    // different accounts is the entire reason a persona exists.
+    /* The accounts under the name — a mark cannot tell `reddit-work` from `reddit-personal`, and those being
+     * different accounts is the entire reason a persona exists.
+     *
+     * EMPTY WHEN THERE ARE NONE, rather than a line saying so. A persona holding no accounts is a perfectly
+     * good persona: it still bounds what the chat can reach, it still names who is speaking, and it is
+     * something you talk to on day one. This rail used to write "No accounts yet" in that slot and mark the
+     * row, which turned the ordinary state of a new card into a defect on every row of the list. */
     readonly detail: string;
-    // A card naming no connected account can be talked to, but cannot post anywhere yet. Said in warning ink
-    // rather than hidden, because a freshly cloned workspace is in exactly this state.
-    readonly stranded: boolean;
     readonly bounds: string | undefined;
     readonly chats: number;
     readonly lastAt: number | undefined;
@@ -71,14 +73,13 @@ interface PersonaRow {
     readonly open: boolean;
 }
 
-const rowFor = (id: string | undefined, label: string, detail: string, stranded: boolean, bounds?: string): PersonaRow => {
+const rowFor = (id: string | undefined, label: string, detail: string, bounds?: string): PersonaRow => {
     const mine = chatsOf(id);
     return {
         key: id ?? `anyone`,
         id,
         label,
         detail,
-        stranded,
         bounds,
         chats: mine.length,
         lastAt: mine[0]?.agent?.updatedAt,
@@ -91,20 +92,16 @@ const rowFor = (id: string | undefined, label: string, detail: string, stranded:
     };
 };
 
-const accountsOf = (persona: Persona): string => (persona.capabilities.length === 0 ? `No accounts yet` : persona.capabilities.join(` · `));
-const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
-
 const rows = computed<PersonaRow[]>(() => [
     ...personas.value.map((persona) =>
         rowFor(
             persona.id,
             persona.label ?? persona.id,
-            accountsOf(persona),
-            !ready(persona),
+            persona.capabilities.join(` · `),
             persona.powers === undefined ? undefined : personaBounds(persona),
         ),
     ),
-    rowFor(undefined, `Anyone`, `Every account you've connected`, false),
+    rowFor(undefined, `Anyone`, `Every account you've connected`),
 ]);
 
 const empty = computed(() => personas.value.length === 0);
@@ -149,18 +146,21 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                 :aria-label="`Chat as ${row.label}`"
                 @click="open(row)"
             >
-                <!-- The persona's own mark, in the colour it wears on its own page and in the composer's
-                     picker — keyed by id, so renaming somebody does not recolour a face you have learned. -->
-                <template #lead>
-                    <Avatar
-                        v-if="row.id !== undefined"
-                        :size="18"
-                        :name="row.label"
-                        :hue="identityHue(row.id)"
-                        :idle="row.stranded"
-                        class="mt-px shrink-0"
-                    />
-                    <span v-else class="mt-0.5 flex h-4 shrink-0 items-center"><Icon name="users" class="text-2xs text-subtle" /></span>
+                <!-- THE FACE, at the card's own height rather than at a glyph's. This list is scanned for a
+                     PERSON, and a name is what you read second — so the mark leads, big enough to be found
+                     without reading, and the row's text sits beside it.
+                     Its letters come from the name and its colour from the id, which is the same derivation
+                     the composer's picker and the personas page use: one persona is one colour everywhere, and
+                     renaming somebody does not recolour a face you have learned to recognise. -->
+                <template #aside>
+                    <span class="flex shrink-0 items-center">
+                        <Avatar v-if="row.id !== undefined" :size="38" :name="row.label" :hue="personaHue(row.id)" />
+                        <!-- Anyone is not a person and gets no invented face: the neutral glyph at the same
+                             size, so the column of marks still lines up. -->
+                        <span v-else class="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-line bg-content/5">
+                            <Icon name="users" class="text-sm text-muted" />
+                        </span>
+                    </span>
                 </template>
                 <!-- The clock, where the rail's session rows keep theirs. Only once this persona has a chat to
                      have a clock about. -->
@@ -171,9 +171,9 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                 </template>
                 <template #meta>
                     <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                    <span class="min-w-0 truncate" :class="row.stranded ? 'text-warning' : 'text-subtle'">
-                        {{ row.detail }}<template v-if="row.stranded"> — not signed in yet</template>
-                    </span>
+                    <!-- The accounts, when there are any. A persona with none says nothing here rather than
+                         apologising for itself — see `detail`. -->
+                    <span v-if="row.detail !== ``" class="min-w-0 truncate text-subtle">{{ row.detail }}</span>
                     <!-- What this window is holding for them, stated as what it is: the chats open HERE. Absent
                          at zero, where "0 chats" would only be saying that a fresh persona is fresh. -->
                     <span v-if="row.chats > 0" class="shrink-0">{{ row.chats }} chat{{ row.chats === 1 ? `` : `s` }}</span>

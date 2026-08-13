@@ -81,8 +81,10 @@ const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
  * (ChatPersonaRail). Two answers to "what goes in the left column", not two views of one set, so the switch
  * swaps the whole list rather than regrouping it. */
 const { grouping, set: setGrouping } = useChatGrouping();
+// "Agents", not "Chats": these rows are the fleet board's cards at the rail's width, and the product calls
+// them agents everywhere the user meets them — the rail tile, the board, the "New agent" button.
 const GROUPINGS: readonly { label: string; value: ChatGrouping; title: string }[] = [
-    { label: `Chats`, value: `lane`, title: `Every conversation this window holds, by what needs you` },
+    { label: `Agents`, value: `lane`, title: `Every conversation this window holds, by what needs you` },
     { label: `Personas`, value: `persona`, title: `The people this sandbox can be — pick one and talk to them` },
 ];
 
@@ -665,14 +667,15 @@ const closeTab = (event: Event, id: string): void => {
              past what is open, the "Not open" group at the foot. -->
         <!-- `Aa` is here as well as on the board because the two fields run ONE filter and one case rule: a
              switch visible on only one of them would be a mode acting where it cannot be seen or undone. -->
-        <!-- WHAT THE COLUMN IS, above the controls that act on it. Two words, so it survives the narrowest this
-             rail is dragged to, and it leads because the field below it belongs to only one of the two lists. -->
+        <!-- WHAT THE COLUMN IS, above the controls that act on it, and deliberately NOT stretched across the
+             rail: a full-width pair of tall pills read as the surface's title bar rather than as a toggle, and
+             spent a whole row of the one column in the app that is short of height. Compact and left-aligned,
+             the way every other viewer toggle in the app sits. -->
         <Segmented
             :model-value="grouping"
             :options="GROUPINGS"
             size="xs"
-            stretch
-            class="shrink-0"
+            class="mr-auto shrink-0"
             @update:model-value="(next: ChatGrouping) => setGrouping(next)"
         />
         <!-- The filter searches MESSAGES, so it belongs to the chats and goes away with them: a box promising

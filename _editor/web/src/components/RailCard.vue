@@ -80,49 +80,53 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
 <template>
     <button
         type="button"
-        class="rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 flex-col gap-1.5 rounded-lg border p-2.5 text-left text-2xs"
-        :class="{ 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed }"
+        class="rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-lg border p-2.5 text-left text-2xs"
+        :class="[
+            { 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed },
+            $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
+        ]"
     >
-        <span class="flex w-full min-w-0 items-start gap-2">
-            <!-- THE LEADING MARK. A caller with a mark of its own passes it here — the persona rail's rows are
-                 people rather than sessions, and a person's mark is their avatar in their own stable colour,
-                 which neither of the two below can be. Everything else falls through to the ladder that was
-                 always here, so no existing card changes.
-                 Sized to the title's first line so a two-line title hangs off the tile, not around it. -->
-            <slot name="lead">
+        <!-- A MARK BESIDE THE WHOLE CARD rather than inside its title row — the persona rail's rows are people,
+             and a face is the thing you find them by, so it stands at the card's own height instead of sitting
+             at the size of a status glyph. Only the rows that pass one are laid out this way; every other card
+             keeps the column it has always been, which is why this is a slot's presence and not a prop. -->
+        <slot name="aside" />
+        <span class="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span class="flex w-full min-w-0 items-start gap-2">
+                <!-- Sized to the title's first line so a two-line title hangs off the tile, not around it. -->
                 <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
                 <span v-else-if="icon !== undefined" class="flex h-4 shrink-0 items-center">
                     <Icon :name="icon" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
                 </span>
-            </slot>
-            <!-- Two lines before the clamp — a card has the width for most titles whole. -->
-            <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4" :class="quiet ? 'text-muted' : 'text-content'">
-                <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                    run.text
-                }}</span>
+                <!-- Two lines before the clamp — a card has the width for most titles whole. -->
+                <span class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4" :class="quiet ? 'text-muted' : 'text-content'">
+                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                        run.text
+                    }}</span>
+                </span>
+                <slot name="trailing" />
+                <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center"><Icon v-bind="status" /></span>
             </span>
-            <slot name="trailing" />
-            <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center"><Icon v-bind="status" /></span>
-        </span>
 
-        <!-- Quiet by default: these are reference numbers, not events, so the only colour on the line is the
-             one that means something. -->
-        <span v-if="$slots[`meta`]" class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
-            <slot name="meta" />
-        </span>
+            <!-- Quiet by default: these are reference numbers, not events, so the only colour on the line is the
+                 one that means something. -->
+            <span v-if="$slots[`meta`]" class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted">
+                <slot name="meta" />
+            </span>
 
-        <!-- Held through a stop's unwind by whoever passes it (turnInFlight, not `running`): the turn is still
-             live there, the elapsed keeps its meaning, and blinking the line off a beat before the card settles
-             is the same flicker the stopping state exists to remove. -->
-        <span v-if="live !== undefined" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
-            <Icon :name="live.icon" class="shrink-0 text-2xs" />
-            <span class="min-w-0 flex-1 truncate">{{ live.text }}</span>
-            <span v-if="live.since !== undefined && now !== undefined" class="shrink-0">{{ formatElapsed(live.since, now) }}</span>
-        </span>
+            <!-- Held through a stop's unwind by whoever passes it (turnInFlight, not `running`): the turn is
+                 still live there, the elapsed keeps its meaning, and blinking the line off a beat before the
+                 card settles is the same flicker the stopping state exists to remove. -->
+            <span v-if="live !== undefined" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
+                <Icon :name="live.icon" class="shrink-0 text-2xs" />
+                <span class="min-w-0 flex-1 truncate">{{ live.text }}</span>
+                <span v-if="live.since !== undefined && now !== undefined" class="shrink-0">{{ formatElapsed(live.since, now) }}</span>
+            </span>
 
-        <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
-            <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
-            <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
+            <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
+                <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
+            </span>
         </span>
     </button>
 </template>

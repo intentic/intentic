@@ -150,19 +150,26 @@ it("returns to the chat already acting as that persona", async () => {
     expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
 });
 
-/* A CARD WITH NOTHING SIGNED IN IS OFFERED, MARKED — the ordinary state of a freshly cloned workspace. Picking
- * it is still meaningful (the chat is bounded), it simply cannot post yet, and hiding it would answer "where
- * did Work go" with silence. */
-it("marks a persona whose accounts are all signed out", async () => {
-    const el = await mountList();
-    expect(rowFor(el, `Work`)?.textContent).toContain(`not signed in yet`);
-});
-
-it("drops the marking once one of its accounts is connected", async () => {
+// The accounts under the name, because a name alone cannot tell `reddit-work` from `reddit-personal` — and
+// those being different accounts is the whole reason a persona exists.
+it("names the accounts a persona holds", async () => {
     withPersonas([{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }], [`reddit-work`]);
     const el = await mountList();
-    expect(rowFor(el, `Work`)?.textContent).not.toContain(`not signed in yet`);
     expect(rowFor(el, `Work`)?.textContent).toContain(`reddit-work`);
+});
+
+/* A PERSONA HOLDING NO ACCOUNTS IS AN ORDINARY ROW, not a broken one. It still bounds what a chat can reach
+ * and still names who is speaking, and it is the state every card is in for the minute after it is made — so
+ * the rail says nothing at all rather than marking the row. This is pinned because the rail used to write
+ * "No accounts yet" into that slot, which turned a normal state into a defect on every row of a new list. */
+it("says nothing about a persona that holds no accounts", async () => {
+    withPersonas([{ id: `fresh`, label: `Fresh`, capabilities: [] }]);
+    const el = await mountList();
+    const row = rowFor(el, `Fresh`);
+    expect(row).toBeDefined();
+    expect(row?.textContent).not.toContain(`No accounts`);
+    expect(row?.textContent).not.toContain(`can't post`);
+    expect(row?.querySelector(`.text-warning`)).toBeNull();
 });
 
 // The switch swaps the whole column, so the chats are still there on the way back.
