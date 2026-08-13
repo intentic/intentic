@@ -55,15 +55,25 @@ const hint = computed(() => {
                 class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
                 :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
             ></span>
+            <!-- The ring is PAINTED, not a border: `border-width` never renders below one CSS pixel — Chromium
+                 clamps a 0.5px border back up to 1px — whereas a box-shadow spread is rasterized, so half a
+                 pixel is half a pixel wherever the display can resolve one (measured: one device pixel against
+                 a 1px border's two, at 2×). Below that it rounds up to the single pixel it always was, so the
+                 hairline needs no media query to degrade. Weight is the whole point here: at this size a
+                 full-pixel ring is heavier than the line the mark stands on, which makes an aside read as a
+                 control.
+                 A painted ring is out of the LAYOUT, though, where the border it replaced was in it — so the
+                 padding takes back the pixel the border used to occupy at each edge (2 + 1/4 and 3/4 against
+                 the old 2 and 1/2). The pill is the size it has always been; only its edge got finer. -->
             <span
-                class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-2xs tabular-nums transition-colors"
+                class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-[0.5px] transition-colors"
                 :class="[
                     run.failed
-                        ? 'border-danger/40 text-danger'
+                        ? 'text-danger ring-danger/40'
                         : expanded
-                          ? 'border-line-strong bg-overlay text-content'
-                          : 'border-line bg-card text-muted',
-                    'group-hover/run:border-line-strong group-hover/run:bg-overlay group-hover/run:text-content',
+                          ? 'bg-overlay text-content ring-line-strong'
+                          : 'bg-card text-muted ring-line',
+                    'group-hover/run:bg-overlay group-hover/run:text-content group-hover/run:ring-line-strong',
                 ]"
             >
                 <!-- While the turn is live the mark spins in place of its icon: a run that is still filling up
