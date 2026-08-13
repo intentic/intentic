@@ -15,7 +15,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../composables/agents/useAgents";
 import { useChatGrouping } from "../composables/chat/chatGrouping";
-import { resetChat, useChat } from "../composables/chat/useChat";
+import { openAgentConversation, resetChat, useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { PERSONAS } from "../composables/queryKeys";
 import { router } from "../router";
@@ -170,6 +170,83 @@ it("says nothing about a persona that holds no accounts", async () => {
     expect(row?.textContent).not.toContain(`No accounts`);
     expect(row?.textContent).not.toContain(`can't post`);
     expect(row?.querySelector(`.text-warning`)).toBeNull();
+});
+
+/* --- Reaching a persona's OTHER chats ---------------------------------------------------------------------
+ * The row states a count, and until the disclosure existed that count named conversations no press could
+ * reach: the card went to the newest and the rest were only findable by leaving this cut for the Agents one.
+ * These pin the door being real. */
+const pinTo = async (persona: string, ids: string[]): Promise<void> => {
+    for (const id of ids) {
+        openAgentConversation({ id, provider: `claude`, harness: `native` });
+    }
+    await settle();
+    for (const id of ids) {
+        const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
+        if (conversation !== undefined) {
+            conversation.actsAs.value = persona;
+        }
+    }
+    await settle();
+};
+
+const disclosureFor = (el: HTMLElement, label: string): HTMLElement | undefined =>
+    (el.querySelector(`[aria-label="Show ${label}'s chats"]`) as HTMLElement | null) ?? undefined;
+
+// The chats drawn UNDER a persona — everything the list holds that is not one of the persona rows themselves.
+const sessionRows = (el: HTMLElement): string[] => {
+    const personaNames = new Set([`Work`, `Inbox Manager`, `Anyone`]);
+    return [...el.querySelectorAll(`[data-chat-tab], .rail-card`)]
+        .map((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() ?? ``)
+        .filter((title) => !personaNames.has(title));
+};
+
+it("lists a persona's chats and switches to the one you pick", async () => {
+    const el = await mountList();
+    await pinTo(`work`, [`first`, `second`]);
+    expect(sessionRows(el)).toHaveLength(2);
+
+    // A SESSION row, addressed by what it offers to do — the persona cards below it are also `.rail-card`, and
+    // pressing one of those would start a chat rather than switch to one.
+    selected = [];
+    el.querySelector(`[aria-label^="Open "]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    await settle();
+    expect(selected).toHaveLength(1);
+});
+
+// The count is the door, and it closes as well as opens — a reader who wants the rail back as a list of people
+// says so once and it stays said (the auto-expand below only fires when the ACTIVE chat changes).
+it("collapses the list again from the same control", async () => {
+    const el = await mountList();
+    await pinTo(`work`, [`first`, `second`]);
+    disclosureFor(el, `Work`)?.click();
+    await settle();
+    expect(sessionRows(el)).toEqual([]);
+});
+
+/* THE SEVENTH CHAT. Before this, a persona holding one chat could never be given another from the rail — the
+ * card's press means "the latest, or a new one if there are none" — so starting a second meant pressing New
+ * agent and naming the persona by hand in the composer, which is the errand the rail exists to remove. */
+it("offers a new chat as that persona once its existing ones are on screen", async () => {
+    const el = await mountList();
+    await pinTo(`work`, [`first`]);
+    expect(el.textContent).toContain(`New chat as Work`);
+});
+
+// The disclosure only exists where it leads somewhere: a persona nobody has talked to yet has no list to open
+// and a card whose own press already starts the first chat.
+it("shows no disclosure on a persona with no chats", async () => {
+    const el = await mountList();
+    expect(disclosureFor(el, `Work`)).toBeUndefined();
+});
+
+/* THE PERSONA YOU ARE TALKING THROUGH OPENS ITSELF, so the rail shows where you are rather than making you
+ * find it — the same reason the board pins the card its chat panel is pointing at. */
+it("expands the persona whose chat is on screen", async () => {
+    const el = await mountList();
+    await pinTo(`work`, [`first`, `second`]);
+    await settle();
+    expect(sessionRows(el).length).toBeGreaterThan(0);
 });
 
 // The switch swaps the whole column, so the chats are still there on the way back.
