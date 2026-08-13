@@ -1,5 +1,6 @@
 import type {
     AskQuestion,
+    CapabilityOffer,
     PermissionAsk,
     ServiceOffer,
     ServiceStreamEvent,
@@ -91,6 +92,22 @@ export interface ServiceOfferRequest {
     // How an approved run ended (the service_receipt frame): served and charged, refunded in full because the
     // service failed to answer, or refused by the platform after the click (a raced-out allowance).
     readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };
+}
+
+/* A missing capability asking for the owner's setup — the daemon's setup gate (capabilities/
+ * capability-offer.ts). 'pending' shows Connect/Not-now with the catalog's own title; 'connecting' is the
+ * owner's yes with the setup still underway (the agent stays parked, waiting for the connection to come
+ * live), settled by the outcome below; 'skipped' freezes the no. 'cancelled' is nobody answering — the turn
+ * stopped under the card, the asking command died, or the ask expired. */
+export type CapabilityOfferStatus = "pending" | "connecting" | "skipped" | "cancelled";
+
+export interface CapabilityOfferRequest {
+    readonly requestId: string;
+    readonly offer: CapabilityOffer;
+    readonly status: CapabilityOfferStatus;
+    // How an accepted ask ended (the capability_outcome frame): the connection came live while the agent
+    // waited (`id` is the connected instance), or the setup didn't finish while anyone was waiting.
+    readonly outcome?: { readonly outcome: "connected" | "unfinished"; readonly id?: string };
 }
 
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
@@ -250,6 +267,9 @@ export interface ChatMessage {
     readonly browserHelp?: BrowserHelpRequest;
     // Set when this turn asked to run a priced service; carries the decision and, once run, the receipt.
     readonly serviceOffer?: ServiceOfferRequest;
+    // Set when this turn asked the owner to connect a missing capability; carries the decision and, once
+    // accepted, how the setup ended.
+    readonly capabilityOffer?: CapabilityOfferRequest;
     // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
     // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably
     // (mapTool rewrites by id), so it's readonly to the element level like `attachments`.
@@ -265,7 +285,7 @@ export interface ChatMessage {
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "serviceOffer"] as const;
+export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "serviceOffer", "capabilityOffer"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
@@ -285,6 +305,7 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
         ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
         ...(message.browserHelp?.status === `pending` ? { browserHelp: { ...message.browserHelp, status: `cancelled` } } : {}),
         ...(message.serviceOffer?.status === `pending` ? { serviceOffer: { ...message.serviceOffer, status: `cancelled` } } : {}),
+        ...(message.capabilityOffer?.status === `pending` ? { capabilityOffer: { ...message.capabilityOffer, status: `cancelled` } } : {}),
     };
 };
 

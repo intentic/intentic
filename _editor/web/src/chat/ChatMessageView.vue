@@ -3,6 +3,7 @@ import { type IconName, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
+import { CAPABILITY_CATALOG } from "@intentic-app/capability-catalog";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -42,13 +43,39 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
 }>();
 
-const { conversation, decidePlan, answerQuestion, cancelQuestion, decidePermission, decideServiceOffer, declineBrowserHelp, awaitingDecision } =
-    usePaneView();
+const {
+    conversation,
+    decidePlan,
+    answerQuestion,
+    cancelQuestion,
+    decidePermission,
+    decideServiceOffer,
+    decideCapabilityOffer,
+    declineBrowserHelp,
+    awaitingDecision,
+} = usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
 // /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
 const router = useRouter();
 const openHelpBrowser = (session: string): void => void router.push(`/browsers/${session}`);
+
+/* The capability card's Connect is a decision AND a navigation: the reply un-parks the daemon's watch (the
+ * agent now waits for the connection to come live), and the setup itself happens on the Capabilities page —
+ * opened straight on the asked card, so the user lands on the form rather than the grid. "Open setup" while
+ * connecting is the navigation alone, for whoever closed the page mid-setup. */
+const openCapabilitySetup = (card: string): void => void router.push(`/capabilities/${card}`);
+const connectCapability = (message: ChatMessage): void => {
+    void decideCapabilityOffer(message, true);
+    openCapabilitySetup(message.capabilityOffer?.offer.card ?? ``);
+};
+
+// The card's one line of catalog prose, when the static catalog knows the card (a contributed card's frame
+// still carries its name — the description line simply stays off).
+const capabilityDescription = computed(() => {
+    const card = props.message.capabilityOffer?.offer.card;
+    return card === undefined ? undefined : CAPABILITY_CATALOG.find((entry) => entry.id === card)?.description;
+});
 const { mobile } = useDevice();
 
 /* The landed notice's one-press offer (ChatMessage.noticeAction): flip THIS agent to holding its future work
@@ -1161,6 +1188,64 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
                     <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip — free</ChatDecisionButton>
+                </div>
+            </div>
+
+            <!-- A missing capability asking for the owner's setup — the product's setup gate. The title and the
+                 card id are the catalog's own words (resolved by the daemon that validated the ask, never typed
+                 by the model); the agent's own words are the one `why` line. Connect is a decision AND a
+                 navigation: setup happens on the Capabilities page, and the agent stays parked until the
+                 connection comes live — the outcome row below is what says how that wait ended. -->
+            <div v-if="message.capabilityOffer" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="bolt" class="text-sm text-primary-500" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
+                        >{{ message.capabilityOffer.offer.name }} isn't connected yet</span
+                    >
+                    <span v-if="message.capabilityOffer.outcome?.outcome === 'connected'" class="text-2xs font-medium text-success">✓ Connected</span>
+                    <span v-else-if="message.capabilityOffer.outcome?.outcome === 'unfinished'" class="text-2xs font-medium text-muted"
+                        >✕ Setup didn't finish</span
+                    >
+                    <span v-else-if="message.capabilityOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
+                    <span v-else-if="message.capabilityOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span v-if="capabilityDescription" class="text-xs text-content/85">{{ capabilityDescription }}</span>
+                    <span v-if="message.capabilityOffer.offer.why" class="text-2xs text-subtle"
+                        >The agent's case: {{ message.capabilityOffer.offer.why }}</span
+                    >
+                </div>
+
+                <!-- The wait living: the owner said yes and the agent is parked on the setup — with the way back
+                     to it for whoever closed the page mid-flow. Settles via the outcome frame. -->
+                <div
+                    v-if="message.capabilityOffer.status === 'connecting' && !message.capabilityOffer.outcome"
+                    class="flex items-center gap-2 border-t border-line px-3.5 py-2.5"
+                >
+                    <Icon name="spinner" class="text-2xs text-link" spin />
+                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">Waiting for you to finish setup…</span>
+                    <ChatDecisionButton tone="secondary" icon="bolt" @click="openCapabilitySetup(message.capabilityOffer.offer.card)"
+                        >Open setup</ChatDecisionButton
+                    >
+                </div>
+
+                <!-- How an accepted ask ended — the agent's side of it, so the row reads as what happened next. -->
+                <div v-if="message.capabilityOffer.outcome" class="border-t border-line px-3.5 py-2.5">
+                    <span v-if="message.capabilityOffer.outcome.outcome === 'connected'" class="text-2xs text-muted"
+                        >Connected<template v-if="message.capabilityOffer.outcome.id"> as “{{ message.capabilityOffer.outcome.id }}”</template> — the
+                        agent is continuing with it.</span
+                    >
+                    <span v-else class="text-2xs text-muted">The setup didn't finish while the agent waited — it continued without it.</span>
+                </div>
+
+                <div v-if="message.capabilityOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <ChatDecisionButton tone="primary" icon="check" @click="connectCapability(message)"
+                        >Connect {{ message.capabilityOffer.offer.name }}</ChatDecisionButton
+                    >
+                    <!-- Final for this conversation: the agent is told to continue without it and not to ask
+                         again; nothing stops the turn. -->
+                    <ChatDecisionButton tone="secondary" icon="times" @click="decideCapabilityOffer(message, false)">Not now</ChatDecisionButton>
                 </div>
             </div>
 

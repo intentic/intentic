@@ -47,15 +47,22 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     },
 });
 
-// The `vpn`, `otp` and `services` CLIs on the agent's PATH (and in the owner's terminals) reach the daemon
-// over loopback with the per-boot agent token. Scoped hard: the agent may dial and drop the tunnels the owner
-// configured, may mint one-time codes off a stored TOTP seed — each derived, expiring within its period —
-// and may browse and run the platform's priced services on the owner's credit allowance; it may never read
-// /secrets or /capabilities themselves, which would hand it the credentials behind them.
+// The `vpn`, `otp`, `services` and `capabilities` CLIs on the agent's PATH (and in the owner's terminals)
+// reach the daemon over loopback with the per-boot agent token. Scoped hard: the agent may dial and drop the
+// tunnels the owner configured, may mint one-time codes off a stored TOTP seed — each derived, expiring
+// within its period — may browse and run the platform's priced services on the owner's credit allowance, and
+// may ask the owner to connect a capability; it may never read /secrets or the /capabilities REST surface
+// itself, which would hand it the credentials behind them.
 const agentReach = (method: string, path: string): boolean =>
     path === "/vpn" ||
     path.startsWith("/vpn/") ||
     (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
+    // The capability setup gate the `capabilities` CLI drives: discovery (card ids and names, whether each is
+    // connected — never a config or a secret), and the ask, which parks on an owner-decided card in chat
+    // before anything is watched for (capabilities/capability-offer.ts). Consent enforced at the route, like
+    // the services gate below.
+    (method === "GET" && path === "/capabilities/connectable") ||
+    (method === "POST" && path === "/capabilities/ask") ||
     // The premium-services surface the `services` CLI drives: the priced catalog, and one metered run. The
     // spend is bounded by the owner's daily allowance platform-side, and the run itself parks on an
     // owner-approval card before anything is forwarded (platform/service-offer.ts) — the consent is enforced

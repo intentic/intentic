@@ -698,5 +698,41 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
     };
 };
 
+/* THE JOIN BETWEEN A CARD AND THE CONNECTIONS THAT CAME FROM IT — here rather than in the web because both
+ * sides ask it: the Capabilities grid joins each card to the live instances it is answerable for, and the
+ * daemon's capability ask gate joins the card an agent requested to whatever is already connected. One
+ * definition, or the two joins drift on exactly the multi-provider cards the discriminator exists for.
+ *
+ * Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli
+ * cards, `platform` for the browser cards (both map straight to the capability's config). The value is a
+ * single fixed value, or the options for a multi-provider card (the SQL card owns postgres + mysql).
+ * Single-card kinds (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. */
+
+// The structural slice of a live connection the join reads — the daemon's manifest `Capability` and the
+// wire's `CapabilitySummary` both carry it, so one signature serves both sides. `undefined` is admitted in
+// the values because the manifest's per-kind config shapes carry optional fields, and the join only ever
+// reads the discriminator key.
+export interface CapabilityInstanceLike {
+    readonly kind: string;
+    readonly config: Record<string, string | number | boolean | undefined>;
+}
+
+const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
+    const field = entry.fields.find((candidate) => candidate.key === "provider" || candidate.key === "platform");
+    if (field === undefined) {
+        return undefined;
+    }
+    return { key: field.key, values: field.value !== undefined ? [field.value] : (field.options ?? []).map((option) => option.value) };
+};
+
+// The live connections a card is answerable for.
+export const instancesOf = <T extends CapabilityInstanceLike>(entry: CapabilityCatalogEntry, capabilities: readonly T[]): T[] => {
+    const disc = cardDiscriminator(entry);
+    if (disc === undefined) {
+        return capabilities.filter((capability) => capability.kind === entry.kind);
+    }
+    return capabilities.filter((capability) => capability.kind === entry.kind && disc.values.includes(String(capability.config[disc.key])));
+};
+
 // Automation "start from" recipes moved to the automations extension (@intentic/ext-automations): they are
 // automation-UI prefill data, so they live with that extension rather than the platform product catalog.

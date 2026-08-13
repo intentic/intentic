@@ -1126,6 +1126,65 @@ describe(`Conversation`, () => {
         expect(card.serviceOffer?.receipt).toMatchObject({ outcome: `ok` });
     });
 
+    /* THE SETUP CARD. Connect does NOT predict the outcome — the owner still has the setup to do, so the card
+     * moves to `connecting` and the capability_outcome frame is what says how it ended — and "Not now" leaves
+     * the turn running: the agent was told to continue without the capability, which is work, not an ending.
+     * Both clicks travel the same /agent/reply side channel as every other card. */
+    it(`parks the turn on a capability card; Connect moves it to connecting and the outcome patches on`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { card: `notion`, name: `Notion`, why: `I'll create a page there for each research writeup` };
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
+
+        const turn = conversation.send(`write it up in notion`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        expect(card().capabilityOffer).toMatchObject({ requestId: `k1`, status: `pending`, offer: { card: `notion`, name: `Notion` } });
+
+        await conversation.decideCapabilityOffer(card(), true);
+        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        // Connecting is not an ending: the agent's command is still parked, watching for the connection.
+        expect(card().capabilityOffer).toMatchObject({ status: `connecting` });
+        expect(card().capabilityOffer?.outcome).toBeUndefined();
+        expect(conversation.streaming.value).toBe(true);
+        await conversation.stop();
+        await turn;
+    });
+
+    it(`"Not now" on a capability card connects nothing and leaves the turn running`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { card: `notion`, name: `Notion` };
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
+
+        const turn = conversation.send(`write it up in notion`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        await conversation.decideCapabilityOffer(card(), false);
+
+        expect(card().capabilityOffer).toMatchObject({ status: `skipped` });
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
+        expect(conversation.streaming.value).toBe(true);
+        await conversation.stop();
+        await turn;
+    });
+
+    it(`a replayed capability card freezes from the resolved frame and wears its outcome`, async () => {
+        const conversation = new Conversation(`c1`);
+        const offer = { card: `notion`, name: `Notion` };
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `capability_offer`, requestId: `k1`, offer },
+                { kind: `resolved`, requestId: `k1`, reply: { kind: `capability_offer`, requestId: `k1`, connect: true } },
+                { kind: `capability_outcome`, requestId: `k1`, outcome: `connected`, id: `notion` },
+            ]),
+        );
+
+        await conversation.send(`write it up in notion`, settings);
+
+        const card = conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        expect(card.capabilityOffer).toMatchObject({ status: `connecting`, outcome: { outcome: `connected`, id: `notion` } });
+    });
+
     it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

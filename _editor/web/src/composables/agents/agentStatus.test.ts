@@ -14,7 +14,7 @@ import {
 
 // No mocks: agentStatus is a leaf of pure functions, which is the point of it living apart from the fleet
 // store — useAgents pulls useChat pulls the router, and none of that is needed to place an agent.
-const none = { plan: false, question: false, permission: false, service: false, conflict: false };
+const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
 
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
 // a cleanly-completed, auto-landed turn reads landed/idle and the card moves lanes on the next roster frame.

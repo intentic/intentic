@@ -19,6 +19,7 @@ import { routeFloor } from "./auth/role-floor.js";
 import { grantsOf } from "./auth/grants.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
+import { createCapabilityAskRoutes } from "./capabilities/ask.routes.js";
 import { extensionDir, extensionRead } from "./capabilities/extension-dirs.js";
 import { installedExtensions } from "./extensions/installed-extensions.js";
 import type { Services } from "./composition.js";
@@ -1127,6 +1128,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             ...(answer.remaining !== undefined ? { "x-intentic-credits-remaining": answer.remaining } : {}),
         });
     });
+
+    /* The capability setup gate — the `capabilities` CLI's two routes (capabilities/ask.routes.ts).
+     * `connectable` is discovery (every card, whether it's connected — names only, never config); `ask` parks
+     * the agent's call on an owner-decided card in chat, exactly the consent shape the priced-services gate
+     * above enforces: the model may ask, and only the owner's click makes anything happen. Registered before
+     * the oRPC catch-all so the exact paths win over the /capabilities REST surface. */
+    const askRoutes = createCapabilityAskRoutes(services);
+    app.get("/capabilities/connectable", askRoutes.connectable);
+    app.post("/capabilities/ask", askRoutes.ask);
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
     // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),

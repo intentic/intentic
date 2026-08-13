@@ -1310,6 +1310,27 @@ export class Conversation {
         }
     }
 
+    /* The setup decision — the click that decides a missing-capability ask (the daemon holds the agent's
+     * request parked until this settles it; capabilities/capability-offer.ts). Connect moves the card to
+     * `connecting` — the owner is now setting it up, and the agent stays parked watching for the connection;
+     * the capability_outcome frame that follows patches how it ended. Not-now tells the agent to carry on
+     * without it, and the daemon remembers the no for this conversation so it isn't asked twice. */
+    async decideCapabilityOffer(message: ChatMessage, connect: boolean): Promise<void> {
+        const offer = message.capabilityOffer;
+        if (offer?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message.id,
+            { kind: `capability_offer`, requestId: offer.requestId, connect },
+            `Could not record your decision — the ask may have expired.`,
+            { capabilityOffer: { ...offer, status: connect ? `connecting` : `skipped` } },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* Declines a pending browser-help card from the CHAT side — "can't help now", which un-parks the agent to
      * carry on without the owner's hands. The other half of this card's life happens on /browsers (the banner
      * over the live stage is where "hand back" lives, beside Take control); when the user resolves it THERE,

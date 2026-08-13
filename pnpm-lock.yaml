@@ -2413,6 +2413,9 @@ importers:
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.0.12(hono@4.12.34)
+      '@intentic-app/capability-catalog':
+        specifier: workspace:*
+        version: link:../../_platform/capability-catalog
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base

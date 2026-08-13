@@ -1,13 +1,16 @@
 # @intentic-app/capability-catalog
 
-The product catalogs the web app renders from: which capabilities exist, what each one's add-form asks for, and
-how its card reads.
+The product catalogs of what a sandbox can be connected to: which capabilities exist, what each one's add-form
+asks for, and how its card reads — rendered by the web app, and read by the sandbox daemon to validate an
+agent's in-chat ask to connect one.
 
 ## Responsibilities
 
 - Describe every capability as a card and an add-form: label, logo, and the fields a user actually fills in.
 - Describe the self-hosted services the infrastructure panel can add.
 - Describe the effects a capability has, so the UI can say what turning it on will do.
+- Join a card to the live connections that came from it (`instancesOf`) — one definition of the discriminator
+  rules, shared by the web's Capabilities grid and the daemon's capability ask gate so the two cannot drift.
 
 ## Key files
 
@@ -19,6 +22,11 @@ how its card reads.
 **Not a wire contract.** This was moved out of `@intentic-app/api-contract` so that package holds only schemas;
 what a form looks like is a product decision, not a protocol. The enums it keys off come from
 `@intentic/sandbox-contract`, so the catalog cannot describe a capability the daemon does not have.
+
+**Two readers.** The web renders the whole catalog (cards, forms, effects). The daemon (`@intentic/sandbox`)
+reads the card list and the join: an agent's `capabilities request` is validated against it, and the card raised
+in the owner's chat takes its title from it — which is what keeps the model unable to retitle what it is asking
+for.
 
 ## Conventions & gotchas
 

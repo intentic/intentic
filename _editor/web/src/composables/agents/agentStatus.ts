@@ -188,6 +188,7 @@ export const blocked = (agent: AgentStanding): boolean =>
     agent.attention.question ||
     agent.attention.permission ||
     agent.attention.service ||
+    agent.attention.capability ||
     agent.attention.conflict ||
     agent.status === `error` ||
     agent.status === `interrupted` ||
@@ -200,7 +201,12 @@ export const blocked = (agent: AgentStanding): boolean =>
 // side, so ending the agent throws away no answer it was owed. laneDrop draws the same line in the same order
 // for the same reason — a drop is refused for this set and offered for the dead ends.
 export const awaitingUser = (agent: AgentStanding): boolean =>
-    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.service || agent.status === `awaiting`;
+    agent.attention.plan ||
+    agent.attention.question ||
+    agent.attention.permission ||
+    agent.attention.service ||
+    agent.attention.capability ||
+    agent.status === `awaiting`;
 
 // The one-line "why this card is in the Attention lane" label — shared by the card chip, the Changes legend's
 // hover card, and any future toast.
@@ -211,6 +217,10 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     // Money outranks a generic question: the agent is parked on a priced run only your click can release.
     if (agent.attention.service) {
         return `Spend approval`;
+    }
+    // Same rank as spend, same reason: the agent is parked on a setup only you can do.
+    if (agent.attention.capability) {
+        return `Setup needed`;
     }
     if (agent.attention.question) {
         return `Question for you`;
@@ -361,6 +371,10 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     // The verb carries the money: this click spends, unlike Approve one line up.
     if (agent.attention.service) {
         return `Approve spend`;
+    }
+    // The verb carries the work: this click leads into a setup flow, not a one-press approval.
+    if (agent.attention.capability) {
+        return `Set up`;
     }
     /* NAMES THE REPORT, not the fix — because on a conflicted card the fix is now a button of its own, sitting
      * one line above this link (AgentCard). While this link WAS the only conflict affordance on the board it

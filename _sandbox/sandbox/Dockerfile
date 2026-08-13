@@ -408,6 +408,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/otp /usr/local/bin/otp
 # owner's credits. Same shape as vpn/otp — it relays through the daemon and owns no economics; the member
 # gate, the meter and the refund discipline are all platform-side.
 COPY --chmod=755 _sandbox/sandbox/bin/services /usr/local/bin/services
+# The capability-ask command the capabilities skill teaches: list what this sandbox can be connected to, and
+# ask the owner in chat to connect one. Same shape as services — it relays through the daemon, which owns the
+# consent card and the setup watch; the CLI connects nothing and reads no credential.
+COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

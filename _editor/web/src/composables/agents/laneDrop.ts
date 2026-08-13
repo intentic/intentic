@@ -1,4 +1,4 @@
-import { laneOf, type FleetLane, turnInFlight, unregistered } from "./agentStatus";
+import { awaitingUser, laneOf, type FleetLane, turnInFlight, unregistered } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
@@ -50,7 +50,8 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
         return undefined;
     }
     // Blocked ON THE USER: the agent is mid-task and its work isn't ready to land. Answer it instead.
-    if (agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`) {
+    // The same line agentStatus.awaitingUser draws, spelled by that function so the two cannot drift.
+    if (awaitingUser(agent)) {
         return undefined;
     }
     /* A CONFLICTED card's drop asks the agent to resolve it, and does NOT re-run the land.

@@ -544,6 +544,8 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         conversation.value.decidePermission(message, decision, feedback),
     // The spend click for a priced service run — the only thing that releases it (or skips it, free).
     decideServiceOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decideServiceOffer(message, approve),
+    // The setup click for a missing-capability ask — connect (and go set it up) or continue without it.
+    decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
     // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
     declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
 });

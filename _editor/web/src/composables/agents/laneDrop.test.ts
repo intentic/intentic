@@ -8,7 +8,7 @@ import type { FleetAgent } from "./useAgents";
 // A drop can't assign a status — the lanes are projections — so it runs the action that CAUSES one, and most
 // drops have no action behind them at all.
 describe("dropActionFor", () => {
-    const none = { plan: false, question: false, permission: false, service: false, conflict: false };
+    const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
     const agent = (over: Partial<FleetAgent>): FleetAgent => ({
         id: `a1`,
         status: `idle`,

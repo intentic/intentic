@@ -1,6 +1,7 @@
 import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
 import {
     type BrowserHelpStatus,
+    type CapabilityOfferStatus,
     type ChatMessage,
     type ChatTool,
     type ChatUsage,
@@ -331,6 +332,10 @@ const browserHelpStatusOf = (reply: AgentReply | undefined): BrowserHelpStatus =
     reply?.kind !== `browser_help` ? `cancelled` : reply.helped ? `helped` : `declined`;
 const serviceOfferStatusOf = (reply: AgentReply | undefined): ServiceOfferStatus =>
     reply?.kind !== `service_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
+// A yes settles the DECISION, not the ask: the owner is now setting the capability up, so the card moves to
+// `connecting` and stays there until the capability_outcome frame says how the setup ended.
+const capabilityOfferStatusOf = (reply: AgentReply | undefined): CapabilityOfferStatus =>
+    reply?.kind !== `capability_offer` ? `cancelled` : reply.connect ? `connecting` : `skipped`;
 
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
@@ -356,6 +361,9 @@ const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resol
         }
         if (message.serviceOffer?.requestId === event.requestId) {
             return { ...message, serviceOffer: { ...message.serviceOffer, status: serviceOfferStatusOf(event.reply) } };
+        }
+        if (message.capabilityOffer?.requestId === event.requestId) {
+            return { ...message, capabilityOffer: { ...message.capabilityOffer, status: capabilityOfferStatusOf(event.reply) } };
         }
         return message;
     }),
@@ -518,6 +526,34 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             }));
             return step({ ...attached, bubbleId: null });
         }
+        case `capability_offer`: {
+            // Same flow as the service offer above: the asking `capabilities request` sits inside a tool call
+            // of this same turn, so the ask's answer lands in that tool's own output — the card carries the
+            // decision and, via the outcome frame below, how the setup ended.
+            const opened = withBubble(flushPending(state));
+            const attached = mapMessage(opened.state, opened.id, (message) => ({
+                ...message,
+                capabilityOffer: { requestId: event.requestId, offer: event.offer, status: `pending` },
+            }));
+            return step({ ...attached, bubbleId: null });
+        }
+        case `capability_outcome`:
+            // How an accepted ask's setup ended, patched onto the card the requestId names — what settles the
+            // "waiting for you to finish setup" state, here and on every replaying surface.
+            return step({
+                ...state,
+                messages: state.messages.map((message): ChatMessage =>
+                    message.capabilityOffer?.requestId === event.requestId
+                        ? {
+                              ...message,
+                              capabilityOffer: {
+                                  ...message.capabilityOffer,
+                                  outcome: { outcome: event.outcome, ...(event.id !== undefined ? { id: event.id } : {}) },
+                              },
+                          }
+                        : message,
+                ),
+            });
         case `service_event`:
             // One event off the approved run's stream, appended to the card the requestId names — the run
             // showing itself living. The card renders the latest status line while the receipt is pending.

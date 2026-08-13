@@ -80,26 +80,9 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 
-/* Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli
- * cards, `platform` for the browser cards (both map straight to the capability's config). The value is a single
- * fixed value, or the options for a multi-provider card (the SQL card owns postgres + mysql). Single-card kinds
- * (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. */
-const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
-    const field = entry.fields.find((candidate) => candidate.key === `provider` || candidate.key === `platform`);
-    if (field === undefined) {
-        return undefined;
-    }
-    return { key: field.key, values: field.value !== undefined ? [field.value] : (field.options ?? []).map((option) => option.value) };
-};
-
-// The live connections a card is answerable for.
-export const instancesOf = (entry: CapabilityCatalogEntry, capabilities: readonly CapabilitySummary[]): CapabilitySummary[] => {
-    const disc = cardDiscriminator(entry);
-    if (disc === undefined) {
-        return capabilities.filter((capability) => capability.kind === entry.kind);
-    }
-    return capabilities.filter((capability) => capability.kind === entry.kind && disc.values.includes(String(capability.config[disc.key])));
-};
+// The live connections a card is answerable for — the card↔instance join, shared with the daemon's capability
+// ask gate (it lives in the catalog package so the two sides cannot drift on the discriminator rules).
+export { instancesOf } from "@intentic-app/capability-catalog";
 
 /* WHICH CARD A LIVE CONNECTION CAME FROM — instancesOf run backwards, and the reason one account is named and
  * drawn the same way on every surface that lists it. A kind's cards pin their own id into the instance's config

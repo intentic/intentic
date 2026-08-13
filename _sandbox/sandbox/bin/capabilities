@@ -1,0 +1,137 @@
+#!/usr/bin/env node
+// The in-sandbox capability command — how an agent discovers what this sandbox can be connected to and asks
+// the owner, in chat, to connect something the task needs. The ASK is the whole of it: `request` parks on
+// the daemon while a card goes up in the owner's chat (capabilities/capability-offer.ts) titled with the
+// catalog's own words, and the call is answered by how the card settles — connected (the setup finished
+// while you waited; continue with it), skipped (continue without it), or expired. The agent never connects
+// anything itself and never sees a credential — the owner's setup happens in their own UI.
+//
+// node:http rather than fetch, deliberately: a parked `request` holds its connection for as long as the
+// owner takes to decide and set up (bounded by the daemon's own deadlines), and undici's default header
+// timeout would kill the wait with the card still up.
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
+// two capability-gate routes — discovery names cards, never configs or secrets.
+
+import { readFileSync } from "node:fs";
+import { request } from "node:http";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
+// WHOSE chat the ask card belongs in. The daemon falls back to the sole live turn when it is unset.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
+const USAGE = `capabilities — what this sandbox can be connected to, and the in-chat ask to connect it
+
+  capabilities list                        every connectable card, and whether it is connected
+  capabilities request <card> [--why "…"]  ask the owner, on a card in their chat, to connect one;
+                                           --why is your one-line case for it
+
+\`request\` raises a card in the owner's chat and waits — for their decision, and then for the setup itself,
+so a connected answer means the capability is live and yours to use in this same turn. Hold the command
+open rather than timing it out. A skip or an expired ask answers with a sentence to act on: continue
+without it, and don't ask for the same card again in this conversation.`;
+
+const die = (message) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+};
+
+// Read lazily, not at startup: `capabilities --help` has to work in any shell, including one where the
+// daemon isn't running yet — only an actual call needs the token.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`capabilities: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
+// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
+const call = (method, path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
+    });
+
+// The daemon's refusals arrive as {error: {message}} — surface the sentence, which is already written to be
+// acted on.
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.error === "string") return parsed.error;
+        if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    } catch {
+        // Not JSON — fall through to the raw text.
+    }
+    return text || "the daemon did not say why";
+};
+
+const list = async () => {
+    const { status, text } = await call("GET", "/capabilities/connectable");
+    if (status !== 200) {
+        return die(`capabilities: ${refusalOf(text)}`);
+    }
+    const { cards } = JSON.parse(text);
+    if (!Array.isArray(cards) || cards.length === 0) {
+        process.stdout.write("No capability cards are available.\n");
+        return;
+    }
+    for (const card of cards) {
+        process.stdout.write(`${card.connected ? "[connected] " : ""}${card.card} — ${card.name}: ${card.description}\n`);
+    }
+};
+
+const requestCard = async (args) => {
+    // `--why` can sit anywhere after `request`; what remains is `<card>`.
+    const rest = [];
+    let why;
+    for (let i = 0; i < args.length; i += 1) {
+        if (args[i] === "--why") {
+            why = args[i + 1] ?? "";
+            i += 1;
+        } else {
+            rest.push(args[i]);
+        }
+    }
+    const [card] = rest;
+    if (card === undefined) {
+        return die(USAGE);
+    }
+    const { status, text } = await call("POST", "/capabilities/ask", JSON.stringify({ card, ...(why !== undefined && why !== "" ? { why } : {}) }));
+    if (status < 200 || status >= 300) {
+        return die(`capabilities: ${refusalOf(text)}`);
+    }
+    const { message } = JSON.parse(text);
+    process.stdout.write(`${message ?? text}\n`);
+};
+
+const main = async () => {
+    const [command, ...rest] = process.argv.slice(2);
+    if (command === "list") {
+        return list();
+    }
+    if (command === "request") {
+        return requestCard(rest);
+    }
+    return die(USAGE);
+};
+
+main().catch((error) => die(`capabilities: ${error?.message ?? error}`));

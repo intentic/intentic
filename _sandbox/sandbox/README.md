@@ -108,6 +108,14 @@ reports the profile.
   priced catalog through the `services` CLI (bin/services + the baked services skill), scoped by the agent
   token's grant; an extension backend's runs pass straight through the gate, because which services it may
   spend the owner's credits on is a `permissions.daemon` glob approved at install.
+- Let an agent ask the owner, in chat, to connect a capability the task is missing — the same consent shape
+  as the spend gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The agent's
+  `capabilities request` (bin/capabilities + the baked capabilities skill) parks on a card titled with the
+  catalog's own words (the daemon validates the ask against src/capabilities/connectable.ts — the static
+  catalog merged with contributed cards); a yes keeps the call parked while the daemon watches the manifest
+  for the connection to come live, so the agent resumes in the same turn with the capability usable; a no is
+  remembered for the conversation so a repeat ask never raises a second card. The model contributes one line
+  of why and can connect nothing itself.
 
 ## Key files
 

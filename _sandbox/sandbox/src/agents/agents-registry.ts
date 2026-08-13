@@ -66,7 +66,7 @@ interface RuntimeState {
     // by its own `resolved` frame. Emphatically NOT inferred from the frames that follow a park: frames keep
     // arriving while a turn waits — the pausing tool's own `tool_call` regularly trails its card — and reading
     // one of those as "the user answered" is what kept an agent asking a question out of the Attention lane.
-    pauses: Map<string, "plan" | "question" | "permission" | "browser_help" | "service_offer">;
+    pauses: Map<string, "plan" | "question" | "permission" | "browser_help" | "service_offer" | "capability_offer">;
     errored: boolean;
     // The sentence the last error frame carried, flushed onto the entry at finish so the card can say why
     // rather than only that. Last one wins: a turn that fails twice died of the second.
@@ -422,6 +422,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 question: parked.includes("question"),
                 permission: parked.includes("permission"),
                 service: parked.includes("service_offer"),
+                capability: parked.includes("capability_offer"),
                 // Reads the DERIVED verdict, not the stored report. Deriving this from a cached status was the
                 // shape of the original bug in miniature: a faithful projection over a stale input is stale.
                 conflict: status === "conflict",
@@ -900,6 +901,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "permission":
                 case "browser_help":
                 case "service_offer":
+                case "capability_offer":
                     // A turn being torn down cannot park on anything: the abort settles every waiter, so a card
                     // raised by a frame still in flight behind the stop would ask the user a question whose
                     // answer has nowhere to go — and would put the card back in Attention as it leaves.

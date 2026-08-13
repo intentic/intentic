@@ -25,6 +25,7 @@
         "@agentclientprotocol/sdk": "catalog:",
         "@anthropic-ai/claude-agent-sdk": "catalog:",
         "@hono/node-server": "catalog:",
+        "@intentic-app/capability-catalog": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/extension-api": "workspace:*",

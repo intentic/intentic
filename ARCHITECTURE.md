@@ -465,7 +465,7 @@ dependency edges into `@intentic/*` all go through `sandbox-contract` (and one t
 | [`@intentic/sandbox-contract`](_sandbox/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
 | [`@intentic-app/api-contract`](_platform/api-contract) | The platform (web↔api) oRPC contract. |
 | [`@intentic/ui`](_editor/ui) | The app design system (PrimeVue + Tailwind primitives). |
-| [`@intentic-app/capability-catalog`](_platform/capability-catalog) | Capability/connector catalog data rendered by the web. |
+| [`@intentic-app/capability-catalog`](_platform/capability-catalog) | Capability/connector catalog data — rendered by the web, and read by the daemon to validate an agent's in-chat ask to connect a capability. |
 
 ### Extension system
 

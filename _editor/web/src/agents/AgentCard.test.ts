@@ -38,7 +38,14 @@ vi.hoisted(() => {
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../router");
 
-const NO_ATTENTION: AgentSummary[`attention`] = { plan: false, question: false, permission: false, service: false, conflict: false };
+const NO_ATTENTION: AgentSummary[`attention`] = {
+    plan: false,
+    question: false,
+    permission: false,
+    service: false,
+    capability: false,
+    conflict: false,
+};
 
 // An agent holding finished work on its branch: auto-land off, nothing refused — the one state the card offers
 // "Land now" for.

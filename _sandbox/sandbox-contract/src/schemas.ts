@@ -715,6 +715,9 @@ export const AgentAttentionSchema = z.object({
     // A priced service run parked on the owner's click (platform/service-offer.ts) — the one card where
     // waiting costs the agent its whole call, so the lane says "spend approval" rather than a generic pause.
     service: z.boolean(),
+    // A missing capability parked on the owner's setup (capabilities/capability-offer.ts) — the agent is
+    // waiting for something to be connected, so the lane can say "setup needed" rather than a generic pause.
+    capability: z.boolean(),
     conflict: z.boolean(),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
@@ -1287,6 +1290,15 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         kind: z.literal("service_offer"),
         requestId: z.string().min(1),
         approve: z.boolean(),
+    }),
+    // A missing-capability ask's yes or no. `connect: true` is "I'll set it up" — it opens the card's setup
+    // and keeps the agent's request parked while the daemon watches for the connection to come live
+    // (capabilities/capability-offer.ts); false tells the agent to continue without it. The click decides
+    // only the WATCHING: nothing is connected by the reply itself — the setup is the owner's own flow.
+    z.object({
+        kind: z.literal("capability_offer"),
+        requestId: z.string().min(1),
+        connect: z.boolean(),
     }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;

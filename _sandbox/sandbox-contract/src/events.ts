@@ -89,6 +89,20 @@ export const ServiceStreamEventSchema = z.discriminatedUnion(`event`, [
 ]);
 export type ServiceStreamEvent = z.infer<typeof ServiceStreamEventSchema>;
 
+/* ONE MISSING CAPABILITY, ASKED FOR — the card the daemon raises when the agent hits something this sandbox
+ * is not connected to (capabilities/capability-offer.ts). `card` names the catalog card and `name` is that
+ * card's own title, both resolved by the daemon from the catalog it validates the ask against — the model
+ * that asked contributes `why` (its one line of rationale) and nothing else, which is what makes the card
+ * impossible to misrepresent, and the click on it the only way anything gets connected. */
+export const CapabilityOfferSchema = z.object({
+    // The catalog card being asked for, and how the catalog itself titles it ("Notion", "GitHub", "Docker").
+    card: z.string(),
+    name: z.string(),
+    // The agent's one-line case for connecting it — the only prose on the card that is the model's.
+    why: z.string().optional(),
+});
+export type CapabilityOffer = z.infer<typeof CapabilityOfferSchema>;
+
 /* The trailer the PLATFORM appends to every relayed run stream — never provider-authored: it is the ledger
  * speaking after the stream settled. `ok` means the run served and was charged (`remaining` is the meter
  * after); `refunded` means the provider's stream died before its `result` and the charge was reversed. */
@@ -556,6 +570,24 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         outcome: z.enum(["ok", "refunded", "refused"]),
         credits: z.number(),
         remaining: z.number().optional(),
+    }),
+    /* A missing capability asking for the owner's setup — the agent hit something this sandbox is not
+     * connected to and raised the card instead of describing manual steps. Raised OUTSIDE the turn generator
+     * exactly like the service offer above (the daemon's ask route parks the agent's `capabilities request`
+     * call and pushes this frame into the live run; capabilities/capability-offer.ts), so it is not
+     * journalled for restore either: its waiter is the CLI's held connection, which dies with the daemon.
+     * Settles through the same `POST /agent/reply` as every other card. */
+    z.object({ kind: z.literal("capability_offer"), requestId: z.string(), offer: CapabilityOfferSchema }),
+    /* How an accepted ask ended, pushed once the daemon stops watching for the connection: `connected` — the
+     * capability came live while the agent waited (`id` is the connected instance, the agent's handle for it)
+     * — or `unfinished`, the setup did not complete while anyone was waiting (the deadline passed, or the
+     * asking command died). A skip needs no outcome frame — nothing was set up, and `resolved` already says
+     * so. It is what settles the card's "waiting for you to finish setup" state on every surface. */
+    z.object({
+        kind: z.literal("capability_outcome"),
+        requestId: z.string(),
+        outcome: z.enum(["connected", "unfinished"]),
+        id: z.string().optional(),
     }),
     // The card above named by `requestId` is released — the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its
