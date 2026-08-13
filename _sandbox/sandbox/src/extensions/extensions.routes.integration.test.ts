@@ -165,7 +165,12 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.google-workspace",
         "intentic.imap",
         "intentic.knowledge",
-        "intentic.logs",
+        /* No `intentic.logs`, and its absence is the first instance of a deliberate pattern rather than a
+         * regression. Logs moved OUT of this repo to its own (extensions/logs), because a screen that is not a
+         * control surface for an engine the daemon runs regardless does not have to ship in every image — it is
+         * installed by whoever wants it. The set that stays baked is the one a sandbox is not itself without:
+         * automations, workflows and maintenance (each the only window onto something running anyway) and
+         * viewers (without which every image, PDF and video in the workspace falls back to a download). */
         "intentic.maintenance",
         "intentic.memory",
         "intentic.pi-agent",

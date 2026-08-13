@@ -10,7 +10,6 @@ import * as documentation from "@intentic/ext-documentation";
 import * as drafts from "@intentic/ext-drafts";
 import * as gitHistory from "@intentic/ext-git-history";
 import * as knowledge from "@intentic/ext-knowledge";
-import * as logs from "@intentic/ext-logs";
 import * as maintenance from "@intentic/ext-maintenance";
 import * as memory from "@intentic/ext-memory";
 import * as pipelines from "@intentic/ext-pipelines";
@@ -36,7 +35,6 @@ export type BuiltinModule = ExtensionModule & { readonly manifest: ExtensionMani
 const modules: readonly BuiltinModule[] = [
     automations,
     drafts,
-    logs,
     memory,
     knowledge,
     activity,

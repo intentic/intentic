@@ -32,7 +32,6 @@
         "@intentic/ext-drafts": "workspace:*",
         "@intentic/ext-git-history": "workspace:*",
         "@intentic/ext-knowledge": "workspace:*",
-        "@intentic/ext-logs": "workspace:*",
         "@intentic/ext-maintenance": "workspace:*",
         "@intentic/ext-memory": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",

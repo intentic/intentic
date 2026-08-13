@@ -10,7 +10,6 @@ import type {
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
-import * as logs from "@intentic/ext-logs";
 import * as memory from "@intentic/ext-memory";
 import { describe, expect, it, vi } from "vitest";
 
@@ -171,15 +170,6 @@ describe(`rail glyphs`, () => {
         }
         // Reported as the whole map of offenders rather than a count, so a failure names which tiles clash.
         expect(Object.fromEntries([...owners].filter(([, ids]) => ids.length > 1))).toEqual({});
-    });
-});
-
-describe(`ext-logs`, () => {
-    it(`registers an always-present Logs tab on the sandbox hub`, () => {
-        const view = activateAndCapture(logs);
-        expect(view.id).toBe(`logs`);
-        expect(view.surface).toBe(`sandbox`);
-        expect(view.detect(noRepos, [])).toEqual([{ key: `logs`, title: `Logs`, icon: `file` }]);
     });
 });
 

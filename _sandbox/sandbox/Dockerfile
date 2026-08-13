@@ -357,7 +357,6 @@ COPY _extensions/knowledge/intentic-extension.json /opt/extensions/knowledge/
 COPY _extensions/knowledge/plugin /opt/extensions/knowledge/plugin
 COPY --from=trees extensions/knowledge/dist/server.js /opt/extensions/knowledge/dist/
 COPY --from=trees --chmod=755 extensions/knowledge/dist/bin /opt/extensions/knowledge/dist/bin
-COPY _extensions/logs/intentic-extension.json /opt/extensions/logs/
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/
 # …except memory, whose BACKEND half ships as a prebuilt server bundle the daemon's backend host loads
