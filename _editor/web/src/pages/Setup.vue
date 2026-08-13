@@ -37,6 +37,7 @@ import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
+import SetupSyncOption from "./SetupSyncOption.vue";
 import { cloudProviderMeta } from "./setupCloud";
 import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
@@ -454,17 +455,16 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * they commit rather than in the email that warns them. */
                   detail:
                       hostedHours.value === null
-                          ? `A small private machine, running now. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
-                          : `A small private machine, running now. It sleeps while you're away and wakes when you come back. You get ${hostedHours.value.allowance} hours a month and a membership lifts that; if you don't open it for a few weeks we remove it. We don't back it up either, so turn on desktop sync or keep your work in a git remote.`,
+                          ? `It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
+                          : `It sleeps while you're away and wakes when you come back. Leave it unopened for a few weeks and we remove it, and we don't back it up — turn on desktop sync, or keep your work in a git remote.`,
               },
           ]
         : []),
-    /* The two rungs where the machine is the READER'S. Both details end on what that actually wins them
-     * against the rung above — no hour limit, and nothing that expires — because those are the differences a
-     * person weighing "instant" against "one pasted command" cannot otherwise see, and they are exactly the
-     * differences that matter after week three. Said as a property of the lane rather than as a nudge: the
-     * hosted rung is genuinely the right pick for someone who wants to start now, and a card that argued
-     * against it would be selling, not captioning. */
+    /* The two rungs where the machine is the READER'S — and neither carries a `detail`, because neither has
+     * anything to say that its own three lines don't. "Your CPUs, your RAM, your GPU" is a poem about owning
+     * a computer, addressed to somebody who owns one; "no hour limit, nothing expires" is the badge again in
+     * a longer coat. A detail line is for a fact the reader would be worse off not knowing, and the hosted
+     * rung's disk is the only one on this row. */
     ...(commandOffered.value
         ? [
               {
@@ -473,7 +473,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   title: `A computer I have`,
                   meta: `Most power · no limits`,
                   note: `One pasted command`,
-                  detail: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. No hour limit, nothing expires, and no membership needed to keep it.`,
+                  detail: ``,
               },
           ]
         : []),
@@ -485,7 +485,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   title: `A new cloud machine`,
                   meta: `From free · 12 GB`,
                   note: `In your own cloud account`,
-                  detail: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere. Bigger than the machine we host, with no hour limit and nothing that expires.`,
+                  detail: ``,
               },
           ]
         : []),
@@ -542,6 +542,18 @@ const targetKey = computed<string | undefined>(() => {
 
 // The command can be built only once the chosen target has a code minted for it.
 const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
+/* Desktop sync is an option ON THE PASTED COMMAND — it rides it as an env var, and the folder it names is
+ * derived from the address the mint just provisioned. So it exists exactly where that command does: not
+ * before a code is minted, not on the compose tab (that file declares its own env), and not in the lanes that
+ * run no command of the reader's at all — a cloud machine boots with its own copy, a hosted one was born
+ * holding everything. It survives the command being FOLDED away in the app, where it rides the handoff too. */
+const syncOffered = computed(
+    () =>
+        commandReady.value &&
+        !composeShown.value &&
+        (commandVisible.value || desktop.value) &&
+        !(machine.value === `cloud` && cloudOffered.value),
+);
 // `.title` rather than the NoticeModel itself — interpolated whole, it renders as its own JSON.
 const lockedReason = computed(() => {
     // The one state that is not a wait: there is no command coming, so the lock says what is true and the card
@@ -2048,7 +2060,7 @@ watch(commandReady, (ready) => {
                                 role="radio"
                                 :aria-checked="machine === option.value"
                                 :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
-                                class="flex cursor-pointer flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                class="flex cursor-pointer flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                                 :class="
                                     machine === option.value
                                         ? `border-link bg-overlay`
@@ -2056,16 +2068,20 @@ watch(commandReady, (ready) => {
                                 "
                                 @click="chooseMachine(option.value)"
                             >
-                                <!-- The icon carries the card now that the prose is gone: at 2xl it is the
-                                     thing the eye lands on, and three glyphs are told apart in the time it
-                                     takes to read one title. -->
-                                <Icon
-                                    :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
-                                    :spin="hostedBusy && option.value === `hosted`"
-                                    class="mb-1 shrink-0 text-2xl"
-                                    :class="machine === option.value ? `text-link` : `text-muted`"
-                                />
-                                <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
+                                <!-- The icon sits ON the title's line. Stacked above it, at 2xl, it bought a
+                                     row of its own plus the space around it — a third of the card's height for
+                                     a glyph — and three cards of mostly air is the same wasted screen the
+                                     paragraphs were, minus the words. Beside the title it still leads the eye
+                                     and costs nothing. -->
+                                <span class="flex items-center gap-2">
+                                    <Icon
+                                        :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
+                                        :spin="hostedBusy && option.value === `hosted`"
+                                        class="shrink-0 text-lg"
+                                        :class="machine === option.value ? `text-link` : `text-muted`"
+                                    />
+                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
+                                </span>
                                 <span class="text-2xs text-muted">{{ option.meta }}</span>
                                 <!-- Three or four words: what this rung asks of you, or where it puts the
                                      machine. The sentences that used to sit here are under the row now, for
@@ -2318,64 +2334,39 @@ watch(commandReady, (ready) => {
                                     </template>
                                 </div>
 
-                                <!-- THE TWO SWITCHES THAT REWRITE THE COMMAND, ON ONE ROW UNDER IT: the decision on
-                                 the left, the default on the right. They belong here rather than in the reference
-                                 column — a checkbox whose effect is a column away is a checkbox nobody connects to
-                                 anything — and each one's state is answered by the command one row up.
-                                 They are weighted differently on purpose. `sudo` is a real choice about the reader's
-                                 machine and reads at full contrast; desktop sync is on unless somebody objects, so
-                                 it sits at the far edge, dimmed, where a default belongs. Given equal weight they
-                                 read as two questions to answer before pasting, which is two more than there are. -->
-                                <!-- The <label> stops at each option's NAME rather than wrapping the row: a label
-                                 toggles on any click inside it, and these captions carry a folder path and a
-                                 `sudo` mention — text people select and read. -->
+                                <!-- THE ONE SWITCH THAT IS A DECISION, UNDER THE COMMAND IT REWRITES. `sudo` is a
+                                 claim about the reader's own machine, and its answer is visible in the line one
+                                 row up, so it stays where the line is. Desktop sync used to sit beside it and no
+                                 longer does: it is on unless somebody objects, and a default at full contrast
+                                 beside a command reads as a second question to settle before pasting. It lives in
+                                 the reference column now (and, where there is no column, under the command).
+                                 Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
+                                 there is no switch here and the Docker prerequisite is left to the panel, which
+                                 names the reboot a first Windows install may want. And only while the command is
+                                 on screen — it rewrites one token of a line, which is no kind of offer when the
+                                 line itself is folded away.
+                                 The <label> stops at the option's NAME rather than wrapping the row: a label
+                                 toggles on any click inside it, and the caption beside it mentions `sudo` — text
+                                 people select and read. -->
                                 <div
-                                    v-if="!composeShown && (commandVisible || desktop)"
-                                    class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-2xs text-muted"
+                                    v-if="environment.production && commandVisible && runTab === `unix`"
+                                    class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
                                 >
-                                    <!-- Unix only, because `sudo` is: PowerShell has no equivalent to drop, so on Windows
-                             there is no switch here and the Docker prerequisite is left to the panel, which
-                             names the reboot a first Windows install may want. And only while the command is on
-                             screen — it rewrites one token of a line, which is no kind of offer when the line
-                             itself is folded away. -->
-                                    <div
-                                        v-if="environment.production && commandVisible && runTab === `unix`"
-                                        class="flex flex-wrap items-center gap-x-2 gap-y-1"
-                                    >
-                                        <label class="flex cursor-pointer items-center gap-2">
-                                            <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                            <span class="shrink-0 text-content">I already have Docker</span>
-                                        </label>
-                                        <span class="min-w-0">
-                                            <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
-                                            <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
-                                        </span>
-                                    </div>
-
-                                    <!-- DESKTOP SYNC, PUSHED RIGHT AND HELD QUIET. It is on by default and almost
-                                         nobody turns it off, so it is a switch to notice rather than a decision to
-                                         make — and at full contrast, beside a command, it read as one more thing
-                                         standing between the reader and the paste. Dimmed until pointed at, and
-                                         `ml-auto` so it sits at the far edge whether or not the `sudo` switch above
-                                         is on screen (it isn't, outside production).
-                                         Still HERE rather than in the reference column, because it rewrites the
-                                         command one row up: a switch whose effect is a column away is a switch
-                                         nobody connects to anything. Sync outlives the command in the APP, where it
-                                         rides the desktop handoff too, so it stays with the command folded away.
-                                         Only the compose tab drops it outright — that file declares its own env. -->
-                                    <div class="ml-auto flex min-w-0 items-center gap-2 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
-                                        <!-- The <label> stops at the option's NAME: a label toggles on any click
-                                             inside it, and the folder beside it is a path people select and read. -->
-                                        <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
-                                            <Checkbox v-model="syncEnabled" :binary="true" size="small" />
-                                            <span>Also sync a local folder</span>
-                                        </label>
-                                        <!-- On, the folder IS the news; off, there is none — the label already says
-                                             what the switch does, and a sales line for the default option was the
-                                             loudest thing in the quietest row. -->
-                                        <code v-if="syncEnabled && syncDir !== ``" class="min-w-0 truncate">{{ syncDir }}</code>
-                                    </div>
+                                    <label class="flex cursor-pointer items-center gap-2">
+                                        <Checkbox v-model="hasDocker" :binary="true" size="small" />
+                                        <span class="shrink-0 text-content">I already have Docker</span>
+                                    </label>
+                                    <span class="min-w-0">
+                                        <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
+                                        <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
+                                    </span>
                                 </div>
+
+                                <!-- …and sync itself, for the widths with no reference column to put it in. Sync
+                                     outlives the command in the APP, where it rides the desktop handoff too, so it
+                                     survives the command being folded away there. Only the compose tab drops it
+                                     outright — that file declares its own env. -->
+                                <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
 
                                 <!-- Read in an ordinary browser: the same handoff is one click away IF the app is
                                  already installed (the OS routes the link), and one download away if it isn't.
@@ -2547,8 +2538,16 @@ watch(commandReady, (ready) => {
                     v-if="created && lane === `provision` && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
                 >
-                    <div class="rounded-2xl border border-line bg-card p-4">
+                    <div class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" />
+                        <!-- Sync belongs with what the command DOES, not with the reader's path to running it:
+                             it is on by default, and the only thing anyone needs from it here is to see that it
+                             is on and where it mirrors to. Its twin under the command covers the widths where
+                             this column doesn't exist.
+                             Gated on the command existing, exactly as that twin is by the branch it sits in: the
+                             folder it names is derived from the address the mint provisions, so before there is
+                             a command there is nothing here to be true. -->
+                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="border-t border-line pt-3" />
                     </div>
                     <!-- …and the correction as the second card in this column, once the wait has gone on long
                          enough to be a misunderstanding rather than a wait. It belongs beside the command, and

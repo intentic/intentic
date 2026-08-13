@@ -148,7 +148,6 @@ watch(keepTrying, (on) => {
 <template>
     <div class="flex flex-col gap-3">
         <Segmented v-model="provider" :options="CLOUD_PROVIDERS.map((entry) => ({ label: entry.label, value: entry.id }))" :stretch="mobile" />
-        <p class="text-xs text-muted">{{ meta.blurb }}</p>
 
         <!-- The credential, with the "get one" link beside the field it fills — the reader who needs it is
              mid-step, and sending them to search the provider's docs is where this flow would lose them. -->
@@ -172,10 +171,16 @@ watch(keepTrying, (on) => {
         </template>
         <template v-else>
             <!-- The walkthrough, click by click: the painful part of the free machine is Oracle's console,
-                 so the wizard walks it rather than pointing at docs — each step deep-links the exact screen. -->
-            <ol class="flex flex-col gap-1.5 rounded-lg border border-line bg-canvas p-3 text-xs text-muted">
-                <li v-for="(step, index) in ORACLE_STEPS" :key="index" class="flex items-start gap-2">
-                    <span class="mt-px font-mono text-2xs text-subtle">{{ index + 1 }}.</span>
+                 so the wizard walks it rather than pointing at docs — each step deep-links the exact screen.
+                 NO BOX. Three instructions inside a bordered, darker inset, inside the run card, inside a
+                 column, is three frames deep to say "press this, then this" — and the frame made the steps
+                 read as a quotation from somewhere else rather than as the thing to do next. The numbers are
+                 the structure; they need no walls. -->
+            <ol class="flex flex-col gap-2 text-xs text-content">
+                <li v-for="(step, index) in ORACLE_STEPS" :key="index" class="flex items-start gap-2.5">
+                    <span class="mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-overlay text-2xs font-medium text-subtle">
+                        {{ index + 1 }}
+                    </span>
                     <span class="min-w-0">
                         {{ step.text }}
                         <a v-if="step.url" :href="step.url" target="_blank" rel="noopener" class="text-link hover:underline">{{

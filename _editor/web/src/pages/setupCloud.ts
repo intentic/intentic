@@ -5,12 +5,14 @@ import { ORACLE_CAPACITY_PHRASE, type CloudCredentials, type CloudProvider, type
  * cloud account whose first boot runs the same setup code the command lane hands out. Pure data + derivations
  * here, state and calls in SetupCloud.vue — the setupAttach.ts split. */
 
+/* THE PROVIDER'S PITCH IS ITS LABEL AND ITS PRICES, AND NOTHING ELSE. Each of these used to carry a
+ * paragraph under the picker — who the provider is for, what the tier costs, how long signing up takes — and
+ * every word of it was already on screen: the tab says "Oracle — free 12 GB", the size list under it carries
+ * live prices, and the walkthrough's first step says what signing up asks for. Prose that repeats the
+ * controls around it is read once, by the person who then has to find the control again. */
 export interface CloudProviderMeta {
     readonly id: CloudProvider;
     readonly label: string;
-    // The one-line pitch under the picker — who this provider is FOR, cost framing included. Prices
-    // themselves are never written here: the options call returns them live from the provider's catalog.
-    readonly blurb: string;
     // Where the pasted credential comes from, as a "get one" link the user can follow mid-step.
     readonly credentialUrl: string;
     readonly credentialLabel: string;
@@ -25,7 +27,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `oracle`,
         label: `Oracle — free 12 GB`,
-        blurb: `A 12 GB ARM machine inside Oracle's Always-Free tier — genuinely $0 while you stay within it. Expect ~10–15 minutes if you're new to Oracle (signup asks for a card for identity; nothing here can bill it).`,
         credentialUrl: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
         credentialLabel: `Add an API key under Profile → API keys`,
         kind: `oracle`,
@@ -33,7 +34,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `hetzner`,
         label: `Hetzner`,
-        blurb: `The budget pick: a machine for a few €/month, billed by Hetzner to you. Prices below are live, excl. VAT.`,
         credentialUrl: `https://docs.hetzner.com/cloud/api/getting-started/generating-api-token/`,
         credentialLabel: `Create a Read & Write API token in your Hetzner Cloud project`,
         kind: `token`,
@@ -41,7 +41,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
     {
         id: `digitalocean`,
         label: `DigitalOcean`,
-        blurb: `Familiar and everywhere: a droplet billed by DigitalOcean to you. Prices below are live.`,
         credentialUrl: `https://docs.digitalocean.com/reference/api/create-personal-access-token/`,
         credentialLabel: `Create a personal access token with write scope`,
         kind: `token`,
@@ -49,20 +48,25 @@ export const CLOUD_PROVIDERS: readonly CloudProviderMeta[] = [
 ];
 
 /* The Oracle walkthrough, click by click — the painful part of the free machine is Oracle's console, so the
- * wizard holds the reader's hand through it rather than pointing at docs. Data here, rendered by
- * SetupCloud.vue, so the steps are testable prose rather than template soup. */
+ * wizard walks it rather than pointing at docs. Data here, rendered by SetupCloud.vue, so the steps are
+ * testable prose rather than template soup.
+ *
+ * A STEP IS AN INSTRUCTION, NOT AN EXPLANATION. These carried their own parentheses — how long signing up
+ * takes, why a card is asked for, what the tier costs — around the one clause that says what to press. Every
+ * qualifier is a thing to read before you can act, on the screen where somebody is already three tabs deep in
+ * a console they have never seen. Press this, then this, then paste it here. */
 export const ORACLE_STEPS: readonly { readonly text: string; readonly url?: string; readonly urlLabel?: string }[] = [
     {
-        text: `Sign in to Oracle Cloud (or create a free account — takes ~10 min, asks for a card for identity, stays $0).`,
+        text: `Sign in to Oracle Cloud, or sign up free.`,
         url: `https://www.oracle.com/cloud/free/`,
         urlLabel: `oracle.com/cloud/free`,
     },
     {
-        text: `Open your API keys and press "Add API key" → "Generate API key pair". Download the private key, then press Add.`,
+        text: `Press "Add API key" → "Generate API key pair" → download the key → "Add".`,
         url: `https://cloud.oracle.com/identity/domains/my-profile/api-keys`,
         urlLabel: `Profile → API keys`,
     },
-    { text: `Copy the "Configuration file preview" Oracle shows into the first box, and the downloaded key file's contents into the second.` },
+    { text: `Paste what Oracle then shows you below: the config preview, then the key file you downloaded.` },
 ];
 
 // Does this refusal mean "no room right now" rather than "no"? Keyed on the adapter's own phrase (a shared
