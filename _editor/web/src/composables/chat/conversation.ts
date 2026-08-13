@@ -790,7 +790,9 @@ export class Conversation {
         // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
         // into a new bubble below the card) — plus the provider/account attribution for the session frame.
         this.transcript.openBubble();
-        const turn: TurnContext = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
+        // Everything but the run, which the daemon only names in the ack below — the head that carries it is
+        // what completes this into the context the frames are rendered under.
+        const turn: Omit<TurnContext, "run"> = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
         // This turn starts from the user's pick; the previous turn's live posture (a plan it entered, a mode an
         // approval landed in) is history, and the daemon will echo this one back at init. Only this path clears
         // it — a REATTACHED turn is already running under a posture of its own, and blanking the composer's
@@ -855,7 +857,7 @@ export class Conversation {
             // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
             // on this window is just one renderer of the run.
             const { run } = (await response.json()) as { run: string };
-            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: () => turn }, controller);
+            await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             if (!(err instanceof DOMException && err.name === `AbortError`)) {
@@ -1134,6 +1136,11 @@ export class Conversation {
             }
             engaged = true;
             this.beginTurn(controller, head.startedAt);
+            /* THIS WINDOW MAY HAVE DRAWN THIS RUN ALREADY — a stream that dropped and came back, a sandbox that
+             * restarted underneath one, a tab reopened onto a run still going. The attach below replays the run
+             * from its first frame regardless, so its rows come off before they are drawn again; what stays is
+             * everything they sit UNDER, which is the part no replay will ever redraw. */
+            this.transcript.dropRun(head.run);
             /* What the user actually asked, whichever run this is. A run the DAEMON restarted carries the original
              * prompt behind a note saying why (RESUME_NOTES), and rendering that verbatim put a paragraph of
              * machine prose into the transcript as something the user had supposedly typed — right under the copy
@@ -1147,9 +1154,13 @@ export class Conversation {
                 // The RUN's start, not this moment: the bubble is being drawn for a turn that has been going
                 // since before this tab attached to it (a reload, a second window), and stamping it now would
                 // date the question to whenever its reader turned up.
-                this.transcript.append({ role: `user`, text: prompt, sentAt: head.startedAt });
-            this.transcript.openBubble();
-            return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
+                //
+                // Marked as this run's own work, because that is what it is: an answered park's bubble carries
+                // words the transcript has never shown (RESUME_NOTES.answered), so the NEXT attach has to be
+                // able to take it back rather than reuse it and stack the answer under it a second time.
+                this.transcript.append({ role: `user`, text: prompt, sentAt: head.startedAt, run: head.run });
+            this.transcript.openBubble(head.run);
+            return { userMessageId, run: head.run, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
         try {
             return await followRun(this.conversationId, undefined, { ...this.sink, ensureTurn }, controller);

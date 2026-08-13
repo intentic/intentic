@@ -12,7 +12,7 @@ import { TranscriptClock } from "./transcriptClock";
  * Driven a FRAME AT A TIME here, because that is the whole difference: the buffer drains either way, and a
  * test that runs frames until the clock stops cannot tell "typed over ten frames" from "settled in one". */
 
-const TURN = { userMessageId: 1, provider: `claude`, account: undefined, harness: `native` } as const;
+const TURN = { userMessageId: 1, run: `run-1`, provider: `claude`, account: undefined, harness: `native` } as const;
 const delta = (text: string): AgentEvent => ({ kind: `delta`, text }) as AgentEvent;
 // Long enough that one slice of it cannot be the whole thing (revealPending takes an eighth, floor 2 chars).
 const ANSWER = `an answer long enough that a single slice of it is nowhere near the whole thing`;

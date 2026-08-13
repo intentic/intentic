@@ -47,6 +47,11 @@ export interface TurnState {
     // reached for a counter on `this` would not be replayable.
     readonly nextId: number;
     readonly pending: PendingText | undefined;
+    /* The run whose frames are being applied, stamped onto every row they append (ChatMessage.run). Held for
+     * the length of a fold AND the effects it raises — a failure notice is written by an effect, and a replay
+     * of the frame behind it raises that effect again — then cleared, so a write on the user's own clock is
+     * never mistaken for something a replay would bring back. */
+    readonly run?: string;
 }
 
 // What the frame needs to know about the turn it belongs to, and which the transcript cannot tell it.
@@ -114,9 +119,11 @@ const unhandledFrame = (state: TurnState, _event: never): TurnStep => step(state
 
 // --- transcript primitives (pure, exported: the conversation runtime writes notices through these too) -------
 
+// The run stamp rides UNDER the message, so a caller that knows its own provenance (the user bubble a reattach
+// synthesizes) keeps it, and everything else inherits whichever run the state is applying.
 export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">): TurnState => ({
     ...state,
-    messages: [...state.messages, { ...message, id: state.nextId }],
+    messages: [...state.messages, { ...(state.run === undefined ? {} : { run: state.run }), ...message, id: state.nextId }],
     nextId: state.nextId + 1,
 });
 

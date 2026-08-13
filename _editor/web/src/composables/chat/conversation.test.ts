@@ -1483,11 +1483,14 @@ describe(`Conversation`, () => {
             await conversation.send(`refactor the store`, settings);
             expect(conversation.failures.credentialRenewal.value).toBeDefined();
 
-            // What the daemon started a moment later: the same request, behind the note saying why it re-ran.
+            // What the daemon started a moment later: the same request, behind the note saying why it re-ran —
+            // and a run of its OWN, because resuming starts a turn rather than reviving the one that died. That
+            // is what keeps the renewal notice above: it belongs to the run that failed, and only that run's own
+            // rows come off when this window attaches to a run it has already drawn.
             sandboxRequestMock.mockImplementation(() => {
                 const body = new ReadableStream<Uint8Array>({
                     start(controller) {
-                        controller.enqueue(sseFrame(head({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
+                        controller.enqueue(sseFrame(head({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) })));
                         controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
                         controller.enqueue(sseFrame({ kind: `end` }));
                         controller.close();
@@ -2037,6 +2040,73 @@ describe(`Conversation`, () => {
 
         expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
+            { role: `assistant`, text: `Picking it back up.` },
+        ]);
+    });
+
+    /* THE ANSWER DRAWN TWICE. A sandbox restart while the turn was parked on a question cannot un-park the run
+     * that died with it, so the daemon starts a fresh one carrying the user's answer (RESUME_NOTES.answered) and
+     * this window renders it. Then the stream drops — a restart is exactly when one does — and the window
+     * attaches to that SAME run again.
+     *
+     * An attach replays its run from the first frame, and a resumed run's bubble deliberately keeps whatever sits
+     * under it, because normally that is the dead run's work. Here it was this run's own answer, so the whole
+     * thing landed a second time, verbatim, under the one bubble. */
+    it(`reattaching to a resumed park's run redraws its answer instead of stacking a second copy`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([{ role: `user`, text: `which shape should it be?` }]);
+        const carried = withResumeNote(`The user answered: a mode of the board.`, RESUME_NOTES.answered);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ run: `r2`, prompt: carried })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `That settles it.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `which shape should it be?` },
+            // The answer the daemon carried in, as its own bubble — words the transcript had never shown — and
+            // exactly one copy of what the run made of it.
+            { role: `user`, text: `The user answered: a mode of the board.` },
+            { role: `assistant`, text: `That settles it.` },
+        ]);
+    });
+
+    /* The other resume shape, and why the reclaim goes by RUN rather than by position: a re-run's bubble sits
+     * above the work of the run that died, which nothing will ever redraw. Attaching twice has to take back this
+     * run's own answer and leave that alone — truncating to the bubble would take both. */
+    it(`reattaching to a re-run replaces only its own answer, keeping the dead run's work above it`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([
+            { role: `user`, text: `refactor the store` },
+            { role: `assistant`, text: `Got as far as the reducer.` },
+        ]);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.restart) })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Picking it back up.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `refactor the store` },
+            { role: `assistant`, text: `Got as far as the reducer.` },
             { role: `assistant`, text: `Picking it back up.` },
         ]);
     });

@@ -164,7 +164,10 @@ export class TranscriptClock {
         const applied: { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[] = [];
         let state = from;
         for (const { event, turn } of batch) {
-            const result = applyTurnFrame(state, event, { userMessageId: turn.userMessageId });
+            // Every row this frame draws is stamped with the run it came from (TurnState.run), so a later attach
+            // to the same run can take them back out rather than draw them twice. Cleared in runApplied, once
+            // the effects these frames raise have had their chance to write too.
+            const result = applyTurnFrame({ ...state, run: turn.run }, event, { userMessageId: turn.userMessageId });
             state = result.state;
             applied.push({ event, turn, effects: result.effects });
         }
@@ -175,8 +178,18 @@ export class TranscriptClock {
     // load-bearing for state the conversation holds ACROSS frames (a provider_retry and the frame that answers
     // it are routinely in one batch), and a reshuffle here would settle it on whichever won.
     private runApplied(applied: ReturnType<TranscriptClock[`foldInbox`]>[`applied`]): void {
+        /* Nothing folded, nothing to run — and, crucially, nothing to clear. An effect below may write a notice
+         * of its own, and a write folds the (empty) inbox on its way in; clearing unconditionally would strip
+         * the run mid-flight and leave that notice unstamped, which is precisely the row a replay redraws. */
+        if (applied.length === 0) {
+            return;
+        }
         for (const { event, turn, effects } of applied) {
             this.applied(event, turn, effects);
+        }
+        // The frames and their effects are all in. What the user does next is theirs, not the run's.
+        if (this.state.value.run !== undefined) {
+            this.state.value = { ...this.state.value, run: undefined };
         }
     }
 
@@ -300,9 +313,36 @@ export class TranscriptClock {
 
     // Open the turn's first bubble: a fresh empty assistant message the frames stream into, so the typing
     // indicator shows the moment the turn starts rather than on the first delta.
-    openBubble(): void {
-        const id = this.append({ role: `assistant`, text: ``, thinking: `` });
+    // `run` on the reattach path, where the head has already named it: this bubble holds the run's first prose
+    // but is opened OUTSIDE the fold that stamps the rest, so without it the one row a re-attach most needs to
+    // reclaim is the one row it cannot see. The send path has no run to give — the daemon names it in the ack,
+    // after the bubble the typing indicator needs is already on screen.
+    openBubble(run?: string): void {
+        const id = this.append({ role: `assistant`, text: ``, thinking: ``, ...(run === undefined ? {} : { run }) });
         this.state.value = { ...this.state.value, bubbleId: id };
+    }
+
+    /* TAKE BACK WHAT THIS RUN ALREADY DREW HERE, before attaching to it again.
+     *
+     * An attach replays its run from the first frame — the daemon has no idea how much of it this window has
+     * seen — so everything below is about to arrive a second time. Dropping it is what makes re-attaching
+     * idempotent, and re-attaching is ordinary: a stream drops, a sandbox restarts, a tab is reopened onto a
+     * run that is still going.
+     *
+     * TRAILING rows only, and by run rather than by position, because the rows above them are the ones that
+     * matter: a resumed turn sits under the dead run's work and the notice explaining the interruption, and
+     * nothing will ever redraw those. Truncating to the user bubble would take them with it — which is why
+     * reuseUserBubble refuses to for a resume, and why the duplicate had nowhere else to be caught. */
+    dropRun(run: string): void {
+        const messages = this.state.value.messages;
+        let end = messages.length;
+        while (end > 0 && messages[end - 1]?.run === run) {
+            end -= 1;
+        }
+        if (end === messages.length) {
+            return;
+        }
+        this.state.value = { ...this.state.value, messages: messages.slice(0, end), bubbleId: null };
     }
 
     /* THE BUBBLE AN ATTACHED RUN'S PROMPT IS ALREADY IN. Two different situations put it there, and in both the

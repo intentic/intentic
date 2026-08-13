@@ -20,6 +20,9 @@ export interface TurnContext {
     // bubble is not here: which bubble the agent is writing into moves with every block boundary and card, so
     // it belongs to the reducer's state (TurnState.bubbleId) rather than to a context the caller holds.
     readonly userMessageId: number;
+    // The run these frames belong to, as the daemon named it in the attach head. Stamped onto every row they
+    // draw, which is what lets a SECOND attach to the same run take the first one's copy back out first.
+    readonly run: string;
     readonly provider: AgentProvider;
     readonly account: string | undefined;
     readonly harness: AgentHarness;

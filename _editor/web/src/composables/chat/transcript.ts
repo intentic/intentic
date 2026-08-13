@@ -230,6 +230,16 @@ export interface ChatMessage {
      * occupies a row of the record and a local one does not, so a fork that counts them the same way cuts the
      * copied prefix in the wrong place (see recordedRows). */
     readonly recorded?: boolean;
+    /* THE DAEMON-SIDE RUN THIS ROW CAME OUT OF — carried by everything a turn's frames drew (and by the notices
+     * their effects raised), absent on everything else: a restored record, a fork's inherited turns, and every
+     * write on the user's own clock.
+     *
+     * Attaching to a run replays it FROM ITS FIRST FRAME, so a window that has already rendered one draws the
+     * whole answer a second time the moment it attaches again — which is what a dropped stream and a sandbox
+     * restart both lead to. This is what lets that window take its own copy back out first (dropRun): rows
+     * carrying the run being attached to are the ones about to arrive again, and the rows above them — an
+     * interrupted run's work, the notice explaining it — are the ones nothing will ever redraw. */
+    readonly run?: string;
     /* WHAT THE DAEMON TOLD THIS TURN and the user did not — each note with the title its row is drawn as and the
      * text that opening it reveals.
      *
