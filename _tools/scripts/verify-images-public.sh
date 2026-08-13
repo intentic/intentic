@@ -15,10 +15,10 @@
 # behind it actually exists — a public package with no `stable` in it fails a user's install just as hard.
 set -euo pipefail
 
-# Exactly the references the connect scripts pull unauthenticated on a user's machine — `stable` and `beta`
-# for the sandbox (the two lanes: release-images.sh moves beta on every release, promote-stable.sh moves
-# stable after the soak), `latest` for the dind-host that the Windows self-host path stands up.
-IMAGES="${IMAGES:-ghcr.io/intentic/sandbox:stable ghcr.io/intentic/sandbox:beta ghcr.io/intentic/dind-host:latest}"
+# Exactly the references the connect scripts pull unauthenticated on a user's machine — `stable` and
+# `core-stable` for the sandbox (release-images.sh moves both on every release), `latest` for the dind-host
+# that the Windows self-host path stands up.
+IMAGES="${IMAGES:-ghcr.io/intentic/sandbox:stable ghcr.io/intentic/sandbox:core-stable ghcr.io/intentic/dind-host:latest}"
 
 failed=0
 for ref in $IMAGES; do

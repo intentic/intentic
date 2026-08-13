@@ -7,8 +7,8 @@
 #
 # ARM64_REF / AMD64_REF pin a half to ONE fixed tag for every requested tag. The release is why they exist:
 # both halves are built by the release workflow's per-arch jobs under the version tag alone (those jobs run
-# before "beta"/"stable" are decided), so a moving tag's merge names `<version>-amd64` + `<version>-arm64`
-# rather than a `beta-amd64` nothing pushed. Missing halves fail loudly — a silently amd64-only `stable`
+# before the publish moves `stable`), so a moving tag's merge names `<version>-amd64` + `<version>-arm64`
+# rather than a `stable-amd64` nothing pushed. Missing halves fail loudly — a silently amd64-only `stable`
 # would strand every arm sandbox on its next update.
 set -euo pipefail
 # The merge runs seconds behind the pushes it stitches, so it sits in the same GHCR rate-limit window they do

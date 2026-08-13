@@ -993,7 +993,7 @@ const main = async (): Promise<void> => {
     // update without ever fetching on the request path. Channel-aware: a stable sandbox is offered the
     // promoted release, a beta one the newest (version-check.ts explains the two pointers).
     // Container-image update offers: meaningless for a local daemon, whose host application owns updates.
-    const versionCheck = traits.containerUpdates ? startVersionCheck(config.sandbox.channel) : undefined;
+    const versionCheck = traits.containerUpdates ? startVersionCheck() : undefined;
     shutdown.push(() => versionCheck?.stop());
 
     // …and what that update would actually give them, on the same cadence: the offer and the reason to take it

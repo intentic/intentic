@@ -273,7 +273,7 @@ mod tests {
         }
 
         let mut full = request("img", "abc");
-        full.channel = Some("beta");
+        full.channel = Some("core-stable");
         full.previous_image = Some("img:1");
         full.environment_hash = Some("deadbeef");
         full.runtime = Some("# intentic:runtime --gpus=all");
@@ -282,7 +282,7 @@ mod tests {
         let argv = run_command_argv(&full, false, &[]);
         assert_eq!(value_of(&argv, "--slug"), Some("abc"));
         assert_eq!(value_of(&argv, "--base-image"), Some("img"));
-        assert_eq!(value_of(&argv, "--channel"), Some("beta"));
+        assert_eq!(value_of(&argv, "--channel"), Some("core-stable"));
         assert_eq!(value_of(&argv, "--previous-image"), Some("img:1"));
         assert_eq!(value_of(&argv, "--environment-hash"), Some("deadbeef"));
         assert_eq!(

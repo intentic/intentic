@@ -65,7 +65,7 @@ test("every one-liner shape the platform ever handed out maps onto its ic verb",
     // The Sandbox card's update command: <slug> alone.
     expect(argv(shimArgs("abc123"))).toEqual(["sandbox", "update", "abc123"]);
     // A channel move, a rollback, and the dev loop (slug optional).
-    expect(argv(shimArgs("abc123", "--channel", "beta"))).toEqual(["sandbox", "update", "abc123", "--channel", "beta"]);
+    expect(argv(shimArgs("abc123", "--channel", "core-stable"))).toEqual(["sandbox", "update", "abc123", "--channel", "core-stable"]);
     expect(argv(shimArgs("abc123", "--rollback"))).toEqual(["sandbox", "rollback", "abc123"]);
     expect(argv(shimArgs("--dev"))).toEqual(["sandbox", "dev"]);
     expect(argv(shimArgs("--dev", "abc123"))).toEqual(["sandbox", "dev", "abc123"]);

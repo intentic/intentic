@@ -97,10 +97,12 @@ notes="$(
 release_id="$(api "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" 2>/dev/null | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).id' 2>/dev/null || true)"
 if [ -z "$release_id" ]; then
   echo "==> creating release ${TAG}"
-  # make_latest: false — A NEW RELEASE IS BETA, NOT LATEST. Every download surface (`releases/latest/download`
-  # in the connect scripts, the site's download links) and every stable sandbox's update check follows the
-  # "latest" flag, and promote-stable.sh flips it only after the release has soaked on the beta lane. Creating
-  # a release as latest here would hand an unsoaked build to every stable user the moment it tagged.
+  # make_latest: false — NOT YET, AND ONLY FOR THE LENGTH OF THIS SCRIPT. Every download surface
+  # (`releases/latest/download` in the connect scripts, the site's download links) follows the "latest" flag,
+  # and this release has no assets attached until the uploads below finish: flagging it latest here would point
+  # every connect one-liner at a release whose installers 404. ship-stable.sh flips it at the very end of the
+  # same publish, once the assets are up and the stable images have moved — seconds, not the two days the old
+  # beta-lane soak cost.
   release_id="$(
     node -pe 'JSON.stringify({tag_name: process.argv[1], name: process.argv[1], body: process.argv[2], make_latest: "false"})' "$TAG" "$notes" |
       api --header "Content-Type: application/json" --data-binary @- "https://api.github.com/repos/${REPO}/releases" |

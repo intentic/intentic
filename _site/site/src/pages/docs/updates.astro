@@ -4,8 +4,9 @@ import DocsLayout from "../../components/DocsLayout.astro";
 /* THE COMPATIBILITY CONTRACT, said to users. Every sentence on this page is a tested property, not an
  * aspiration: the promises are drilled nightly against real published images (verify-update-survival.sh),
  * the breaking-change flow is enforced in CI (prepass.mjs invariants 5 and 6, contract.lock.json), and the
- * lanes are how the release pipeline actually publishes (release-images.sh, promote-stable.sh). Change the
- * mechanics and this page changes in the same commit, or it becomes marketing. */
+ * shipping story is how the release pipeline actually publishes (release-images.sh, ship-stable.sh) and
+ * un-publishes (rollback-stable.sh). Change the mechanics and this page changes in the same commit, or it
+ * becomes marketing. */
 ---
 
 <DocsLayout
@@ -37,15 +38,17 @@ import DocsLayout from "../../components/DocsLayout.astro";
         </li>
     </ul>
 
-    <h2>The two lanes</h2>
+    <h2>When a release reaches you</h2>
     <p>
-        Every release lands on the <strong>beta</strong> lane the moment it publishes. The <strong>stable</strong> lane is the default and serves every download link. It takes a release only after about two days on beta with nothing superseding it. We run beta ourselves, so a bad release is caught by the people who made it.
+        As soon as it passes. A release is built, installed and verified on real machines before it is published, and the moment that
+        finishes it becomes the version every download link and every update card offers. There is no waiting room: what the tests proved
+        is what you get, and a fix reaches you the day it is written rather than two days later.
     </p>
     <p>
-        Your sandbox shows its lane on the update card. Moving to beta is one command on the machine that runs your sandbox, and moving
-        back is the same command with <code>stable</code>:
+        The trade is that we carry the risk on our side rather than yours. If a release turns out badly we put the previous version back
+        centrally, in one step, and your sandbox simply stops being offered the bad one — while anything already running keeps running,
+        because the older release is never withdrawn.
     </p>
-    <pre><code>ic sandbox update --channel beta</code></pre>
 
     <h2>What can change freely</h2>
     <p>

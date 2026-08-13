@@ -131,8 +131,8 @@ mod tests {
         // appended to by hand behaves the same way it always did.
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("sandbox-abc.channel");
-        std::fs::write(&path, "channel=stable\nchannel=beta\ncurrent=x\n").expect("write");
-        assert_eq!(read_file(&path).channel.as_deref(), Some("beta"));
+        std::fs::write(&path, "channel=stable\nchannel=core-stable\ncurrent=x\n").expect("write");
+        assert_eq!(read_file(&path).channel.as_deref(), Some("core-stable"));
         assert_eq!(read_file(&path).previous, None);
     }
 

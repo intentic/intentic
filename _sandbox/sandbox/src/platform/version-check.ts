@@ -1,14 +1,13 @@
-// The daemon compares its own baked version (version.ts) to the latest release OF ITS OWN CHANNEL so the web
-// can offer a non-blocking update, surfaced on /info. Version strings, not registry digests: the sandbox has
-// no Docker socket.
+// The daemon compares its own baked version (version.ts) to the latest release so the web can offer a
+// non-blocking update, surfaced on /info. Version strings, not registry digests: the sandbox has no Docker
+// socket.
 //
-// SOURCE IS GITHUB, BY LANE. Every release publishes the `beta` image tags immediately; the `stable` tags move
-// only when the promote step (_tools/scripts/promote-stable.sh, nightly) decides a release has soaked — and
-// that same step is what flips the GitHub Release's "latest" flag. So the two lanes have two authoritative
-// pointers on one API: /releases/latest IS what ghcr.io/intentic/sandbox:stable resolves to, and the newest
-// release in the list IS what :beta resolves to. A beta-family channel (`beta`, `core-beta`) reads the second;
-// every other channel — `stable`, `core-stable`, the pre-channel empty string — reads the first, which is also
-// the honest answer for a pinned custom channel: the promoted release is the one it would be offered.
+// SOURCE IS GITHUB, ONE LANE. A release ships the moment its pipeline goes green: release-images.sh moves the
+// `stable` image tags and ship-stable.sh flips the Release's "latest" flag, both inside the same publish. That
+// leaves exactly ONE authoritative pointer — /releases/latest IS what ghcr.io/intentic/sandbox:stable resolves
+// to — so the check needs no channel to decide where to look. This used to be two lanes, `beta` reading the
+// newest release and `stable` reading the promoted one; the soak between them is gone and so is the split.
+// A pinned custom channel reads the same pointer, which is still the honest answer to what it would be offered.
 //
 // Plain global fetch (not the node:https of announce.ts, whose only reason is per-host TLS skip).
 //
@@ -20,10 +19,7 @@ import { isDevBuild } from "../version.js";
 
 export { isNewer } from "@intentic/sandbox-contract";
 
-const STABLE_URL = "https://api.github.com/repos/intentic/intentic/releases/latest";
-// Newest release, promoted or not — what the beta lane runs. Drafts are invisible unauthenticated, and this
-// repo publishes no prereleases, so item one is the lane's head.
-const BETA_URL = "https://api.github.com/repos/intentic/intentic/releases?per_page=1";
+const LATEST_URL = "https://api.github.com/repos/intentic/intentic/releases/latest";
 // A moved release isn't urgent, so refresh cheaply: ~1 request/sandbox/hour against GitHub's 60/hour budget,
 // beside release-notes.ts's one.
 const REFRESH_MS = 60 * 60_000;
@@ -40,15 +36,13 @@ const tagOf = (release: unknown): string | undefined => {
     return typeof tag === "string" ? tag.replace(/^v/, "") : undefined;
 };
 
-// Fetch the channel's latest version once and update the cache. Never throws — any failure (offline, GitHub
+// Fetch the latest released version once and update the cache. Never throws — any failure (offline, GitHub
 // down, shape change) keeps the previous value so /info degrades to "no update known".
-export const refreshLatestVersion = async (channel: string): Promise<void> => {
-    const beta = channel.endsWith("beta");
+export const refreshLatestVersion = async (): Promise<void> => {
     try {
-        const response = await fetch(beta ? BETA_URL : STABLE_URL, { headers: { accept: "application/vnd.github+json" } });
+        const response = await fetch(LATEST_URL, { headers: { accept: "application/vnd.github+json" } });
         if (response.ok) {
-            const body: unknown = await response.json();
-            const version = tagOf(beta ? (body as unknown[])[0] : body);
+            const version = tagOf(await response.json());
             if (version !== undefined) {
                 latest = version;
             }
@@ -67,12 +61,12 @@ export const refreshLatestVersion = async (channel: string): Promise<void> => {
 // actually move it BACKWARDS. Leaving the cache cold is what makes /info omit latest/updateAvailable entirely,
 // so both the hub card and the global banner stay hidden; it also spares GitHub an hourly request per dev
 // sandbox.
-export const startVersionCheck = (channel: string): { stop: () => void } => {
+export const startVersionCheck = (): { stop: () => void } => {
     if (isDevBuild) {
         return { stop: () => undefined };
     }
-    void refreshLatestVersion(channel);
-    const timer = setInterval(() => void refreshLatestVersion(channel), REFRESH_MS);
+    void refreshLatestVersion();
+    const timer = setInterval(() => void refreshLatestVersion(), REFRESH_MS);
     timer.unref?.();
     return { stop: () => clearInterval(timer) };
 };

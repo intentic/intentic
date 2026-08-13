@@ -1,0 +1,51 @@
+# Put stable back onto an earlier release — the manual lever, and the only one that moves stable backwards.
+#
+# Its own workflow, on workflow_dispatch alone, because that is exactly what it is for: a rollback is a
+# deliberate human decision taken in the minutes after a bad release, never something a schedule or a push may
+# trigger. It BUILDS nothing — it moves pointers between artifacts a release already published — so it runs in
+# under a minute and needs nothing from the checkout but the script.
+#
+# Shipping is the other direction and happens in the release pipeline (ship-stable.sh, on green). There is no
+# soak lane to fall back on any more; this is the safety net that replaced it.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The released version to put stable back onto, e.g. 1.200.0"
+        required: true
+
+# Serialized against itself only. Two rollbacks at once would race on the same three pointers and could leave
+# stable straddling two versions; a release is gated by its own lock upstream of this workflow.
+concurrency:
+  group: rollback
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  rollback-stable:
+    runs-on: [self-hosted, intentic]
+    permissions:
+      contents: write
+      packages: write
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+      - run: bash _tools/scripts/rollback-stable.sh "$ROLLBACK_VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          ROLLBACK_VERSION: ${{ inputs.version }}

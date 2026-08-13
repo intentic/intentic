@@ -242,12 +242,12 @@ mod tests {
     fn update_takes_a_channel_by_name_and_refuses_a_bare_one() {
         let Ok(Cli {
             command: Command::Sandbox(SandboxCommand::Update { slug, channel }),
-        }) = parse(&["sandbox", "update", "abc123", "--channel", "beta"])
+        }) = parse(&["sandbox", "update", "abc123", "--channel", "core-stable"])
         else {
             panic!("update --channel did not parse")
         };
         assert_eq!(slug.as_deref(), Some("abc123"));
-        assert_eq!(channel.as_deref(), Some("beta"));
+        assert_eq!(channel.as_deref(), Some("core-stable"));
         // A valueless --channel must not swallow the next thing or default to something.
         assert!(parse(&["sandbox", "update", "abc123", "--channel"]).is_err());
     }

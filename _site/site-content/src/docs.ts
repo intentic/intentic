@@ -105,11 +105,11 @@ export const docsBook: Book = {
                              * click actually reads it. */
                             id: "updates",
                             title: "Updates & rollback",
-                            blurb: "The promises every update keeps, and the two lanes",
+                            blurb: "The promises every update keeps, and the way back",
                             meta: {
                                 title: "Updates: what we promise never breaks · intentic docs",
                                 description:
-                                    "What an intentic update can never touch: your files survive every update and rollback, updates are offered rather than forced, breaking changes are flagged before you take them, and every release soaks on the beta lane before stable.",
+                                    "What an intentic update can never touch: your files survive every update and rollback, updates are offered rather than forced, breaking changes are flagged before you take them, and a release reaches you as soon as it passes.",
                                 datePublished: "2026-08-10",
                             },
                         },

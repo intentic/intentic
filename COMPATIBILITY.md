@@ -17,9 +17,11 @@ are the contract; everything here is the machinery that keeps them true.
    `type!:` commit carrying a `Breaking-Note: <what stops working and what to do instead>` trailer. That
    sentence travels to the Release's `## Breaking changes` section, the changelog's Breaking badge, and the
    update card's warning — which withholds the update command until the user acknowledges it.
-5. **Releases soak before users get them.** Every release publishes to the `beta` lane immediately
-   (`release-images.sh`); `stable` — and the GitHub "latest" flag every download link follows — moves only via
-   `promote-stable.sh` (nightly) after ~48h of soak.
+5. **A bad release can be un-shipped.** A release ships the moment its pipeline goes green — the `stable`
+   images (`release-images.sh`) and the GitHub "latest" flag every download link follows (`ship-stable.sh`)
+   move inside that same publish, so what CI proved is what users get. Putting stable back onto an earlier
+   version is one command, `rollback-stable.sh` (the Rollback workflow); the rolled-back release stays
+   published, so anything pinned to that exact version keeps working.
 
 ## The surfaces the promises cover
 

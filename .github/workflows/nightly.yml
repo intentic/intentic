@@ -10,13 +10,6 @@ on:
     # 03:00 UTC daily.
     - cron: "0 3 * * *"
   workflow_dispatch:
-    inputs:
-      # The promote-stable job's soak window override. "0" is the manual fast-track: promote the newest
-      # release right now (an urgent fix that must not wait out the soak).
-      soak-hours:
-        description: "Hours a release must have soaked on beta before promote-stable moves stable onto it"
-        required: false
-        default: "48"
 
 concurrency:
   group: nightly
@@ -281,37 +274,3 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: bash _tools/scripts/verify-update-survival.sh
-
-  # The stable lane's one mover. Every release publishes as `beta` and un-latest (release-images.sh,
-  # publish-github.sh); this job promotes the newest release that has soaked ≥48h on the beta lane — image
-  # tags, the git `stable` pointer, and the Release's "latest" flag that every download link and every stable
-  # sandbox's update check follows. promote-stable.sh explains the ordering and the kill switch (mark a bad
-  # release pre-release and it drops out of candidacy).
-  #
-  # This file's header bans publish rules from riding the schedule, and this is the deliberate exception that
-  # proves the rule's point: it BUILDS nothing and reads nothing from the checkout but the script itself — it
-  # moves pointers between artifacts a release already published, which is exactly the decision that should
-  # happen on a clock rather than on a push. A workflow_dispatch of this workflow with soak-hours: "0" is the
-  # manual fast-track for an urgent fix.
-  promote-stable:
-    runs-on: [self-hosted, intentic]
-    permissions:
-      contents: write
-      packages: write
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-      - run: bash _tools/scripts/promote-stable.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          SOAK_HOURS: ${{ inputs.soak-hours || '48' }}
