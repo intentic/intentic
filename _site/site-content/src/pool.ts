@@ -16,10 +16,14 @@
  * The live numbers are published by the platform itself on GET /pool/transparency, and that ledger is what
  * payouts settle on. This module is what a static page can state without a backend behind it. */
 
-// The four figures the platform publishes. Change one here and every derived number below follows.
+// The five figures the platform publishes. Change one here and every derived number below follows.
 export const pool = {
     // The membership's monthly price in USD.
     priceUsd: 20,
+    /* What running the platform for one member costs — their hosted machine and its disk, above all — taken
+     * off the price BEFORE the shares below apply. Published rather than absorbed silently, because it is
+     * the base the 90% is 90% OF, and a share whose base a reader cannot see is not a disclosure. */
+    infraUsd: 5,
     // A member's daily credit allowance, reset at UTC midnight.
     dailyCredits: 1000,
     // What installing or, at most monthly, updating a premium extension donates to its publisher. Flat
@@ -32,13 +36,18 @@ export const pool = {
 // The month the credit value is derived over, matching the platform's own arithmetic.
 const DAYS = 30;
 
+// What is actually shared: the membership after infrastructure. Every figure below is derived from THIS
+// rather than from the price, exactly as the platform derives them, so no page can quote a share of a number
+// the pool never contained.
+export const poolUsd = pool.priceUsd - pool.infraUsd;
+
 // A month's allowance: the ceiling on what one member can possibly spend, and so on what they can possibly
 // direct to creators. Local: it exists to price a credit, and every reader-facing figure below is derived.
 const monthlyCredits = pool.dailyCredits * DAYS;
 
-// How many credits go to a cent. Stated this way round because a credit is worth well under one, and "15 to
-// the cent" is a number a reader can hold where "$0.000667" is one they skip.
-export const creditsPerCent = Math.round(monthlyCredits / (pool.priceUsd * 100));
+// How many credits go to a cent. Stated this way round because a credit is worth well under one, and "20 to
+// the cent" is a number a reader can hold where "$0.0005" is one they skip.
+export const creditsPerCent = Math.round(monthlyCredits / (poolUsd * 100));
 
 // The creator share as whole percent, for copy that says "90%".
 export const creatorSharePct = Math.round(pool.creatorShare * 100);

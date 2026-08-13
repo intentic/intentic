@@ -304,6 +304,10 @@ const hostedRow = computed(() => created.value?.hosted ?? null);
 // one. The card still renders (hiding an option the reader was just offered elsewhere explains nothing); it
 // says why it cannot be taken instead.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
+/* The free lane's awake-hour budget, or null for anyone it does not apply to — a member, or a platform
+ * running without a ceiling. The distinction is the whole point of reading it here: `null` means the cards
+ * below say nothing about hours at all, rather than showing a member a limit they do not have. */
+const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
 // The daemon's announced host, once it exists — step 1's address line for a lane that never mints a code.
 const hostedHost = computed(() => {
     const url = created.value?.daemonUrl;
@@ -385,24 +389,41 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   value: `hosted` as const,
                   icon: `bolt` as const,
                   title: `We host it`,
-                  meta: `Free · ready in seconds`,
+                  // The badge carries the hour ceiling when there is one, because "Free" alone in the place a
+                  // reader looks for the cost would be the version of this card that has to be corrected
+                  // later. Members and ceiling-less platforms send no hours at all and read the old way.
+                  meta: hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month`,
                   /* The durability sentence is here, on the card, rather than only in the terms: this is the
                    * moment someone chooses a disk that is ours, and "we don't back it up" is the one fact
                    * about that disk which changes what a reasonable person does next. It names the remedy in
                    * the same breath, because a warning with no next step just makes the safe choice look
                    * scary. Deliberately silent about the provider's own snapshots — they are disaster
                    * recovery we cannot restore from on request, so mentioning them here would read as a
-                   * safety net the user does not actually have. The terms spell that out. */
-                  note: `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`,
+                   * safety net the user does not actually have. The terms spell that out.
+                   *
+                   * The collection sentence earns its place the same way: a free machine left unopened is
+                   * eventually removed, and someone deciding where their work will live is owed that before
+                   * they choose rather than in the email that warns them. Both facts name their remedy —
+                   * opening it, and the two rungs below where neither applies. */
+                  note:
+                      hostedHours.value === null
+                          ? `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back. We don't back it up — turn on desktop sync, or keep your work in a git remote.`
+                          : `A small private machine, running now. Nothing to install. It sleeps while you're away and wakes when you come back — you get ${hostedHours.value.allowance} hours of it a month, and if you don't open it for a few weeks we remove it. We don't back it up either, so turn on desktop sync or keep your work in a git remote.`,
               },
           ]
         : []),
+    /* The two rungs where the machine is the READER'S. Both notes now end on what that actually wins them
+     * against the rung above — no hour limit, and nothing that expires — because those are the differences a
+     * person weighing "instant" against "one pasted command" cannot otherwise see, and they are exactly the
+     * differences that matter after week three. Said as a property of the lane rather than as a nudge: the
+     * hosted rung is genuinely the right pick for someone who wants to start now, and a card that argued
+     * against it would be selling, not captioning. */
     {
         value: `mine` as const,
         icon: `desktop`,
         title: `A computer I have`,
-        meta: `Most power · needs Docker`,
-        note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command.`,
+        meta: `Most power · no limits`,
+        note: `Your CPUs, your RAM, your GPU — this laptop or any server you can open a shell on. One pasted command. No hour limit, nothing expires, and no membership needed to keep it.`,
     },
     ...(cloudOffered.value
         ? [
@@ -411,7 +432,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   icon: `cloud` as const,
                   title: `A new cloud machine`,
                   meta: `From free · 12 GB`,
-                  note: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere.`,
+                  note: `Created in your own cloud account — including Oracle's Always-Free tier, or a few €/month elsewhere. Bigger than the machine we host, with no hour limit and nothing that expires.`,
               },
           ]
         : []),
@@ -1906,6 +1927,13 @@ watch(commandReady, (ready) => {
                                     <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
                                 </span>
                                 <span class="text-2xs text-muted">{{ option.meta }}</span>
+                                <!-- The trade, in the reader's terms. This is what the card comment above has
+                                     always described and what the badge alone cannot carry: the badge is a
+                                     price, the note is what you are buying with it — the hour ceiling and the
+                                     expiry on the free rung, and what the two rungs below win in exchange for
+                                     a pasted command. Rendering it is the difference between a picker that
+                                     can be READ before it is clicked and three labels. -->
+                                <span class="text-2xs leading-snug text-subtle">{{ option.note }}</span>
                                 <!-- The allowance is spent, and saying so beats hiding a rung the reader was
                                      offered on their first sandbox. -->
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-2xs text-warning">Already using yours</span>

@@ -40,8 +40,7 @@ export const monthWindow = (month: string): { from: Date; to: Date } => {
 };
 
 // The most recent month that is entirely in the past — the only one there is anything to close.
-export const lastClosableMonth = (now: Date): string =>
-    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+export const lastClosableMonth = (now: Date): string => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
 
 /* Fold every listing's earnings into one line per publisher. A publisher earning through both lanes — an
  * extension people install and a service they run — is owed one amount, not two rows that a payout would then
@@ -167,16 +166,16 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
      * expire: an amount owed to a creator who proved their name is owed until it is paid, however long that
      * takes. And the sweep only happens into a month that HAS earners — with nobody to receive it the money
      * would simply vanish, so it stays claimable and is swept by the next close that can distribute it. */
-    const claimedPublishers = new Set(
-        (await prisma.publisherClaim.findMany({ select: { publisher: true } })).map((claim) => claim.publisher),
-    );
+    const claimedPublishers = new Set((await prisma.publisherClaim.findMany({ select: { publisher: true } })).map((claim) => claim.publisher));
     const expired =
         shares.length === 0
             ? []
-            : (await prisma.creatorStatement.findMany({
-                  where: { expiredAt: null, expiresAt: { lte: at } },
-                  select: { id: true, publisher: true, amountCents: true },
-              })).filter((statement) => !claimedPublishers.has(statement.publisher));
+            : (
+                  await prisma.creatorStatement.findMany({
+                      where: { expiredAt: null, expiresAt: { lte: at } },
+                      select: { id: true, publisher: true, amountCents: true },
+                  })
+              ).filter((statement) => !claimedPublishers.has(statement.publisher));
     const sweptCents = expired.reduce((sum, statement) => sum + statement.amountCents, 0);
     const sweptShares = distribute(sweptCents, shares);
 
@@ -203,6 +202,7 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
                 members,
                 grossCents: settled.grossCents,
                 feeCents: settled.feeCents,
+                infraCents: report.infraCents,
                 poolCents: report.poolCents,
                 earnedCents: report.paidCents,
                 sweptCents,
@@ -213,7 +213,9 @@ export const closeMonth = async (month: string, { prisma, config, gateway, now =
             },
         }),
         ...(rows.length > 0 ? [prisma.creatorStatement.createMany({ data: rows })] : []),
-        ...(expired.length > 0 ? [prisma.creatorStatement.updateMany({ where: { id: { in: expired.map((row) => row.id) } }, data: { expiredAt: at } })] : []),
+        ...(expired.length > 0
+            ? [prisma.creatorStatement.updateMany({ where: { id: { in: expired.map((row) => row.id) } }, data: { expiredAt: at } })]
+            : []),
     ]);
     return { month, closed: true, statements: rows.length, distributedCents, sweptCents };
 };

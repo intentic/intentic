@@ -315,7 +315,31 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
     // Not a bare label each: the cost and what it asks of you are on the card, before it is clicked.
     expect(cards[0]?.textContent).toContain(`We host it`);
     expect(cards[0]?.textContent).toContain(`Free`);
-    expect(cards[1]?.textContent).toContain(`needs Docker`);
+    expect(cards[1]?.textContent).toContain(`One pasted command`);
+    // What the reader's own machine actually wins over the free one, said where the choice is made rather
+    // than discovered in week three.
+    expect(cards[1]?.textContent).toContain(`no limits`);
+});
+
+/* THE FREE LANE'S PRICE IS ON ITS CARD. "Free" alone, in the place a reader looks for the cost, is the
+ * version of this that has to be corrected later — so when the platform meters hours, the badge carries the
+ * ceiling and the note carries the collection. */
+it(`states the hour ceiling and the expiry on the hosted card when they apply`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
+    const el = await mount();
+    const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
+    expect(hosted?.textContent).toContain(`40h a month`);
+    expect(hosted?.textContent).toContain(`we remove it`);
+});
+
+// A member has no ceiling, so a member is shown none — the absence of the block is the whole contract.
+it(`says nothing about hours to someone they do not apply to`, async () => {
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
+    expect(hosted?.textContent).toContain(`ready in seconds`);
+    expect(hosted?.textContent).not.toContain(`a month`);
+    expect(hosted?.textContent).not.toContain(`we remove it`);
 });
 
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {

@@ -511,11 +511,28 @@ export const SandboxHostedSchema = z.object({
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
-// The hosted lane's offer, read before anything is created: `enabled` mirrors platform config (a platform
-// with no provider token offers no hosted lane — routes 404, editor never mentions it), `remaining` is how
-// many more hosted sandboxes THIS caller may still create under the per-user allowance. What the editor's
-// zero-click first run and the wizard's lead card both gate on.
-export const HostedOfferSchema = z.object({ enabled: z.boolean(), remaining: z.number().int().nonnegative() });
+/* The hosted lane's offer, read before anything is created: `enabled` mirrors platform config (a platform
+ * with no provider token offers no hosted lane — routes 404, editor never mentions it), `remaining` is how
+ * many more hosted sandboxes THIS caller may still create under the per-user allowance. What the editor's
+ * zero-click first run and the wizard's lead card both gate on.
+ *
+ * `hours` is the free lane's awake-time budget for this caller, and is ABSENT for anyone unmetered — a
+ * member, or a platform running with no ceiling. Absent means "do not mention hours at all", which is what
+ * keeps a limit that does not apply to this person off their screen entirely rather than shown as a
+ * generous-looking number they never asked about. */
+export const HostedHoursSchema = z.object({
+    // The monthly ceiling and what is left of it, in whole hours. Rounded for display only — the meter itself
+    // counts minutes — and `remaining` floors, so "1 hour left" never means four minutes.
+    allowance: z.number().int().nonnegative(),
+    remaining: z.number().int().nonnegative(),
+});
+export type HostedHours = z.infer<typeof HostedHoursSchema>;
+
+export const HostedOfferSchema = z.object({
+    enabled: z.boolean(),
+    remaining: z.number().int().nonnegative(),
+    hours: HostedHoursSchema.optional(),
+});
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
 export const SandboxSummarySchema = z.object({

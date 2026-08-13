@@ -29,6 +29,7 @@ model User {
     accounts         Account[]
     sandboxes        Sandbox[]
     trialUsage       TrialUsage[]
+    hostedUsage      HostedUsage[]
     membership       Membership?
     donations        Donation[]
     creditSpends     CreditSpend[]
@@ -205,10 +206,47 @@ model HostedMachine {
     machineId String
     volumeId  String
     region    String
+    // When the platform last STARTED this machine, and null once that stretch has been counted. The open end
+    // of the awake interval the hour meter bills: the platform performs every wake, so it always knows when
+    // running began — it is the STOP it never sees, since the machine puts itself to sleep from the inside
+    // (sandbox idle-stop). So the interval is closed later, by asking Fly when the machine actually stopped;
+    // until then this stays set and the stretch is uncounted. See hosted-usage.ts.
+    wokeAt    DateTime?
+    // When the owner was told this machine is about to be collected for going unopened, and null whenever it
+    // is not under notice. Set by the idle sweep at `hosted.idleWarnDays` and cleared on every wake, so
+    // coming back cancels the notice and a later absence earns a fresh one — the stamp is what stops the
+    // warning arriving every morning of the week it covers.
+    idleWarnedAt DateTime?
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
     @@map("hosted_machine")
+}
+
+// Awake MINUTES this account's hosted machines have burned this calendar month — the meter behind the free
+// lane's hour ceiling (api config.ts `hosted.monthlyHours`). Shaped exactly like TrialUsage above, one period
+// coarser: a `YYYY-MM` string rather than a timestamp range, so the unique key does the resetting and an
+// upsert on (userId, month) is the whole increment with no read-modify-write to race.
+//
+// Billed to the OWNER of the sandbox, never to whoever woke it — a shared sandbox's guests spend the owner's
+// month, which is the only reading under which sharing a sandbox cannot be used to launder machine time.
+// Members are unmetered, so rows exist only for accounts without a membership (and for members who were not
+// members at the time, which is why the sweep does not assume otherwise).
+//
+// Rows are disposable — nothing reads a past month — and retention.ts sweeps them on the ledger window.
+model HostedUsage {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    month     String
+    minutes   Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([userId, month])
+    // The sweep deletes by month; the unique index above leads with userId, which it can't use.
+    @@index([month])
+    @@map("hosted_usage")
 }
 
 // One sign-in, carried from the user's REAL BROWSER into the desktop app's webview (_editor/desktop-app).
@@ -431,6 +469,10 @@ model PoolMonth {
     members           Int
     grossCents        Int
     feeCents          Int
+    // What running the platform for this month's members cost, taken off the top before the shares — frozen
+    // here alongside the gross it was subtracted from, so a reader of a closed month can check the pool
+    // figure rather than take it. Distinct from feeCents, which is the payment processor's, not ours.
+    infraCents        Int
     poolCents         Int
     earnedCents       Int
     sweptCents        Int

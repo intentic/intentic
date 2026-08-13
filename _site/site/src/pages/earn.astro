@@ -1,5 +1,5 @@
 ---
-import { creatorSharePct, creditsPerCent, demoServiceCredits, installsPerDay, pool, runsPerDay } from "@intentic-dev/site-content/pool";
+import { creatorSharePct, creditsPerCent, demoServiceCredits, installsPerDay, pool, poolUsd, runsPerDay } from "@intentic-dev/site-content/pool";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
@@ -259,6 +259,9 @@ const rules = [
                             {
                                 [
                                     { term: `$${pool.priceUsd}`, detail: "a month" },
+                                    // The base the share is a share OF, stated beside the price rather than
+                                    // left for a reader to derive from the credit value further along.
+                                    { term: `$${poolUsd}`, detail: "of it, the pool" },
                                     { term: n(pool.dailyCredits), detail: "credits a day" },
                                     { term: n(creditsPerCent), detail: "credits to the cent" },
                                 ].map((stat) => (

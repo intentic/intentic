@@ -100,6 +100,9 @@ export const buildLedger = async (prisma: PrismaClient, config: Config, at: Date
         state: `open` as const,
         members: live.members,
         estimatedGrossCents: live.grossCents,
+        // Estimated on the same basis as the gross above it, and shown for the same reason: the pool figure
+        // beneath is what is left after this, and a share whose base is invisible discloses nothing.
+        estimatedInfraCents: live.infraCents,
         poolCents: live.poolCents,
         earnedCents: live.paidCents,
         extensions: live.extensions,
@@ -124,6 +127,10 @@ export const buildLedger = async (prisma: PrismaClient, config: Config, at: Date
             // Settled, not estimated: what actually moved at Stripe, and what Stripe took on it.
             grossCents: month.grossCents,
             feeCents: month.feeCents,
+            // What the platform's own infrastructure took off the top before the shares below were computed.
+            // Published for the same reason the share itself is: a percentage nobody can see the base of is
+            // not a disclosure.
+            infraCents: month.infraCents,
             creatorShare: month.creatorShare,
             serviceShare: month.serviceShare,
             poolCents: month.poolCents,

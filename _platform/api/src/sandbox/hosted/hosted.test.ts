@@ -14,23 +14,37 @@ const config = (over?: Record<string, unknown>): Config =>
         google: { clientId: `gcid` },
         api: { url: `https://api.test` },
         secrets: { key: `` },
-        intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+        intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true },
+        zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,
             region: `iad`,
             appPrefix: `intentic-sbx`,
             image: `ghcr.io/intentic/sandbox:stable`,
-            cpus: 4,
-            memoryMb: 8192,
-            volumeGb: 20,
+            cpus: 2,
+            memoryMb: 4096,
+            volumeGb: 10,
             perUser: 1,
             idleStopMinutes: 20,
+            monthlyHours: 40,
+            idleDays: 21,
+            idleWarnDays: 14,
         },
         ...over,
     }) as unknown as Config;
 
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
+/* Every model the hosted routes touch, stubbed to the harmless answer, with the case's own overrides on top.
+ * The defaults matter: the hour meter reads membership (absent ⇒ not a member ⇒ metered) and the month's
+ * usage (absent ⇒ nothing spent) on paths whose SUBJECT is something else entirely, and a fixture that
+ * omitted them would fail those tests for a reason none of them are about. */
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
+    ({
+        membership: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
+        ...overrides,
+        hostedMachine: { update: vi.fn().mockResolvedValue({}), ...overrides[`hostedMachine`] },
+    }) as unknown as OrpcContext[`prisma`];
 
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
@@ -92,8 +106,10 @@ describe(`provisionHosted`, () => {
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
         expect(machine.config.env[`SANDBOX_VM`]).toBe(`1`);
+        // `wokeAt` opens the hour meter's first stretch: the machine is running from the moment it is made,
+        // so provisioning starts the clock rather than handing out an uncounted first session.
         expect(created).toHaveBeenCalledWith({
-            data: { sandboxId: `s1`, appName: result.appName, machineId: `m1`, volumeId: `vol_1`, region: `iad` },
+            data: { sandboxId: `s1`, appName: result.appName, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: expect.any(Date) },
         });
     });
 
@@ -164,7 +180,61 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const on = await call(sandboxRoutes.hostedOffer, undefined, {
             context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: vi.fn().mockResolvedValue(0) } }) }),
         });
-        expect(on).toEqual({ enabled: true, remaining: 1 });
+        // A non-member on a platform with a ceiling is told the ceiling BEFORE spending any of it, so the
+        // lane's card can caption itself honestly rather than saying "Free" and correcting itself later.
+        expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
+    });
+
+    /* The hours block is ABSENT for anyone the ceiling does not apply to, rather than present and generous.
+     * A member being shown a limit they do not have is the failure this shape exists to prevent — and the
+     * same absence covers a self-hosted platform that meters nothing. */
+    it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
+        const member = fakePrisma({
+            hostedMachine: { count: vi.fn().mockResolvedValue(0) },
+            membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+        });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
+            enabled: true,
+            remaining: 1,
+        });
+        const uncapped = routeContext({
+            prisma: fakePrisma({ hostedMachine: { count: vi.fn().mockResolvedValue(0) } }),
+            config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
+        });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1 });
+    });
+
+    /* The gate itself: a non-member who has spent the month is refused the wake, and told both ways out. The
+     * refusal is PAYMENT_REQUIRED so the editor can offer the membership without reading the sentence. */
+    it(`wake refuses a non-member whose month is spent, and never touches the provider`, async () => {
+        const fetchSpy = stubFetch([]);
+        const spent = fakePrisma({
+            sandbox: {
+                findFirst: vi
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+            },
+            hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
+        });
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent }) })).rejects.toMatchObject({
+            code: `PAYMENT_REQUIRED`,
+        });
+        expect(fetchSpy).toHaveLength(0);
+    });
+
+    // Same spent month, but the owner is a member: unmetered, so the machine starts and the meter is not read.
+    it(`wake starts a member's machine however much of the month has been used`, async () => {
+        stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
+        const spentMember = fakePrisma({
+            sandbox: {
+                findFirst: vi
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+            },
+            hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
+            membership: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+        });
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spentMember }) })).toEqual({ ok: true });
     });
 
     // The row every provision test starts from: created the ordinary way, tunnel already claimed from the pool.
@@ -210,7 +280,10 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`hostedProvision answers with the sandbox it already hosts, without creating anything`, async () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad` } }) },
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad` } }),
+            },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }), count: vi.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
@@ -249,7 +322,11 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     it(`wake starts the machine for an accepted member's hosted sandbox`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
         const findFirst = vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-a`, machineId: `m1`, region: `iad` } });
-        const result = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: fakePrisma({ sandbox: { findFirst } }) }) });
+        const result = await call(
+            sandboxRoutes.wake,
+            { sandboxId: `s1` },
+            { context: routeContext({ prisma: fakePrisma({ sandbox: { findFirst } }) }) },
+        );
         expect(result).toEqual({ ok: true });
         // The access query admits owner OR accepted member — the OR is the contract here.
         expect(findFirst.mock.calls[0]?.[0]?.where?.OR).toHaveLength(2);

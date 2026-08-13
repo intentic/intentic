@@ -1,5 +1,5 @@
 ---
-import { creatorSharePct, pool } from "@intentic-dev/site-content/pool";
+import { creatorSharePct, pool, poolUsd } from "@intentic-dev/site-content/pool";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import Footer from "../../components/Footer.astro";
@@ -49,7 +49,10 @@ const entry = `{
                 <p>
                     A user buys one <strong>intentic membership</strong> (${pool.priceUsd}/month). It includes every <code>premium</code> extension
                     wherever they work and a daily allowance of <strong>credits</strong>, the pool's only currency.{" "}
-                    <strong>Every credit a member spends pays {creatorSharePct}% of its dollar value to the creator it went to</strong>; the rest runs the platform.
+                    <strong>${pool.infraUsd} of that membership pays for running the platform</strong> — a member's machine, its disk, the
+                    things that cost money whether anybody installs anything or not — and the remaining{" "}
+                    <strong>${poolUsd} is the pool</strong>, which is what the daily allowance is worth and what the share below is a share of.
+                    <strong> Every credit a member spends pays {creatorSharePct}% of its dollar value to the creator it went to</strong>; the rest runs the platform.
                     Two ways credits move:
                 </p>
                 <ul>
@@ -75,9 +78,10 @@ const entry = `{
 
                 <h2>Why farming loses money, arithmetically</h2>
                 <p>
-                    A member's credits are bounded by their own membership: a month's allowance is worth exactly what they paid. So a publisher
-                    "farming" donations to their own listing with bought memberships can only redirect <em>a {creatorSharePct}% share of money they themselves paid
-                    in</em>: every farmed dollar costs more than it returns, at any scale. The monthly donation dedupe also stops update spam:
+                    A member's credits are bounded by their own membership: a month's allowance is worth the pool share of what they paid — ${poolUsd} of
+                    every ${pool.priceUsd}, never more. So a publisher
+                    "farming" donations to their own listing with bought memberships can only redirect <em>a {creatorSharePct}% share of a fraction of money they
+                    themselves paid in</em>: every farmed dollar costs more than it returns, at any scale. The monthly donation dedupe also stops update spam:
                     an install can donate at most twelve times a year however often its publisher ships. What remains for policy is only nudging real
                     users into meaningless updates, which is <strong>delisting grounds</strong>, stated on the row like every other trust decision.
                 </p>

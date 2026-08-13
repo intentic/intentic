@@ -76,7 +76,10 @@ export const provisionHosted = async (
             ],
         });
         const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: machineConfig });
-        await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region } });
+        // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
+        // so the free lane's clock starts here rather than at the first wake — which is the only version that
+        // does not hand out an uncounted first session to everyone who ever provisions one.
+        await prisma.hostedMachine.create({ data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, wokeAt: new Date() } });
         return { appName, region };
     } catch (error) {
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>

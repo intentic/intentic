@@ -25,7 +25,10 @@ const errorSchema = z.object({ error: z.string() });
 
 const appsSchema = z.object({ apps: z.array(z.object({ name: z.string() })) });
 const idSchema = z.object({ id: z.string() });
-const machineSchema = z.object({ id: z.string(), state: z.string() });
+// `updated_at` is Fly's own stamp of the last state transition, which for a stopped machine is when it
+// stopped — the hour meter's only way to learn a moment nothing on our side witnessed (the machine sleeps
+// from the inside). Optional because create's response is not required to carry one and nothing there wants it.
+const machineSchema = z.object({ id: z.string(), state: z.string(), updated_at: z.string().optional() });
 
 const call = async (token: string, method: string, path: string, body?: unknown): Promise<unknown> => {
     const response = await fetch(`${BASE}${path}`, {
@@ -69,7 +72,9 @@ export const deleteApp = async (token: string, name: string): Promise<void> => {
         throw new FlyError(`Fly rejected the platform's API token (HTTP ${response.status}) — check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`);
     }
     const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
-    throw new FlyError(failure.success ? `Fly refused DELETE /apps/${name}: ${failure.data.error}` : `Fly DELETE /apps/${name} failed with HTTP ${response.status}`);
+    throw new FlyError(
+        failure.success ? `Fly refused DELETE /apps/${name}: ${failure.data.error}` : `Fly DELETE /apps/${name} failed with HTTP ${response.status}`,
+    );
 };
 
 // Every app name in the org — the reaper diffs this against the DB to find orphans (prefix-filtered there;
@@ -93,9 +98,12 @@ export const createMachine = async (
     return { machineId: parsed.id };
 };
 
-export const getMachine = async (token: string, app: string, machineId: string): Promise<{ state: string }> => {
+export const getMachine = async (token: string, app: string, machineId: string): Promise<{ state: string; updatedAt?: Date }> => {
     const parsed = machineSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
-    return { state: parsed.state };
+    const updatedAt = parsed.updated_at === undefined ? undefined : new Date(parsed.updated_at);
+    // An unparseable stamp is dropped rather than propagated as an Invalid Date — the meter's fallback (bill
+    // to now) is a worse answer than Fly's, but a NaN one would silently poison every sum it reaches.
+    return { state: parsed.state, updatedAt: updatedAt !== undefined && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined };
 };
 
 // Start answers 200 with a small status body; a machine already running answers an error naming its state,

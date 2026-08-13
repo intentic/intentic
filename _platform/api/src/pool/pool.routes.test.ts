@@ -24,13 +24,15 @@ const baseConfig = {
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true }, zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
+    zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     trial: { keys: ``, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     pool: {
         stripeSecretKey: `sk_test`,
         stripeWebhookSecret: `whsec_test`,
         stripePriceId: `price_1`,
         priceUsd: 20,
+        infraUsd: 5,
         creatorShare: 0.9,
         dailyCredits: 100,
         serviceShare: 0.9,
@@ -48,7 +50,17 @@ const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`h
 interface Stored {
     donations: { userId: string; extensionId: string; month: string; credits: number }[];
     memberships: { userId: string; stripeCustomerId: string; stripeSubscriptionId: string; status: string; currentPeriodEnd: Date }[];
-    services: { id: string; slug: string; publisher: string; name: string; description: string; upstreamUrl: string; secret: string; creditsPerRun: number; active: boolean }[];
+    services: {
+        id: string;
+        slug: string;
+        publisher: string;
+        name: string;
+        description: string;
+        upstreamUrl: string;
+        secret: string;
+        creditsPerRun: number;
+        active: boolean;
+    }[];
     creditSpends: Map<string, number>;
     serviceRuns: { userId: string; serviceId: string; credits: number; status: string; createdAt: Date }[];
 }
@@ -73,9 +85,8 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             findUnique: vi.fn(async ({ where }: { where: { userId_extensionId_month: { userId: string; extensionId: string; month: string } } }) => {
                 const key = where.userId_extensionId_month;
                 return (
-                    stored.donations.find(
-                        (row) => row.userId === key.userId && row.extensionId === key.extensionId && row.month === key.month,
-                    ) ?? null
+                    stored.donations.find((row) => row.userId === key.userId && row.extensionId === key.extensionId && row.month === key.month) ??
+                    null
                 );
             }),
             create: vi.fn(async ({ data }: { data: Stored[`donations`][number] }) => {
@@ -93,12 +104,21 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             findMany: vi.fn(async ({ where }: { where: { month: string } }) => stored.donations.filter((row) => row.month === where.month)),
         },
         membership: {
-            findUnique: vi.fn(async ({ where }: { where: { userId: string } }) =>
-                stored.memberships.find((membership) => membership.userId === where.userId) ?? null,
+            findUnique: vi.fn(
+                async ({ where }: { where: { userId: string } }) =>
+                    stored.memberships.find((membership) => membership.userId === where.userId) ?? null,
             ),
             findMany: vi.fn(async () => stored.memberships),
             upsert: vi.fn(
-                async ({ where, create, update }: { where: { userId: string }; create: Stored[`memberships`][number]; update: Partial<Stored[`memberships`][number]> }) => {
+                async ({
+                    where,
+                    create,
+                    update,
+                }: {
+                    where: { userId: string };
+                    create: Stored[`memberships`][number];
+                    update: Partial<Stored[`memberships`][number]>;
+                }) => {
                     const existing = stored.memberships.find((membership) => membership.userId === where.userId);
                     if (existing === undefined) {
                         stored.memberships.push(create);
@@ -121,7 +141,9 @@ const fakePrisma = (seed?: Partial<Stored>) => {
         poolMonth: { findMany: vi.fn(async () => []) },
         publisherClaim: { findMany: vi.fn(async () => []) },
         service: {
-            findUnique: vi.fn(async ({ where }: { where: { slug: string } }) => stored.services.find((service) => service.slug === where.slug) ?? null),
+            findUnique: vi.fn(
+                async ({ where }: { where: { slug: string } }) => stored.services.find((service) => service.slug === where.slug) ?? null,
+            ),
             findMany: vi.fn(async () =>
                 stored.services
                     .filter((service) => service.active)
@@ -134,25 +156,37 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 return value === undefined ? null : { credits: value };
             }),
             upsert: vi.fn(
-                async ({ where, create, update }: { where: { userId_day: { userId: string; day: string } }; create: { credits: number }; update: { credits: { increment: number } } }) => {
+                async ({
+                    where,
+                    create,
+                    update,
+                }: {
+                    where: { userId_day: { userId: string; day: string } };
+                    create: { credits: number };
+                    update: { credits: { increment: number } };
+                }) => {
                     const key = `${where.userId_day.userId}:${where.userId_day.day}`;
                     const next = stored.creditSpends.has(key) ? (stored.creditSpends.get(key) ?? 0) + update.credits.increment : create.credits;
                     stored.creditSpends.set(key, next);
                     return { credits: next };
                 },
             ),
-            update: vi.fn(async ({ where, data }: { where: { userId_day: { userId: string; day: string } }; data: { credits: { decrement: number } } }) => {
-                const key = `${where.userId_day.userId}:${where.userId_day.day}`;
-                stored.creditSpends.set(key, (stored.creditSpends.get(key) ?? 0) - data.credits.decrement);
-                return { credits: stored.creditSpends.get(key) };
-            }),
-            updateMany: vi.fn(async ({ where, data }: { where: { userId: string; day: string; credits: { lt: number } }; data: { credits: number } }) => {
-                const key = `${where.userId}:${where.day}`;
-                if ((stored.creditSpends.get(key) ?? 0) < 0) {
-                    stored.creditSpends.set(key, data.credits);
-                }
-                return { count: 0 };
-            }),
+            update: vi.fn(
+                async ({ where, data }: { where: { userId_day: { userId: string; day: string } }; data: { credits: { decrement: number } } }) => {
+                    const key = `${where.userId_day.userId}:${where.userId_day.day}`;
+                    stored.creditSpends.set(key, (stored.creditSpends.get(key) ?? 0) - data.credits.decrement);
+                    return { credits: stored.creditSpends.get(key) };
+                },
+            ),
+            updateMany: vi.fn(
+                async ({ where, data }: { where: { userId: string; day: string; credits: { lt: number } }; data: { credits: number } }) => {
+                    const key = `${where.userId}:${where.day}`;
+                    if ((stored.creditSpends.get(key) ?? 0) < 0) {
+                        stored.creditSpends.set(key, data.credits);
+                    }
+                    return { count: 0 };
+                },
+            ),
         },
         serviceRun: {
             create: vi.fn(async ({ data }: { data: { userId: string; serviceId: string; credits: number; status: string } }) => {
@@ -165,7 +199,11 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                     .filter((run) => run.status === where.status && run.createdAt >= where.createdAt.gte)
                     .map((run) => {
                         const service = stored.services.find((candidate) => candidate.id === run.serviceId);
-                        return { credits: run.credits, createdAt: run.createdAt, service: { slug: service?.slug ?? `?`, publisher: service?.publisher ?? `?` } };
+                        return {
+                            credits: run.credits,
+                            createdAt: run.createdAt,
+                            service: { slug: service?.slug ?? `?`, publisher: service?.publisher ?? `?` },
+                        };
                     }),
             ),
         },
@@ -174,9 +212,18 @@ const fakePrisma = (seed?: Partial<Stored>) => {
 };
 
 const call = (config: Config, prisma: PrismaClient, path: string, init?: RequestInit) =>
-    createApp(config, prisma, logger).app.request(path, { ...init, headers: { "x-intentic-connect": `tok`, "content-type": `application/json`, ...init?.headers } });
+    createApp(config, prisma, logger).app.request(path, {
+        ...init,
+        headers: { "x-intentic-connect": `tok`, "content-type": `application/json`, ...init?.headers },
+    });
 
-const MEMBER_ROW = { userId: `user-1`, stripeCustomerId: `cus_1`, stripeSubscriptionId: `sub_1`, status: `active`, currentPeriodEnd: new Date(`2026-08-10T12:00:00Z`) };
+const MEMBER_ROW = {
+    userId: `user-1`,
+    stripeCustomerId: `cus_1`,
+    stripeSubscriptionId: `sub_1`,
+    status: `active`,
+    currentPeriodEnd: new Date(`2026-08-10T12:00:00Z`),
+};
 
 const donate = (config: Config, prisma: PrismaClient, extensionId: string, headers?: Record<string, string>) =>
     call(config, prisma, `/pool/donate`, { method: `POST`, body: JSON.stringify({ extensionId }), headers });
@@ -263,19 +310,22 @@ describe(`the creator pool`, () => {
                 poolCents: number;
                 earnedCents: number;
                 estimatedGrossCents: number;
+                estimatedInfraCents: number;
                 extensions: { extensionId: string; donors: number; credits: number; earningsCents: number }[];
             }[];
         };
         expect(body.creatorShare).toBe(0.9);
         expect(body.donationCredits).toBe(50);
         const current = body.months.find((entry) => entry.month === month);
-        // Ceiling: 1 member × $20 × 90% = 1800¢. Earned: 50 credits × (2000¢/3000) × 90% = 29¢ — the ledger
-        // states both, so nobody can read the ceiling as a promise.
-        expect(current).toMatchObject({ state: `open`, poolCents: 1800, earnedCents: 29 });
-        // The month in progress cannot know what it took, so its revenue is named as the estimate it is.
+        // Ceiling: 1 member × ($20 − $5 infrastructure) × 90% = 1350¢. Earned: 50 credits × (1500¢/3000) ×
+        // 90% = 22¢ — the ledger states both, so nobody can read the ceiling as a promise.
+        expect(current).toMatchObject({ state: `open`, poolCents: 1350, earnedCents: 22 });
+        // The month in progress cannot know what it took, so its revenue is named as the estimate it is —
+        // and what infrastructure took out of it is estimated on the same basis and published beside it.
         expect(current?.estimatedGrossCents).toBe(2000);
+        expect(current?.estimatedInfraCents).toBe(500);
         expect(current).not.toHaveProperty(`grossCents`);
-        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 29 }]);
+        expect(current?.extensions).toEqual([{ extensionId: `acme.research`, donors: 1, credits: 50, earningsCents: 22 }]);
     });
 
     it(`refuses an unsigned webhook and honours a signed subscription lapse`, async () => {
@@ -316,7 +366,11 @@ describe(`the creator pool`, () => {
         });
         const timestamp = Math.floor(NOW.getTime() / 1000);
         const signature = createHmac(`sha256`, `whsec_test`).update(`${timestamp}.${payload}`).digest(`hex`);
-        const response = await app.request(`/webhook`, { method: `POST`, body: payload, headers: { "stripe-signature": `t=${timestamp},v1=${signature}` } });
+        const response = await app.request(`/webhook`, {
+            method: `POST`,
+            body: payload,
+            headers: { "stripe-signature": `t=${timestamp},v1=${signature}` },
+        });
         expect(response.status).toBe(200);
         expect(stored.memberships).toEqual([
             { userId: `user-1`, stripeCustomerId: `cus_9`, stripeSubscriptionId: `sub_9`, status: `active`, currentPeriodEnd: NOW },
@@ -388,7 +442,10 @@ describe(`metered service runs`, () => {
         const response = await run(prisma, fetchFn as unknown as typeof fetch, requestBody);
         expect(response.status).toBe(200);
         expect(response.headers.get(`content-type`)).toBe(`application/x-ndjson`);
-        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        const lines = (await response.text())
+            .trim()
+            .split(`\n`)
+            .map((line) => JSON.parse(line) as object);
         expect(lines).toEqual([
             { event: `status`, text: `digging` },
             { event: `result`, data: { answer: 42 } },
@@ -408,7 +465,10 @@ describe(`metered service runs`, () => {
         // The status line already crossed the wire before the stream died, so the refusal cannot be an HTTP
         // status — the refund is the trailer's word, and the ledger agrees.
         expect(response.status).toBe(200);
-        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        const lines = (await response.text())
+            .trim()
+            .split(`\n`)
+            .map((line) => JSON.parse(line) as object);
         expect(lines).toEqual([
             { event: `status`, text: `digging` },
             { event: `receipt`, outcome: `refunded`, credits: 40 },
@@ -422,7 +482,10 @@ describe(`metered service runs`, () => {
         const fetchFn = vi.fn(async () => new Response(`{"answer":42}`, { status: 200, headers: { "content-type": `application/json` } }));
         const response = await run(prisma, fetchFn as unknown as typeof fetch);
         expect(response.status).toBe(200);
-        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        const lines = (await response.text())
+            .trim()
+            .split(`\n`)
+            .map((line) => JSON.parse(line) as object);
         expect(lines).toEqual([{ event: `receipt`, outcome: `refunded`, credits: 40 }]);
         expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(0);
         expect(stored.serviceRuns).toMatchObject([{ status: `refunded` }]);
@@ -434,7 +497,10 @@ describe(`metered service runs`, () => {
             async () => new Response(`{"event":"result","data":7}`, { status: 200, headers: { "content-type": `application/x-ndjson` } }),
         );
         const response = await run(prisma, fetchFn as unknown as typeof fetch);
-        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as object);
+        const lines = (await response.text())
+            .trim()
+            .split(`\n`)
+            .map((line) => JSON.parse(line) as object);
         expect(lines).toEqual([
             { event: `result`, data: 7 },
             { event: `receipt`, outcome: `ok`, credits: 40, remaining: 60 },
@@ -518,7 +584,10 @@ describe(`metered service runs`, () => {
             headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
         });
         expect(response.status).toBe(200);
-        const lines = (await response.text()).trim().split(`\n`).map((line) => JSON.parse(line) as { event: string; data?: { demo?: boolean; query?: string }; remaining?: number });
+        const lines = (await response.text())
+            .trim()
+            .split(`\n`)
+            .map((line) => JSON.parse(line) as { event: string; data?: { demo?: boolean; query?: string }; remaining?: number });
         // The demo streams like any provider: status lines, its result, then the platform's receipt.
         expect(lines.map((line) => line.event)).toEqual([`status`, `status`, `result`, `receipt`]);
         expect(lines[2]?.data?.demo).toBe(true);
@@ -545,14 +614,23 @@ describe(`metered service runs`, () => {
         const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/transparency`);
         const body = (await response.json()) as {
             serviceShare: number;
-            months: { month: string; poolCents: number; earnedCents: number; services: { slug: string; runs: number; credits: number; earningsCents: number }[]; extensions: { extensionId: string; earningsCents: number }[] }[];
+            months: {
+                month: string;
+                poolCents: number;
+                earnedCents: number;
+                services: { slug: string; runs: number; credits: number; earningsCents: number }[];
+                extensions: { extensionId: string; earningsCents: number }[];
+            }[];
         };
         expect(body.serviceShare).toBe(0.9);
         const current = body.months.find((entry) => entry.month === month);
-        // Credit value = 2000¢/3000 = 2/3¢. Service: 40 ok credits × 2/3¢ × 90% = 24¢ (the refunded run
-        // earns nothing). Donation: 50 credits × 2/3¢ × 90% = 29¢. Both on the same ledger, side by side.
-        expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 24 }]);
-        expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 29 }]);
-        expect(current).toMatchObject({ poolCents: 1800, earnedCents: 53 });
+        /* One member's $20, less the $5 of infrastructure, is a $15 pool — so credit value = 1500¢/3000 = ½¢
+         * and the ceiling is 90% of 1500¢. Service: 40 ok credits × ½¢ × 90% = 18¢ (the refunded run earns
+         * nothing). Donation: 50 credits × ½¢ × 90% = 22.5 → 22¢. Both on the same ledger, side by side. */
+        expect(current?.services).toEqual([{ slug: `acme-research`, publisher: `acme`, runs: 1, credits: 40, earningsCents: 18 }]);
+        expect(current?.extensions).toMatchObject([{ extensionId: `acme.research`, earningsCents: 22 }]);
+        // The infrastructure line is published, not merely subtracted: the pool figure beside it is checkable
+        // only if a reader can see what came off the gross first.
+        expect(current).toMatchObject({ estimatedGrossCents: 2000, estimatedInfraCents: 500, poolCents: 1350, earnedCents: 40 });
     });
 });

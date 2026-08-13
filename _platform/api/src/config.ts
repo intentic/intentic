@@ -117,17 +117,41 @@ const configSchema = z.object({
             // The image a hosted machine boots — the same public sandbox image every other lane runs.
             // HOSTED_IMAGE.
             image: z.string().default(`ghcr.io/intentic/sandbox:stable`),
-            // The starter machine: shared CPUs + memory in MB (Fly guest shape), disk in GB. HOSTED_CPUS,
-            // HOSTED_MEMORY_MB, HOSTED_VOLUME_GB.
-            cpus: z.coerce.number().int().positive().default(4),
-            memoryMb: z.coerce.number().int().positive().default(8192),
-            volumeGb: z.coerce.number().int().positive().default(20),
+            /* The starter machine: shared CPUs + memory in MB (Fly guest shape), disk in GB. HOSTED_CPUS,
+             * HOSTED_MEMORY_MB, HOSTED_VOLUME_GB.
+             *
+             * Sized against `monthlyHours` below, not against what a workstation wants. Once awake time is
+             * capped the guest shape stops being the bill's driver — a capped month on this shape costs less
+             * than the DISK did on the 4×/8 GB/20 GB box this replaces — so the money saved by halving memory
+             * again buys nothing and costs the thing people actually notice: 4 GB survives an install and a
+             * build on a real repository, 2 GB meets the OOM killer and reads as "intentic is broken". */
+            cpus: z.coerce.number().int().positive().default(2),
+            memoryMb: z.coerce.number().int().positive().default(4096),
+            volumeGb: z.coerce.number().int().positive().default(10),
             // Hosted sandboxes per user. The free promise is ONE instant box each; more is a product decision,
             // not a config bump someone makes casually. HOSTED_PER_USER.
             perUser: z.coerce.number().int().positive().default(1),
             // Minutes of nobody-watching-nothing-running before the daemon exits and the machine stops —
             // rides into the box as IDLE_STOP_MINUTES. 0 disables (always-on). HOSTED_IDLE_STOP_MINUTES.
             idleStopMinutes: z.coerce.number().int().nonnegative().default(20),
+            /* THE FREE LANE'S CEILING: awake hours per calendar month for an owner WITHOUT a membership.
+             * Members are unmetered, so this is the one number that decides what the free machine costs and
+             * the one place the hosted lane asks anybody to upgrade.
+             *
+             * Charged only while the machine is actually awake — it sleeps after `idleStopMinutes`, so
+             * thinking time and a closed laptop cost nothing — and enforced at WAKE, never mid-session:
+             * running out means the next visit offers the upgrade, not that the box dies under someone's
+             * hands. 0 disables the ceiling (self-hosters metering nothing). HOSTED_MONTHLY_HOURS. */
+            monthlyHours: z.coerce.number().int().nonnegative().default(40),
+            /* THE FREE LANE'S EXPIRY, in days since the machine was last woken. A hosted disk bills every day
+             * it exists, so a machine nobody has opened since spring is the free tier's largest cost and its
+             * least useful one. Non-members only; a member's machine is never collected.
+             *
+             * `idleWarnDays` sends one email first — the machine is about to go, opening it is the whole
+             * remedy — because this deletes a disk somebody may still want. Either at 0 disables the sweep.
+             * HOSTED_IDLE_DAYS, HOSTED_IDLE_WARN_DAYS. */
+            idleDays: z.coerce.number().int().nonnegative().default(21),
+            idleWarnDays: z.coerce.number().int().nonnegative().default(14),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL — intentic's OWN model keys, and the SECOND documented exception to the secret-free
@@ -176,10 +200,22 @@ const configSchema = z.object({
             // The membership's monthly price in USD as the transparency page states it — display + pool math
             // only; what Stripe actually charges is the Price above. POOL_PRICE_USD.
             priceUsd: z.coerce.number().nonnegative().default(20),
+            /* WHAT THE MEMBERSHIP BUYS BEFORE IT BUYS ANYTHING FOR A CREATOR: the per-member monthly cost of
+             * running the platform — a member's hosted machine and disk above all — taken off the top, so the
+             * pool is what is left rather than the whole ticket.
+             *
+             * Without this the shares are levied on gross, and a member who spends their whole allowance
+             * leaves the platform ~$2 of $20 while costing it more than that to host: the more someone uses
+             * the product, the worse it does, which is not a pricing bug that can be grown out of. Taking it
+             * off the top instead means the published share stays LITERALLY true of the pool it names — the
+             * alternative, quietly paying creators 90% of something called $20 that isn't, is the kind of
+             * asterisk this whole model exists not to have. The transparency report states it as its own
+             * line for the same reason. 0 restores the old gross-share behaviour. POOL_INFRA_USD. */
+            infraUsd: z.coerce.number().nonnegative().default(5),
             // The fraction of a spent credit's VALUE its recipient earns — a donated credit pays the
             // extension's creator this share, a consumed credit pays the service's provider this share
-            // (credit value is derived and published: priceUsd / (30 × dailyCredits)). The published number
-            // the whole model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
+            // (credit value is derived and published: (priceUsd − infraUsd) / (30 × dailyCredits)). The
+            // published number the whole model stands on — change it loudly or not at all. POOL_CREATOR_SHARE.
             creatorShare: z.coerce.number().min(0).max(1).default(0.9),
             // A member's daily credit allowance, reset at UTC midnight like the trial. The membership's cost
             // ceiling: 1000/day bounds what a member can spend — on service runs and on install donations —

@@ -21,6 +21,7 @@ import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, stopMachine } from "./hosted/fly.js";
 import { destroyHosted, hostedEnabled, provisionHosted, wakeHosted } from "./hosted/hosted.js";
+import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ensureZrokAccount, zrokEnabled } from "./zrok-provision.js";
@@ -286,7 +287,17 @@ export const sandboxRoutes = {
             return { enabled: false, remaining: 0 };
         }
         const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
-        return { enabled: true, remaining: Math.max(0, context.config.hosted.perUser - used) };
+        // The hour budget rides along so the lane's card can state the ceiling BEFORE anyone spends it, and
+        // is omitted entirely for the unmetered (members, ceiling-less platforms) — a limit that does not
+        // apply to you should not appear on your screen at all.
+        const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
+        return {
+            enabled: true,
+            remaining: Math.max(0, context.config.hosted.perUser - used),
+            ...(budget.metered
+                ? { hours: { allowance: Math.round(budget.allowanceMinutes / 60), remaining: Math.floor(budget.remainingMinutes / 60) } }
+                : {}),
+        };
     }),
     /* Give an existing sandbox a machine on intentic's own provider — the lane with no command, no code, no
      * paste. Shaped after cloudProvision on purpose: the ROW is created the ordinary way on arrival, and
@@ -317,6 +328,14 @@ export const sandboxRoutes = {
         if (used >= context.config.hosted.perUser) {
             throw new ORPCError(`BAD_REQUEST`, {
                 message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`} — remove one to have this sandbox hosted instead`,
+            });
+        }
+        // A new machine boots the moment it is created, so the hour ceiling applies here as much as at wake —
+        // otherwise releasing a spent machine and provisioning another would be the way around it.
+        const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
+        if (budget.metered && budget.remainingMinutes === 0) {
+            throw new ORPCError(`PAYMENT_REQUIRED`, {
+                message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month — a membership lifts the limit, or run it on a machine of your own and it never applies`,
             });
         }
         if (!zrokEnabled(context.config)) {
@@ -408,16 +427,32 @@ export const sandboxRoutes = {
         await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
             context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
         );
+        // The stop above just ended any open stretch, so settling now is exact rather than lazy. The budget
+        // gate applies here too — a restart is a start, and a lane that refused to wake but agreed to restart
+        // would be a limit with a button next to it.
+        await settleHostedStretch(context.prisma, context.config, context.logger, hosted, sandbox.ownerId);
+        const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
+        if (budget.metered && budget.remainingMinutes === 0) {
+            throw new ORPCError(`PAYMENT_REQUIRED`, {
+                message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month — a membership lifts the limit, or run it on a machine of your own and it never applies`,
+            });
+        }
         try {
             await wakeHosted(context.config, hosted);
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }
+        await openHostedStretch(context.prisma, hosted.id);
         return { ok: true };
     }),
-    // Power a hosted sandbox's machine back on — the idle-stop's other half, called by any browser (owner or
-    // accepted member) that finds the daemon unreachable. Idempotent: waking a running machine is a no-op, so
-    // the browser needs no machine-state oracle, it just wakes and keeps probing the daemon like always.
+    /* Power a hosted sandbox's machine back on — the idle-stop's other half, called by any browser (owner or
+     * accepted member) that finds the daemon unreachable. Idempotent: waking a running machine is a no-op, so
+     * the browser needs no machine-state oracle, it just wakes and keeps probing the daemon like always.
+     *
+     * ALSO THE FREE LANE'S ONLY GATE. The previous stretch is settled first (this is the moment Fly can tell
+     * us when the machine actually stopped), then the owner's remaining hours decide whether this wake
+     * happens at all. Everything is billed to the OWNER, never to the caller — a guest on a shared sandbox
+     * spends the owner's month, which is the only reading under which sharing cannot launder machine time. */
     wake: os.sandbox.wake.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await context.prisma.sandbox.findFirst({
@@ -430,11 +465,23 @@ export const sandboxRoutes = {
         if (!sandbox || sandbox.hosted === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
         }
+        await settleHostedStretch(context.prisma, context.config, context.logger, sandbox.hosted, sandbox.ownerId);
+        const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
+        if (budget.metered && budget.remainingMinutes === 0) {
+            // Addressed to the person reading it, which on a shared sandbox may not be the account that spent
+            // the hours — hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
+            // the membership without string-matching a message.
+            throw new ORPCError(`PAYMENT_REQUIRED`, {
+                message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up for this month — a membership lifts the limit, or run it on a machine of your own and it never applies`,
+            });
+        }
         try {
             await wakeHosted(context.config, sandbox.hosted);
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `waking the machine failed` });
         }
+        // Only after a start that actually succeeded: a wake that failed cost nothing and must not be billed.
+        await openHostedStretch(context.prisma, sandbox.hosted.id);
         return { ok: true };
     }),
     /* Mint the short-lived setup code the install one-liner carries instead of raw tokens. One lane now: the

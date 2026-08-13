@@ -75,7 +75,13 @@ const glyph = (paths: string, x: number, y: number, size: number) =>
 
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
-const label = `One membership funds a daily allowance of ${n(pool.dailyCredits)} credits. It can be spent two ways: installing a premium extension, which donates ${n(
+// The spoken version of the diagram. It names the infrastructure step the drawing leaves implicit — the arrow
+// from the membership to the allowance is where $5 of the $20 stops being the pool's — because a screen reader
+// gets this sentence INSTEAD of the shape, not alongside it, and the shape's own claims are about a credit's
+// value rather than the membership's.
+const label = `A $${pool.priceUsd} membership funds a daily allowance of ${n(pool.dailyCredits)} credits, backed by the $${
+    pool.priceUsd - pool.infraUsd
+} of it left after the $${pool.infraUsd} that runs the platform. The allowance can be spent two ways: installing a premium extension, which donates ${n(
     pool.donationCredits,
 )} credits once, or running a premium service, which costs the price that service publishes, per run. Either way ${creatorSharePct}% of the credit's value reaches its creator.`;
 ---

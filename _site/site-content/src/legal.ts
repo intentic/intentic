@@ -150,7 +150,7 @@ export const privacyDoc: LegalDoc = {
                 "Credit ledger, donations and service-run records: 13 months.",
                 "Account, sandbox and membership records: until you delete your account.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
-                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it — they expire on their own retention schedule, currently five days — so erasure completes within that window rather than instantly. We hold no other copy.",
+                "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account — and, for a machine without a membership, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it — they expire on their own retention schedule, currently five days — so erasure completes within that window rather than instantly. We hold no other copy.",
             ],
         },
         {
@@ -206,12 +206,14 @@ export const termsDoc: LegalDoc = {
             heading: "Sandboxes we host",
             paragraphs: [
                 "You may have one hosted sandbox per account. We create it at Fly.io on a machine of the size published in the app, with a disk of the published size, and we pay the bill. It stops on its own after a period of inactivity and starts again when you return.",
-                "Three things about it you should plan around, because they are not incidental limitations but the terms on which it is free:",
+                "Without a membership it also has an allowance of running time each calendar month, of the number of hours published in the app. Only time the machine is actually running counts against it; while it is asleep, nothing does. When the allowance is used up we will not start the machine again until the next month begins, and we will say so rather than failing quietly. We never stop a machine that is already running to enforce this. A membership removes the allowance entirely.",
+                "Four things about it you should plan around, because they are not incidental limitations but the terms on which it is free:",
             ],
             list: [
                 "There is no availability commitment. It is provided on a best-effort basis, it will sometimes be unavailable, and we owe you no service level, credit or refund for that.",
                 "We run no backup service. Our infrastructure provider takes automatic daily snapshots of the disk and keeps them for a few days, but that is their disaster-recovery mechanism rather than a feature of ours: we offer no way to browse or restore one, and we will not restore one on request. Do not plan around it.",
                 "Your own copy is the one that counts. Turn on desktop sync and the workspace mirrors continuously to a folder on your own computer, or keep your work in a git remote — the workspace is where work happens, not where it is kept.",
+                "It does not wait for you indefinitely. Without a membership, a machine you have not opened for the period published in the app is destroyed along with its disk, after we email you a warning first. Opening it stops that. A member's machine is not destroyed for going unused.",
                 "It is not for production. Do not run anything on it that other people depend on, and do not store the only copy of anything on it.",
             ],
         },
@@ -219,7 +221,7 @@ export const termsDoc: LegalDoc = {
             heading: "What we may do to a hosted sandbox",
             paragraphs: [
                 "We can create, stop, start and destroy the machine. We cannot read what is on it, and we will not build ourselves a way to.",
-                "We may stop or destroy a hosted machine: at your request; when you delete the sandbox or your account; immediately and without notice if it breaches our Acceptable Use Policy or if leaving it running would expose us or others to harm or legal liability; after telling you first, if we discontinue the hosted offering or if the machine has gone unused for 60 days.",
+                "We may stop or destroy a hosted machine: at your request; when you delete the sandbox or your account; immediately and without notice if it breaches our Acceptable Use Policy or if leaving it running would expose us or others to harm or legal liability; after telling you first, if we discontinue the hosted offering or if a machine without a membership has gone unopened for the period published in the app. We may also decline to start a machine whose free monthly running-time allowance is used up, until that allowance resets.",
                 "Because we cannot inspect the machine, stopping or destroying it is the whole of our response to an abuse report — we cannot investigate what is inside, and we will not pretend to. Where we destroy a machine and the circumstances allow it, we will give you a chance to retrieve your data first; where they do not, we will not.",
             ],
         },
@@ -380,7 +382,10 @@ export const dpaDoc: LegalDoc = {
                 rows: [
                     ["Subject matter", "Hosting a development workspace on a virtual machine and disk we provide"],
                     ["Duration", "For as long as the hosted sandbox exists; it ends when you delete the sandbox or your account"],
-                    ["Nature and purpose", "Storage, and the operations needed to run a machine: creating, stopping, starting, restoring and destroying it"],
+                    [
+                        "Nature and purpose",
+                        "Storage, and the operations needed to run a machine: creating, stopping, starting, restoring and destroying it",
+                    ],
                     ["Type of personal data", "Whatever you place in the workspace — we neither select nor inspect it, so you determine it entirely"],
                     ["Categories of data subjects", "Determined by you; typically your own users, customers, employees or test data"],
                     ["Our role", "Processor, acting only on your instructions"],
