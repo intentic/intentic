@@ -74,6 +74,40 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
     return { text: resolved, used, unknown };
 };
 
+/* THE SURFACE FORMS ONE VALUE CAN WEAR by the time it reaches a reader — what masking has to match, and the
+ * half a raw-value comparison silently misses.
+ *
+ * Masking is exact-substring by design (it cannot misfire the way a name heuristic does), and that is only
+ * complete if every form the value ARRIVES in is registered. Two transformations happen to credentials
+ * constantly and neither leaves the raw string behind:
+ *
+ *   · JSON escaping — a secret with a quote, a backslash or a newline inside a serialized payload (a verbose
+ *     HTTP dump, a config the agent printed, an MCP tool's own encoding of its result) appears as `pa\"ss`,
+ *     which shares no run of text with `pa"ss`. This form also folds in the multi-line case: an ssh key
+ *     serialized onto one line is contiguous again.
+ *   · Percent encoding — a secret in a URL query or a form body. Every symbol in a generated password
+ *     (`@`, `#`, `$`, `%`, `^`, `+`, `=`) encodes, so this is the ordinary case for those, not an exotic one.
+ *
+ * Alphanumeric tokens encode to themselves and add nothing; only genuinely different forms are kept. */
+export const surfaceForms = (value: string): readonly string[] => {
+    const forms = [value];
+    // JSON.stringify of a string is always `"…"`; the slice is its escaped body.
+    const jsonEscaped = JSON.stringify(value).slice(1, -1);
+    if (jsonEscaped !== value) {
+        forms.push(jsonEscaped);
+    }
+    try {
+        const encoded = encodeURIComponent(value);
+        if (encoded !== value) {
+            forms.push(encoded);
+        }
+    } catch {
+        // A lone surrogate makes encodeURIComponent throw. A value that cannot be URL-encoded cannot reach a
+        // reader in that form either, so there is nothing to register.
+    }
+    return forms;
+};
+
 // Whether a text carries any reference-shaped token at all — the cheap pre-check callers use to skip the
 // registry read on the overwhelmingly common command that names no secret.
 export const hasSecretReferences = (text: string): boolean => {

@@ -1,5 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { type NamedSecret, secretReference } from "../secrets/secret-registry.js";
+import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secret-registry.js";
 
 /* MASKING WHAT THE AGENT READS, not only what it runs.
  *
@@ -42,24 +42,34 @@ export interface MaskTarget {
     readonly replacement: string;
 }
 
-/* Each whole value is masked to its `{{secret:name}}` reference. A credential that SPANS lines (an ssh
- * private key, a WireGuard conf) rarely survives as one run of text inside a JSON tool result, so its lines
- * are registered as their own targets too — but to the anonymous mask, not the reference: a reference stands
- * for the WHOLE value, and stamping it on every line would make the masked block resolve to N copies of the
- * key. Longest first, so a value that contains another is masked whole rather than leaving its tail behind. */
+/* Each whole value is masked to its `{{secret:name}}` reference — in every SURFACE FORM it can arrive in
+ * (secret-registry.ts surfaceForms), not only the raw one. A value that reached the reader JSON-escaped or
+ * percent-encoded shares no run of text with the string this sandbox stores, so a raw-only comparison hands
+ * it over intact; that is the ordinary shape of a credential inside a serialized payload or a URL.
+ *
+ * A credential that SPANS lines (an ssh private key, a WireGuard conf) may also arrive re-wrapped, with no
+ * form of the whole surviving as one run — so its lines are registered as their own targets too, but to the
+ * anonymous mask, not the reference: a reference stands for the WHOLE value, and stamping it on every line
+ * would make the masked block resolve to N copies of the key.
+ *
+ * Longest first, so a value that contains another is masked whole rather than leaving its tail behind. */
 export const maskTargets = (secrets: readonly NamedSecret[]): readonly MaskTarget[] => {
     const byTarget = new Map<string, MaskTarget>();
+    const add = (target: string, replacement: string): void => {
+        const trimmed = target.trim();
+        if (trimmed.length >= MIN_LENGTH && !byTarget.has(trimmed)) {
+            byTarget.set(trimmed, { target: trimmed, replacement });
+        }
+    };
     for (const { name, value } of secrets) {
-        const whole = value.trim();
-        if (whole.length >= MIN_LENGTH && !byTarget.has(whole)) {
-            byTarget.set(whole, { target: whole, replacement: secretReference(name) });
+        // Forms are derived from the TRIMMED value, which is the only form ever masked: encoding the padding
+        // of a stored-with-whitespace value would register a target nothing can produce.
+        for (const form of surfaceForms(value.trim())) {
+            add(form, secretReference(name));
         }
         if (value.includes("\n")) {
             for (const line of value.split("\n")) {
-                const trimmed = line.trim();
-                if (trimmed.length >= MIN_LENGTH && !byTarget.has(trimmed)) {
-                    byTarget.set(trimmed, { target: trimmed, replacement: LINE_MASK });
-                }
+                add(line, LINE_MASK);
             }
         }
     }

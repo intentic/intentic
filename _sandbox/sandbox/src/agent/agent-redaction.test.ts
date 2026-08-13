@@ -1,6 +1,6 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
-import type { NamedSecret } from "../secrets/secret-registry.js";
+import { type NamedSecret, surfaceForms } from "../secrets/secret-registry.js";
 import { maskDeep, maskTargets, redactionHooks } from "./agent-redaction.js";
 
 /* THE PROMISE THIS KEEPS: a credential this sandbox stores never reaches the model, no matter which tool went
@@ -86,6 +86,57 @@ test("a multi-line credential appearing WHOLE masks to its reference", async () 
     const key = "line-one-aaaaaaaaaa\nline-two-bbbbbbbbbb";
     const result = `conf:\n${key}\nend`;
     expect(shown(await fire(held(named("vpnbox/config", key)), "Bash", result), result)).toBe("conf:\n{{secret:vpnbox/config}}\nend");
+});
+
+/* THE FORM A CREDENTIAL ARRIVES IN is not the form this sandbox stores it in, and exact-substring masking is
+ * only complete once every form is registered. Both cases below leaked the value in full against raw-only
+ * targets, and both are ordinary rather than exotic: a serialized payload escapes quotes and backslashes, and
+ * a URL encodes every symbol in a generated password. */
+test("a JSON-escaped credential is masked — the form a serialized payload carries", async () => {
+    const password = 'pa"ss\\word-1234567890';
+    const escaped = JSON.stringify(password).slice(1, -1);
+    const result = `{"password":"${escaped}"}`;
+    expect(shown(await fire(held(named("reddit/password", password)), "Bash", result), result)).toBe('{"password":"{{secret:reddit/password}}"}');
+});
+
+test("a percent-encoded credential is masked — the form a URL carries", async () => {
+    const password = "Xk4!mQ2pRt7@wZ9aBc1_";
+    const result = `curl "https://api.example.com/login?p=${encodeURIComponent(password)}"`;
+    expect(shown(await fire(held(named("reddit/password", password)), "Bash", result), result)).toBe(
+        'curl "https://api.example.com/login?p={{secret:reddit/password}}"',
+    );
+});
+
+test("a multi-line key serialized onto one line is masked whole, by its escaped form", async () => {
+    // The escaped form makes a value that only ever appeared across lines contiguous again, so it masks to the
+    // reference rather than to the per-line blanks.
+    const key = "-----BEGIN KEY-----\nMIIEvQIBADANBgkqhkiG9w0\n-----END KEY-----";
+    const result = `{"key":"${JSON.stringify(key).slice(1, -1)}"}`;
+    expect(shown(await fire(held(named("host/sshKey", key)), "Read", result), result)).toBe('{"key":"{{secret:host/sshKey}}"}');
+});
+
+test("an alphanumeric token registers no extra forms — encoding it changes nothing", () => {
+    // The common case must not pay three targets for one secret.
+    expect(maskTargets([named("a/token", "cf_live_0011223344ff")])).toEqual([{ target: "cf_live_0011223344ff", replacement: "{{secret:a/token}}" }]);
+});
+
+test("the terminal lane derives the same surface forms as this one", async () => {
+    /* The two masking lanes each carry their own copy — the terminal filter runs as a standalone script with
+     * no daemon behind it — so the thing worth pinning is that they agree. A form one lane registers and the
+     * other does not is a credential that is masked when fetched with Read and shown when fetched with `cat`,
+     * which is exactly the seam this whole mechanism exists to close. */
+    // Imported by URL rather than by literal path: the filter is plain JS with no declarations, and a literal
+    // specifier would make the type checker demand them for a module this test only calls one function of.
+    const cleaners = new URL("../../bin/cleaners.mjs", import.meta.url).href;
+    const { surfaceForms: terminalForms } = (await import(cleaners)) as { surfaceForms: (value: string) => string[] };
+    for (const value of [
+        'pa"ss\\word-1234567890',
+        "Xk4!mQ2pRt7@wZ9aBc1_",
+        "cf_live_0011223344ff",
+        "-----BEGIN KEY-----\nMIIEvQ\n-----END KEY-----",
+    ]) {
+        expect(terminalForms(value)).toEqual([...surfaceForms(value)]);
+    }
 });
 
 test("a value containing another is masked whole, not left with its tail showing", async () => {

@@ -358,6 +358,28 @@ const readIfChanged = (path, name) => {
     }
 };
 
+/* EVERY FORM ONE VALUE CAN ARRIVE IN — a mirror of src/secrets/secret-registry.ts surfaceForms, which is
+ * where the reasoning lives. Duplicated rather than imported for the same reason the naming below is: this
+ * filter runs as a standalone script with no daemon and no build step behind it. A secret that reached the
+ * reader JSON-escaped or percent-encoded shares no run of text with the stored string, so registering only
+ * the raw one hands it over intact. */
+export const surfaceForms = (value) => {
+    const forms = [value];
+    const jsonEscaped = JSON.stringify(value).slice(1, -1);
+    if (jsonEscaped !== value) {
+        forms.push(jsonEscaped);
+    }
+    try {
+        const encoded = encodeURIComponent(value);
+        if (encoded !== value) {
+            forms.push(encoded);
+        }
+    } catch {
+        // A lone surrogate makes encodeURIComponent throw; such a value cannot reach a reader encoded either.
+    }
+    return forms;
+};
+
 // Every {target, replacement} worth masking out of one of the three files. The vault is {id: {field: value}}
 // (named `<id>/<field>`); .env is KEY=value lines and .secrets.json a flat {KEY: value} (named KEY). Read for
 // VALUES only — a key name is not a secret and masking it would blank prose.
@@ -388,17 +410,21 @@ const harvest = (text, path, name) => {
         }
     }
     const byTarget = new Map();
+    const add = (target, replacement) => {
+        const trimmed = target.trim();
+        if (trimmed.length >= SECRET_VALUE_MIN && !byTarget.has(trimmed)) {
+            byTarget.set(trimmed, { target: trimmed, replacement });
+        }
+    };
     for (const [reference, value] of named) {
-        const whole = value.trim();
-        if (whole.length >= SECRET_VALUE_MIN && !byTarget.has(whole)) {
-            byTarget.set(whole, { target: whole, replacement: `{{secret:${reference}}}` });
+        // Trimmed first: the padding of a stored-with-whitespace value is never masked, so encoding it would
+        // register a target nothing can produce.
+        for (const form of surfaceForms(value.trim())) {
+            add(form, `{{secret:${reference}}}`);
         }
         if (value.includes("\n")) {
             for (const line of value.split("\n")) {
-                const trimmed = line.trim();
-                if (trimmed.length >= SECRET_VALUE_MIN && !byTarget.has(trimmed)) {
-                    byTarget.set(trimmed, { target: trimmed, replacement: "***" });
-                }
+                add(line, "***");
             }
         }
     }
