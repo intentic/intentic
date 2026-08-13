@@ -273,7 +273,7 @@ const advancedSummary = computed(() => {
          field draws a box to say it. The measure is capped because the pane is draggable — an unbounded prompt
          at 700px runs past where the eye finds the start of the next line. -->
     <div class="h-full cursor-text overflow-y-auto px-4 py-5">
-        <div class="flex max-w-[68ch] flex-col text-sm">
+        <div class="flex max-w-read flex-col text-sm">
             <!-- The step's name, at the size a heading is. Delete sits beside it rather than in a toolbar: it
                  is the one action that belongs to this step and to nothing else on the page. -->
             <div class="-mx-2 flex items-start gap-1">

@@ -333,11 +333,11 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                          the whole view exists for, and it was set two steps down and dimmed, as if it were the
                          chrome around the answer rather than the answer. The agent's note stays quiet: that IS
                          the annotation. -->
-                    <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-4 flex max-w-[68ch] flex-col gap-1.5">
+                    <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-4 flex max-w-read flex-col gap-1.5">
                         <li
                             v-for="(criterion, index) in outcomes[story.slug]?.result?.criteria ?? []"
                             :key="index"
-                            class="flex items-start gap-2 text-sm leading-[1.7]"
+                            class="flex items-start gap-2 text-sm leading-relaxed"
                         >
                             <Icon
                                 :name="criterion.verdict === `pass` ? `check-circle` : criterion.verdict === `fail` ? `exclamation-circle` : `circle`"

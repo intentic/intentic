@@ -91,7 +91,7 @@ const logText = computed(() => {
 </script>
 
 <template>
-    <div class="group border-l-[3px] transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]">
+    <div class="group border-l-4 transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/2` : `hover:bg-content/2`]">
         <div class="flex w-full items-center gap-3 px-4 py-3">
             <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="toggle">
                 <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />

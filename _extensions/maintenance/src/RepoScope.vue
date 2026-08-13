@@ -101,7 +101,7 @@ const summary = computed(() => {
     <!-- A WASH, not an outlined box. It sits between the page title and a column of bordered row groups, and an
          outline at that position reads as a third panel competing with both — the same call Documentation's
          strips make, for the same reason. -->
-    <div v-if="measured.length > 0 || summary !== ``" class="flex flex-col gap-1.5 rounded-lg bg-content/[0.04] px-3 py-2">
+    <div v-if="measured.length > 0 || summary !== ``" class="flex flex-col gap-1.5 rounded-lg bg-content/4 px-3 py-2">
         <div v-if="measured.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             <span class="text-2xs text-subtle">measured</span>
             <div v-for="entry in measured" :key="entry.probe.id" class="flex items-center gap-1.5">
@@ -111,7 +111,7 @@ const summary = computed(() => {
                     :class="entry.probe.state === `failed` ? `text-warning` : `text-subtle`"
                 />
                 <span class="shrink-0 text-2xs text-content">{{ entry.title }}</span>
-                <span class="max-w-[36ch] truncate text-2xs text-subtle" :title="entry.note">{{ entry.note }}</span>
+                <span class="max-w-read-xs truncate text-2xs text-subtle" :title="entry.note">{{ entry.note }}</span>
                 <button
                     type="button"
                     class="shrink-0 cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"
@@ -150,7 +150,7 @@ const summary = computed(() => {
                 >
                     <template v-if="block.groups.length > 0">
                         <p class="text-2xs text-content">{{ block.label }}</p>
-                        <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 @md:grid-cols-[max-content_1fr]">
+                        <dl class="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 @md:grid-cols-facts">
                             <template v-for="group in block.groups" :key="group.cause">
                                 <dt class="text-2xs text-subtle">{{ group.cause }}</dt>
                                 <dd class="text-2xs text-subtle/70">{{ group.names.join(` · `) }}</dd>

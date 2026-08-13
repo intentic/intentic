@@ -236,7 +236,7 @@ watch(tail, () => {
              `:scroll="false"` — the tail pane below drives its own scroll (it jumps to the newest lines on every
              refresh), and a panel scroller wrapped around a scroller gives you two scrollbars and neither works. -->
         <div v-if="selected !== undefined" ref="reader" class="sticky bottom-0 z-10 bg-canvas py-3">
-            <Panel :scroll="false" class="max-h-[45dvh] border-line-strong shadow-lg md:max-h-[55dvh]">
+            <Panel :scroll="false" class="max-h-panel-sm border-line-strong shadow-lg md:max-h-panel">
                 <template #title
                     ><span class="font-mono text-xs">{{ selected }}</span></template
                 >

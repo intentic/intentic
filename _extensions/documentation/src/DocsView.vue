@@ -192,7 +192,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
 
                  Both strips here are a WASH, not an outlined box: they sit between a page title and a document,
                  and an outline at that position reads as a third panel competing with both. -->
-            <div v-if="activeRun !== undefined" class="flex items-center gap-3 rounded-lg bg-content/[0.04] px-3 py-2 text-xs">
+            <div v-if="activeRun !== undefined" class="flex items-center gap-3 rounded-lg bg-content/4 px-3 py-2 text-xs">
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
                     {{ activeRun.mapDone ? `Documenting packages` : `Reading the repository and drawing its map` }}
@@ -214,7 +214,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
 
             <!-- The draft banner. Publishing is a deliberate act with a named consequence, so the button says what
                  it will do and the count of unrelated changes is on the confirmation, not hidden. -->
-            <div v-if="source === `staged` && hasStaged" class="flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/12 px-3 py-2 text-xs">
+            <div v-if="source === `staged` && hasStaged" class="flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/10 px-3 py-2 text-xs">
                 <Icon name="file-edit" class="shrink-0 text-link" />
                 <span class="text-content">This is a draft. Nothing is in the repository until you publish it.</span>
                 <div class="ml-auto flex items-center gap-2">

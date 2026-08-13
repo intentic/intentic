@@ -83,7 +83,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
             <span class="flex min-w-0 flex-1 flex-col gap-0.5 @lg:flex-row @lg:items-center @lg:gap-3">
                 <span class="@lg:shrink-0 flex min-w-0 items-center gap-2">
                     <span class="min-w-0 truncate text-sm text-content">{{ verdict.chore.title }}</span>
-                    <span v-if="showRepo" class="shrink-0 rounded bg-content/[0.06] px-1.5 py-0.5 text-2xs text-subtle">
+                    <span v-if="showRepo" class="shrink-0 rounded bg-content/5 px-1.5 py-0.5 text-2xs text-subtle">
                         {{ repoName(verdict.repo) }}
                     </span>
                 </span>
@@ -94,13 +94,13 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
         </button>
 
         <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 @lg:px-6">
-            <p class="max-w-[70ch] text-xs text-subtle">{{ verdict.chore.description }}</p>
+            <p class="max-w-read text-xs text-subtle">{{ verdict.chore.description }}</p>
 
             <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
                  the chore is due or clear. Without it a row is asking to be taken on trust; with it, the reader
                  can disagree with the rule rather than only with the number — which is the disagreement worth
                  having, and the one that improves the book. -->
-            <p class="mt-3 max-w-[70ch] text-2xs text-subtle">
+            <p class="mt-3 max-w-read text-2xs text-subtle">
                 <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
             </p>
 
@@ -120,7 +120,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     open the transcript
                 </button>
             </div>
-            <p v-if="run?.result?.summary" class="mt-1 max-w-[70ch] text-xs text-content">{{ run.result.summary }}</p>
+            <p v-if="run?.result?.summary" class="mt-1 max-w-read text-xs text-content">{{ run.result.summary }}</p>
 
             <div class="mt-4 flex flex-wrap items-center gap-2">
                 <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing

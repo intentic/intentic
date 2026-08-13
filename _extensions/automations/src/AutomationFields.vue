@@ -729,7 +729,7 @@ const setProvider = (provider: string): void => {
                             @click="choose"
                         >
                             <Icon name="sparkles" class="shrink-0 text-subtle" />
-                            <span class="max-w-[16rem] truncate">{{ runsOn.label }}</span>
+                            <span class="max-w-64 truncate">{{ runsOn.label }}</span>
                             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
                         </button>
                         <!-- The pinned account, named by the shell (its sign-in identity — the label is "Claude"

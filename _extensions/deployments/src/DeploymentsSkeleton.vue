@@ -34,7 +34,7 @@ const ROWS = [{ name: `w-32` }, { name: `w-44` }, { name: `w-24` }, { name: `w-4
             </div>
 
             <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
-                <div v-for="(row, index) in ROWS" :key="index" class="flex w-full items-center gap-3 border-l-[3px] border-line px-4 py-3">
+                <div v-for="(row, index) in ROWS" :key="index" class="flex w-full items-center gap-3 border-l-4 border-line px-4 py-3">
                     <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
 
                     <!-- h-5 / h-4 with an h-0.5 gap is exactly what the real name (text-sm) and status line

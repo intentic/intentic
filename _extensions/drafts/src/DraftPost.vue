@@ -45,7 +45,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 </script>
 
 <template>
-    <div :class="tone === `full` ? `max-w-[64ch]` : `max-w-[80ch]`">
+    <div :class="tone === `full` ? `max-w-read` : `max-w-read-lg`">
         <!-- Quiet sections show the opening of the post, not the post: the decision there is already made, so
              a couple of lines are enough to tell one row from another. Still legible text — this is the line
              that had faded to 11px of the page's faintest grey in the posted list. -->
@@ -62,7 +62,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                 <p
                     v-for="(paragraph, index) in paragraphs"
                     :key="index"
-                    class="whitespace-pre-wrap wrap-break-word text-[0.9375rem] leading-[1.7] text-content"
+                    class="whitespace-pre-wrap wrap-break-word text-base leading-relaxed text-content"
                     :class="index > 0 ? `mt-3` : ``"
                 >
                     {{ paragraph }}

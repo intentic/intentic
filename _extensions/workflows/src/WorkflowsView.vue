@@ -487,7 +487,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 :count="loops.length"
                 caption="Pick one in a chat — what you type there is what it works towards."
             >
-                <Row v-for="design in loops" :key="design.id" icon="repeat" density="compact" class="group/loop">
+                <Row v-for="design in loops" :key="design.id" icon="repeat" density="compact" class="group/item">
                     <template #title>{{ design.name }}</template>
                     <template #description>
                         Ends on {{ loopDesignLine(design) }}{{ design.context === `continue` ? ` · keeps context` : `` }}
@@ -508,7 +508,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         </Button>
                         <button
                             type="button"
-                            :class="cmp.iconButton('md:opacity-0 md:group-hover/loop:opacity-100 md:focus-visible:opacity-100')"
+                            :class="cmp.iconButton('md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
                             :aria-label="`Edit ${design.name}`"
                             v-tooltip.top="`Edit`"
                             @click="editLoop(design)"
@@ -517,7 +517,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         </button>
                         <button
                             type="button"
-                            :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/loop:opacity-100 md:focus-visible:opacity-100')"
+                            :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
                             :aria-label="`Delete ${design.name}`"
                             v-tooltip.top="`Delete`"
                             @click="confirmRemoveLoopId = design.id"
@@ -634,7 +634,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
         <!-- The gate badge's panel: the same <GateAccess> the designer shows, so the two copies of the one
              string a pipeline is taught cannot disagree. -->
         <AnchoredOverlay v-model="gateOpen" :anchor="gateShown?.anchor" side="bottom" cross="start">
-            <div class="w-[28rem] max-w-[92vw] p-3">
+            <div class="w-pop p-3">
                 <GateAccess v-if="gateShown" :workflow="gateShown.workflow" />
             </div>
         </AnchoredOverlay>

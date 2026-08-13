@@ -233,7 +233,7 @@ onBeforeUnmount(() => void flush());
                      nothing in them stands out — least of all the row carrying a failed verdict. `muted` is the step
                      past this one and it is the wrong one: that is the weight of a FACT ABOUT a row, and a list
                      whose subject is set in it looks switched off. -->
-                <span v-else class="min-w-0 flex-1 truncate text-sm text-content/85 group-hover:text-content">{{ story.title }}</span>
+                <span v-else class="min-w-0 flex-1 truncate text-sm text-content/80 group-hover:text-content">{{ story.title }}</span>
                 <!-- THE VERDICT FIRST, THEN THE COUNT — and the count in a fixed cell, the runs list's own
                      trailing-column recipe. Ordered the other way round they both moved: the count sat at the
                      right edge on a story nothing had tested and 70px in on one that had, so a list where most
@@ -254,7 +254,7 @@ onBeforeUnmount(() => void flush());
                  font-size, so a cap set here while the div still inherited the 16px root made 68ch mean 686px —
                  101 characters of 14px prose, past the ~90 where the eye stops finding the next line. Set in the
                  prose's own size it means what it says. -->
-            <div class="flex max-w-[68ch] flex-col px-2 text-sm">
+            <div class="flex max-w-read flex-col px-2 text-sm">
                 <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium` — the same
                      size as the collapsed row it replaces, so opening a story changed nothing about how it read. -->
                 <ProseField
@@ -281,7 +281,7 @@ onBeforeUnmount(() => void flush());
                         <!-- The same line box as the text it numbers — same size, same leading, same padding — so
                              the digit sits ON the first baseline. Smaller, it rendered as a superscript. It
                              recedes by colour instead, which costs no alignment. -->
-                        <span class="w-5 shrink-0 py-1 text-right text-sm leading-[1.7] tabular-nums text-subtle">{{ index + 1 }}</span>
+                        <span class="w-5 shrink-0 py-1 text-right text-sm leading-relaxed tabular-nums text-subtle">{{ index + 1 }}</span>
                         <!-- Bound through the loop's own value rather than as `v-model="criteria[index]"`: an
                              indexed read is `string | undefined`, and the field's model is a string. -->
                         <ProseField

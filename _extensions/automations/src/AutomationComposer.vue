@@ -205,7 +205,7 @@ const finish = (id: string): void => {
                      is what the inline gallery used for the same reason. -->
                 <div
                     v-if="recipesOpen"
-                    class="absolute right-0 top-full z-20 mt-1.5 flex w-[min(46rem,calc(100vw-6rem))] flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
+                    class="absolute right-0 top-full z-20 mt-1.5 flex w-pop-lg flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
                     @keydown.escape.stop.prevent="recipesOpen = false"
                 >
                     <input
@@ -215,7 +215,7 @@ const finish = (id: string): void => {
                         :class="cmp.input('px-2 py-1 text-xs')"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
-                    <div class="scrollbar-thin @container flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+                    <div class="scrollbar-thin @container flex max-h-panel flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
                             <span :class="cmp.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
                             <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">

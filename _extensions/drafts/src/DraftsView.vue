@@ -337,16 +337,16 @@ const noteOf = (draft: DraftSummary): string | undefined => (postsATitle(draft.p
  * indent is the mark plus <Row>'s own gap (28 + 10, and 22 + 10 on the compact tiers), so it tracks the header
  * beside it rather than being a number that happens to look right today. Only from `sm` up: on a phone those
  * 38px are a tenth of the line, and an aligned column costs more than a hanging one is worth. */
-const POST_COLUMN = `sm:pl-[2.375rem]`;
+const POST_COLUMN = `sm:pl-10`;
 const QUIET_COLUMN = `sm:pl-8`;
 
 // The row's footer: facts about the post, wrapping on a narrow screen, quieter than the post itself, and held
 // to the post's own measure so the note at its end truncates against the column rather than the window.
-const FACTS = `mt-3 flex max-w-[64ch] flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`;
+const FACTS = `mt-3 flex max-w-read flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`;
 
 // And the note under it: two lines at most, the rest on hover. Below the post rather than above it, because it
 // is the agent talking ABOUT the post — a reader who mistakes it for the post has read the wrong thing.
-const NOTE = `mt-1.5 line-clamp-2 max-w-[64ch] text-2xs leading-relaxed text-subtle`;
+const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtle`;
 
 /* THE PENCIL SITS WITH THE OTHER ACTIONS, which is the fix for where it used to be. It began life as a muted
  * phrase in the row's footer, on the reasoning that rewriting a post is rarer than approving one and should not
@@ -460,7 +460,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <DraftPost v-else :draft="draft" />
                                     <!-- The reason, in the row. It used to live in a tooltip on the status badge — the
                                          one state whose entire content is an explanation, hidden behind a hover. -->
-                                    <p :class="cmp.alertDanger(`mt-3 max-w-[64ch]`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
+                                    <p :class="cmp.alertDanger(`mt-3 max-w-read`)">{{ draft.error ?? `The publisher did not say why.` }}</p>
                                     <div :class="FACTS">
                                         <span v-if="lengthOf(draft)" :class="isOver(draft) ? `text-danger` : ``">{{ lengthOf(draft) }}</span>
                                     </div>

@@ -608,7 +608,7 @@ const runPending = async (): Promise<void> => {
                     `${undo.action.value?.description ?? ''} — moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
                 "
             >
-                <Icon name="undo" class="mr-0.5 text-[0.6rem]" />{{ undo.label.value }}
+                <Icon name="undo" class="mr-0.5 text-3xs" />{{ undo.label.value }}
             </button>
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
@@ -704,17 +704,17 @@ const runPending = async (): Promise<void> => {
                          can act on, and the name (`stash@{0}`) is also the handle its verbs take. -->
                     <span
                         v-if="stashBySha.get(commit.sha)"
-                        class="shrink-0 rounded bg-info/15 px-1 font-mono text-[0.6rem] text-info"
+                        class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
                         v-tooltip.top="'Work set aside without committing it'"
                         >{{ stashBySha.get(commit.sha)!.ref }}</span
                     >
-                    <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-[0.6rem] font-semibold text-link">HEAD</span>
+                    <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">HEAD</span>
                     <!-- Right-clickable: a pill is the thing you want to act on, so it answers the gesture
                          rather than sending you to the commit's menu to find a verb about a ref. -->
                     <span
                         v-for="ref in commit.refs.slice(0, 3)"
                         :key="ref"
-                        class="shrink-0 cursor-context-menu rounded px-1 text-[0.6rem]"
+                        class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
                         :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
                         v-tooltip.top="`Right-click for ${refBadge(ref).label} actions`"
                         @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
@@ -765,7 +765,7 @@ const runPending = async (): Promise<void> => {
                     <template v-else>
                         <span class="hidden shrink-0 truncate text-2xs text-subtle @2xl:block @2xl:max-w-32">{{ commit.author }}</span>
                         <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
-                        <span class="shrink-0 font-mono text-[0.65rem] text-subtle">{{ commit.short }}</span>
+                        <span class="shrink-0 font-mono text-3xs text-subtle">{{ commit.short }}</span>
                     </template>
                 </button>
 
@@ -775,12 +775,12 @@ const runPending = async (): Promise<void> => {
                     <!-- Row zero has no sha, no parents, no author and no date, so it opens straight into its
                          file list. Everything it WOULD say lives in the Changes panel, which is where it can
                          also be acted on. -->
-                    <dl v-if="commit.sha !== WORKING" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-2xs">
+                    <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
                         <dt class="text-subtle">Commit</dt>
                         <dd class="flex items-center gap-1 font-mono text-muted">
                             {{ commit.sha }}
                             <button type="button" class="text-subtle hover:text-content" @click="copy(commit.sha)" v-tooltip.top="'Copy full SHA'">
-                                <Icon name="copy" class="text-[0.6rem]" />
+                                <Icon name="copy" class="text-3xs" />
                             </button>
                         </dd>
                         <template v-if="commit.parents.length > 0">
@@ -816,9 +816,9 @@ const runPending = async (): Promise<void> => {
                                     >
                                         <Icon
                                             :name="row.expanded ? 'chevron-down' : 'chevron-right'"
-                                            class="w-2.5 shrink-0 text-[0.55rem] text-subtle"
+                                            class="w-2.5 shrink-0 text-3xs text-subtle"
                                         />
-                                        <Icon name="folder" class="shrink-0 text-[0.7rem] text-subtle" />
+                                        <Icon name="folder" class="shrink-0 text-2xs text-subtle" />
                                         <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
                                     </button>
                                     <button
@@ -903,7 +903,7 @@ const runPending = async (): Promise<void> => {
                 </div>
 
                 <p v-if="ACTIONS[pending.kind].danger" class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A restore point is saved first, so this is reversible from Restore points.
+                    <Icon name="shield" class="mr-0.5 text-3xs" />A restore point is saved first, so this is reversible from Restore points.
                 </p>
                 <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
             </template>

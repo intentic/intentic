@@ -154,7 +154,7 @@ const openSibling = (name: string): void => {
         <!-- Bounded, so the note scrolls inside its own frame and the picker above it stays put. Unbounded, the
              hub page would scroll them together and reaching the end of a long note would take the way to the
              next one off screen with it. -->
-        <div class="flex max-h-[72dvh] min-h-0 flex-col">
+        <div class="flex max-h-panel-lg min-h-0 flex-col">
             <p v-if="files.length === 0 && isLoading" class="text-sm text-muted">Loading…</p>
 
             <div v-else-if="files.length === 0" :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">

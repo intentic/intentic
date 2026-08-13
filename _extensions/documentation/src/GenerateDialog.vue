@@ -70,7 +70,7 @@ const start = (): void => {
 
             <!-- A wash instead of a frame with hairlines between every row: the checkboxes already give the list
                  its structure, and 55 of them inside a ruled box is a spreadsheet. -->
-            <div class="max-h-72 overflow-y-auto rounded-lg bg-content/[0.035] p-1">
+            <div class="max-h-72 overflow-y-auto rounded-lg bg-content/4 p-1">
                 <label
                     v-for="dir in packages"
                     :key="dir"

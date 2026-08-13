@@ -413,7 +413,7 @@ watch(
             @click="togglePlay"
         >
             <span
-                class="flex h-16 w-16 items-center justify-center rounded-full bg-black/55 text-2xl text-white backdrop-blur transition-transform hover:scale-105"
+                class="flex h-16 w-16 items-center justify-center rounded-full bg-black/50 text-2xl text-white backdrop-blur transition-transform hover:scale-105"
             >
                 <Icon name="play" />
             </span>
@@ -451,7 +451,7 @@ watch(
                 @pointercancel="onTimelineUp"
                 @pointerleave="hoverTime = undefined"
             >
-                <div class="relative h-1 rounded-full transition-[height] group-hover/bar:h-1.5" :class="hasVideo ? `bg-white/25` : `bg-overlay`">
+                <div class="relative h-1 rounded-full transition-[height,background-color] group-hover/bar:h-1.5" :class="hasVideo ? `bg-white/25` : `bg-overlay`">
                     <div
                         v-for="(range, index) in buffered"
                         :key="index"
@@ -494,7 +494,7 @@ watch(
                 </button>
 
                 <!-- Volume: the slider widens on hover so the row stays compact until it is wanted. -->
-                <div class="group/vol flex items-center">
+                <div class="group/bar flex items-center">
                     <button type="button" class="media-btn" :aria-label="muted ? `Unmute` : `Mute`" v-tooltip.top="'Mute (M)'" @click="toggleMute">
                         <Icon :name="muted || volume === 0 ? `volume-off` : `volume-up`" />
                     </button>
@@ -505,7 +505,7 @@ watch(
                         step="0.01"
                         :value="muted ? 0 : volume"
                         aria-label="Volume"
-                        class="media-range w-0 opacity-0 transition-all group-hover/vol:w-16 group-hover/vol:opacity-100 focus:w-16 focus:opacity-100"
+                        class="media-range w-0 opacity-0 transition-all group-hover/bar:w-16 group-hover/bar:opacity-100 focus:w-16 focus:opacity-100"
                         @input="setVolume(Number(($event.target as HTMLInputElement).value))"
                     />
                 </div>

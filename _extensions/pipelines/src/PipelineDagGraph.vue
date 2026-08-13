@@ -109,7 +109,7 @@ const caption = computed(() => {
                 <!-- The card the trace is drawn FROM. Without it the gesture only ever says what a job is
                      related to, never which job you are on — every neighbour lights, and the one under the
                      pointer looks like all of them. DagGraph rings a PINNED card; this covers the hover. -->
-                <span v-if="node.id === focus" class="pointer-events-none absolute inset-0 rounded-[5px] ring-1 ring-inset ring-link"></span>
+                <span v-if="node.id === focus" class="pointer-events-none absolute inset-0 rounded-sm ring-1 ring-inset ring-link"></span>
                 <!-- The slot fills the card, so this is where the graph learns what the pointer is on. -->
                 <span
                     class="flex h-full items-center gap-2 pl-3 pr-2.5"
@@ -145,7 +145,7 @@ const caption = computed(() => {
 
             <template #overlay="{ fitAll }">
                 <!-- Teaches the gesture while nothing is traced, then gets out of the way and reports it. -->
-                <div class="pointer-events-none absolute left-3 top-2.5 max-w-[75%] truncate text-2xs">
+                <div class="pointer-events-none absolute left-3 top-2.5 max-w-3/4 truncate text-2xs">
                     <template v-if="caption">
                         <span class="font-medium text-content">{{ caption.name }}</span>
                         <span v-if="caption.stage" class="text-subtle"> · {{ caption.stage }}</span>

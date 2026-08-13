@@ -244,7 +244,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                      it says what was checked rather than congratulating anyone. -->
                 <div v-else-if="groups.length === 0" class="flex flex-col items-start gap-2 py-10">
                     <p class="text-sm text-content">Nothing needs attention.</p>
-                    <p class="max-w-[60ch] text-xs text-subtle">
+                    <p class="max-w-read-sm text-xs text-subtle">
                         Every chore in the book is either clear or waiting on a measurement. Switch to Everything to see what was checked, when, and
                         what could not be measured at all.
                     </p>

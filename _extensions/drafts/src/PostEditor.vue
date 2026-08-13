@@ -52,7 +52,7 @@ onBeforeUnmount(() => emit(`touch`));
 </script>
 
 <template>
-    <div class="-mx-2 -my-1 max-w-[calc(64ch+1rem)]">
+    <div class="-mx-2 -my-1 max-w-read">
         <ProseField
             v-if="headlined"
             v-model="title"

@@ -219,7 +219,7 @@ const startVault = async (): Promise<void> => {
             <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
         </div>
 
-        <div v-else class="flex max-h-[72dvh] min-h-0 gap-3" :class="stacked ? `flex-col` : undefined">
+        <div v-else class="flex max-h-panel-lg min-h-0 gap-3" :class="stacked ? `flex-col` : undefined">
             <!-- In a narrow body the index folds above the note instead of beside it: a 16rem column next to a
                  note leaves neither of them readable, and hiding the note behind a list would put two clicks
                  between the reader and the thing they came for. -->

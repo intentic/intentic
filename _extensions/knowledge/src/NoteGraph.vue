@@ -73,7 +73,7 @@ const openSelected = (): void => {
          rectangle. It sits inside a scrolling panel body, which cannot give it one, so the height is stated
          here: enough for three ranks of cards, and bounded by the viewport so a short window still shows the
          note's own frame around it. -->
-    <div class="relative flex h-[min(26rem,50dvh)] w-full flex-col">
+    <div class="relative flex h-figure w-full flex-col">
         <p v-if="error" class="px-4 py-3 text-xs text-danger">{{ error }}</p>
         <p v-else-if="isLoading" class="px-4 py-6 text-xs text-subtle">Drawing the map…</p>
         <div v-else-if="nodes.length <= 1" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">

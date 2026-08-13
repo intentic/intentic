@@ -94,11 +94,11 @@ const confirmDelete = async (name: string): Promise<void> => {
             aria-label="Branch"
             @click="toggle"
         >
-            <Icon name="code" class="shrink-0 text-[0.6rem]" />
+            <Icon name="code" class="shrink-0 text-3xs" />
             <span class="truncate">{{ current?.name ?? "detached" }}</span>
             <span v-if="current && current.behind > 0" class="shrink-0 text-muted">↓{{ current.behind }}</span>
             <span v-if="current && current.ahead > 0" class="shrink-0 text-muted">↑{{ current.ahead }}</span>
-            <Icon name="chevron-down" class="shrink-0 text-[0.5rem]" />
+            <Icon name="chevron-down" class="shrink-0 text-4xs" />
         </button>
 
         <Popover ref="popover">
@@ -117,7 +117,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                          places, so they share a row: the name once, and the remotes it also lives on as small
                          pills after it. A row with no local branch is one somebody else pushed. -->
                     <template v-for="branch in shown" :key="branch.name">
-                        <div class="group/branch flex items-center gap-1 rounded transition-colors hover:bg-overlay">
+                        <div class="group/row flex items-center gap-1 rounded transition-colors hover:bg-overlay">
                             <button
                                 type="button"
                                 class="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left"
@@ -126,7 +126,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             >
                                 <Icon
                                     :name="branch.local?.current ? 'check' : branch.local ? 'code' : 'cloud'"
-                                    class="shrink-0 text-[0.6rem]"
+                                    class="shrink-0 text-3xs"
                                     :class="branch.local?.current ? 'text-success' : 'text-subtle'"
                                 />
                                 <span class="min-w-0 flex-1 truncate text-xs" :class="branch.local?.current ? 'text-content' : 'text-muted'">{{
@@ -137,7 +137,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <span
                                     v-for="entry in branch.remotes"
                                     :key="entry.name"
-                                    class="shrink-0 rounded bg-overlay px-1 text-[0.6rem] text-subtle"
+                                    class="shrink-0 rounded bg-overlay px-1 text-3xs text-subtle"
                                     v-tooltip.top="entry.name"
                                     >{{ entry.remote }}</span
                                 >
@@ -156,7 +156,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             <button
                                 v-if="branch.local && !branch.local.current"
                                 type="button"
-                                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-danger focus-visible:opacity-100 group-hover/branch:opacity-100"
+                                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-danger focus-visible:opacity-100 group-hover/row:opacity-100"
                                 :class="{ 'text-danger opacity-100': armedDelete === branch.name }"
                                 :disabled="busy"
                                 @click="askDelete(branch.name)"

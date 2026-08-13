@@ -79,7 +79,7 @@ const setDailyMax = (raw: string): void => {
 </script>
 
 <template>
-    <div class="flex w-[26rem] max-w-[90vw] flex-col gap-3 p-1">
+    <div class="flex w-pop-sm flex-col gap-3 p-1">
         <p class="text-2xs text-subtle">
             A gate gives this workflow a webhook a CI pipeline can call: the pipeline POSTs what it knows, the whole design runs, and
             the reply is pass, fail or blocked — read off one declared field, never scraped out of prose.

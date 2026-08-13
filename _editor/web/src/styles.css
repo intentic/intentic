@@ -13,6 +13,11 @@
 @import "../../../_editor/ui/src/styles/shared/index.css";
 @import "../../../_editor/ui/src/styles/core/index.css";
 
+/* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used
+ * to be, below. It lives in the design system because that is whose surface it is, and is imported here
+ * because only the app that loads extension bundles has to pay for it. */
+@import "../../../_editor/ui/src/styles/extension-surface.css";
+
 /* Rendered markdown, then the conversation column that is its biggest consumer. Both are unlayered on
  * purpose (they must beat the `components` layer), and both load here rather than from a component's
  * <style> because neither is scoped to one component: prose.css styles v-html output shared by the chat,
@@ -33,12 +38,13 @@
 @source "./**/*.{ts,html,vue}";
 @source "../index.html";
 
-/* Same reason for the compiled-in builtin extensions (extension-host/builtins.ts statically imports them, so
- * their views ARE this bundle's views) — without this, every class a builtin authors that no app file happens
- * to use is silently dropped, and the view renders as a near-miss of what its author wrote. A git-installed
- * extension is genuinely different: nothing scans a bundle we don't build, which is why the kit's primitives
- * carry their own styling (see Page.vue's width tiers). */
-@source "../../../_extensions/*/src/**/*.{ts,vue}";
+/* EXTENSIONS ARE NOT SCANNED, and that absence is deliberate. There used to be a
+ * `@source "../../../_extensions/*/src/**"` here, which worked only because the first-party extensions happen
+ * to be built by this repo. Nothing scans an extension that lives in its own repository — a bundle we do not
+ * build cannot be read for class names — so a screen styled by being scanned is a screen that can never leave.
+ * The classes an extension may use are DECLARED instead, by extension-surface.css imported above. Everything
+ * that reaches an extension's markup comes from that promise or from the kit's own components, both of which
+ * travel with the host. */
 
 /* Mobile base: kill the gray tap flash (active: classes provide press feedback instead) and the
  * browser's own pull-to-refresh / scroll chaining on the app shell — inner scrollers opt back in

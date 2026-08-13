@@ -1,0 +1,216 @@
+/* THE CLASS SURFACE CORE PROMISES TO EXTENSIONS — layout, typography, colour and state, declared rather than
+ * inferred.
+ *
+ * Every other stylesheet in this app gets its utilities by being READ: Tailwind scans the app's source, the
+ * kit's source, and (until this file existed) each first-party extension's source, and emits only the classes
+ * it finds. That works exactly as long as the thing being styled is part of this build. An extension that
+ * lives in its own repository is not: nothing scans a bundle we do not build, so every class it authors that
+ * no app file happens to use is silently dropped and its screen renders as a near-miss of what its author
+ * wrote — right words, wrong everything else.
+ *
+ * So the classes an extension may use cannot be a side effect of who is using them. They are a PROMISE, made
+ * here, generated unconditionally, and versioned with the host. `@source inline(…)` is how a promise is
+ * spelled: these utilities exist whether or not a single line of markup asks for one.
+ *
+ * WHAT THIS IS NOT. It is not "the classes the first-party extensions happen to use today" — that list would
+ * make an outside author's first unusual spacing step a bug report, and being blocked on somebody else's
+ * release is the whole thing this file exists to end. Each family below is declared WHOLE wherever a family
+ * is cheap to emit: the entire spacing scale, every step of the type scale, every colour role.
+ *
+ * WHERE IT IS NOT WHOLE, AND WHY. A variant multiplies whatever it is applied to, and two multiplications
+ * compose: every state × every colour × every opacity step is ten thousand rules and two and a half megabytes,
+ * for a matrix whose far corners (`odd:border-info/35`) nobody will ever write. So the base families are
+ * generous and the MULTIPLIED ones are aimed — the states that carry meaning in this design system, over the
+ * properties that actually change under them. extension-surface.test.ts prints the bill, so a future widening
+ * is a decision made against a number rather than a shrug.
+ *
+ * WHAT IT DELIBERATELY CANNOT COVER: arbitrary values (`w-[37px]`, `max-w-[64ch]`, `text-[0.65rem]`). They are
+ * infinite by construction, so no enumeration reaches them and no promise can include them. That is not a gap
+ * to be filled but the line itself — the surface is the SCALE, and anything off the scale is either a case the
+ * kit should own as a component (the width tiers on <Page> are exactly this) or a rule in the extension's own
+ * stylesheet, which an extension ships anyway. The same goes for the invented half of `group/<name>`: the
+ * names below are slots on offer, because a name an author makes up is not something this file can know.
+ *
+ * Imported by the EXTENSION HOST (the web app's styles.css) rather than by the design system's own index.css:
+ * the declaration belongs to the design system, but only the app that loads extension bundles has to pay for
+ * it. */
+
+/* ── Spacing ─────────────────────────────────────────────────────────────────────────────────────────────
+ * The whole scale, on every box property that takes it. `auto` and `px` ride along; combinations that are not
+ * real utilities (`p-auto`) are simply never emitted. */
+@source inline("{p,px,py,pt,pr,pb,pl,m,mx,my,mt,mr,mb,ml}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96,px,auto}");
+@source inline("{gap,gap-x,gap-y,space-x,space-y}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,px}");
+@source inline("-{m,mx,my,mt,mr,mb,ml}-{0.5,1,1.5,2,2.5,3,3.5,4,5,6,8,10,12,16,px}");
+@source inline("indent-{0,1,2,3,4,6,8}");
+
+/* ── Sizing ──────────────────────────────────────────────────────────────────────────────────────────────
+ * The spacing scale again, plus the fractions, the keywords and the named maxima a reading column wants. */
+@source inline("{w,h,size,min-w,min-h,max-w,max-h}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96,px,auto,full,fit,min,max,screen,dvh,dvw,lh}");
+@source inline("{w,h,max-w,max-h,min-w,min-h}-{1/2,1/3,2/3,1/4,3/4,1/5,2/5,3/5,4/5,1/6,5/6,1/12,5/12,7/12,11/12}");
+@source inline("max-w-{3xs,2xs,xs,sm,md,lg,xl,2xl,3xl,4xl,5xl,6xl,7xl,none,prose}");
+/* The named reading column and panel ceiling (tokens.css) — the two families that were being spelled as
+ * one-off arbitrary values, and the reason they are tokens now: a scale can be promised, a one-off cannot. */
+@source inline("{w,max-w,min-w}-{read-xs,read-sm,read,read-lg,pop-sm,pop,pop-lg}");
+@source inline("{sm:,md:,@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:,}{h,max-h,min-h}-{panel-sm,panel,panel-lg,figure}");
+@source inline("{sm:,md:,@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:,}grid-cols-facts");
+/* The one transition an extension cannot spell on the scale: a bar that grows on hover must animate its
+ * height and nothing else, and `transition-all` on the same element would drag its colour change along. */
+@source inline("transition-[height] transition-[height,background-color] transition-[width] transition-[max-height]");
+@source inline("{basis,grow,shrink}-{0,1}");
+@source inline("{grow,shrink,basis-auto,basis-full,aspect-auto,aspect-square,aspect-video}");
+
+/* ── Typography ──────────────────────────────────────────────────────────────────────────────────────────
+ * Every step of the scale (`2xs` is this app's own, below Tailwind's `xs`), both families, the weights, the
+ * leading and tracking ramps, and the text shaping a dense list needs. */
+@source inline("text-{4xs,3xs,2xs,xs,sm,base,lg,xl,2xl,3xl,4xl,5xl}");
+@source inline("font-{sans,mono,thin,light,normal,medium,semibold,bold,extrabold}");
+@source inline("leading-{none,tight,snug,normal,relaxed,loose,3,4,5,6,7,8,9,10}");
+@source inline("tracking-{tighter,tight,normal,wide,wider,widest}");
+@source inline("text-{left,center,right,justify,start,end}");
+@source inline("{uppercase,lowercase,capitalize,normal-case}");
+@source inline("{truncate,text-ellipsis,text-clip,tabular-nums,ordinal,proportional-nums,slashed-zero}");
+@source inline("line-clamp-{1,2,3,4,5,6,none}");
+@source inline("whitespace-{normal,nowrap,pre,pre-line,pre-wrap,break-spaces}");
+@source inline("{break-normal,break-words,break-all,break-keep,wrap-break-word,wrap-anywhere,hyphens-auto,hyphens-none}");
+@source inline("{underline,overline,line-through,no-underline}");
+@source inline("underline-offset-{0,1,2,4,8,auto}");
+@source inline("decoration-{solid,dashed,dotted,double,wavy,none}");
+@source inline("{align-baseline,align-top,align-middle,align-bottom,align-text-top,align-text-bottom}");
+@source inline("{list-none,list-disc,list-decimal,list-inside,list-outside}");
+
+/* ── Colour ──────────────────────────────────────────────────────────────────────────────────────────────
+ * The ROLES, not the palette — an extension names what a colour is FOR (danger, muted, card) and the theme
+ * decides what that is in light and dark. Every colour property at full strength.
+ *
+ * THE TINT LADDER IS ASYMMETRIC, on purpose. A translucent BACKGROUND is this design system's basic move — a
+ * row lifting five percent off the canvas, a danger strip at ten — so `bg` gets the whole ladder in fives,
+ * which is the granularity somebody reaches for when they are matching a mock. Translucent text, borders and
+ * rings are real but rarer, and each rule is a two-hundred-byte `color-mix`, so those get tens. An author who
+ * wants `text-content/85` rounds to /80 or /90; an author who wants `bg-content/[0.035]` was never on a scale
+ * to begin with and belongs in their own stylesheet. */
+@source inline("{text,bg,border,ring,outline,decoration,divide,caret,accent,fill,stroke,from,via,to}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,white,black,transparent,current,inherit}");
+@source inline("{border,divide}-{x,y,t,r,b,l,s,e}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,white,black,transparent}");
+@source inline("bg-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,white,black}/{2,3,4,5,10,15,20,25,30,40,50,60,70,80,90,95}");
+@source inline("{text,border,ring}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,white,black}/{10,20,30,40,50,60,70,80,90}");
+@source inline("border-{t,l}-{line,line-strong,subtle,danger,warning,success,info}/{30,40,50,60}");
+@source inline("divide-{line,line-strong,subtle,content}/{20,30,40,50,60,70}");
+@source inline("{from,via,to}-{black,white,canvas,transparent}/{0,50,75,90,95}");
+@source inline("{text,bg,border,ring,from,via,to}-primary-{50,100,200,300,400,500,600,700,800,900,950}");
+@source inline("{text,bg,border,ring}-primary-{500,600}/{10,15,20,30,40,50,70}");
+@source inline("bg-{gradient,linear}-to-{t,tr,r,br,b,bl,l,tl}");
+@source inline("bg-{none,cover,contain,center,top,bottom,left,right,no-repeat}");
+
+/* ── Layout ──────────────────────────────────────────────────────────────────────────────────────────────*/
+@source inline("{block,inline-block,inline,flex,inline-flex,grid,inline-grid,table,table-row,table-cell,contents,hidden,flow-root,list-item}");
+@source inline("flex-{row,row-reverse,col,col-reverse,wrap,wrap-reverse,nowrap,1,auto,initial,none}");
+@source inline("items-{start,end,center,baseline,stretch}");
+@source inline("justify-{start,end,center,between,around,evenly,stretch}");
+@source inline("{content,self,place-items,place-content,place-self,justify-items,justify-self}-{start,end,center,between,around,evenly,stretch,baseline,auto}");
+@source inline("grid-{cols,rows}-{1,2,3,4,5,6,7,8,9,10,11,12,none,subgrid}");
+@source inline("{col,row}-span-{1,2,3,4,5,6,7,8,9,10,11,12,full}");
+@source inline("{col,row}-{start,end}-{1,2,3,4,5,6,7,8,9,10,11,12,13,auto}");
+@source inline("{auto-cols,auto-rows}-{auto,min,max,fr}");
+@source inline("grid-flow-{row,col,dense,row-dense,col-dense}");
+@source inline("order-{first,last,none,1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{static,fixed,absolute,relative,sticky}");
+@source inline("{inset,inset-x,inset-y,top,right,bottom,left,start,end}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,8,10,12,16,20,24,px,auto,full,1/2,1/3,2/3,1/4,3/4}");
+@source inline("-{inset,inset-x,inset-y,top,right,bottom,left}-{0.5,1,1.5,2,2.5,3,4,5,6,8,px,full,1/2}");
+@source inline("z-{0,1,10,20,30,40,50,auto}");
+@source inline("{overflow,overflow-x,overflow-y}-{auto,hidden,clip,visible,scroll}");
+@source inline("overscroll-{auto,contain,none}");
+@source inline("{float-left,float-right,float-none,clear-left,clear-right,clear-both,clear-none,isolate,isolation-auto}");
+@source inline("{box-border,box-content,container,mx-auto,ml-auto,mr-auto,my-auto,mt-auto,mb-auto,@container}");
+@source inline("object-{contain,cover,fill,none,scale-down,top,bottom,center,left,right}");
+
+/* ── Borders, rings, shadow, effects ─────────────────────────────────────────────────────────────────────*/
+@source inline("rounded{,-none,-xs,-sm,-md,-lg,-xl,-2xl,-3xl,-4xl,-full}");
+@source inline("rounded-{t,r,b,l,s,e,tl,tr,br,bl}{,-none,-xs,-sm,-md,-lg,-xl,-2xl,-3xl,-full}");
+@source inline("border{,-x,-y,-t,-r,-b,-l,-s,-e}{,-0,-2,-4,-8}");
+@source inline("border-{solid,dashed,dotted,double,hidden,none,collapse,separate}");
+@source inline("divide-{x,y}{,-0,-2,-4,-8,-reverse}");
+@source inline("ring{,-0,-1,-2,-4,-8,-inset}");
+@source inline("outline{,-0,-1,-2,-4,-8,-none,-hidden,-offset-0,-offset-1,-offset-2,-offset-4}");
+@source inline("shadow{,-2xs,-xs,-sm,-md,-lg,-xl,-2xl,-none,-inner}");
+@source inline("{inset-shadow-none,drop-shadow-sm,drop-shadow-md,drop-shadow-lg,drop-shadow-none}");
+@source inline("opacity-{0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100}");
+@source inline("{blur,backdrop-blur}{,-none,-xs,-sm,-md,-lg,-xl,-2xl,-3xl}");
+@source inline("{filter,filter-none,backdrop-filter,backdrop-filter-none,mix-blend-normal,mix-blend-multiply,mix-blend-screen,mix-blend-overlay}");
+@source inline("{grayscale,grayscale-0,invert,invert-0,saturate-0,saturate-50,saturate-100,saturate-150,saturate-200}");
+
+/* ── Motion and transforms ───────────────────────────────────────────────────────────────────────────────*/
+@source inline("transition{,-all,-colors,-opacity,-shadow,-transform,-none}");
+@source inline("{duration,delay}-{0,50,75,100,150,200,300,500,700,1000}");
+@source inline("ease-{linear,in,out,in-out,initial}");
+@source inline("{animate-none,animate-spin,animate-ping,animate-pulse,animate-bounce,animate-fade-in,animate-fade-in-up}");
+@source inline("scale-{0,50,75,90,95,100,105,110,125,150}");
+@source inline("{,-}rotate-{0,1,2,3,6,12,45,90,180}");
+@source inline("{,-}{translate-x,translate-y}-{0,0.5,1,1.5,2,2.5,3,4,5,6,8,10,12,16,px,full,1/2,1/3,2/3,1/4,3/4}");
+@source inline("origin-{center,top,top-right,right,bottom-right,bottom,bottom-left,left,top-left}");
+@source inline("transform{,-none,-gpu}");
+@source inline("will-change-{auto,scroll,contents,transform}");
+
+/* ── Interaction and accessibility ───────────────────────────────────────────────────────────────────────*/
+@source inline("cursor-{auto,default,pointer,wait,text,move,help,not-allowed,none,context-menu,grab,grabbing,col-resize,row-resize,ew-resize,ns-resize,zoom-in,zoom-out}");
+@source inline("pointer-events-{none,auto}");
+@source inline("select-{none,text,all,auto}");
+@source inline("{resize,resize-none,resize-x,resize-y}");
+@source inline("{visible,invisible,collapse,sr-only,not-sr-only}");
+@source inline("touch-{auto,none,pan-x,pan-y,manipulation}");
+@source inline("appearance-{none,auto}");
+@source inline("scroll-{auto,smooth}");
+@source inline("{snap-none,snap-x,snap-y,snap-start,snap-center,snap-end,snap-mandatory,snap-proximity}");
+/* This app's own, promised by name for the same reason as everything above. */
+@source inline("{scrollbar-thin,scrollbar-stable,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
+
+/* ── The named group ─────────────────────────────────────────────────────────────────────────────────────
+ * `group/<name>` lets a row style its own hover children, and the name is invented by the author — which is
+ * precisely what a promise cannot know. So the names are SLOTS on offer: generic enough to fit any row, card
+ * or bar, and documented as the set. An author who wants `group/sparkline` is off the surface, the same way
+ * `w-[37px]` is, and reaches for their own stylesheet. */
+@source inline("{group,peer}{,/item,/row,/card,/bar,/tile,/cell,/a,/b}");
+
+/* ── States ──────────────────────────────────────────────────────────────────────────────────────────────
+ * Aimed, not exhaustive — see the note at the top. The variants are the ones this design system gives meaning
+ * to; the properties are the ones that actually change under them. */
+@source inline("{hover:,focus:,focus-visible:,focus-within:,disabled:,group-hover:,aria-selected:,data-active:,placeholder:}{text,bg,border,ring}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,transparent}");
+/* A TINT under a state is the app's hover language — a row lifting a few percent off the canvas — so it is
+ * promised on the property that carries it. Not on text, border or ring: a state there changes the ROLE
+ * (`hover:text-content`), which the line above already covers, and promising the full cross would cost a
+ * megabyte for corners nobody writes. */
+@source inline("{hover:,group-hover:,aria-selected:}bg-{content,muted,subtle,canvas,card,overlay,line,link,danger,warning,success,info}/{2,3,4,5,10,15,20,30,50}");
+@source inline("{hover:,focus:,focus-visible:,focus-within:,active:,disabled:,group-hover:,group-focus-within:,peer-checked:,aria-selected:,data-active:}opacity-{0,10,20,25,30,40,50,60,70,75,80,90,100}");
+@source inline("{hover:,focus:,focus-visible:,focus-within:,active:,group-hover:,aria-selected:,data-active:}{ring,ring-0,ring-1,ring-2,ring-4,ring-inset,outline,outline-none,outline-hidden,outline-1,outline-2,outline-offset-1,outline-offset-2}");
+@source inline("{hover:,focus:,focus-visible:,active:,group-hover:,disabled:}{underline,no-underline,line-through,truncate,visible,invisible}");
+@source inline("{hover:,focus:,focus-visible:,active:,group-hover:,motion-safe:}{scale-95,scale-100,scale-105,scale-110,rotate-90,rotate-180,translate-x-0,translate-y-0,translate-x-1,translate-y-1,-translate-y-1,-translate-y-0.5}");
+@source inline("{hover:,focus:,group-hover:,disabled:,aria-selected:}{shadow,shadow-sm,shadow-md,shadow-lg,shadow-xl,shadow-none,border,border-0,border-2,bg-transparent}");
+@source inline("{hover:,focus:,group-hover:,peer-checked:}{w,h}-{0,1,1.5,2,4,6,8,12,16,24,full,auto,fit}");
+@source inline("disabled:{cursor-not-allowed,cursor-default,pointer-events-none,select-none}");
+@source inline("{first:,last:,odd:,even:}{border-t-0,border-b-0,border-l-0,border-r-0,pt-0,pb-0,mt-0,mb-0,rounded-t-md,rounded-b-md,rounded-t-lg,rounded-b-lg,bg-card,bg-canvas,bg-subtle/20}");
+@source inline("group-hover/{item,row,card,bar,tile,cell,a,b}:{opacity-0,opacity-50,opacity-70,opacity-100,visible,invisible,text-content,text-muted,text-link,text-danger,bg-card,bg-overlay,bg-subtle,w-16,h-1.5,translate-x-0}");
+
+/* ── Responsive ──────────────────────────────────────────────────────────────────────────────────────────
+ * THE CONTAINER LADDER IS THE REAL ONE HERE, and the viewport ladder is kept deliberately thin.
+ *
+ * An extension does not render into a window. It renders into a pane the reader can drag to half its width,
+ * pop out, or stack under a chat — so `md:` is asking the wrong question and `@md:` is asking the right one.
+ * That is also why this section is not simply "every family × every breakpoint": a breakpoint multiplies
+ * whatever it touches by nine, and the answer to most of what an extension would reach a breakpoint FOR
+ * already exists as a component. <SplitView> folds its index above its body; `useCompact` says whether it
+ * has; `useNarrow` answers "is my own element too narrow for this", which is the question, and <Page>'s width
+ * tiers own the reading column. A screen that asks the kit gets behaviour that matches the shell's at every
+ * width; a screen that hand-rolls nine breakpoints gets a near-miss, and pays for it in this file.
+ *
+ * So: the container steps carry layout and spacing, the viewport steps carry only what genuinely differs on a
+ * phone, and everything else is the kit's answer to give. */
+@source inline("{sm:,md:,lg:,@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{block,inline-block,inline,flex,inline-flex,grid,hidden,contents}");
+@source inline("{@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}flex-{row,row-reverse,col,col-reverse,wrap,nowrap,1}");
+@source inline("{@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{items,justify}-{start,end,center,between,around,baseline,stretch}");
+@source inline("{@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{grid-cols,col-span}-{1,2,3,4,6,12,full}");
+@source inline("{sm:,md:,@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{p,px,py,pl,pr,gap}-{0,1,2,3,4,5,6,8,10,12,16}");
+@source inline("{@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{w,h,max-w,min-w}-{0,16,32,48,64,auto,full,fit,min,max,1/2,1/3,2/3}");
+@source inline("{sm:,md:,@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}text-{2xs,xs,sm,base,lg,left,center,right}");
+@source inline("{@sm:,@md:,@lg:,@xl:,@2xl:,@3xl:}{shrink-0,shrink,grow,order-first,order-last,overflow-auto,overflow-hidden,sticky,static,relative,absolute,truncate,line-clamp-1,line-clamp-2,border-l,border-t,border-line}");
+/* A breakpoint stacked on a state — "reveal this control on a pointer device, keep it visible on touch",
+ * which is the one place two variants genuinely compose in these screens. */
+@source inline("md:{,hover:,focus:,focus-visible:,group-hover:,group-focus-within:}opacity-{0,50,70,100}");
+@source inline("md:group-hover/{item,row,card,bar,tile,cell,a,b}:opacity-{0,50,70,100}");

@@ -51,7 +51,7 @@ const GROUPS = [
             <div class="mb-2 flex h-4 items-center gap-x-2 px-0.5">
                 <span class="skeleton h-3 w-20"></span>
                 <span class="skeleton h-3 w-2"></span>
-                <span class="skeleton h-3 max-w-[45%]" :class="group.caption"></span>
+                <span class="skeleton h-3 max-w-2/5" :class="group.caption"></span>
             </div>
 
             <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">

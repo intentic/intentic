@@ -81,7 +81,7 @@ const startFix = (): void => {
 </script>
 
 <template>
-    <div class="group border-l-[3px] transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/[0.02]` : `hover:bg-content/[0.02]`]">
+    <div class="group border-l-4 transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/2` : `hover:bg-content/2`]">
         <!-- Run header row. IT WRAPS, because the pane it lives in is not the window: with the chat panel open
              this row gets ~450px, and four rigid clusters in a nowrap line simply ran off the side of it — the
              stage circles landed on top of the branch name and "Fix with agent" was painted outside the pane. The
@@ -231,10 +231,10 @@ const startFix = (): void => {
                     <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Job graph</span>
                     <span class="skeleton h-2.5 w-40"></span>
                 </div>
-                <div class="flex h-[150px] items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
+                <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
                     <template v-for="i in 3" :key="i">
                         <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
-                        <span class="skeleton h-[52px] w-[200px] shrink-0 rounded-md"></span>
+                        <span class="skeleton h-12 w-48 shrink-0 rounded-md"></span>
                     </template>
                 </div>
             </div>

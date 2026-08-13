@@ -88,7 +88,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
                  stays one hover away. -->
             <span v-if="blocked" class="flex min-w-0 items-center gap-1.5 text-2xs text-warning" v-tooltip.top="blocked">
                 <Icon name="exclamation-triangle" class="shrink-0" />
-                <span class="max-w-[18rem] truncate">{{ blocked }}</span>
+                <span class="max-w-72 truncate">{{ blocked }}</span>
             </span>
             <span v-else-if="chosen > 0" class="text-2xs text-muted">{{ spend }}</span>
 

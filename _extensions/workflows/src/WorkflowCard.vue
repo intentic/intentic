@@ -77,7 +77,7 @@ const shape = computed(() => {
 
         <!-- THE DIAGRAM, in the documentation figure's frame: a wash rather than a stroke, because the picture
              inside is already a field of bordered boxes and an outline around it makes a box of boxes. -->
-        <div class="relative w-full overflow-hidden rounded-lg bg-content/[0.04]" :style="{ height: `${frameRem}rem` }">
+        <div class="relative w-full overflow-hidden rounded-lg bg-content/4" :style="{ height: `${frameRem}rem` }">
             <!-- A PICTURE, NOT A CANVAS. The graph keeps its own wheel-zoom and drag-pan, which on a page of
                  cards means scrolling past one zooms it instead — so the whole thing is made inert and the
                  gestures go to the page. Panning a thumbnail was never the point; opening it is. -->

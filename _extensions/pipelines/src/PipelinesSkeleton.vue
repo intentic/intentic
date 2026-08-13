@@ -51,7 +51,7 @@ const ROWS = [
                 <div
                     v-for="(row, index) in ROWS"
                     :key="index"
-                    class="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-l-[3px] border-line px-4 py-3"
+                    class="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-l-4 border-line px-4 py-3"
                 >
                     <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
                     <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>

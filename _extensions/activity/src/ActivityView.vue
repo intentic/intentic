@@ -105,7 +105,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
              screen is a log you have to scroll back up out of. Same idiom, and the same viewport units, as the
              log viewer one section over. -->
         <ActivityTimeline
-            class="max-h-[60dvh]"
+            class="max-h-panel"
             :episodes="visible"
             :source="selected"
             :window="window"

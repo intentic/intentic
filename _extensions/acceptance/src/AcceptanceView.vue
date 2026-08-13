@@ -564,7 +564,7 @@ const run = async (model: PickedModel): Promise<void> =>
                         <!-- What it TESTED, not how many. "3 stories" makes every run in the list look
                                      like every other one; the titles are how someone finds the run they
                                      remember. -->
-                        <span class="block truncate text-sm text-content/85 group-hover:text-content">
+                        <span class="block truncate text-sm text-content/80 group-hover:text-content">
                             {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
                         </span>
                         <span class="block truncate font-mono text-2xs text-subtle">

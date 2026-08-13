@@ -136,13 +136,13 @@ const start = async (): Promise<void> => {
          is running in. That last column is the difference between a list you read and a list you can act on —
          every row either opens the output it is producing, or says plainly that this sandbox has none to show. -->
     <Popover ref="popover">
-        <div class="flex w-[26rem] flex-col gap-2 p-1">
+        <div class="flex w-pop-sm flex-col gap-2 p-1">
             <p class="text-sm font-medium text-content">
                 <span class="font-mono">{{ repo }}</span> is serving {{ targets.serversOf(repo).length }}
                 {{ targets.serversOf(repo).length === 1 ? `app` : `apps` }}
             </p>
             <div v-for="server in targets.serversOf(repo)" :key="server.url" class="flex items-baseline gap-2">
-                <span class="h-1.5 w-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
+                <span class="h-1.5 w-1.5 shrink-0 -translate-y-0.5 rounded-full bg-success" />
                 <span class="font-mono text-2xs text-content">{{ server.url }}</span>
                 <span class="ml-auto flex shrink-0 items-baseline gap-2">
                     <span v-if="server.dir" class="font-mono text-2xs text-subtle">{{ server.dir }}</span>

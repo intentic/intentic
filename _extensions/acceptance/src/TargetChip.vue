@@ -104,7 +104,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
                 >
                     <Icon
                         :name="targets.addressOf(repo, group) === server.url ? `check` : `arrow-right`"
-                        class="shrink-0 translate-y-[1px]"
+                        class="shrink-0 translate-y-px"
                         :class="targets.addressOf(repo, group) === server.url ? `text-success` : `text-subtle`"
                     />
                     <span class="font-mono text-2xs text-content">{{ server.url }}</span>
