@@ -27,10 +27,17 @@ anchors, the size and neighbour facts, whether the page is stale — is derived 
 `intentic-docs` is on your PATH:
 
 ```sh
-intentic-docs facts    --repo <dir>                            # packages, dependency edges, sizes, revisions
-intentic-docs validate --repo <dir> --from published           # every package has a README, every anchor resolves
-intentic-docs check    --repo <dir> --from published --write   # rewrite index.json (staleness, orphans, facts)
+intentic-docs facts    --repo intentic                            # packages, dependency edges, sizes, revisions
+intentic-docs validate --repo intentic --from published           # every package has a README, every anchor resolves
+intentic-docs check    --repo intentic --from published --write   # rewrite index.json (staleness, orphans, facts)
 ```
+
+**`--repo` names a repository under the workspace root, not the directory you are standing in.** It is resolved
+against `--root` (`/work`), so `cd`-ing into a repository changes nothing about how you spell it: from inside
+`/work/intentic` it is still `--repo intentic`. `--repo .` is the tempting shorthand for "this one" and it means
+the workspace itself — which documents nothing, so the run answers about the wrong tree, leaves the repository's
+real index unrefreshed, and drops an empty one at the top of the workspace. Omit the flag entirely only when you
+genuinely mean the workspace root repository.
 
 **`--from published` is not optional.** Without it the tool reads and writes the *draft* tree instead — the one a
 generation run stages for the owner to review — and the app reads that tree to decide whether there is a draft

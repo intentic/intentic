@@ -406,8 +406,11 @@ const documentedDirs = (root, repo, from, packages) => {
 
 // ---- verbs ---------------------------------------------------------------------------------------------------
 
+// `--repo` is a tail under `--root`, and the root repository is the empty tail — the one place that distinction lives.
+const repoRootOf = (root, repo) => (repo === `` ? root : join(root, repo));
+
 const factsOf = (root, repo) => {
-    const repoRoot = repo === `` ? root : join(root, repo);
+    const repoRoot = repoRootOf(root, repo);
     const packages = discoverPackages(repoRoot);
     return {
         repo,
@@ -435,7 +438,7 @@ const factsOf = (root, repo) => {
  * the WORKING TREE the agent is in, which is the point: an anchor that no longer resolves is the one staleness
  * signal that needs no git history and cannot be argued with. */
 const validateDocs = (root, repo, from) => {
-    const repoRoot = repo === `` ? root : join(root, repo);
+    const repoRoot = repoRootOf(root, repo);
     const base = mapBase(root, repo, from);
     const packages = discoverPackages(repoRoot);
     const documented = documentedDirs(root, repo, from, packages);
@@ -471,8 +474,8 @@ const validateDocs = (root, repo, from) => {
     return problems;
 };
 
-const checkDocs = (root, repo, from, write) => {
-    const repoRoot = repo === `` ? root : join(root, repo);
+const checkDocs = (root, repo, from) => {
+    const repoRoot = repoRootOf(root, repo);
     const base = mapBase(root, repo, from);
     const packages = discoverPackages(repoRoot);
     const documented = documentedDirs(root, repo, from, packages);
@@ -524,10 +527,6 @@ const checkDocs = (root, repo, from, write) => {
         orphans: documented.filter((dir) => !existsSync(join(repoRoot, dir))),
         undocumented: packages.filter((dir) => dir !== `` && !documented.includes(dir)),
     };
-    if (write) {
-        mkdirSync(base, { recursive: true });
-        writeFileSync(join(base, `index.json`), canonical(index));
-    }
     return index;
 };
 
@@ -604,11 +603,30 @@ const main = (argv) => {
             );
             return 1;
         }
-        const index = checkDocs(root, repo, from, write);
+        const index = checkDocs(root, repo, from);
         if (!write) {
             process.stdout.write(canonical(index));
             return 0;
         }
+        /* AN INDEX OF NOTHING IS NEVER AN ANSWER, IT IS A MISS. No packages, no pages, no orphans means the run
+         * scanned a directory that documents nothing — in practice `--repo .` typed from inside a repository,
+         * which resolves against `--root` and lands on the workspace itself. That wrote an empty index to the top
+         * of the workspace, left the repository's real index untouched and unrefreshed, and rode into the next
+         * commit; it was deleted by hand and came back thirteen times. The guard above refuses the absolute path,
+         * this one refuses the answer that path produced, so the mistake cannot be spelled any other way. */
+        if (index.entries.length === 0 && index.undocumented.length === 0 && index.orphans.length === 0) {
+            // The directory the caller is standing in is the repository they almost certainly meant, so name it for them.
+            const here = relative(root, process.cwd()).split(`\\`).join(`/`);
+            const meant = here === `` || here.startsWith(`..`) ? `<repository>` : here;
+            process.stderr.write(
+                `nothing to document at ${repoRootOf(root, repo)} — no packages, no pages, no orphans, so an index here would say nothing.\n` +
+                    `If you meant a repository inside the workspace: \`--repo\` is a path under \`--root\` (${root}), not the directory you are standing in — name it, as in \`--repo ${meant}\`.\n`,
+            );
+            return 1;
+        }
+        const base = mapBase(root, repo, from);
+        mkdirSync(base, { recursive: true });
+        writeFileSync(join(base, `index.json`), canonical(index));
         const stale = index.entries.filter((entry) => entry.stale).length;
         process.stdout.write(
             `${index.entries.length} documented, ${stale} stale, ${index.undocumented.length} undocumented, ${index.orphans.length} orphaned\n`,

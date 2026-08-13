@@ -190,4 +190,18 @@ describe(`intentic-docs against a real repository`, () => {
         // The path the join would have invented: the root, with the whole absolute path hung off it again.
         expect(existsSync(join(root, root))).toBe(false);
     });
+
+    /* THE SPELLING THE GUARD ABOVE CANNOT CATCH. `--repo .` is a valid path under the root — it IS the root — so an
+     * agent standing in a repository and naming it "here" is silently answered about the workspace instead. The
+     * workspace documents nothing itself, so the run wrote an all-empty index at the top of it, left the
+     * repository's real index unrefreshed, and rode into the next commit: deleted by hand, back the next session,
+     * thirteen times over. An index with no packages, no pages and no orphans is never worth writing — a
+     * single-package repository produces exactly the same nothing — so refusing it closes the spelling for good. */
+    it(`refuses to write an index that would say nothing, whichever way it was asked`, () => {
+        write(`hollow/README.md`, `# hollow\n\nNot a repository, and nothing under it is a package.\n`);
+        const result = run(`check`, `--root`, root, `--repo`, `hollow`, `--from`, `published`, `--write`);
+        expect(result.status).toBe(1);
+        expect(result.output).toContain(`nothing to document`);
+        expect(existsSync(join(root, `hollow/docs/architecture/index.json`))).toBe(false);
+    });
 });

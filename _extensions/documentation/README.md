@@ -197,6 +197,12 @@ patching your own key never disturbs another view's.
 
 ## Gotchas
 
+- `--repo` is a path under `--root`, and `--root` defaults to the workspace rather than the caller's directory, so
+  the two ways of getting it wrong are an absolute path and `.`. The first is refused outright. The second is a
+  valid spelling of the workspace itself, which documents nothing — it answered about the wrong tree, left the
+  repository's index unrefreshed and dropped an all-empty one at the top of the workspace, thirteen times before
+  anyone traced it. `check --write` now refuses any index with no packages, no pages and no orphans, which is the
+  same nothing a single-package repository produces and is never worth a file either way.
 - `bin/intentic-docs` duplicates three path constants from `src/paths.ts` — it is plain ESM executed directly by
   the agent's shell, so it cannot import TypeScript. `paths.test.ts` pins them together so the duplication cannot
   drift; `README_TAIL` matters most, since the tool decides what is documented by looking for that filename and
