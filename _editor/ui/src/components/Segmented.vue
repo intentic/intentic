@@ -45,7 +45,10 @@ const model = defineModel<T>({ required: true });
     <div
         role="tablist"
         class="flex items-center"
-        :class="[stretch ? `w-full gap-1 rounded-lg border border-line bg-canvas p-1` : `gap-0.5`, wrap ? `flex-wrap gap-y-1` : ``]"
+        :class="[
+            stretch ? [`w-full gap-1 rounded-lg border border-line bg-canvas`, size === `xs` ? `p-0.5` : `p-1`] : `gap-0.5`,
+            wrap ? `flex-wrap gap-y-1` : ``,
+        ]"
     >
         <button
             v-for="option in options"
@@ -58,7 +61,13 @@ const model = defineModel<T>({ required: true });
             :class="[
                 model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
                 stretch
-                    ? `flex min-h-9 flex-1 items-center justify-center px-2 text-center text-xs`
+                    ? /* THE FULL-WIDTH TRACK STILL HAS A DENSITY, which it used to ignore — `size` only reached
+                       * the compact pill, so any surface wanting the track's shape was handed a thumb-sized one
+                       * whether or not a thumb was ever going to press it. `sm` keeps the 36px target the setup
+                       * flow's steps need on a phone; `xs` is the same track at a pointer's height, for a
+                       * toggle that owns its row in a narrow column and would otherwise spend a third of that
+                       * column's height saying two words. */
+                      [`flex flex-1 items-center justify-center text-center`, size === `xs` ? `min-h-6 px-1.5 text-2xs` : `min-h-9 px-2 text-xs`]
                     : // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is
                       // 2.25rem), so a pill that breaks doesn't merely look wrong — it stands taller than the bar
                       // holding it and than every bar beside it. Only the MARK chip could do this: an icon is an

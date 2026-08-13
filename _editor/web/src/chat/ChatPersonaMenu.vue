@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { Avatar, StatusBadge } from "@intentic/ui";
+import { StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { personaHue } from "../composables/identityHue";
+import PersonaFace from "../components/PersonaFace.vue";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 
 /* THE COMPOSER'S PERSONA PICKER — "who is this chat when it reaches the outside world".
@@ -84,7 +84,7 @@ const openPersonas = (): void => {
             >
                 <!-- The same mark and the same colour this persona wears on its own page, keyed by id so a
                      rename doesn't recolour somebody you have learned to recognise. -->
-                <Avatar :size="20" :name="persona.label ?? persona.id" :hue="personaHue(persona.id)" :idle="!ready(persona)" class="mt-0.5" />
+                <PersonaFace :seed="persona.id" :size="20" :idle="!ready(persona)" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>

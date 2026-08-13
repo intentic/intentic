@@ -667,15 +667,17 @@ const closeTab = (event: Event, id: string): void => {
              past what is open, the "Not open" group at the foot. -->
         <!-- `Aa` is here as well as on the board because the two fields run ONE filter and one case rule: a
              switch visible on only one of them would be a mode acting where it cannot be seen or undone. -->
-        <!-- WHAT THE COLUMN IS, above the controls that act on it, and deliberately NOT stretched across the
-             rail: a full-width pair of tall pills read as the surface's title bar rather than as a toggle, and
-             spent a whole row of the one column in the app that is short of height. Compact and left-aligned,
-             the way every other viewer toggle in the app sits. -->
+        <!-- WHAT THE COLUMN IS, above the controls that act on it. Full width, because the switch is not a
+             filter on the list below — it decides what the list IS, and a control that owns the column reads
+             as the column's own header rather than as one more knob in a toolbar. At `xs` the track keeps that
+             shape at a pointer's height, so it costs the rail a line rather than a thumb-sized band (see
+             Segmented: the stretched track honours the density prop). -->
         <Segmented
             :model-value="grouping"
             :options="GROUPINGS"
             size="xs"
-            class="mr-auto shrink-0"
+            stretch
+            class="shrink-0"
             @update:model-value="(next: ChatGrouping) => setGrouping(next)"
         />
         <!-- The filter searches MESSAGES, so it belongs to the chats and goes away with them: a box promising
