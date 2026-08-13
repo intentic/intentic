@@ -1,23 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, paragraphsOf, postEdit, postsATitle } from "./postText";
+import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, postEdit, postsATitle } from "./postText";
 
 // No mocks: postText is a leaf of pure functions over a draft's own fields, which is why the page can ask the
 // same questions from four sections without four answers.
-
-describe("paragraphsOf", () => {
-    it("breaks on blank lines and keeps single newlines inside their paragraph", () => {
-        expect(paragraphsOf(`first\n\nsecond`)).toEqual([`first`, `second`]);
-        // A chapter list, a Discord bullet list: deliberate line breaks inside ONE paragraph. Re-flowing them
-        // would be this page rewriting the post.
-        expect(paragraphsOf(`Chapters:\n00:00 one\n02:14 two`)).toEqual([`Chapters:\n00:00 one\n02:14 two`]);
-    });
-
-    it("survives the whitespace agents actually write", () => {
-        // Trailing spaces on the blank line (a wrapped editor), and three newlines rather than two.
-        expect(paragraphsOf(`first\n   \nsecond\n\n\nthird`)).toEqual([`first`, `second`, `third`]);
-        expect(paragraphsOf(`one line`)).toEqual([`one line`]);
-    });
-});
 
 describe("limitOf", () => {
     it("answers for platforms with a hard cap and stays quiet for the rest", () => {

@@ -4,15 +4,14 @@
      A MEASURE, BEFORE ANYTHING ELSE. The queue's rows are as wide as the window, and a paragraph run across
      them is ~110 characters a line — past roughly 75 the eye loses its place on the return sweep, which is
      what made this page "unreadable" rather than merely plain. The column here is capped in `ch`, so it holds
-     at any window width and on any theme's font, and the post reads at the same rhythm the platform will show
-     it at. Size and leading go with it: body text people actually read, not the 12px the row's own metadata
-     uses.
+     at any window width and on any theme's font. The review body uses the design system's compact prose scale:
+     smaller than the old 16px post treatment, but still large enough to read as paragraphs rather than chrome.
 
-     EXACTLY THE BYTES THAT WILL BE POSTED. No markdown rendering, deliberately — half of these platforms take
-     markdown and half take it literally, so a page that rendered `**bold**` would be showing the reviewer
-     something the connector may never send, and hiding the one class of mistake that is invisible in the
-     rendered form (a stray `*`, a fence that never closed). What structure there is comes from splitting on
-     blank lines (postText.ts) and spacing the paragraphs like paragraphs.
+     MARKDOWN IS SUPPORTING STRUCTURE HERE. Drafts are authored as Markdown, and asking for approval against a
+     slab containing literal `**`, list markers and links makes their intended shape needlessly hard to read.
+     <Markdown> is the shared sanitized renderer, so headings, emphasis, lists, links and code all use the same
+     prose rules as the rest of the app. The editor remains the source view: opening the pencil reveals and
+     edits the exact Markdown that will be posted.
 
      LONG POSTS FOLD. A YouTube description is a screenful on its own; three of them push everything else in
      the queue below the fold, including the section that owes a decision. Past LONG_POST the body clamps with
@@ -20,18 +19,16 @@
      as a rendering bug. -->
 <script setup lang="ts">
 import type { DraftSummary } from "@intentic/sandbox-contract";
-import { cmp } from "@intentic/extension-ui";
+import { cmp, Markdown } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "./attachmentPreviews";
-import { LONG_POST, paragraphsOf, postsATitle } from "./postText";
+import { LONG_POST, postsATitle } from "./postText";
 
 const { draft, tone = `full` } = defineProps<{
     draft: DraftSummary;
     /** `full` where a decision is owed; `quiet` for the sections that are only being kept an eye on. */
     tone?: `full` | `quiet`;
 }>();
-
-const paragraphs = computed(() => paragraphsOf(draft.content));
 
 // Only when the platform really publishes one — otherwise the field is the agent's note and the row's footer
 // carries it (postText.ts). A headline drawn for a note is the thing that used to outweigh the post itself.
@@ -51,22 +48,18 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
              that had faded to 11px of the page's faintest grey in the posted list. -->
         <template v-if="tone === `quiet`">
             <p v-if="title" class="truncate text-sm font-medium text-content">{{ title }}</p>
-            <p class="line-clamp-2 whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-muted" :class="title ? `mt-0.5` : ``">
-                {{ draft.content }}
-            </p>
+            <div class="max-h-10 overflow-hidden" :class="title ? `mt-0.5` : ``">
+                <Markdown
+                    :source="draft.content"
+                    style="--prose-size: 0.75rem; --prose-code: 0.6875rem; --prose-lead: 1.625; --prose-gap: 0.35em; color: var(--color-muted)"
+                />
+            </div>
         </template>
 
         <template v-else>
             <p v-if="title" class="wrap-break-word text-base font-semibold leading-snug text-content">{{ title }}</p>
             <div class="relative" :class="[title ? `mt-2` : ``, foldable && !expanded ? `max-h-80 overflow-hidden` : ``]">
-                <p
-                    v-for="(paragraph, index) in paragraphs"
-                    :key="index"
-                    class="whitespace-pre-wrap wrap-break-word text-base leading-relaxed text-content"
-                    :class="index > 0 ? `mt-3` : ``"
-                >
-                    {{ paragraph }}
-                </p>
+                <Markdown :source="draft.content" style="--prose-measure: 72ch" />
                 <!-- The fade is what says "there is more": a hard cut mid-sentence reads as a rendering bug. -->
                 <div
                     v-if="foldable && !expanded"

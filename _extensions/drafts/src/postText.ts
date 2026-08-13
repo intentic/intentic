@@ -5,21 +5,6 @@
  * The rules live in one module because the page asks them from four sections and they have to agree: a draft
  * whose `title` is drawn as a post title must not also be drawn as a note beside it. */
 
-/* THE POST AS PARAGRAPHS. A draft's content is the exact string that will be submitted, and every platform
- * agrees on one thing: a blank line starts a new paragraph. Splitting on that lets the paragraphs be spaced
- * like paragraphs instead of being separated by an empty line of body text — which is what a single
- * `whitespace-pre-wrap` block does, and why the long drafts read as one grey slab.
- *
- * Single newlines stay INSIDE their paragraph (the block keeps `whitespace-pre-wrap`): a YouTube description's
- * chapter list and a Discord release note's bullets are one paragraph of deliberate line breaks, and re-flowing
- * them would be this page rewriting the post. Nothing is added, removed or re-ordered here — the reviewer is
- * approving these bytes.
- *
- * The whole run of blank lines is ONE break — a draft written with three of them is one paragraph gap, not a
- * gap plus an empty line at the top of the next paragraph — and `\r\n` counts, since a draft file is written
- * by whatever the agent had to hand. */
-export const paragraphsOf = (content: string): string[] => content.split(/(?:\r?\n[ \t]*){2,}/).filter((paragraph) => paragraph.trim() !== ``);
-
 /* HOW MUCH ROOM THE PLATFORM GIVES. The one fact about a post that a reviewer cannot work out by reading it and
  * that fails the post outright when it is wrong — an over-length X draft doesn't post badly, it doesn't post.
  * Only platforms with a hard, well-known cap are listed; anything absent shows a plain character count, which
