@@ -1170,7 +1170,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                  The one exception is a query that matched NOTHING: there is no card left on the board to drag,
                  so the full height buys nothing and costs the miss its explanation, which would otherwise be
                  pushed to exactly the fold. -->
-            <div class="grid gap-3 p-3" :class="[narrow ? 'content-start' : 'grid-cols-3 items-start', noMatches ? '' : 'h-full']">
+            <div class="grid gap-3 p-3" :class="[narrow ? 'content-start' : 'grid-cols-3 items-start gap-5', noMatches ? '' : 'h-full']">
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
@@ -1430,7 +1430,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
                          and its transcript, so the thing the user wants to do with a hit here — read it,
                          restore it — is exactly what the card already offers. -->
-                    <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start'">
+                    <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start gap-4'">
                         <AgentCard
                             v-for="agent in archivedHits"
                             :key="agent.id"
