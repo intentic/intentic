@@ -244,7 +244,9 @@ it(`renames the sandbox it created, from the step itself`, async () => {
  * the wait — no command, no copy button, nothing to paste. The classic tests above run with the offer
  * answering "disabled", which is every self-hosted platform and every platform from before the lane existed. */
 it(`points a fresh sandbox at the free machine, and starts nothing until the button is pressed`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    // Not `…Once`: the offer is the account's remaining allowance, and the page asks again every time it
+    // spends or hands back a machine. A platform that hosts goes on hosting between two reads of it.
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The row is created the ordinary way — the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
@@ -269,7 +271,7 @@ it(`points a fresh sandbox at the free machine, and starts nothing until the but
  * reason on the step. The silent version of this — bounce lanes, wipe the message — is what made the page
  * read as broken. */
 it(`keeps the sandbox and says why when the machine is refused`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
     buttonLabelled(`Start my machine`)!.click();
@@ -364,17 +366,41 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 });
 
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
-    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
-    await nextTick();
-    const mine = [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I have`)) as HTMLButtonElement;
-    mine.click();
+    const mine = (): HTMLButtonElement =>
+        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I have`)) as HTMLButtonElement;
+    // The rungs are disabled while the machine is being made AND while the allowance that made it is re-read —
+    // clicked before that settles, this does nothing, which is what the card is saying by being greyed out.
+    await vi.waitFor(() => expect(mine().disabled).toBe(false));
+    mine().click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
     expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
     await nextTick();
     expect(nameRow()).toContain(`workspace`);
+});
+
+/* …AND THE RUNG IT CAME OFF IS STILL TAKEABLE. The allowance is the server's count of the machines this
+ * account holds, and it used to be read once on arrival and never again — so a reader who resumed a hosted
+ * sandbox (allowance spent, on that very machine) and then tried another rung was left in front of a page
+ * that still counted the machine it had just handed back: the rung they had come off sat disabled under
+ * "Already using yours", naming a machine that no longer existed, with no way back but a reload. */
+it(`offers the hosted rung again once its machine has been handed back`, async () => {
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    // Spent on arrival — by this very sandbox — and free again the moment it is released.
+    hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 0 }).mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const rung = (label: string): HTMLButtonElement =>
+        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
+
+    rung(`A computer I have`).click();
+    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    await vi.waitFor(() => expect(rung(`We host it`).disabled).toBe(false));
+    expect(el.textContent).not.toContain(`Already using yours`);
 });
 
 /* A PLATFORM THAT HANDS OUT NO ADDRESSES SAYS SO, IN THE FIRST FRAME. This is the state that read as the page

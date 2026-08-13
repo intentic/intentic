@@ -483,13 +483,23 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
  * read there is nothing honest to draw at all. */
 const ladderShown = computed(() => !desktop.value && ladderOptions.value.length > 1);
 
-/* The label column of step 1's two facts. A fixed width is what makes "Name" and "Address" one grid rather
- * than two sentences that happen to be stacked — and the width is the reason the VALUES line up, which is the
- * only alignment on the card that carries meaning. Label and value are ONE size — the field size, since the
+/* WHICH ADDRESS THE CARD IS REPORTING — one of four, and they are mutually exclusive: a hosted machine
+ * announces its own, a platform that mints none says so, the default is the intentic domain, and the last is
+ * the reader's own Cloudflare zone (the only one that is a FORM rather than a fact, which is why it is the one
+ * that still gets a block of its own under the row). */
+const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
+    machine.value === `hosted` ? `hosted` : addressless.value ? `none` : mode.value === `intentic` ? `intentic` : `own`,
+);
+
+/* The label in front of each of step 1's two facts. Label and value are ONE size — the field size, since the
  * name becomes a field — and colour alone separates them: the name used to sit in the step's own heading, in
  * the heading's weight and the heading's colour, where the one word on the card worth changing read as the
- * label in front of it. */
-const factLabel = `w-16 shrink-0 text-sm text-muted`;
+ * label in front of it.
+ * NO FIXED WIDTH ANY MORE. It used to be `w-16`, because the two facts were stacked and the width was what
+ * lined their values up. They sit on ONE ROW now — the card reports two short facts and asked for a fifth of
+ * the screen to do it, above the choice the page actually turns on — and on a row a padded label is just a
+ * hole between a word and the value it introduces. */
+const factLabel = `shrink-0 text-sm text-muted`;
 
 /* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
  * turn into a text field without moving, which means the idle name already wears the field's height, padding
@@ -925,6 +935,20 @@ const autoCreate = async (): Promise<void> => {
     }
 };
 
+/* WHAT THE ACCOUNT HAS LEFT, ASKED AGAIN EVERY TIME WE CHANGE IT. The offer is the server's count of machines
+ * this account holds, and it used to be read once on arrival and never again — so a reader who resumed a
+ * hosted sandbox (allowance spent, on that very machine) and then picked another rung was left in front of a
+ * page that still counted the machine it had just handed back: the rung they had come off sat disabled under
+ * "Already using yours", naming a machine that no longer existed, with no way back to it but a reload.
+ * A failed re-read keeps the last answer — this must retract nothing that is still true. */
+const refreshHostedOffer = async (): Promise<void> => {
+    try {
+        hostedOffer.value = await apiClient.sandbox.hostedOffer();
+    } catch {
+        // A platform that cannot be asked keeps the answer it already gave.
+    }
+};
+
 /* Give THIS sandbox a machine the platform runs, then let the ordinary announce watch take over. The row is
  * already there (created on arrival like every lane's), so a refusal — capacity weather, the allowance
  * already spent, a platform whose provider credential is wrong — costs nothing but the attempt: the reason
@@ -948,6 +972,10 @@ const provisionHosted = async (): Promise<boolean> => {
         hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
         return false;
     } finally {
+        // Whether it worked or not, the count on the server may have moved — a refusal is often the allowance
+        // being spent somewhere else, which is a thing this page should then be saying. Inside the busy window,
+        // so the rungs stay unclickable until the page knows what it is offering.
+        await refreshHostedOffer();
         hostedBusy.value = false;
     }
 };
@@ -1028,6 +1056,9 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
             hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
             return;
         } finally {
+            // The machine we just handed back is the machine the allowance was counting — re-read it before the
+            // rungs go live again, so the one being stepped off is takeable the moment it is clickable.
+            await refreshHostedOffer();
             hostedBusy.value = false;
         }
     }
@@ -1711,8 +1742,10 @@ watch(commandReady, (ready) => {
                          business wearing a step number or a heading. "Your sandbox" above a row labelled "Name"
                          and a row labelled "Address" was a title that only restated the two labels under it.
                          The card chrome is StepSection's own, spelled out here because this is the one card on
-                         the page that is deliberately not a step. -->
-                    <section v-else class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 md:p-5">
+                         the page that is deliberately not a step — and it is deliberately SHALLOWER than one:
+                         two facts on a line do not need a step's padding around them, and every pixel this card
+                         spends is pushing the only decision on the page further down it. -->
+                    <section v-else class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 md:px-5 md:py-4">
                         <!-- No row yet, which on this lane means the arrival create is in flight or has failed —
                              never a form waiting to be filled in. Both states are one line, because neither is
                              something the user has to do anything about. -->
@@ -1734,198 +1767,202 @@ watch(commandReady, (ready) => {
                             </button>
                         </template>
                         <template v-else>
-                            <template v-if="resuming">
-                                <!-- Two different histories, and only one of them is a reconnect. A sandbox that
-                                     ran before was torn down locally; one that was made here and never started is
-                                     simply where the user left off — telling them a container was cleared would
-                                     be describing a machine that never existed. -->
-                                <p class="text-xs leading-relaxed text-muted">
-                                    <template v-if="neverStarted">
-                                        This one was made last time you were here but never started. Pick up where you left off, or create a new
-                                        sandbox instead.
-                                    </template>
-                                    <template v-else>
-                                        This sandbox still exists on the platform; the CLI cleanup only cleared its local container. Reconnect it
-                                        below to start a fresh daemon, or create a new sandbox instead.
-                                    </template>
-                                </p>
-                                <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" @click="startFresh">
-                                    Not this one? Create a new sandbox instead
-                                </button>
-                            </template>
-                            <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
+                            <!-- Two different histories, and only one of them is a reconnect. A sandbox that ran
+                                 before was torn down locally; one that was made here and never started is simply
+                                 where the user left off — telling them a container was cleared would be describing
+                                 a machine that never existed.
+                                 ONE LINE, WITH THE WAY OUT INSIDE IT. It was a two-line paragraph ending in "or
+                                 create a new sandbox instead", above a link that said "Not this one? Create a new
+                                 sandbox instead" — the same sentence twice, three lines tall, at the top of the
+                                 page, to report something the reader had not asked about.
+                                 The two histories are ONE interpolation rather than two `<template v-if>`
+                                 branches, because the space before the link would then be a text node between two
+                                 elements, and the compiler condenses those away — the sentence ran straight into
+                                 the link. -->
+                            <p v-if="resuming" class="text-xs text-muted">
+                                {{
+                                    neverStarted
+                                        ? `Made last time you were here, never started.`
+                                        : `Still on the platform — the cleanup only cleared its local container.`
+                                }}
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
+                                    Use a new sandbox instead</button
+                                >.
+                            </p>
+                            <!-- THE TWO FACTS, ON ONE ROW. They were stacked, each in a slot tall enough to become a
+                                 field, under a paragraph and a link — a card the height of the choice below it, to
+                                 say a name and a hostname. Side by side they are one line on a desktop and wrap the
+                                 way any sentence does on a phone, and the run step comes up the page to meet them. -->
+                            <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                                <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
                                  it is also where it is changed — and the change is a pencil, not a sentence: the
                                  card used to spend a paragraph explaining that the name was a default and a link
                                  saying so again, which is three lines of apology for a word the user can simply
                                  overwrite. The label is muted, so the value is the thing the
                                  eye lands on. Never a gate: the command below is ready whether or not this is
-                                 ever touched. -->
-                            <!-- STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
+                                 ever touched.
+                                 STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
                                  used to replace this row with a stacked field and two labelled buttons, which moved
                                  every glyph on the card and shoved the run step down the page — a jump, on a card
                                  whose whole job is to sit still while you read it. -->
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <span :class="factLabel">Name</span>
-                                <!-- The name and the field it becomes share ONE grid cell at one type scale, one
+                                <div class="flex items-center gap-x-2">
+                                    <span :class="factLabel">Name</span>
+                                    <!-- The name and the field it becomes share ONE grid cell at one type scale, one
                                      height and one padding, so switching modes paints a border and nothing else.
                                      The hidden sizer gives the field the width of the text it holds instead of the
                                      whole row — with `size="1"` on the input, which is what lets it: an input
                                      carries an intrinsic width of about twenty characters, and in a `w-fit` cell
                                      THAT is what decided the column, so the field opened ~100px wider than the
                                      name and shoved the two buttons beside it sideways. Same jump, last axis.
-                                     THE ADDRESS BELOW WEARS THE SAME EMPTY SLOT (`factSlot`), which is what makes
-                                     the two values start on one column: the padding a field needs to be typed in
-                                     would otherwise push the name a few pixels right of an address that has none,
-                                     and paying it back with a negative margin means hard-coding a spacing token
-                                     this theme is free to change. -->
-                                <div class="grid w-fit max-w-full min-w-0 grid-cols-1 grid-rows-1">
-                                    <template v-if="renaming">
-                                        <span aria-hidden="true" :class="`${factSlot} invisible col-start-1 row-start-1 whitespace-pre`">{{
-                                            name === `` ? ` ` : name
-                                        }}</span>
-                                        <input
-                                            ref="nameInput"
-                                            v-model="name"
-                                            aria-label="Sandbox name"
-                                            autocomplete="off"
-                                            size="1"
-                                            spellcheck="false"
-                                            :class="`${factSlot} col-start-1 row-start-1 w-full border-line-strong bg-canvas outline-none`"
-                                            @keydown.enter="saveName"
-                                            @keydown.esc="cancelRename"
-                                        />
-                                    </template>
-                                    <span v-else :class="`${factSlot} col-start-1 row-start-1`"
-                                        ><span class="truncate">{{ created.name }}</span></span
-                                    >
-                                </div>
-                                <!-- Pencil and the commit pair stack in one cell too, so the cell is as wide as the
+                                     THE ADDRESS WEARS THE SAME EMPTY SLOT (`factSlot`), so the two values sit at
+                                     one height and one padding however the name is being read — as a word or as
+                                     a field it has just become. -->
+                                    <div class="grid w-fit max-w-full min-w-0 grid-cols-1 grid-rows-1">
+                                        <template v-if="renaming">
+                                            <span aria-hidden="true" :class="`${factSlot} invisible col-start-1 row-start-1 whitespace-pre`">{{
+                                                name === `` ? ` ` : name
+                                            }}</span>
+                                            <input
+                                                ref="nameInput"
+                                                v-model="name"
+                                                aria-label="Sandbox name"
+                                                autocomplete="off"
+                                                size="1"
+                                                spellcheck="false"
+                                                :class="`${factSlot} col-start-1 row-start-1 w-full border-line-strong bg-canvas outline-none`"
+                                                @keydown.enter="saveName"
+                                                @keydown.esc="cancelRename"
+                                            />
+                                        </template>
+                                        <span v-else :class="`${factSlot} col-start-1 row-start-1`"
+                                            ><span class="truncate">{{ created.name }}</span></span
+                                        >
+                                    </div>
+                                    <!-- Pencil and the commit pair stack in one cell too, so the cell is as wide as the
                                      wider of them and revealing Save cannot push anything sideways. The idle layer
                                      is `invisible`, which keeps its size while leaving the tab order.
                                      32px rather than the recipe's 24: these are not in a toolbar of their peers,
                                      they are alone beside a line of text on a card people reach on a phone. And a
                                      step dimmer than the recipe's muted — the name is the thing being read here,
                                      and an affordance beside one word should not compete with it. -->
-                                <div class="grid grid-cols-1 grid-rows-1 items-center">
-                                    <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
-                                        <button
-                                            type="button"
-                                            :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
-                                            aria-label="Rename sandbox"
-                                            v-tooltip.bottom="`Rename sandbox`"
-                                            @click="startRename"
-                                        >
-                                            <Icon name="pencil" class="text-xs" />
-                                        </button>
+                                    <div class="grid grid-cols-1 grid-rows-1 items-center">
+                                        <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
+                                            <button
+                                                type="button"
+                                                :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                                aria-label="Rename sandbox"
+                                                v-tooltip.bottom="`Rename sandbox`"
+                                                @click="startRename"
+                                            >
+                                                <Icon name="pencil" class="text-xs" />
+                                            </button>
+                                        </div>
+                                        <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
+                                            <button
+                                                type="button"
+                                                :class="cmp.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
+                                                aria-label="Save name"
+                                                v-tooltip.bottom="`Save · Enter`"
+                                                @click="saveName"
+                                            >
+                                                <Icon :name="savingName ? `spinner` : `check`" :spin="savingName" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                                aria-label="Cancel rename"
+                                                v-tooltip.bottom="`Cancel · Esc`"
+                                                @click="cancelRename"
+                                            >
+                                                <Icon name="times" />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
-                                        <button
-                                            type="button"
-                                            :class="cmp.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
-                                            aria-label="Save name"
-                                            v-tooltip.bottom="`Save · Enter`"
-                                            @click="saveName"
-                                        >
-                                            <Icon :name="savingName ? `spinner` : `check`" :spin="savingName" />
+                                </div>
+
+                                <!-- THE ADDRESS, BESIDE THE NAME — the two facts this card reports, on the line it
+                                     takes to report them.
+                                     No padlock: the tunnel is https by construction, so the icon marked every
+                                     address this page can ever show and therefore distinguished none of them — it
+                                     was decoration sitting where a reader looks for the value.
+                                     ONE GROUP IN EVERY STATE (announced, minted, still minting, failed, or never
+                                     offered) so the escape hatch beside it is reachable in all of them. It used to
+                                     hang off the success branch alone, which left a reader whose mint had just
+                                     errored with no way to choose a different address at all.
+                                     The own-zone case is the one that is missing here, because it is the one that
+                                     is not a fact: it is a form, and it keeps its own block under this row. -->
+                                <div v-if="addressFact !== `own`" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span :class="factLabel">Address</span>
+                                    <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
+                                         escape hatches: the machine is born holding its tunnel, and the page
+                                         redirects the moment this turns real.
+                                         KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing that rung starts
+                                         nothing, there is a stretch with the hosted lane selected and no machine
+                                         behind it — and read off the machine, this fell through to the mint's
+                                         spinner and promised a domain that lane never asks for. A spinner before
+                                         the button is pressed is the same lie the addressless platform used to
+                                         tell. -->
+                                    <template v-if="addressFact === `hosted`">
+                                        <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
+                                        <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
+                                            <Icon name="spinner" spin /> Assigned as your machine starts…
+                                        </span>
+                                        <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
+                                    </template>
+                                    <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
+                                         spinner nor the escape hatch (both ways off the default address mint a code
+                                         too, so both are the same dead end here). -->
+                                    <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
+                                        This platform doesn't set one up
+                                    </span>
+                                    <template v-else>
+                                        <!-- `.title` — this is a NoticeModel, and interpolating the object itself
+                                             put its JSON on the card. -->
+                                        <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
+                                        <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
+                                        <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
+                                            <Icon name="spinner" spin /> Preparing your intentic domain…
+                                        </span>
+                                        <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
+                                             "Already reachable at a domain? Connect it" were two links, in two
+                                             places, asking the same question — how should this be reached — and the
+                                             reader had to know the difference between provisioning under their zone
+                                             and attaching an address that already answers BEFORE they could tell
+                                             which link was theirs. Now one link opens both, each stating what it
+                                             does rather than what it is called. -->
+                                        <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
+                                            {{ reaching ? `Keep this address` : `Use a different address` }}
                                         </button>
-                                        <button
-                                            type="button"
-                                            :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
-                                            aria-label="Cancel rename"
-                                            v-tooltip.bottom="`Cancel · Esc`"
-                                            @click="cancelRename"
-                                        >
-                                            <Icon name="times" />
-                                        </button>
-                                    </div>
+                                    </template>
                                 </div>
                             </div>
 
-                            <!-- THE ADDRESS, on the same grid as the name — the two facts this card reports, aligned.
-                                 No padlock: the tunnel is https by construction, so the icon marked every address
-                                 this page can ever show and therefore distinguished none of them — it was decoration
-                                 sitting where a reader looks for the value. -->
-                            <!-- A hosted sandbox's address is the daemon's own announce — no mint, no escape
-                                 hatches: the machine is born holding its tunnel, and the page redirects the
-                                 moment the address below turns real.
-                                 KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing this rung starts
-                                 nothing, there is a stretch with the hosted lane selected and no machine behind
-                                 it — and read off the machine, this row fell through to the mint's spinner and
-                                 promised a domain that this lane never asks for. A spinner before the button is
-                                 pressed is the same lie the addressless platform used to tell. -->
-                            <template v-if="machine === `hosted`">
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                    <span :class="factLabel">Address</span>
-                                    <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
-                                    <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
-                                        <Icon name="spinner" spin /> Assigned as your machine starts…
-                                    </span>
-                                    <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
-                                </div>
-                            </template>
-                            <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a spinner
-                                 nor the escape hatch below (both ways off the default address mint a code too, so
-                                 both are the same dead end here). One statement, and the one thing that does work. -->
-                            <template v-else-if="addressless">
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                    <span :class="factLabel">Address</span>
-                                    <span :class="`${factSlot} text-xs text-muted`">This platform doesn't set one up</span>
-                                </div>
-                                <p class="text-xs text-muted">
-                                    Sandboxes here are reached at an address you already have. Already running one?
-                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                        Connect the domain it answers on</button
-                                    >.
-                                </p>
-                            </template>
-                            <template v-else-if="mode === `intentic`">
-                                <!-- ONE ROW IN EVERY STATE (provisioned, still minting, or failed) so the escape
-                                     hatch beside it is reachable in all three. It used to hang off the success
-                                     branch alone, which left a reader whose mint had just errored with no way to
-                                     choose a different address at all.
-                                     THE SAME `gap-x-3` AND THE SAME `factSlot` AS THE NAME ROW, which together are
-                                     the whole of what kept these two values from lining up: this row had a wider
-                                     gap than that one, and its value sat flush while the name's sat inside the
-                                     padding its field needs. Both facts start on one column now by construction
-                                     rather than by arithmetic. -->
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                    <span :class="factLabel">Address</span>
-                                    <!-- `.title` — this is a NoticeModel, and interpolating the object itself put
-                                         its JSON on the card. -->
-                                    <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
-                                    <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
-                                    <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
-                                        <Icon name="spinner" spin /> Preparing your intentic domain…
-                                    </span>
-                                    <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and "Already
-                                         reachable at a domain? Connect it" were two links, in two places, asking the
-                                         same question — how should this be reached — and the reader had to know the
-                                         difference between provisioning under their zone and attaching an address
-                                         that already answers BEFORE they could tell which link was theirs. Now one
-                                         link opens both, each stating what it does rather than what it is called. -->
-                                    <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
-                                        {{ reaching ? `Keep this address` : `Use a different address` }}
-                                    </button>
-                                </div>
-                                <!-- The two ways off the default address, as one sentence. They were rows in a
-                                     bordered inset with a caption each: a second frame, inside a card, to hold two
-                                     choices that fit on one line. The labels carry the distinction, which is the
-                                     only thing the captions were for. -->
-                                <p v-if="reaching" class="text-xs text-muted">
-                                    Use
-                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
-                                        your own Cloudflare zone</button
-                                    >, or connect
-                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                        a domain it already answers on</button
-                                    >.
-                                </p>
-                            </template>
+                            <!-- What the two facts could not say on their own line, under the row rather than in
+                                 it: this platform hands out no addresses, so here is the one thing that does work
+                                 — and the two ways off the default one, opened by the link above. They were rows
+                                 in a bordered inset with a caption each: a second frame, inside a card, to hold
+                                 two choices that fit on one line. The labels carry the distinction, which is the
+                                 only thing the captions were for. -->
+                            <p v-if="addressFact === `none`" class="text-xs text-muted">
+                                Sandboxes here are reached at an address you already have. Already running one?
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                    Connect the domain it answers on</button
+                                >.
+                            </p>
+                            <p v-else-if="addressFact === `intentic` && reaching" class="text-xs text-muted">
+                                Use
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
+                                    your own Cloudflare zone</button
+                                >, or connect
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                    a domain it already answers on</button
+                                >.
+                            </p>
 
                             <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
                                  the (i) that explains the token, which is the corner the step header used to keep
                                  it in — this card has no header to hang it off any more. -->
-                            <template v-else>
+                            <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                     <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
                                         ← Use intentic's domain
