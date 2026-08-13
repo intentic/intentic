@@ -69,6 +69,7 @@ export type IconName =
     | "gitlab"
     | "globe"
     | "google"
+    | "hammer"
     | "history"
     | "image"
     | "info-circle"
@@ -188,6 +189,10 @@ export const ICONS: Record<IconName, string> = {
     gitlab: "ri:gitlab-line",
     globe: "ri:global-line",
     google: "ri:google-line",
+    /* What a run DID, as opposed to what it said: the tool calls under a message. A hammer is the plainest
+     * picture of work being done with something, and it stays legible at the size the composer strip draws it —
+     * `wrench` at that size is a thin diagonal smudge, and it is already spoken for by settings-ish surfaces. */
+    hammer: "ri:hammer-line",
     history: "ri:history-line",
     image: "ri:image-line",
     "info-circle": "ri:information-line",
