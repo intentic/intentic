@@ -5,9 +5,7 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::platform;
-use crate::sandbox::{
-    container_status, doctor, list_slugs, remove, CONTAINER_PREFIX,
-};
+use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX};
 use crate::tty;
 use crate::util::{bail, kv_lines, slug_from_token, Result};
 
@@ -15,13 +13,11 @@ use crate::util::{bail, kv_lines, slug_from_token, Result};
  * post-Docker half. The bootstrap shim keeps the one thing that genuinely needs a dependency-free start
  * (checking for Docker and installing it, with consent); everything after Docker lands here.
  *
- * The platform mints a per-project connection token and hands out a one-liner. This flow creates the
- * sandbox's OWN Cloudflare tunnel (or takes the platform-provisioned one), starts the published image as a
- * long-lived UNPRIVILEGED container (privileges only ever arrive later through owner-approved overlay
- * directives — the host's Docker socket is never mounted), and runs a cloudflared sidecar. The browser then
- * talks to the sandbox DIRECTLY over the tunnel; the platform stays off the command path. */
-
-const ORIGIN_HOST: &str = "intentic-sandbox-workspace";
+ * The platform mints a per-project connection token plus the sandbox's reachability grant on the hub, and
+ * hands out a one-liner. This flow starts the published image as a long-lived UNPRIVILEGED container
+ * (privileges only ever arrive later through owner-approved overlay directives — the host's Docker socket is
+ * never mounted) and rides the grant in; the box enables against the hub and serves its own share. The
+ * browser then talks to the sandbox DIRECTLY over that address; the platform stays off the command path. */
 
 pub struct Args {
     pub setup_code: Option<String>,
