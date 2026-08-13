@@ -12,8 +12,8 @@
  *
  * So every value is resolved by PAINTING it: a 1×1 canvas is the one colour parser guaranteed to agree with
  * the browser rendering the page, it converts whatever CSS colour syntax the tokens are written in, and it
- * blends two of them in the same call — which is how a node gets a fill that is "a few percent of the text
- * colour over the card", the same recipe the surrounding figures use, without hard-coding a grey per scheme.
+ * blends two of them in the same call — which is how a node gets a fill that is "a few percent of the accent
+ * over the card", the same recipe the surrounding figures use, without hard-coding a shade per scheme.
  *
  * Where there is no 2D canvas (a jsdom test, a context that refuses one), there are no themeVariables at all
  * and mermaid's own themes stand in. A diagram in the wrong palette still says what it says. */
@@ -67,12 +67,44 @@ const paint = (base: string, over?: string, alpha = 0): string | undefined => {
     return `#${hex(red)}${hex(green)}${hex(blue)}`;
 };
 
-/* How much of the text colour a surface takes. A node has to read as an object sitting ON the page, and a
- * subgraph as a region UNDER its nodes, so the two differ by enough to see and not enough to shout. Both are
- * expressed against the card colour rather than picked per scheme, which is what makes one pair of numbers
- * correct in light, in dark, and in a brand theme none of us has looked at yet. */
-const NODE_TINT = 0.06;
+/* How much of another colour a surface takes. A node has to read as an object sitting ON the page, and a
+ * subgraph as a region UNDER its nodes, so the two differ by enough to see and not enough to shout. All three
+ * are expressed against the card colour rather than picked per scheme, which is what makes one set of numbers
+ * correct in light, in dark, and in a brand theme none of us has looked at yet.
+ *
+ * A NODE IS TINTED WITH THE ACCENT, NOT WITH THE INK. Washed with the text colour it was grey on grey — legible,
+ * and indistinguishable from a wireframe of itself. The accent is the one colour the reader has already agreed
+ * to (they chose it), it is what every other control on the page is drawn in, and it costs the diagram nothing
+ * in meaning: every box in a flowchart is the same KIND of thing, so the colour is dressing the surface, not
+ * encoding anything. Colour that varies per box would be colour carrying no information, which is the one thing
+ * a palette exists not to do — the slots below are where a diagram's colour is allowed to mean something.
+ *
+ * The border takes much more of the accent than the fill: the fill is a surface to read text off, the border is
+ * the line that says where the box ends, and matching them leaves a smudge instead of an edge. A subgraph keeps
+ * the neutral wash — it is a region behind the nodes, and colouring it puts it in competition with them. */
+const NODE_TINT = 0.07;
+const NODE_EDGE_TINT = 0.85;
 const CLUSTER_TINT = 0.03;
+
+/* The five categorical slots the chart palette exposes, and the achromatic bucket everything past them folds
+ * into (semantic-colors.css). Assigned in fixed order and never cycled: past the fifth entity the answer is the
+ * tail colour, not a sixth hue this palette never validated. The sixth git branch is told apart by its label,
+ * which mermaid draws on every branch anyway — the same relief the palette's own contrast note calls for. */
+const SERIES_SLOTS = [1, 2, 3, 4, 5] as const;
+
+// Mermaid's own scale lengths, so a slot past our fifth resolves to the fold rather than to whatever its
+// derivation would have invented. Pie sections are 1-indexed; the other two count from zero.
+const PIE_SLOTS = 12;
+const GIT_SLOTS = 8;
+const SCALE_SLOTS = 13;
+
+// `count` colours: the palette in order, then the fold for the rest.
+const folded = (count: number, palette: readonly string[], fold: string): string[] =>
+    Array.from({ length: count }, (_, index) => palette[index] ?? fold);
+
+// `prefix0, prefix1, …` — the shape mermaid names a scale in.
+const numbered = (prefix: string, from: number, values: readonly string[]): Record<string, string> =>
+    Object.fromEntries(values.map((value, index) => [`${prefix}${index + from}`, value]));
 
 // A diagram's own type size. A step under the prose it sits in — a flowchart's labels are glanced at, not
 // read in paragraphs, and matching the body size makes a five-box diagram wider than the column holding it.
@@ -87,11 +119,16 @@ export const mermaidTheme = (scheme: "light" | "dark", font: string): MermaidThe
     const card = token(`--color-card`);
     const content = token(`--color-content`);
 
+    // The accent as it is drawn ON this surface — the token every link and control on the page already uses,
+    // so it is the one shade of the reader's chosen colour that is known to read against the card in BOTH
+    // schemes. Taking the raw brand ramp instead would be a light-mode accent painted on a dark card.
+    const accent = token(`--color-link`);
+
     const background = paint(card);
     const text = paint(content);
-    const node = paint(card, content, NODE_TINT);
+    const node = paint(card, accent, NODE_TINT);
     const cluster = paint(card, content, CLUSTER_TINT);
-    const border = paint(token(`--color-line-strong`));
+    const border = paint(card, accent, NODE_EDGE_TINT);
     const line = paint(token(`--color-line`));
     const stroke = paint(token(`--color-muted`));
     if (
@@ -105,6 +142,59 @@ export const mermaidTheme = (scheme: "light" | "dark", font: string): MermaidThe
     ) {
         return { theme: scheme === `dark` ? `dark` : `default` };
     }
+
+    /* The chart palette, resolved as a set. Partial is not useful — five slots minus one is a diagram where a
+     * single entity is silently the fold colour — so it is all or nothing, and its absence costs only the
+     * categorical scales below. The core theme above still stands, which is what keeps a flowchart (the case
+     * that has no categories at all) working in a context where these tokens never resolved. */
+    const palette = SERIES_SLOTS.map((slot) => paint(token(`--color-series-${slot}`))).filter((colour): colour is string => colour !== undefined);
+    const fold = paint(token(`--color-series-other`));
+    /* THE LABEL THAT LANDS ON A FILLED SLOT, and why it does not flip with the scheme.
+     *
+     * Everywhere else this app puts a number next to a coloured mark, not on it (BarChart) — the palette's own
+     * contrast note assumes exactly that. Mermaid's pie draws the percentage INSIDE the slice and offers one
+     * colour for all of them, so a label here has to survive all five fills at once.
+     *
+     * It is white in both schemes, which is NOT the scheme's own on-fill ink: that token is chosen together
+     * with the semantic fills, and those invert between light and dark. The chart slots do not — they are
+     * stepped into the same mid-lightness band in both, so what reads on them is the same colour in both.
+     * Measured against all ten: white's worst pairing is 3.0:1, the dark scheme's own ink drops to 2.5:1 on
+     * violet. Neither reaches AA for small text, which is the real reason a figure like this carries its
+     * legend as well — the slice is named outside the wheel, not only sized inside it. */
+    const onFill = paint(token(`--color-white`));
+
+    const categorical =
+        palette.length === SERIES_SLOTS.length && fold !== undefined && onFill !== undefined
+            ? {
+                  ...numbered(`pie`, 1, folded(PIE_SLOTS, palette, fold)),
+                  ...numbered(`git`, 0, folded(GIT_SLOTS, palette, fold)),
+                  ...numbered(`cScale`, 0, folded(SCALE_SLOTS, palette, fold)),
+                  // Every label that lands on one of those fills, rather than beside it.
+                  ...numbered(
+                      `gitBranchLabel`,
+                      0,
+                      Array.from({ length: GIT_SLOTS }, () => onFill),
+                  ),
+                  ...numbered(
+                      `cScaleLabel`,
+                      0,
+                      Array.from({ length: SCALE_SLOTS }, () => onFill),
+                  ),
+                  /* Slices at FULL strength. Mermaid's own default is 0.7, which is not a styling choice here
+                   * but a different palette: the slots were measured for adjacent-pair separation and for the
+                   * label that sits on them, and 70% of each over the page is a set of colours nobody checked
+                   * — visibly paler, and closest exactly where two neighbours were already closest. */
+                  pieOpacity: `1`,
+                  pieSectionTextColor: onFill,
+                  // The page's own colour between slices: two categorical fills meeting at a shared edge read
+                  // as one shape, and a hairline of the background is what separates them back into two.
+                  pieStrokeColor: background,
+                  pieOuterStrokeColor: line,
+                  // Legend and title are prose about the chart, so they wear text colour — never a slot's.
+                  pieLegendTextColor: text,
+                  pieTitleTextColor: text,
+              }
+            : {};
 
     /* Seeds first, then the specific variables the flowchart renderer reads. Both are given because `base`
      * derives the second set from the first with arithmetic that assumes mermaid's own palette — deriving a
@@ -137,6 +227,9 @@ export const mermaidTheme = (scheme: "light" | "dark", font: string): MermaidThe
             edgeLabelBackground: background,
             fontFamily: font,
             fontSize: FONT_SIZE,
+            // Last, so a diagram type that has real categories in it overrides whatever `base` derived for
+            // that scale from the seeds above.
+            ...categorical,
         },
     };
 };
