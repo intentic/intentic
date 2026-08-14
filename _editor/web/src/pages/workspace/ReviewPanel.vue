@@ -11,6 +11,7 @@ import ReviewStat from "../../components/ReviewStat.vue";
 import { useCodeStats, type CodeCount } from "../../composables/workspace/useCodeStats";
 import { rendersAsBytes } from "./fileType";
 import { useAgents } from "../../composables/agents/useAgents";
+import type { ChatAttachment } from "../../composables/chat/transcript";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "../../composables/workspace/commitMessage";
@@ -322,17 +323,21 @@ const filterDraftLines = computed<readonly string[]>(() => {
 // title, and under it the first message it came from when that conversation is open in the panel (the roster
 // carries no prompt, only the ≤40-char title).
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
-const firstPromptOf = (id: string): string | undefined => {
+// The prompt as the card takes it — its words and whatever pictures were attached to it, since a screenshot is
+// often the whole of what was asked and a card that dropped it would be quoting half a sentence.
+const firstPromptOf = (id: string): { text?: string; attachments?: readonly ChatAttachment[] } | undefined => {
     const conversation = conversations.value.find((c) => c.conversationId === id);
-    return conversation?.messages.value.find((message) => message.role === `user`)?.text;
+    const prompt = conversation?.messages.value.find((message) => message.role === `user`);
+    return prompt === undefined ? undefined : { text: prompt.text, attachments: prompt.attachments };
 };
 const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
     // Two agents on one file is a real (if rare) case, and it is exactly the case a single title can't state —
     // so the card lists them and the first message stays out of it.
+    const prompt = ids.length === 1 ? firstPromptOf(ids[0]!) : undefined;
     hoverCard.value?.show(
         event,
         ids.length === 1
-            ? { label: `Landed by`, title: originLabel(ids[0]!), note: originNote(ids[0]!), body: firstPromptOf(ids[0]!) }
+            ? { label: `Landed by`, title: originLabel(ids[0]!), note: originNote(ids[0]!), ...(prompt === undefined ? {} : { messages: [prompt] }) }
             : { label: `Landed by`, title: ids.map((id) => originLabel(id)).join(`\n`) },
     );
 };

@@ -410,19 +410,6 @@ const hasMeta = (entry: OpenChat): boolean =>
     costOf(entry) !== undefined ||
     turnsOf(entry) !== undefined;
 
-// The card's hover preview note: what kind of work the tile's colour says this is (the legend for the tint —
-// a colour code nothing ever spells out is one the user has to break), the model (with the provider as its
-// floor) and the UNTRUNCATED live activity — the card's own meta line clamps both, so the hover is where a
-// long command or model name is read whole.
-const noteOf = (entry: OpenChat): string | undefined => {
-    const parts = [
-        sessionCategory(tabLabel(entry.conversation))?.type,
-        modelOf(entry) ?? providerLabel(entry.agent?.provider ?? entry.conversation.provider.value),
-        entry.agent === undefined ? undefined : activityLine(entry.agent),
-    ].filter((part) => part !== undefined && part !== ``);
-    return parts.length === 0 ? undefined : parts.join(` · `);
-};
-
 /* What the query found that ISN'T open in this window — the whole point of the filter reaching past its own
  * list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens the
  * conversation. Conversations no agent owns come from `sessionMatches` and open the same way.
@@ -517,15 +504,38 @@ const beginRename = (id: string): void => {
 // hands the press down to the card it names. Docked, the header renames itself and never calls this.
 defineExpose({ beginRename });
 
-// --- Hover preview --------------------------------------------------------------------------------
-// A card clamps its title to two lines, on top of the 40-char derivation, so hovering reveals the FULL derived
-// title and, under it, the first message that title was derived from. The card itself is the shared HoverCard
-// — the Changes panel's agent chips raise the same one for the same session.
+/* --- Hover preview --------------------------------------------------------------------------------
+ * A card clamps its title to two lines, on top of the 40-char derivation, so hovering reveals the FULL derived
+ * title and, under it, WHAT THE USER ASKED — their first message, and their last one when the conversation has
+ * moved on since. The card itself is the shared HoverCard; the Changes panel's agent chips raise the same one.
+ *
+ * The two ends, rather than the first message alone, because that is the question a rail of a dozen open chats
+ * actually poses: the first message says what this conversation was FOR, and after an hour of it the title
+ * derived from that first message no longer says what it is ABOUT. The last prompt is the only line that does.
+ *
+ * The hover used to spend its widest line on the card's state instead — the tile's category, the model, and the
+ * agent's untruncated live activity, in accent ink — which meant a hover over a working chat was mostly a raw
+ * shell command wrapped over ten lines. Every part of that was already on the card the pointer was sitting on:
+ * the model on its meta line, the activity on its live line, the category in its tint. So the card's one wide
+ * surface goes to the thing that appears nowhere else instead.
+ *
+ * Their PICTURES ride along (HoverCard draws them full-bleed): a prompt is often a screenshot with "fix this"
+ * under it, and among a dozen open chats the image is the fastest thing there is to recognise one by. */
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 const showPreview = (event: MouseEvent, entry: OpenChat): void => {
-    const firstUser = entry.conversation.messages.value.find((message) => message.role === `user`);
-    // A fresh "New chat"/"New agent" card has neither, and the preview declines to open on empty content.
-    hoverCard.value?.show(event, { title: entry.conversation.title.value ?? undefined, note: noteOf(entry), body: firstUser?.text });
+    const prompts = entry.conversation.messages.value.filter((message) => message.role === `user`);
+    const first = prompts[0];
+    const last = prompts.at(-1);
+    hoverCard.value?.show(event, {
+        title: entry.conversation.title.value ?? undefined,
+        // Labelled only when there are two, since "Latest" over the single prompt of a one-turn chat names a
+        // distinction that isn't there. A fresh "New chat" card has no prompts at all and no title either, and
+        // the card declines to open on that rather than floating an empty box.
+        messages: [
+            ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),
+            ...(last === undefined || last === first ? [] : [{ label: `Latest`, text: last.text, attachments: last.attachments }]),
+        ],
+    });
 };
 const hidePreview = (): void => {
     hoverCard.value?.hide();

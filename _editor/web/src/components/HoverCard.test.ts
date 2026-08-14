@@ -2,11 +2,16 @@
 //
 // The card two surfaces share (the chat tab strip, the Changes panel's origin chips). Driven through the real
 // component, because the rules worth pinning are the ones a caller can't see: where it lands relative to its
-// anchor, that it declines to open on content that says nothing, and that it drops a body that only repeats the
-// title — the common case, since a one-line first message IS its own derived title.
-import { expect, it } from "vitest";
+// anchor, that it declines to open on content that says nothing, that it drops a message that only repeats the
+// title — the common case, since a one-line first message IS its own derived title — and that a prompt's
+// pictures are drawn at the card's full width rather than inside its padding.
+import { expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 import HoverCard from "./HoverCard.vue";
+
+// The bytes behind a workspace path are fetched off the daemon; the card's job here is only to ask for them and
+// draw what comes back, so the fetch is stubbed and the src it produces is what the test reads.
+vi.mock(`../composables/chat/attachmentPreviews`, () => ({ attachmentPreview: (path: string) => `blob:${path}` }));
 
 // The anchor a real trigger would be: show() measures event.currentTarget, so it has to be a live element.
 // jsdom lays nothing out, so a placement test hands in the box the anchor would have had on screen.
@@ -44,7 +49,7 @@ it(`reveals the full title, and the first message under it`, async () => {
     card.show(anchorEvent(), {
         label: `Landed by`,
         title: `Right-click on empty space`,
-        body: `Clicking on empty space should allow also Close All option.`,
+        messages: [{ text: `Clicking on empty space should allow also Close All option.` }],
     });
     await nextTick();
     expect(text()).toContain(`Landed by`);
@@ -54,6 +59,23 @@ it(`reveals the full title, and the first message under it`, async () => {
     card.hide();
     await nextTick();
     expect(text()).toBe(``);
+});
+
+// The pair the chat rail hovers on: what the conversation was for, and what it is about NOW. The title is
+// derived from the first message and stops being a description of a long session hours ago, so the last prompt
+// is the only line on the card that says where it has got to — and it is labelled, because two unmarked blocks
+// of the user's own words don't say which end is which.
+it(`shows the latest message under the first, labelled`, async () => {
+    const { card, text } = await mount();
+    card.show(anchorEvent(), {
+        title: `Fix the tab strip`,
+        messages: [{ text: `Fix the tab strip, it wraps to two rows.` }, { label: `Latest`, text: `Now make the rail scroll.` }],
+    });
+    await nextTick();
+    expect(text()).toContain(`it wraps to two rows.`);
+    expect(text()).toContain(`Latest`);
+    expect(text()).toContain(`Now make the rail scroll.`);
+    card.hide();
 });
 
 // Placement is the whole point of the card over a title=: it opens BESIDE its anchor, because every surface
@@ -88,14 +110,66 @@ it(`rises from the bottom edge for an anchor low in a full-height rail`, async (
     card.hide();
 });
 
-it(`drops a body that only repeats the title, and stays shut with nothing to say`, async () => {
+it(`drops a message that only repeats the title, and stays shut with nothing to say`, async () => {
     const { card, text } = await mount();
-    card.show(anchorEvent(), { title: `Fix the tab strip`, body: `  Fix the tab strip ` });
+    card.show(anchorEvent(), { title: `Fix the tab strip`, messages: [{ text: `  Fix the tab strip ` }] });
     await nextTick();
     expect(text()).toBe(`Fix the tab strip`);
 
     card.hide();
-    card.show(anchorEvent(), { label: `Landed by`, title: undefined, body: `   ` });
+    card.show(anchorEvent(), { label: `Landed by`, title: undefined, messages: [{ text: `   ` }] });
     await nextTick();
     expect(text()).toBe(``); // a fresh "New agent" tab has no title and no message — no empty card either
+});
+
+/* THE PICTURES A PROMPT CAME WITH, drawn edge to edge. A screenshot is often the whole of what was asked, and at
+ * 320px a card that also paid its own padding out of the image would be showing a thumbnail of a thumbnail — so
+ * the row breaks back out through the padding it sits in.
+ *
+ * A message whose words merely repeat the title keeps its block here rather than being dropped with them: the
+ * duplicate line goes, the picture is not a duplicate of anything. */
+it(`draws a prompt's images at the card's full width, past its padding`, async () => {
+    const { card, text } = await mount();
+    card.show(anchorEvent(), {
+        title: `Fix the tab strip`,
+        messages: [{ text: `Fix the tab strip`, attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }] }],
+    });
+    await nextTick();
+    const image = document.body.querySelector(`img`)!;
+    expect(image.getAttribute(`src`)).toBe(`blob:.intentic/artifacts/attachments/u1/shot.png`);
+    expect(image.className).toContain(`w-full`);
+    expect(image.parentElement?.className).toContain(`-mx-3`);
+    expect(text()).toBe(`Fix the tab strip`); // the repeated line still goes; only the picture is new
+    card.hide();
+});
+
+// The send-time object URL wins where the page still has one — the same picture the sent bubble is showing,
+// without a second trip to the daemon for bytes this browser already holds.
+it(`prefers an attachment's own preview url over refetching it`, async () => {
+    const { card } = await mount();
+    card.show(anchorEvent(), {
+        title: `Look at this`,
+        messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png`, previewUrl: `blob:local-object-url` }] }],
+    });
+    await nextTick();
+    expect(document.body.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:local-object-url`);
+    card.hide();
+});
+
+/* A card may not grow past the edge it was placed against. Text clamps itself to a known number of lines; an
+ * image is however tall the user's screenshot was, so without a cap a two-screenshot hover near the bottom of a
+ * rail runs off the window — and nothing can scroll a card the pointer passes straight through. */
+it(`caps its height at the room its corner leaves`, async () => {
+    const { card, style } = await mount();
+    card.show(anchorEvent({ left: 40, top: 600, width: 120 }), { title: `Fix the tab strip` });
+    await nextTick();
+    expect(style().bottom).toBe(`148px`); // rises from the anchor's bottom edge (620)
+    expect(style().maxHeight).toBe(`612px`); // ...and reaches no further than the window's top margin
+    card.hide();
+
+    card.show(anchorEvent({ left: 40, top: 100, width: 120 }), { title: `Fix the tab strip` });
+    await nextTick();
+    expect(style().top).toBe(`100px`); // hangs from the anchor's top edge
+    expect(style().maxHeight).toBe(`660px`); // 768 − 100 − the 8px margin
+    card.hide();
 });
