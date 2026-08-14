@@ -26,7 +26,7 @@ import PastChatList from "./PastChatList.vue";
 
 /* THE CHAT PANEL'S OWN BAR — one line that says which conversation you are in, and drops the list of every
  * other one on click. Docked it is a header across the top of the chat column; popped out it stands up the
- * window's right edge as a rail, with that same list permanently open in it.
+ * window's left edge as a rail, with that same list permanently open in it.
  *
  * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
  * and then scrolled, so a fleet of a dozen showed two or three truncated titles ("Migrate the users tab…",
@@ -68,8 +68,8 @@ const railHint = computed(() => withShortcut(`Dock chat to rail — full window,
 // Only where the /chat area exists to navigate to: the workspace shell, not a local-posture host window.
 const canFill = localPosture() === undefined;
 
-/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the RIGHT
- * EDGE as a resizable rail with the chat list always open in it (ChatPanel's row-reverse says why that side).
+/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
+ * EDGE as a resizable rail with the chat list always open in it (ChatPanel says why that side).
  * A wide surface has the width to keep the list open beside the transcript, and a top bar there would spend
  * the one axis the chat is short of (height) on a row that has width to burn — while a rail has room to be a
  * slice of the fleet board. Docked, the chat column is ~22rem: a permanent rail there would halve the
@@ -178,7 +178,7 @@ watch(
 );
 
 // --- Rail width ---------------------------------------------------------------------------------
-// The rail resizes off its LEFT edge (pointer capture, double-click resets) — it stands at the right of every
+// The rail resizes off its RIGHT edge (pointer capture, double-click resets) — it stands at the left of every
 // wide surface — and persists locally, because it exists only in those forms. The bounds themselves are
 // chatRail.ts's: the panel needs them too, to know what the panes get.
 const readRailWidth = (): number => {
@@ -204,12 +204,14 @@ const startRailResize = (event: PointerEvent): void => {
     railResizing.value = true;
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 };
-// The rail is flush with its window's RIGHT edge, so its width is the distance from the pointer to it — asked
-// of the rail's OWN window, which is the pop-out's whenever the panel floats there.
+// The width is the distance from the rail's own left edge to the pointer — measured off the ELEMENT, not off
+// the window. In a pop-out the two are the same thing (the rail is flush with that window's left edge), but in
+// the /chat area the shell's icon rail stands to its left, and a width read as the pointer's x would be that
+// column's width too wide on every drag.
 const onRailResize = (event: PointerEvent): void => {
     if (railResizing.value) {
-        const view = bar.value?.ownerDocument.defaultView ?? window;
-        setRailWidth(toAppPx(view.innerWidth - event.clientX));
+        const left = bar.value?.getBoundingClientRect().left ?? 0;
+        setRailWidth(toAppPx(event.clientX - left));
     }
 };
 const endRailResize = (event: PointerEvent): void => {
@@ -464,7 +466,7 @@ const openHistory = (event: Event): void => {
 
 <template>
     <!-- Docked: one line across the top of the chat column, with the list on a sheet beneath it. Undocked: a
-         resizable rail down the window's right edge with the list always open, over a foot that carries the
+         resizable rail down the window's left edge with the list always open, over a foot that carries the
          same ✚ / history pair the header wears beside it — there as two bare glyphs, here as a labelled
          "Past chats" row and a filled "New agent". -->
     <component
@@ -692,11 +694,11 @@ const openHistory = (event: Event): void => {
 </template>
 
 <style scoped>
-/* Drag-to-resize handle on the rail's LEFT edge — the seam against the panes it stands beside (pointer-capture,
+/* Drag-to-resize handle on the rail's RIGHT edge — the seam against the panes it stands beside (pointer-capture,
  * mirrors the panel's .resize-handle). */
 .rail-resize {
     position: absolute;
-    inset: 0 auto 0 0;
+    inset: 0 0 0 auto;
     width: 6px;
     cursor: col-resize;
     z-index: 20;

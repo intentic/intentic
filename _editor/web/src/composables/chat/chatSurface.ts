@@ -10,7 +10,7 @@ import { useLayout } from "../useLayout";
  * These readings are the whole vocabulary the rest of the app needs:
  *
  *   · chatWide       — the panel is on a WIDE surface (the pop-out window or the full-window area), so it turns
- *                      on its side: the tab bar becomes a right-edge rail of chat cards, panes stand beside,
+ *                      on its side: the tab bar becomes a left rail of chat cards, panes stand side by side,
  *                      and a workflow run may take the pane area for its diagram. The docked column keeps the
  *                      stacked form. Everything that used to ask "popped out?" to pick a LAYOUT asks this now;
  *                      what asks about window identity (which document, which clock) still asks poppedOut.
