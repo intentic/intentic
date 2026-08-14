@@ -1,17 +1,40 @@
 <!-- A THING, in a rounded square — what <Avatar> is for people, for everything that isn't one: a capability
      card, an extension in a list, a registry entry being read about before it is installed.
 
-     THE LADDER IS THE WHOLE POINT, and it is the same argument <Avatar> makes one component over. Three tiers,
-     because each of the top two is allowed to be absent and allowed to FAIL:
+     THE LADDER IS THE WHOLE POINT, and it is the same argument <Avatar> makes one component over. Four tiers,
+     because each of the top three is allowed to be absent and allowed to FAIL:
 
+       art    the thing's OWN drawing, an SVG document carried inline in the manifest. The only tier its author
+              controls completely, and the only one that can make a grid of unfamiliar names read as a shelf of
+              distinct products — which is what a list of extensions is. Costs no request and works offline,
+              since the document is already here.
        logo   a simple-icons slug, fetched from a CDN. Right for anything standing in for somebody else's
               product, and wrong as a lone tier for three separate reasons: most things have no brand in that
               set (Slack is not in it at all), an offline sandbox reaches no CDN at all, and a renamed slug
               404s long after the manifest declaring it was approved.
        icon   a name from the app's own vocabulary — bundled in the image, themed with the rest of the UI,
-              no request. This is what actually carries a first-party extension. Also allowed to be a name
-              this build has never heard of, since manifests are written against builds that haven't shipped.
+              no request. This is what carries a first-party extension nobody has drawn yet. Also allowed to be
+              a name this build has never heard of, since manifests are written against builds that haven't
+              shipped.
        name   its initials. Always available, so the ladder can't bottom out in a hole.
+
+     ART FILLS THE TILE; every tier below it is a glyph ON a tile. That asymmetry is deliberate and is what
+     makes the top tier worth having: an app icon IS its square — its own plate, its own corners, its own
+     colour — and drawing somebody's artwork shrunken onto a neutral grey plate would throw away the exact
+     thing they drew it for. So art brings no plate of its own from this component; whatever framing the
+     wrapper carries in the shape it was asked for is the framing, which is none at all under `flush`.
+
+     That makes the plate and the outline two SEPARATE questions, and they are answered separately below:
+     `flush` says whose border and whose corners these are, artwork says whether anything is painted beneath
+     the mark. Every combination is a shape somebody asks for — a drawn mark as a badge, a drawn mark as a
+     full-height band, a glyph as either — so neither may be folded into the other.
+
+     ART IS DRAWN INERT, and this is the load-bearing sentence of the whole component: the document arrives
+     from a registry row, which is to say from a stranger, and it is handed to an <img> — never to v-html, never
+     to an inline <svg>. An SVG loaded through <img> renders in the browser's secure static mode, where script
+     does not run and external references do not resolve, so a hostile mark is a picture and nothing more. The
+     day someone "improves" this by inlining the markup to make it themeable is the day a registry listing can
+     script the page listing it.
 
      The copies this replaces disagreed at exactly the point that matters: two tracked failures in a reactive
      Set the CALLER had to own and never cleared, and two others (the automation source and recipe rows) had no
@@ -48,7 +71,7 @@
      outline, and any divider between the band and the text beside it belongs to the caller's layout. -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { type Brand, brandUrl, loadBrand } from "./brandMark.js";
+import { artSrc, type Brand, brandUrl, loadBrand } from "./brandMark.js";
 import { isIconName } from "../icons/iconSets.js";
 import { initialsOf } from "../format.js";
 import Icon from "./Icon.vue";
@@ -56,6 +79,7 @@ import Icon from "./Icon.vue";
 const {
     size,
     name,
+    art,
     logo,
     icon,
     idle = false,
@@ -67,6 +91,9 @@ const {
     size: number;
     /** The monogram tier — the one thing every caller can always supply. Not an accessible label: see below. */
     name: string;
+    /** The thing's own mark, as a complete SVG document. An OPEN string from a manifest like `icon` is, so
+     *  anything that isn't a drawable document falls to the tier below rather than to a broken-image glyph. */
+    art?: string | undefined;
     /** A simple-icons slug. Colour is not the caller's to choose — the brand's own is what gets painted, and
      *  it comes from the fetched mark — so a `<slug>/<hex>` left over from when it was gets its colour
      *  dropped rather than passed on. */
@@ -81,11 +108,15 @@ const {
     flush?: boolean;
 }>();
 
+const drawing = computed(() => artSrc(art));
 const glyph = computed(() => (icon !== undefined && isIconName(icon) ? icon : undefined));
 const initials = computed(() => initialsOf(name));
 
-// An absent slug simply never resolves a brand.
-const logoUrl = computed(() => brandUrl(logo));
+/* An absent slug simply never resolves a brand — and neither does a present one on something that brought its
+ * own drawing. Skipping the fetch when art has already won is not an optimisation to be tidied away: the
+ * request it saves is to a third party, so a mark that never gets painted must not still tell a CDN that this
+ * sandbox is looking at this extension. */
+const logoUrl = computed(() => (drawing.value === undefined ? brandUrl(logo) : undefined));
 
 /* How far the top tier has got. Undefined means "not this tier" — still in flight, or answered with no brand —
  * and the tier underneath stays painted until a brand actually arrives. */
@@ -118,9 +149,12 @@ watch(
             idle ? `opacity-50 grayscale` : ``,
             // Both belong to the badge shape only — a flush mark is inside a border that is already drawn.
             flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
-            // The brand's own plate replaces the neutral one only once its colour is known — a tinted tile
-            // under a fallback glyph would claim a brand that never loaded.
-            brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
+            /* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border
+             * and whose corners), artwork decides the PLATE (whether there is anything to paint under the
+             * mark). A drawing brings its own square, so it gets no plate in either shape — see the note above.
+             * Otherwise the brand's own plate replaces the neutral one only once its colour is known: a tinted
+             * tile under a fallback glyph would claim a brand that never loaded. */
+            drawing !== undefined ? `` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
             // Stretched to the container and held square, rather than sized here: the height belongs to
@@ -140,7 +174,13 @@ watch(
         }"
         aria-hidden="true"
     >
-        <template v-if="brand === undefined">
+        <!-- The author's own mark, edge to edge. `object-cover` rather than `contain` because this is a tile,
+             not a picture in a frame: a mark drawn on a square plate should meet the rounded corners the way an
+             app icon does, and one drawn a few percent off-square should be cropped by those few percent rather
+             than float in a band of nothing. Decorative like the rest of the tile, so it carries an empty alt
+             and never adds a second reading of a name already drawn beside it. -->
+        <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
+        <template v-else-if="brand === undefined">
             <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
             <span v-else-if="initials !== undefined" class="font-semibold leading-none" :style="{ fontSize: `${Math.max(7, size * 0.375)}px` }">
                 {{ initials }}

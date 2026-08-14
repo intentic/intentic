@@ -24,6 +24,11 @@
             "type": "string",
             "minLength": 1
         },
+        "art": {
+            "description": "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+            "type": "string",
+            "maxLength": 4096
+        },
         "logo": {
             "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
             "type": "string"
@@ -390,6 +395,11 @@
                                                 "type": "string",
                                                 "minLength": 1
                                             },
+                                            "art": {
+                                                "description": "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+                                                "type": "string",
+                                                "maxLength": 4096
+                                            },
                                             "logo": {
                                                 "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
                                                 "type": "string"
@@ -579,6 +589,11 @@
                                                 "type": "string",
                                                 "minLength": 1
                                             },
+                                            "art": {
+                                                "description": "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+                                                "type": "string",
+                                                "maxLength": 4096
+                                            },
                                             "logo": {
                                                 "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
                                                 "type": "string"
@@ -760,6 +775,11 @@
                                                 "type": "string",
                                                 "minLength": 1
                                             },
+                                            "art": {
+                                                "description": "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+                                                "type": "string",
+                                                "maxLength": 4096
+                                            },
                                             "logo": {
                                                 "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
                                                 "type": "string"
@@ -930,6 +950,11 @@
                                             "name": {
                                                 "type": "string",
                                                 "minLength": 1
+                                            },
+                                            "art": {
+                                                "description": "This extension's own mark, as a complete SVG document inline — the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+                                                "type": "string",
+                                                "maxLength": 4096
                                             },
                                             "logo": {
                                                 "description": "A simple-icons slug, fetched from a CDN — right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",

@@ -92,7 +92,7 @@ const priceLabel = computed(() =>
     >
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
-                <BrandMark :size="32" :name="listing.entry.name" :logo="listing.entry.logo" :icon="listing.entry.icon" />
+                <BrandMark :size="32" :name="listing.entry.name" :art="listing.entry.art" :logo="listing.entry.logo" :icon="listing.entry.icon" />
                 <div class="min-w-0">
                     <div class="truncate font-medium text-content">{{ name.title }}</div>
                     <div class="truncate text-2xs text-subtle">{{ listing.entry.name }}</div>

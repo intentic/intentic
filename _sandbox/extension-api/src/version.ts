@@ -26,4 +26,11 @@
 // that URL completes the fields, shows what each one does, and marks a key nothing declares — which used to be
 // the one class of mistake nothing caught, because zod strips what it does not know rather than refusing it.
 // Additive: a manifest that names no schema is unchanged.
-export const extensionApiVersion = "2.4.0";
+// 2.5.0 lets an extension bring its own picture: `art` carries a complete SVG document inline, above the
+// simple-icons `logo` and the host's `icon` in the same ladder. The two tiers before it could say "this is
+// Slack" or "this is a server", and nothing could say "this is mine" — so a page listing seven unfamiliar
+// extensions drew seven near-identical glyphs, which is the shape of a directory rather than of a shelf. Inline
+// rather than a URL because the row is drawn before any code is cloned: a link would put a stranger's server in
+// the render path, track who is browsing, and rot after approval. Additive — a manifest that ships no drawing
+// falls to exactly the mark it had before.
+export const extensionApiVersion = "2.5.0";

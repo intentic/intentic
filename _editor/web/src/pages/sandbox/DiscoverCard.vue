@@ -52,7 +52,14 @@ const premiumHint = computed(() =>
         @click="emit(`open`)"
     >
         <div class="flex w-full items-start gap-2.5">
-            <BrandMark :size="28" :name="listing.entry.name" :logo="listing.entry.logo" :icon="listing.entry.icon" :idle="dim" />
+            <BrandMark
+                :size="28"
+                :name="listing.entry.name"
+                :art="listing.entry.art"
+                :logo="listing.entry.logo"
+                :icon="listing.entry.icon"
+                :idle="dim"
+            />
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-x-1.5">
                     <span class="truncate text-sm font-semibold text-content">{{ name.title }}</span>

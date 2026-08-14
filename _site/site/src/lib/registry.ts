@@ -70,11 +70,17 @@ export const sourceHref = (entry: RegistryEntry): string | undefined => entry.in
 
 /* THE CARD'S MARK, and what this page can and cannot draw of it.
  *
- * A registry row carries the two tiers the manifest declares: a simple-icons `logo` and an `icon` from the
- * app's own set, and this page can honour only the first. The second is a name in a vocabulary that exists as
- * bundled Iconify data inside @intentic/ui, a Vue design system; a static marketing page has no dependency on
- * it and should not grow one to draw ~90 glyphs it would then ship to every visitor. So the glyph tier
- * DEGRADES here to the tier below it, and every card without a logo wears its initials.
+ * A registry row carries the three tiers the manifest declares: the author's own `art`, a simple-icons `logo`,
+ * and an `icon` from the app's own set. This page can honour the first two and not the third. The glyph is a
+ * name in a vocabulary that exists as bundled Iconify data inside @intentic/ui, a Vue design system; a static
+ * marketing page has no dependency on it and should not grow one to draw ~90 glyphs it would then ship to every
+ * visitor. So the glyph tier DEGRADES here to the tier below it, and every card with neither art nor a logo
+ * wears its initials.
+ *
+ * ART IS THE EASIEST TIER FOR THIS PAGE, not the hardest — the one place where the site is better off than the
+ * app. The document is already in the row, so drawing it costs no dependency, no CDN and no request: it inlines
+ * into the built HTML and is correct for a visitor whose network blocks the icon CDN. That it arrived last is
+ * an accident of when it was added, not an order of preference.
  *
  * The initials rule matches `initialsOf` in @intentic/ui and remains a second copy of
  * it: there is no dependency edge from this site to that package, and one shouldn't be added for eight lines
@@ -91,3 +97,21 @@ export const markInitials = (name: string): string => {
 // The simple-icons CDN URL a row's logo slug resolves to, or undefined for a row that declared none.
 export const markLogoUrl = (entry: RegistryEntry): string | undefined =>
     entry.logo === undefined ? undefined : `https://cdn.simpleicons.org/${entry.logo}`;
+
+/* A row's own artwork as a data URI, or undefined for a row that shipped none or shipped something undrawable.
+ *
+ * The same gate and the same encoding the app applies (<BrandMark>'s artSrc), deliberately kept as a second
+ * copy for the reason markInitials is one: there is no dependency edge from this site to @intentic/ui and one
+ * should not be added for a few lines of string handling. Both halves matter — the `#` in every fill has to be
+ * escaped or the URI ends at the first colour, and a truncated document has to answer `undefined` or the card
+ * paints a broken image where a mark should be. Keep them in step by hand.
+ *
+ * Drawn through an <img> here exactly as it is in the app, and for exactly the same reason: this page renders
+ * documents out of a registry anybody can open a pull request against, and an <img> is what makes them inert. */
+export const markArtUrl = (entry: RegistryEntry): string | undefined => {
+    const svg = entry.art?.trim();
+    if (svg === undefined || !svg.startsWith("<") || !/<svg[\s>]/iu.test(svg) || !svg.endsWith("</svg>") || /<script[\s>]/iu.test(svg)) {
+        return undefined;
+    }
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};

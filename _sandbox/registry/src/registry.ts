@@ -102,16 +102,21 @@ const RegistryFileEntrySchema = z
         securityFix: z.boolean().optional(),
         tier: RegistryTierSchema.optional(),
         category: z.string().optional(),
-        /* The mark the row is drawn with, copied off the extension's manifest by the scanner exactly like the
-         * description and the version — the same two tiers the manifest declares (a simple-icons slug, then a name
-         * from the app's icon set), and neither is required.
+        /* The mark the row is drawn with, copied off the extension's manifest exactly like the description and
+         * the version — the same three tiers the manifest declares (the author's own inline drawing, then a
+         * simple-icons slug, then a name from the app's icon set), and none is required.
          *
          * It rides the CURATED file rather than the generated one, which looks wrong for a derived value until you
          * ask what a registry is for: a listing is what a human decided to publish, and the mark is part of how it
          * presents itself, so it belongs in the row a reviewer reads and can strike out. The generated file holds
          * only what a bot re-reads nightly and nobody reviews. It also has to be here to be of any use at all —
          * this is what the gallery and the in-app browse list render, and neither of them has the manifest: the
-         * whole point of the row is that the code has NOT been cloned yet. */
+         * whole point of the row is that the code has NOT been cloned yet.
+         *
+         * `art` being reviewable is the reason it is capped and kept as SVG text: it is the one field here that
+         * is a picture, and a picture nobody can read in the diff is a picture nobody reviewed. Four kilobytes
+         * of readable shapes is a thing a reviewer can strike out; a base64 blob is not. */
+        art: z.string().max(4096).optional(),
         logo: z.string().optional(),
         icon: z.string().optional(),
         homepage: z.url().optional(),
@@ -213,6 +218,7 @@ export const RegistryEntrySchema = z.object({
     tier: RegistryTierSchema,
     category: z.string().optional(),
     // The mark, as the gallery and the app's browse list draw it — see the curated file's fields above.
+    art: z.string().optional(),
     logo: z.string().optional(),
     icon: z.string().optional(),
     homepage: z.string().optional(),
@@ -282,6 +288,7 @@ export const resolveRegistry = (file: RegistryFile, facts: RegistryFacts | undef
             ...(plugin.securityReview !== undefined ? { securityReview: plugin.securityReview } : {}),
             ...(plugin.securityFix !== undefined ? { securityFix: plugin.securityFix } : {}),
             ...(plugin.category !== undefined ? { category: plugin.category } : {}),
+            ...(plugin.art !== undefined ? { art: plugin.art } : {}),
             ...(plugin.logo !== undefined ? { logo: plugin.logo } : {}),
             ...(plugin.icon !== undefined ? { icon: plugin.icon } : {}),
             ...(plugin.homepage !== undefined ? { homepage: plugin.homepage } : {}),

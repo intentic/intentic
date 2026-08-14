@@ -193,7 +193,14 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <!-- The one thing on the row that is not words. Dimmed AND desaturated when the extension is
                      off, so a brand logo goes quiet with the rest of the row instead of being the loudest
                      thing on the one row that is switched off. -->
-                <BrandMark :size="22" :name="manifest.name" :logo="manifest.logo" :icon="manifest.icon" :idle="!entry.extension.enabled" />
+                <BrandMark
+                    :size="22"
+                    :name="manifest.name"
+                    :art="manifest.art"
+                    :logo="manifest.logo"
+                    :icon="manifest.icon"
+                    :idle="!entry.extension.enabled"
+                />
                 <span class="min-w-0 flex-1">
                     <span class="flex min-w-0 items-baseline gap-3">
                         <!-- Dimming is never on the switch: a faded control reads as unavailable, and the switch

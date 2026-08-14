@@ -21,6 +21,39 @@ export interface Brand {
  * — which encodeURIComponent does escape, so none can appear to close it early — all three are just characters. */
 const maskValue = (svg: string): string => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 
+/* THE AUTHOR'S OWN DRAWING, as something an <img> will load — the top tier, and the only one whose document
+ * comes from the manifest rather than from a CDN.
+ *
+ * Sniffed rather than parsed. What this has to catch is not an attack — the <img> below is what makes the
+ * document inert, and it does that whatever the string says — but GARBAGE: a truncated field, a stray URL,
+ * somebody's base64 pasted into the wrong key. Handed to an <img>, all of those paint the browser's broken-
+ * image glyph, which is the one outcome the ladder exists to prevent. Answering `undefined` instead drops to
+ * the tier below, where there is always something real to draw.
+ *
+ * The `<script` test is not the security boundary and must not be read as one — an SVG in an <img> is loaded in
+ * the browser's secure static mode, where script never runs and external references never resolve, and THAT is
+ * the guarantee. This is here to say out loud that a mark carrying script is not a mark this app will draw,
+ * so a reviewer reading the registry diff knows the answer before they ask. */
+export const artSrc = (art: string | undefined): string | undefined => {
+    if (art === undefined) {
+        return undefined;
+    }
+    const svg = art.trim();
+    /* Opens as markup, carries an <svg> root, and CLOSES it. The closing tag is the load-bearing third of that
+     * and the reason this is not a one-line startsWith: the realistic way this field goes wrong is not a
+     * hostile document but a truncated one — a string cut short by a length cap, a bad merge, an editor that
+     * ate a paste — and `<svg viewBox="0 0 32 32"><rect fill="#6C` opens perfectly well. Requiring the close
+     * also rejects a self-closed empty root, which is valid SVG that paints an invisible tile: a hole with a
+     * clean bill of health, and the exact outcome the ladder exists to prevent.
+     *
+     * An XML prolog or a comment ahead of the root is legal and common in exported files, so the opening test
+     * is that the document begins as markup — not that its very first byte is the tag itself. */
+    if (!svg.startsWith(`<`) || !/<svg[\s>]/iu.test(svg) || !svg.endsWith(`</svg>`) || /<script[\s>]/iu.test(svg)) {
+        return undefined;
+    }
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+
 /* Keyed by URL, so the second tile wanting `github` awaits the first one's request instead of opening its own,
  * and a re-render mounts nothing new. The promise is stored BEFORE it settles, which is what makes marks
  * mounting in the same tick share one request rather than race.

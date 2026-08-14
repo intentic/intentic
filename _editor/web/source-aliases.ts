@@ -90,6 +90,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // 24 official brand hexes clear the separation bar in both schemes, which is a claim only a test can hold —
     // and one that must not need a DOM (nor <BrandMark> itself) to be asked.
     "@intentic/ui/brand-color": fromRoot("_editor/ui/src/brandColor.ts"),
+    // And again, for the gate an extension's own artwork passes through on its way to an <img>: it decides what
+    // a registry row is allowed to paint, which is a claim worth a test — and one that must not need a DOM, a
+    // network, or <BrandMark> itself to be asked.
+    "@intentic/ui/brand-mark": fromRoot("_editor/ui/src/components/brandMark.ts"),
     // And again, for the app's base text size: it is the knob that column widths, editor font sizes and the
     // terminal's grid all convert against (uiScale.ts), so it is reached from plain modules the shell loads on
     // every boot — and through the barrel, asking a column how wide it should be would boot Picker.vue.

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { artSrc } from "@intentic/ui/brand-mark";
 import { isIconName } from "@intentic/ui/icons";
 import { describe, expect, it } from "vitest";
 
@@ -20,7 +21,10 @@ import { describe, expect, it } from "vitest";
  *
  * `logo` is deliberately NOT checked: a simple-icons slug can only be confirmed by fetching it, and a test that
  * reaches a CDN fails on a train. A dead slug is the one tier that degrades on its own — the mark underneath is
- * already painted. */
+ * already painted.
+ *
+ * `art` IS checked, and for the mirror-image reason: it is the one tier whose whole document is already here, so
+ * asking whether it will draw costs nothing and reaches nowhere. */
 
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
@@ -53,12 +57,23 @@ describe(`first-party extension marks`, () => {
             expect(declared.filter((icon) => !isIconName(icon))).toEqual([]);
         });
 
-        /* Something to draw, without exception. An extension that declares neither tier still renders — its
+        /* Something to draw, without exception. An extension that declares no tier at all still renders — its
          * initials are the floor — but a FIRST-PARTY one arriving with no mark is an oversight rather than a
          * choice, and the Extensions tab is where it shows: one row in a column of marks wearing two grey
          * letters reads as the one that failed to load. */
         it(`declares a mark — ${dir}`, () => {
-            expect(manifest.logo ?? manifest.icon).toBeDefined();
+            expect(manifest.art ?? manifest.logo ?? manifest.icon).toBeDefined();
+        });
+
+        /* Artwork that would not survive the gate is worse than none: it falls back silently, so the author sees
+         * the glyph they also declared and never learns the drawing they shipped is not being drawn. Checked
+         * here rather than in the schema because "is an SVG document" is not a thing zod can say about a string,
+         * and because the answer has to be the RENDERER's — this calls the same function <BrandMark> calls. */
+        it(`declares artwork this build will actually paint — ${dir}`, () => {
+            if (manifest.art === undefined) {
+                return;
+            }
+            expect(artSrc(manifest.art), `contributes art that is not a drawable SVG document`).toBeDefined();
         });
     }
 });

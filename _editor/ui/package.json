@@ -22,6 +22,10 @@
             "types": "./src/brandColor.ts",
             "default": "./src/brandColor.ts"
         },
+        "./brand-mark": {
+            "types": "./src/components/brandMark.ts",
+            "default": "./src/components/brandMark.ts"
+        },
         "./format": {
             "types": "./src/format.ts",
             "default": "./src/format.ts"

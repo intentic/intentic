@@ -120,7 +120,7 @@ const pick = (entry: RegistryEntry): void => {
                     <!-- The mark the registry carries, which for most rows is the extension's own initials: these
                          are names nobody has seen before, and a column of marks is the only thing here that can
                          be scanned without reading. -->
-                    <BrandMark :size="20" :name="entry.name" :logo="entry.logo" :icon="entry.icon" />
+                    <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
                     <!-- Verified is the only badge: it is the one state a human asserted, and badging "listed"
                          too would dress the honest default up as a review. -->
                     <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
