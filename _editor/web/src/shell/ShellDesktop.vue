@@ -3,7 +3,7 @@ import type { Disposable, ViewBadge } from "@intentic/extension-api";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
 import { cmp, type IconName, initialsOf } from "@intentic/ui";
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
@@ -16,6 +16,7 @@ import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
+import { chatFullscreen, lastAreaPath } from "../composables/chat/chatSurface";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
@@ -156,11 +157,23 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
     {
+        // FULL-SCREEN CHAT — the chat as a place rather than a column: opening it fills everything right of
+        // the rail with the panel in its wide (pop-out) form, and leaving it (any other tile) returns the chat
+        // to the side column exactly as it was. First in the Work band because talking to the agent is the
+        // product's primary surface; unbadged, because the docked header already carries the running/attention
+        // counts and the Agents tile below carries the debt.
+        id: `chat`,
+        to: `/chat`,
+        label: `Chat`,
+        icon: `comments`,
+    },
+    {
         id: `agents`,
         to: `/agents`,
         label: `Agents`,
-        // `robot`, not `comments` — the two Work-band tiles have to differ in SILHOUETTE, not in detail. The
-        // reasoning, and what it rules out, is on `robot` in the icon table.
+        // `robot`, not `comments` — the Work-band tiles have to differ in SILHOUETTE, not in detail: a face,
+        // a bubble (Chat above), a branching tree. The reasoning, and what it rules out, is on `robot` in the
+        // icon table.
         icon: `robot`,
         ...(agentAttention.value > 0
             ? {
@@ -343,9 +356,23 @@ onUnmounted(() => {
     areaCommands = [];
 });
 
-// Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
-// the workspace reclaims the full width — and equally while a window from before a page reload is still on its
-// way back, so a refresh doesn't flash the column open for a few frames. The rail variables flow into its child
+// Where full-screen chat's "Back to side panel" returns to: the last route that wasn't the chat area. Tracked
+// off the path the user actually stands on rather than history, which may START on /chat (a reload, a link).
+watch(
+    () => route.path,
+    (path) => {
+        if (!path.startsWith(`/chat`)) {
+            lastAreaPath.value = path;
+        }
+    },
+    { immediate: true },
+);
+
+// Collapse the chat column to nothing while the panel is drawn somewhere else — teleported into its own window
+// (popped out), on its way back to one after a page reload (so a refresh doesn't flash the column open for a
+// few frames), or filling the /chat area — so the workspace reclaims the full width. Read off where the panel
+// actually is (chatSurface.ts), never off the route, so the column can't collapse around a panel still in it.
+// The rail variables flow into its child
 // controls too, keeping every tile on one density without threading a presentation-only prop through the
 // switcher and account components.
 // THE RAIL DOES NOT TAKE THE APP'S TEXT SIZE. Everything else on screen grows with it — that is the point of
@@ -359,7 +386,7 @@ const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": poppedOut.value || chatRestoring.value ? `0px` : uiLength(layout.chatWidth.value),
+        "--chat-width": poppedOut.value || chatRestoring.value || chatFullscreen.value ? `0px` : uiLength(layout.chatWidth.value),
         "--icon-rail-width": rail(compact ? `3.5rem` : `4rem`),
         "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),

@@ -31,6 +31,7 @@ import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLa
 import ChatShareDialog from "./ChatShareDialog.vue";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { chatWide } from "../composables/chat/chatSurface";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import {
@@ -546,10 +547,11 @@ const showing = (id: string): boolean => panes.value.includes(id);
 // Whether there is a column to GIVE BACK: the last pane is the panel itself, so "Close Pane" and the Ctrl+click
 // that toggles one off are offered only past the first.
 const split = computed(() => panes.value.length > 1);
-// Panes exist in the POP-OUT window only — the docked column is ~22rem, and a second chat in it would be two
-// unusable slivers (ChatPanel holds that rule). So the gestures and the rows that teach them are offered where
-// they do something, rather than sitting in the docked sheet quietly doing nothing.
-const paneable = computed(() => poppedOut.value);
+// Panes exist on WIDE surfaces only (the pop-out window, the full-window /chat area) — the docked column is
+// ~22rem, and a second chat in it would be two unusable slivers (ChatPanel holds that rule). So the gestures
+// and the rows that teach them are offered where they do something, rather than sitting in the docked sheet
+// quietly doing nothing.
+const paneable = computed(() => chatWide.value);
 
 // The rows as the eye reads them, top to bottom, across the lanes that are drawn — what a Shift+range means.
 // The lanes SORT (by status, then recency), so this is the list's own order rather than the tab order; a range

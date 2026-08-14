@@ -4,12 +4,15 @@ import { AnchoredOverlay, ContextMenu, SearchBar } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { turnInFlight } from "../composables/agents/agentStatus";
+import { localPosture } from "../environments/posture";
 import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
+import { chatFullscreen, chatWide, toggleChatFullscreen } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -52,16 +55,25 @@ const emit = defineEmits<{
 const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions } = useChat();
 const { agentById, rename } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+const router = useRouter();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
-// teaches the chord that makes the trip unnecessary. Docked-only, so it never has to say the way back.
+// teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
+// has to say the way back.
 const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
+// Its sibling on the docked header — the same chat filling THIS window instead of a new one — and the way back
+// on the rail foot once it has. Both teach the palette's one toggle, so a chord bound there shows up on each.
+const fillHint = computed(() => withShortcut(`Fill the window with chat`, `chat.fullscreen`));
+const backHint = computed(() => withShortcut(`Back to side panel`, `chat.fullscreen`));
+// Only where the /chat area exists to navigate to: the workspace shell, not a local-posture host window.
+const canFill = localPosture() === undefined;
 
-/* Undocked, the bar stands up the window's LEFT EDGE as a resizable rail with the chat list always open in
- * it. A pop-out window is as wide as the user drags it, so a top bar there would spend the one axis the chat
- * is short of (height) on a row that has width to burn — while a rail has room to be a slice of the fleet
- * board. Docked, the chat column is ~22rem: a permanent rail there would halve the transcript, so the list
- * lives in a sheet the header drops and takes back. */
-const vertical = computed(() => poppedOut.value);
+/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
+ * EDGE as a resizable rail with the chat list always open in it. A wide surface has the width to keep the list
+ * open beside the transcript, and a top bar there would spend the one axis the chat is short of (height) on a
+ * row that has width to burn — while a rail has room to be a slice of the fleet board. Docked, the chat column
+ * is ~22rem: a permanent rail there would halve the transcript, so the list lives in a sheet the header drops
+ * and takes back. */
+const vertical = computed(() => chatWide.value);
 
 /* --- The counts the header carries -------------------------------------------------------------
  * The one thing the strip did that /agents cannot: from inside the workspace, a terminal or settings, say
@@ -245,6 +257,19 @@ const barMenuItems = computed<MenuItem[]>(() => [
     },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
+    // The chat's other two homes, in the header buttons' order (grow in place, then leave). The fill row is
+    // the shell command's move (toggleChatFullscreen — from a pop-out window it docks AND navigates, which is
+    // exactly what those words ask for there) and is absent where the /chat area doesn't exist (a
+    // local-posture host window).
+    ...(canFill
+        ? [
+              {
+                  label: chatFullscreen.value ? `Back to side panel` : `Fill the window with chat`,
+                  shortcut: commandShortcut(`chat.fullscreen`),
+                  command: (): void => toggleChatFullscreen(router),
+              },
+          ]
+        : []),
     {
         label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
         shortcut: commandShortcut(`chat.togglePopout`),
@@ -288,7 +313,7 @@ const cycleTab = (delta: number): void => {
 // the first anywhere that isn't — so repeated presses fill the window rather than re-opening the same chat.
 // Tab order, like cycleTab, since both answer "the next chat" and must not mean two different things.
 const splitBeside = (): void => {
-    if (!poppedOut.value) {
+    if (!chatWide.value) {
         return;
     }
     const list = conversations.value;
@@ -384,7 +409,7 @@ onMounted(() => {
             /* VSCode's split-editor chord doing the chat's version of it: give the next chat a column of its
              * own beside this one. NOT a second view of the same conversation, which is what VSCode splits to
              * — a chat carries a composer, and two of them writing into one transcript is a worse answer than
-             * the question deserves. Pop-out only, where the width for a second column exists (ChatPanel). */
+             * the question deserves. Wide surfaces only, where the width for a second column exists (ChatPanel). */
             command: `chat.splitView`,
             title: `Open Next Chat Beside`,
             keybinding: `Mod+\\`,
@@ -545,21 +570,33 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!-- Docked: the ✚ / history / pop-out trio beside the switcher — a header row has width to spare and no
-             room for three labels.
-             THE THIRD GLYPH IS THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL. Moving the chat into its own
-             window is a several-times-an-hour act for anyone running it beside an editor or on a second screen,
-             and it used to live only behind a right-click on chrome the tabs kept eating. It sits last, hard
-             against the window edge where window controls live, and its tooltip teaches F9 so the pointer trip
-             is one a hand only has to make until it remembers. It is absent from the rail (which is already in
-             the window this button opens — out there the way back is the window's own ×, F9, or the menu's
-             "Dock chat back"). -->
+        <!-- Docked: the ✚ / history / fill / pop-out run beside the switcher — a header row has width to spare
+             and no room for labels.
+             THE LAST TWO GLYPHS ARE THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL: the chat's other two homes.
+             The expand fills THIS window (the /chat area — the same wide form, no second window to manage); the
+             pop-out moves it into its own, a several-times-an-hour act for anyone running it beside an editor
+             or on a second screen that used to live only behind a right-click on chrome the tabs kept eating.
+             They sit last in that order — grow in place, then leave — hard against the window edge where window
+             controls live, and each tooltip teaches its command's chord so the pointer trip is one a hand only
+             has to make until it remembers. Both are absent from the rail form (which is already one of the
+             places they lead — out there the ways back are the rail foot's own controls, the window's ×, F9,
+             or the menu's "Dock chat back"). -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
             </button>
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
                 <Icon name="history" class="text-sm" />
+            </button>
+            <button
+                v-if="canFill"
+                type="button"
+                class="composer-ghost h-7 w-7 shrink-0"
+                @click="toggleChatFullscreen(router)"
+                v-tooltip.bottom="fillHint"
+                :aria-label="fillHint"
+            >
+                <Icon name="expand" class="text-sm" />
             </button>
             <button
                 type="button"
@@ -601,6 +638,31 @@ const openHistory = (event: Event): void => {
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats</span>
             </button>
+            <!-- FILLING THE MAIN WINDOW ONLY: the chat's two other homes, as the quiet pair after the list's
+                 own actions. The pop-out window doesn't carry them — its ways back are the window's own ×, F9
+                 and the menu's "Dock chat back" — but the /chat area has no window chrome to lean on, so the
+                 ways out have to live on the surface itself: back to the side column (the rail tiles are the
+                 other exit — any of them leaves too), or onward into a window of its own. -->
+            <template v-if="chatFullscreen">
+                <button
+                    type="button"
+                    class="composer-ghost h-7 w-7 shrink-0"
+                    @click="toggleChatFullscreen(router)"
+                    v-tooltip.top="backHint"
+                    :aria-label="backHint"
+                >
+                    <Icon name="compress" class="text-sm" />
+                </button>
+                <button
+                    type="button"
+                    class="composer-ghost h-7 w-7 shrink-0"
+                    @click="togglePopout"
+                    v-tooltip.top="popoutHint"
+                    :aria-label="popoutHint"
+                >
+                    <Icon name="external-link" class="text-sm" />
+                </button>
+            </template>
         </div>
 
         <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never

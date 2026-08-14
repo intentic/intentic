@@ -113,7 +113,7 @@ export interface RailGroup {
 }
 
 export const RAIL_GROUPS: readonly RailGroup[] = [
-    { id: `work`, label: `Work`, ids: [`agents`, `workspace`] },
+    { id: `work`, label: `Work`, ids: [`chat`, `agents`, `workspace`] },
     { id: `judge`, label: `Judge`, ids: [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`] },
     { id: `setup`, label: `Set up`, ids: [`workflows`, `automations`] },
     { id: `know`, label: `Know`, ids: [`documentation`, `infrastructure`, `live-status`] },

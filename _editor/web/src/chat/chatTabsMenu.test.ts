@@ -235,9 +235,9 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
     // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
-    // under the pointer; the pop-out is one of them.
+    // under the pointer; the panel's other two homes (the /chat area, the pop-out window) are two of them.
     await openBarMenu();
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Fill the window with chat`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
@@ -277,7 +277,7 @@ it(`opens the tab menu from the ✚ / history pair beside the strip, not the bro
     await nextTick();
 
     expect(await openMenuOnNewChatButton()).toBe(true);
-    expect(labels()).toEqual([`Close Finished`, `Close All`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Fill the window with chat`, `Move chat into new window`]);
 });
 
 /* "Clear the done ones" is the sweep a long session actually wants, and neither Close Others nor Close to the

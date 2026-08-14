@@ -25,12 +25,16 @@ useExtensionHost();
 const router = useRouter();
 const route = useRoute();
 
-// The route guards on chat/menu/terminal only fire on navigation, not on a live resize. If the viewport grows
-// past the mobile breakpoint while parked on one of those mobile-only pages, the desktop shell would render it
-// in its workspace column — bounce to the workspace so the desktop chrome is coherent.
+// The form-factor route guards only fire on navigation, not on a live resize. If the viewport grows past the
+// mobile breakpoint while parked on a mobile-only page (menu, terminal), the desktop shell would render it in
+// its workspace column — bounce to the workspace so the desktop chrome is coherent. And the mirror image:
+// shrinking into the mobile shell while on full-screen chat lands on the fleet, where mobile's chat lives.
 watch(mobile, (isMobile) => {
-    if (!isMobile && [`chat`, `menu`, `terminal`].includes(String(route.name))) {
+    if (!isMobile && [`menu`, `terminal`].includes(String(route.name))) {
         void router.push(`/workspace`);
+    }
+    if (isMobile && route.name === `chat`) {
+        void router.push(`/agents`);
     }
 });
 

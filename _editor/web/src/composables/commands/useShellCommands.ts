@@ -2,6 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { type CommandRegistration, registerCommand } from "./useCommands";
+import { toggleChatFullscreen } from "../chat/chatSurface";
 import { useChatPopout } from "../chat/useChatPopout";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
@@ -104,6 +105,19 @@ export function useShellCommands(): void {
                 keybinding: `F9`,
                 when: `tabSurface != 'terminal'`,
                 handler: () => chat.toggle(),
+            },
+            /* THE POP-OUT'S IN-WINDOW SIBLING: the same wide chat filling THIS window — the /chat area — with
+             * the same direction-aware title, for the same reason (the palette matches on words, and "fill
+             * window" promising a navigation while it leaves is worse than no row). The move itself is
+             * toggleChatFullscreen (chatSurface.ts), shared with the chat bar's menu row. Unbound by default —
+             * F9's bare-key trick is spent, and the header button and rail tile are one click. */
+            {
+                command: `chat.fullscreen`,
+                get title(): string {
+                    return router.currentRoute.value.name === `chat` ? `Chat Back to Side Panel` : `Fill Window with Chat`;
+                },
+                icon: `expand`,
+                handler: () => toggleChatFullscreen(router),
             },
             {
                 command: `terminal.togglePopout`,

@@ -49,9 +49,13 @@ const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
     return setupRedirect(await list()) ?? true;
 };
 
-// Chat, Menu, and Terminal are full-screen tabs only on the mobile shell — the desktop shell docks chat and
-// the terminal and puts the menu's contents on the rail, so a desktop hit lands on the workspace instead.
+// Menu and Terminal are full-screen tabs only on the mobile shell — the desktop shell docks the terminal and
+// puts the menu's contents on the rail, so a desktop hit lands on the workspace instead.
 const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
+
+// …and full-screen chat is the desktop's alone, the mirror image: the mobile shell's chat is the agent route
+// (an agent's conversation IS its chat surface there), so a mobile hit lands on the fleet those live behind.
+const desktopOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? `/agents` : true);
 
 const routes: RouteRecordRaw[] = [
     {
@@ -115,6 +119,10 @@ const routes: RouteRecordRaw[] = [
                 path: ``,
                 redirect: () => (useDevice().mobile.value || !agentStarted(useSandbox().activeSandboxId.value) ? `/agents` : `/workspace`),
             },
+            // Full-screen chat: the docked panel filling the window (pages/ChatArea.vue lends it the slot).
+            // An area rather than a layout switch, so the rail, the back button and a reload all already know
+            // how to enter and leave it.
+            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: () => import(`../pages/ChatArea.vue`) },
             { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).

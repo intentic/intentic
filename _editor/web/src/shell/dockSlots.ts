@@ -22,4 +22,8 @@ import { shallowRef } from "vue";
  * template ref when the element it named goes away. */
 
 export const chatDock = shallowRef<HTMLElement | null>(null);
+// The chat's FULL-WINDOW home — published by the /chat area (pages/ChatArea.vue) while it is on screen, and
+// preferred over the docked column when both exist: standing in the chat area IS the ask to see the chat fill
+// it. The pop-out window still outranks both (PoppablePanels holds the priority in one place).
+export const chatFullDock = shallowRef<HTMLElement | null>(null);
 export const terminalDock = shallowRef<HTMLElement | null>(null);

@@ -3,9 +3,10 @@ import { computed, onUnmounted, watch } from "vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
+import { chatFullscreen } from "../composables/chat/chatSurface";
 import ChatPanel from "../chat/ChatPanel.vue";
 import TerminalPanel from "../pages/TerminalPanel.vue";
-import { chatDock, terminalDock } from "./dockSlots";
+import { chatDock, chatFullDock, terminalDock } from "./dockSlots";
 
 /* THE TWO POPPABLE PANELS — the chat and the sandbox-global terminal — each mounted exactly once per page, here
  * above the router rather than inside the workspace shell (dockSlots.ts has the why). One instance whose live
@@ -48,7 +49,10 @@ park.style.cssText = `position:fixed;left:-20000px;top:0;width:900px;height:700p
 document.body.append(park);
 onUnmounted(() => park.remove());
 
-const chatTarget = computed(() => chatPopoutBody.value ?? chatDock.value ?? park);
+// The chat's three homes, in rank: its own window, the /chat area filling the main one, the docked column.
+// The pop-out outranks the full-window slot so a URL restored to /chat can never steal a floating window the
+// reload path is busy re-adopting — recalling it is the area's own explicit button (ChatArea.vue).
+const chatTarget = computed(() => chatPopoutBody.value ?? chatFullDock.value ?? chatDock.value ?? park);
 const terminalTarget = computed(() => terminalPopoutBody.value ?? terminalDock.value ?? park);
 
 // Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window. A decision
@@ -71,8 +75,11 @@ holdTerminal(() => terminal.open.value && !terminalRestoring.value);
          (display: contents), so the panel itself is the shell grid's item. Held back entirely while a pop-out
          window from before a page reload is still coming back, so the panel mounts once, out there, instead of
          building itself in the collapsed column first. -->
+    <!-- The left border is the seam against the workspace it docks beside (kept in the pop-out window too,
+         where it has always drawn). Filling the /chat area it would double the rail's own right border, so it
+         is the one place the seam comes off. -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="!chatRestoring" class="border-l border-line" style="grid-area: chat" />
+        <ChatPanel v-if="!chatRestoring" :class="{ 'border-l border-line': !chatFullscreen }" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel

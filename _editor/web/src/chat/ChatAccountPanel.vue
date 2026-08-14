@@ -2,8 +2,8 @@
 import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { offerOnBoard } from "../composables/chat/connectOffer";
+import { chatWide } from "../composables/chat/chatSurface";
 import { useChat, usePaneView } from "../composables/chat/useChat";
-import { useChatPopout } from "../composables/chat/useChatPopout";
 import ConnectOffer from "./ConnectOffer.vue";
 
 /* The connect gate above the composer: shown when THIS pane's conversation has a provider+harness selection
@@ -12,17 +12,16 @@ import ConnectOffer from "./ConnectOffer.vue";
  *
  * IT STANDS DOWN FOR THE BOARD. On a fresh workspace the empty board IS the offer, docked chat and all, so the
  * gate here would be the second copy of it on one screen — see connectOffer.ts. Only for the DOCKED panel on
- * desktop: a popped-out chat is its own window with no board in it, and mobile puts the two on separate
- * screens, so in both the chat has to carry the offer itself. */
+ * desktop: a popped-out chat is its own window with no board in it, full-screen chat covers the board outright,
+ * and mobile puts the two on separate screens — in all three the chat has to carry the offer itself. */
 
 const view = usePaneView();
 const { connected } = view;
 // Whether the daemon has answered about connections AT ALL is the sandbox's fact, not this conversation's.
 const { accountsLoaded } = useChat();
-const { poppedOut } = useChatPopout();
 const { mobile } = useDevice();
 
-const deferred = computed(() => offerOnBoard.value && !poppedOut.value && !mobile.value);
+const deferred = computed(() => offerOnBoard.value && !chatWide.value && !mobile.value);
 </script>
 
 <template>

@@ -6,6 +6,7 @@ import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { openRunSessions } from "../composables/chat/openRun";
+import { chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
@@ -22,9 +23,9 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * which window it is painting in.
  *
  * All state lives in the useChat singleton, so a transcript persists as the user moves between workspace
- * areas. On mobile (the full-screen /chat tab) the bar becomes a taller touch header over a bottom sheet and
- * the resize handle disappears. Popped out the panel turns on its side: the strip becomes a left rail, and the
- * panes stand side by side in the room that leaves. */
+ * areas. On mobile the bar becomes a taller touch header over a bottom sheet and the resize handle disappears.
+ * On a WIDE surface — the pop-out window, or the /chat area filling the main one (chatSurface.ts) — the panel
+ * turns on its side: the strip becomes a left rail, and the panes stand side by side in the room that leaves. */
 
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
@@ -63,7 +64,7 @@ const paneIds = computed(() => {
     if (mobile.value) {
         return [activeId.value];
     }
-    return poppedOut.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
+    return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
 });
 /* The conversations behind those ids, in column order — and an id naming no open chat is DROPPED rather than
  * filled in with the focused one, which is what it used to do.
@@ -98,7 +99,7 @@ watch([() => activeId.value, shown], () => {
 
 /* --- The run this panel is showing ----------------------------------------------------------------
  * A workflow run opened from the fleet board takes over the pane area: its live sessions in the columns, and
- * one press back, the diagram they came from. Only while POPPED OUT and on a desktop, for the same reason the
+ * one press back, the diagram they came from. Only on a WIDE surface and on a desktop, for the same reason the
  * split itself is: a run's whole point is several sessions at once, and a 22rem docked column can hold one.
  *
  * The run is looked up rather than held (see chatRun): the ledger is polled, so the graph a reader is looking
@@ -111,7 +112,7 @@ const { runs } = useWorkflowRuns();
 const trackedRun = computed(() => runs.value.find((run) => run.runId === chatRun.value?.runId));
 // Where the DIAGRAM can be drawn: it takes the whole pane area, and that is a trade only a window has the room
 // to make.
-const shownRun = computed(() => (poppedOut.value && !mobile.value ? trackedRun.value : undefined));
+const shownRun = computed(() => (chatWide.value && !mobile.value ? trackedRun.value : undefined));
 /* THE BAR IS DRAWN WHEREVER THE RUN IS DRIVING, which is not the same question and used to be answered as if
  * it were. Following a run moves the panes on its own, and docked — where the diagram cannot be shown — the
  * bar went with the diagram: the reader got a panel that reseated itself every few seconds, with nothing on
@@ -160,7 +161,7 @@ watch([activeId, tabReveal], () => {
  * layout to a sliver short of the viewport, and left there for the reader to drag back: a width the app chose
  * is still a width, and the seam is where it is undone. */
 const makeRoomFor = (count: number): void => {
-    if (poppedOut.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
+    if (chatWide.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
         return;
     }
     layout.setChatWidth(dockedRoom(count));
@@ -275,16 +276,16 @@ const endResize = (event: PointerEvent): void => {
 </script>
 
 <template>
-    <!-- Docked, the panel is a column: the switcher bar on top, then the pane. Undocked, that bar becomes a
-         rail of chat cards down the window's left edge, so the panel's own axis flips and the panes stand in
-         the room beside it. -->
+    <!-- Docked, the panel is a column: the switcher bar on top, then the pane. On a wide surface (its own
+         window, or the /chat area) that bar becomes a rail of chat cards down the left edge, so the panel's
+         own axis flips and the panes stand in the room beside it. -->
     <div
         ref="root"
         class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
-        :class="[poppedOut ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
+        :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
     >
         <div
-            v-if="!poppedOut && !mobile"
+            v-if="!chatWide && !mobile"
             class="resize-handle"
             @pointerdown="startResize"
             @pointermove="onResize"
