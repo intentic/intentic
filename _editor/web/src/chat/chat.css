@@ -536,6 +536,14 @@
     background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
     color: var(--color-primary-500);
 }
+/* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a
+   pill, because being in this mode by accident is the one mistake worth paint — the words typed here land in
+   the transcript as the agent's own. Border over background alone so the state survives focus (focus-within
+   already owns the ring), and a faint wash so it reads armed even with the caret elsewhere. */
+.composer-voice {
+    border-color: var(--color-primary-500);
+    background: color-mix(in srgb, var(--color-primary-500) 6%, var(--color-overlay));
+}
 .composer-effort-seg {
     height: 0.75rem;
     width: 0.25rem;

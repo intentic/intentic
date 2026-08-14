@@ -669,6 +669,32 @@ export class Conversation {
         return true;
     }
 
+    /* SPEAK AS THE AGENT — place the user's words into the transcript as an assistant bubble, with no turn and
+     * no reply. The daemon appends the row to its record marked `placed` and forgets the provider session in
+     * the same breath; this then makes the tab agree, the same two halves as a rewind.
+     *
+     * The local session drop mirrors the daemon's and is just as load-bearing here: a next send that still
+     * carried a session id would ask the daemon to resume a thread it has already retired. Dropped, the next
+     * turn opens fresh and is seeded from the record — where the placed line reads as the agent's own words.
+     *
+     * Returns false when the daemon refused; the tab is left untouched, because a bubble drawn for a row the
+     * record never took would be the transcript lying about itself. */
+    async placeAsAgent(text: string): Promise<boolean> {
+        const response = await sandboxRequest(`/agents/${encodeURIComponent(this.conversationId)}/place`, jsonBody(`POST`, { text }));
+        if (!response.ok) {
+            this.error.value =
+                response.status === 409
+                    ? `This agent is running a turn — wait for it to finish before speaking as it.`
+                    : `Could not place the message${response.status === 404 ? ` — this conversation hasn't run a turn yet` : ``}.`;
+            return false;
+        }
+        this.transcript.append({ role: `assistant`, text, placed: true });
+        this.session.value = undefined;
+        this.error.value = null;
+        this.persist(true);
+        return true;
+    }
+
     /* THE FILES MOVED UNDER THIS CONVERSATION, and not by anything it did — somebody restored a checkpoint from
      * the Checkpoints timeline while this chat was open.
      *
@@ -711,6 +737,9 @@ export class Conversation {
                     : {}),
                 ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
                 ...(message.tools !== undefined ? { tools: message.tools } : {}),
+                // The user's words in the agent's voice keep their quiet mark across a reopen — the mark's
+                // whole audience is the human re-reading this later.
+                ...(message.placed === true ? { placed: true } : {}),
                 // What the daemon added to that turn's message. Kept across a reopen for the same reason it is
                 // shown live: a reader who can see the agent's instructions only while the tab stays open can't
                 // see them at all.

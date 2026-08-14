@@ -2512,6 +2512,56 @@ describe(`the transcript's clock`, () => {
     });
 });
 
+/* SPEAKING AS THE AGENT (Conversation.placeAsAgent) — the tab's half of agents.place. The daemon appends the
+ * row to its record and forgets the provider session; these check the tab then agrees on both halves, and that
+ * a refusal moves NOTHING — a bubble drawn for a row the record never took would be the transcript lying. */
+describe(`Conversation placeAsAgent`, () => {
+    it(`appends a marked agent bubble and drops the session, so the next send starts a fresh thread`, async () => {
+        const conversation = new Conversation(`c-place`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `done` }, { kind: `done` }]),
+        );
+        await conversation.send(`first`, settings);
+        expect(conversation.session.value).toBeDefined();
+
+        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+        expect(await conversation.placeAsAgent(`I checked the tests.`)).toBe(true);
+
+        const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
+        expect(path).toBe(`/agents/c-place/place`);
+        expect(JSON.parse(init!.body as string)).toEqual({ text: `I checked the tests.` });
+        // The bubble reads as the agent's, carrying the mark whose one audience is the human re-reading this.
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
+        // And the local session matches the daemon's forgotten one — the next send resumes nothing.
+        expect(conversation.session.value).toBeUndefined();
+    });
+
+    it(`leaves the tab untouched when the daemon refuses the place`, async () => {
+        const conversation = new Conversation(`c-place-busy`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
+        await conversation.send(`first`, settings);
+        const before = conversation.messages.value.length;
+
+        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
+        expect(await conversation.placeAsAgent(`planted`)).toBe(false);
+
+        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.session.value).toBeDefined();
+        expect(conversation.error.value).toContain(`running a turn`);
+    });
+
+    // The mark survives a reopen: the record's `placed` maps back onto the bubble a restored tab draws.
+    it(`restores a placed row with its mark`, () => {
+        const conversation = new Conversation(`c-place-restore`);
+        conversation.restoreMessages([
+            { role: `user`, text: `map the flow` },
+            { role: `assistant`, text: `I checked the tests.`, placed: true },
+        ]);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
+        expect(conversation.messages.value[0]).not.toHaveProperty(`placed`);
+    });
+});
+
 /* WHEN EACH MESSAGE WAS SENT (ChatMessage.sentAt) — the stamp the bubble shows on hover. Three sources, and the
  * point of the group is that they agree: a turn sent here, a turn already running when this tab arrived, and a
  * turn read back out of the daemon's record all say the hour the user actually pressed send. */

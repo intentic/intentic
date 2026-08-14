@@ -1039,6 +1039,11 @@ export const AgentSearchResultSchema = z.object({ matches: z.array(AgentMatchSch
 export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
+/* place's input: words the user writes INTO the transcript wearing the agent's voice (see agentsContract.place).
+ * Bounded well above anything a person types by hand and just above the handoff's per-message render cap
+ * (runtime-history's MESSAGE_CHAR_CAP) — a placed line longer than that would reach the agent truncated, which
+ * silently breaks "it thinks these are its own words". Better to refuse at the door with a reason. */
+export const AgentPlaceSchema = z.object({ id: z.string().min(1), text: z.string().trim().min(1).max(8_000) });
 // autoLand's input: this agent's own land-at-completion posture. `null` CLEARS the override back to "inherit
 // the sandbox setting" — the browser sends it whenever the user toggles back to what the global already says,
 // so agents don't accumulate frozen overrides that quietly stop following the global toggle.

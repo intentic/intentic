@@ -156,6 +156,39 @@ export const createAgentsRoutes = (services: Services) => {
             const messages = await services.transcripts.read(agent);
             return { ...(sessionId !== undefined ? { sessionId } : {}), messages };
         }),
+        /* SPEAK AS THE AGENT — the user's words appended to the record as an assistant row, no turn behind them,
+         * no reply. Marked `placed` so a HUMAN re-reading the transcript can tell (the flag never reaches any
+         * agent-facing text — see RestoredMessageSchema).
+         *
+         * The session drop is the half that makes it real. Appending alone would show the line to every reader
+         * but the one that matters: a next turn that RESUMES its provider session never re-reads the record, so
+         * the agent would carry on from a memory the transcript no longer matches. Forgetting the session is
+         * rewind's own move — the next turn then opens a fresh runtime session seeded from the record
+         * (agent.routes.ts → handoffHistory), where the placed line renders exactly like every line the agent
+         * genuinely said.
+         *
+         * OPEN BEFORE APPEND, and not as ceremony: for a conversation still served off the provider-store
+         * backfill the record does not exist yet, and a bare append would create it holding ONLY the placed
+         * line — which, the record being authoritative wherever it exists, would silently disappear the whole
+         * conversation behind it. `open` adopts that history first.
+         *
+         * UNDER THE REWIND LEASE rather than a notRunning check, for rewind's own reason: a turn admitted
+         * between check and append would resume the very session this exists to retire, and the placed line
+         * would sit in a transcript the running turn's memory knows nothing about. The lease is the same mutex
+         * a turn takes, so the two cannot interleave; a held lease answers undefined ⇒ CONFLICT. */
+        place: i.place.handler(async ({ input }) => {
+            const agent = entryOf(input.id);
+            const outcome = await services.agents.withRewindLease(input.id, async () => {
+                await services.transcripts.open(agent);
+                await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true }]);
+                await services.agents.clearSession(input.id);
+                return true;
+            });
+            if (outcome === undefined) {
+                throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
+            }
+            return { ok: true } as const;
+        }),
         // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
         // entry at begin/finish, so the rename survives a running turn.
         rename: i.rename.handler(async ({ input }) => {

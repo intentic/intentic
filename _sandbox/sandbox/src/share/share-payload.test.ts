@@ -55,6 +55,17 @@ describe("a messages-only share", () => {
     });
 });
 
+/* The one row-level flag that SURVIVES a share, at every detail level: a line the owner placed wearing the
+ * agent's voice must not read as the agent's to a recipient — the share page is a human audience, which is the
+ * only audience the mark exists for. (The agent-facing handoff stays blind to it; see RestoredMessageSchema.) */
+describe("a placed row", () => {
+    it("keeps its mark in the shared payload", () => {
+        const placed: RestoredMessage[] = [{ role: "assistant", text: "I verified it myself.", placed: true }];
+        expect(shareTranscript(placed, "messages").messages[0]).toEqual({ role: "assistant", text: "I verified it myself.", placed: true });
+        expect(shareTranscript(placed, "everything").messages[0]).toEqual({ role: "assistant", text: "I verified it myself.", placed: true });
+    });
+});
+
 describe("an everything share", () => {
     it("carries the work: the thinking, the cards, and the diffs of what was edited", () => {
         const { messages } = shareTranscript(conversation, "everything");

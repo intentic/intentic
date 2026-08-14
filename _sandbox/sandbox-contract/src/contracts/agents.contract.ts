@@ -8,6 +8,7 @@ import {
     AgentIdSchema,
     AgentIdsSchema,
     AgentLandSchema,
+    AgentPlaceSchema,
     AgentRenameSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
@@ -54,6 +55,13 @@ export const agentsContract = {
     search: oc.route({ method: "GET", path: "/agents/search" }).input(AgentSearchQuerySchema).output(AgentSearchResultSchema),
     get: oc.route({ method: "GET", path: "/agents/{id}" }).input(AgentIdSchema).output(AgentSummarySchema),
     transcript: oc.route({ method: "GET", path: "/agents/{id}/transcript" }).input(AgentIdSchema).output(AgentTranscriptSchema),
+    /* SPEAK AS THE AGENT — append the user's words to the conversation's record as an assistant row, with no
+     * turn behind them and no reply. The row is marked `placed` for human readers (RestoredMessageSchema); the
+     * provider session is FORGOTTEN in the same breath, rewind-style, so the next real turn opens a fresh
+     * runtime session seeded from the record — where the placed line reads as the agent's own words, because
+     * the handoff renders every assistant row identically. A running turn is CONFLICT: the illusion can only be
+     * established between turns, and a concurrent turn would resume the very session this exists to retire. */
+    place: oc.route({ method: "POST", path: "/agents/{id}/place" }).input(AgentPlaceSchema).output(OkSchema),
     rename: oc.route({ method: "POST", path: "/agents/{id}/rename" }).input(AgentRenameSchema).output(AgentSummarySchema),
     // This agent's own land-at-completion posture — an override of the sandbox-wide `autoLand` setting; null
     // clears it back to "inherit". Legal mid-turn on purpose: the setting is read at turn COMPLETION, so

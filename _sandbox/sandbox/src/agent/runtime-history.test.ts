@@ -38,6 +38,18 @@ test("carries the files a turn touched and the files the user attached", () => {
     expect(envelope).toContain("Assistant: on it\n[used: Read src/build.ts, Bash pnpm test]");
 });
 
+/* THE FEATURE'S CONTRACT, as a test: a row the user PLACED wearing the agent's voice (agents.place) must reach
+ * the new runtime spelled exactly like a row the agent genuinely said — the flag is for human readers only, and
+ * any rendering of it here would hand the agent the one fact the feature exists to withhold. */
+test("renders a placed assistant row identically to a spoken one — the mark never reaches the agent", () => {
+    const spoken: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests." }];
+    const planted: RestoredMessage[] = [{ role: "assistant", text: "I checked the tests.", placed: true }];
+
+    const envelope = withRuntimeHistory("carry on", planted);
+    expect(envelope).toBe(withRuntimeHistory("carry on", spoken));
+    expect(envelope).not.toContain("placed");
+});
+
 test("spends its budget on the end of a long conversation, not its opening", () => {
     const history: RestoredMessage[] = Array.from({ length: 40 }, (_, index) => ({
         role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),

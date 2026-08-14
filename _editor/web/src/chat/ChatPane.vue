@@ -29,6 +29,7 @@ import { useLoadingReveal } from "../composables/loadingReveal";
 import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { useToolCalls } from "../composables/chat/useToolCalls";
+import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
 import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
@@ -657,6 +658,17 @@ const editorChipLabel = computed(() => {
 // pending plan is no exception: the typed text becomes revision feedback, and staged files ride along with it
 // (Conversation.decidePlan), because a screenshot is the most natural way to say what a plan got wrong.
 const staged = computed(() => draft.value.trim().length > 0 || attachments.value.length > 0);
+/* --- The composer's VOICE: yours, or the agent's --------------------------------------------------
+ * Armed, the next Send does not prompt anything — the words are PLACED into the transcript as an assistant
+ * bubble, no turn, no reply, and the daemon retires the provider session so the next real turn re-reads the
+ * record and takes the placed line as its own (agents.place). Per-pane and DISARMED BY A SEND, deliberately:
+ * speaking as the agent is a deliberate act each time, and a mode that stayed armed would have the next
+ * ordinary question land in the transcript as words the agent never said.
+ *
+ * Offered only where it can land: the route is keyed on the registry, so a draft chat that has never run a
+ * turn has nowhere to place into — the pill appears with the first turn, like the agent itself does. */
+const voiceAgent = ref(false);
+const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
 /* WHY SEND IS REFUSING, in the user's words — undefined when the press will land. The only thing that can hold
  * a staged message back is an attachment that isn't on disk yet, and until now that greyed the button out and
  * said nothing: the chip looks finished the moment its thumbnail renders, so a message that will not send has
@@ -665,6 +677,21 @@ const sendBlock = computed(() => {
     if (!staged.value) {
         // Nothing staged is not a refusal — an empty composer explains itself.
         return undefined;
+    }
+    /* The agent's voice refuses more than your own, and each refusal is the daemon's rule said early: a
+     * running turn holds the very session placing exists to retire (the route answers CONFLICT), a pending
+     * plan is a question the agent is mid-way through asking, and an attachment is a thing the USER hands
+     * over — there is no shape of transcript in which the agent attached a file to its own reply. */
+    if (voiceAgent.value) {
+        if (streaming.value) {
+            return `The agent is running — its words can be placed once the turn ends.`;
+        }
+        if (pendingPlanMessage.value) {
+            return `A plan is awaiting your answer — decide it before speaking as the agent.`;
+        }
+        if (attachments.value.length > 0) {
+            return `An attachment can't be placed as the agent's words — remove it (×) or switch back to your own voice.`;
+        }
     }
     if (attachments.value.some((entry) => entry.status === `uploading`)) {
         return `Waiting for the attachment to finish uploading…`;
@@ -693,11 +720,19 @@ const canSend = computed(() => {
     if (sendBlock.value !== undefined) {
         return false;
     }
+    // The agent's voice sends exactly the words in the box — an empty box continues nothing and flushes no
+    // queue, because both of those are turns and a placed message is deliberately not one.
+    if (voiceAgent.value) {
+        return staged.value;
+    }
     return staged.value || continueOffer.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
 });
 const sendHint = computed(() => {
     if (sendBlock.value !== undefined) {
         return sendBlock.value;
+    }
+    if (voiceAgent.value) {
+        return `Place into the transcript as ${providerName.value} — no reply`;
     }
     if (pendingPlanMessage.value) {
         return `Send as feedback (keep planning)`;
@@ -729,6 +764,11 @@ const { canDrive } = useRole();
 const composerPlaceholder = computed(() => {
     if (!canDrive.value) {
         return `You're viewing — ask the owner for a collaborator role to drive agents`;
+    }
+    // The armed voice outranks every turn-shaped placeholder below: none of them describes what this box now
+    // does, and the placeholder is where a composer says whose words it is holding.
+    if (voiceAgent.value) {
+        return `Write as ${providerName.value} — placed into the transcript, no reply…`;
     }
     if (pendingPlanMessage.value) {
         return `Reply to revise the plan…`;
@@ -836,6 +876,14 @@ const snapshotAttachments = (): ChatAttachment[] =>
 const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
 const workflowFailure = ref<string>();
 const pickedWorkflow = computed(() => workflowDesigns.value.find((workflow) => workflow.id === props.conversation.workflowId.value));
+
+// A workflow badge takes the composer over entirely — the message becomes a run's request, and an agent voice
+// left armed under it would be a promise about a send that is no longer a message into this chat.
+watch(pickedWorkflow, (picked) => {
+    if (picked !== undefined) {
+        voiceAgent.value = false;
+    }
+});
 
 /* Close the model and mode panels whenever the pill they hang off stops being usable, which happens two ways.
  * The pills live behind `v-if="connected"`, so switching to a disconnected provider unmounts the anchor out
@@ -995,9 +1043,42 @@ const sendThroughLoop = async (design: LoopDesign): Promise<void> => {
     }
 };
 
+/* Place the draft into the transcript as the AGENT's words (the armed voice above). Awaited rather than
+ * fire-and-forget, unlike an ordinary send, because a refused place has no queue to fall back into: the words
+ * either land in the record or they stay in the box, and clearing the draft on a refusal would be the composer
+ * eating a message. The conversation's own error line names why the daemon said no. */
+const placeDraft = async (): Promise<void> => {
+    const text = draft.value.trim();
+    if (!(await props.conversation.placeAsAgent(text))) {
+        return;
+    }
+    // The warmed transcript cache now ends one row early — the same signal a settled turn sends.
+    invalidateAgentTranscript(props.conversation.conversationId);
+    history.value?.record(text);
+    // Disarm — speaking as the agent is a deliberate act each time (see voiceAgent).
+    voiceAgent.value = false;
+    pin();
+    draft.value = ``;
+    void nextTick(() => {
+        grow();
+        input.value?.focus();
+    });
+};
+
 const submit = (): void => {
     workflowFailure.value = undefined;
     loopFailure.value = undefined;
+    /* THE ARMED VOICE INTERCEPTS EVERYTHING — placed words are not a turn, so no gate below (a plan to revise,
+     * a turn to steer, a queue to flush, a continuation to offer) applies to them; and it RETURNS either way,
+     * because falling through with an empty box would let a press meant as "place" become a Continue. The
+     * workflow badge cannot be armed at the same time (its pick disarms the voice), so the order to it is a
+     * formality kept explicit. */
+    if (voiceAgent.value) {
+        if (connected.value && staged.value && sendBlock.value === undefined) {
+            void placeDraft();
+        }
+        return;
+    }
     /* THE BADGE INTERCEPTS THE SEND, ahead of every gate below it — those are about a TURN on this
      * conversation (a pending plan, a running turn to steer, staged attachments), and this message is not one.
      * It goes to a graph of sessions that are not this chat, so none of the machinery for putting words into
@@ -1680,8 +1761,12 @@ watch(
                                 </div>
                                 <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
                             </div>
+                            <!-- The whole box changes standing when the agent's voice is armed (.composer-voice):
+                                 being in this mode by accident is the one mistake worth paint, because the words
+                                 land in the transcript as the agent's own. -->
                             <form
                                 class="relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
+                                :class="{ 'composer-voice': voiceAgent }"
                                 @submit.prevent="submit"
                             >
                                 <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
@@ -1896,6 +1981,37 @@ watch(
                                         </template>
                                     </button>
 
+                                    <!-- VOICE — whose words the box is writing: yours (the default, a bare glyph),
+                                         or the AGENT's. Armed, it names itself in the active tint and the next
+                                         Send PLACES the draft into the transcript as the agent's own words — no
+                                         turn, no reply — then disarms. Last of the shaping pills and nearest to
+                                         Send, because it changes what Send IS more than anything else in the
+                                         row: every other pill shapes a turn, this one removes the turn entirely.
+                                         Appears with the conversation's first turn (a draft chat has no
+                                         transcript to place into), and a workflow badge greys it like the rest —
+                                         a run's request is nobody's transcript. -->
+                                    <button
+                                        v-if="placeable"
+                                        type="button"
+                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                        :class="{
+                                            'composer-active': voiceAgent && pickedWorkflow === undefined,
+                                            'composer-steered': pickedWorkflow !== undefined,
+                                        }"
+                                        :disabled="pickedWorkflow !== undefined"
+                                        @click="voiceAgent = !voiceAgent"
+                                        v-tooltip.top="
+                                            voiceAgent
+                                                ? `Writing as the agent — Send places the words into the transcript, no reply`
+                                                : `Write as the agent — place words into the transcript in its voice`
+                                        "
+                                        :aria-pressed="voiceAgent"
+                                        aria-label="Write as the agent"
+                                    >
+                                        <Icon name="robot" class="text-2xs" :class="voiceAgent ? 'text-link' : ''" />
+                                        <span v-if="voiceAgent" class="@max-md:hidden">As agent</span>
+                                    </button>
+
                                     <button
                                         v-if="speechSupported"
                                         type="button"
@@ -1958,6 +2074,14 @@ watch(
                             <p v-else-if="pickedLoop && !looping" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met — ends on
                                 {{ loopDesignLine(pickedLoop) }}.
+                            </p>
+                            <!-- The armed voice's own sentence, and it says the consequential half out loud: not
+                                 just "no reply", but that the agent will treat these words as its own from its
+                                 next turn on. That is the feature — and exactly the thing worth one line of
+                                 reading before the press, because it steers everything the agent does after. -->
+                            <p v-else-if="voiceAgent" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
+                                <Icon name="robot" class="shrink-0 text-2xs text-link" />Send places these words into the transcript as
+                                {{ providerName }}'s own — no reply runs, and from its next turn the agent reads them as something it said.
                             </p>
                             <!-- A persona that CANNOT do what the pill implies, said where the message is being
                                  written rather than discovered when the turn comes back empty-handed. Only ever

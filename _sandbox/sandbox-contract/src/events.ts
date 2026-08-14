@@ -266,6 +266,16 @@ export const RestoredMessageSchema = z.object({
      * sent, and a record row per turn preamble would break the one-row-per-bubble correspondence a branch counts
      * with (see the client's recordedRows — notices are drawn locally and never recorded). */
     notes: z.array(TurnNoteSchema).optional(),
+    /* THE USER WROTE THIS ROW WEARING THE AGENT'S VOICE (assistant rows only) — the composer's "as agent" mode
+     * appending straight into the record, with no turn behind it (agents.place).
+     *
+     * The flag exists for exactly one audience: the HUMAN re-reading the transcript, whose bubble carries a
+     * quiet mark so that months later their own words don't pass as the agent's. The one reader that must
+     * never see it is the agent itself — a placed line reaches the model only through the handoff that seeds a
+     * fresh runtime session (agent/runtime-history.ts), which renders role and text alone, so there the line is
+     * indistinguishable from anything the agent genuinely said. Keep it that way: rendering this flag into any
+     * agent-facing text would break the feature's whole contract. */
+    placed: z.boolean().optional(),
 });
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 

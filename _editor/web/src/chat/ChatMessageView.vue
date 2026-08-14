@@ -878,6 +878,18 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <MarkdownFigure v-else :figure="part.figure" />
                 </template>
             </div>
+            <!-- The quiet mark on words the USER placed wearing the agent's voice (composer "as agent" mode).
+                 Its one audience is the human re-reading this later — an unmarked planted line fools its own
+                 author within a month. Deliberately outside the bubble and in the smallest muted tier: the row
+                 must read as the agent's at a glance (that is the feature), and only confess on inspection.
+                 The agent itself never sees the flag; the daemon's handoff renders placed rows as its own. -->
+            <p
+                v-if="message.placed"
+                class="flex items-center gap-1 px-1 text-2xs text-subtle"
+                v-tooltip.top="`You wrote this in the agent's voice — the agent reads it as its own words`"
+            >
+                <Icon name="pencil" class="text-2xs" />Placed by you
+            </p>
 
             <div v-if="message.plan" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">

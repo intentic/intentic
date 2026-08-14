@@ -113,6 +113,11 @@ export const shareTranscript = (messages: readonly RestoredMessage[], detail: Sh
             role: message.role,
             text: redact(message.text),
             ...(message.sentAt === undefined ? {} : { sentAt: message.sentAt }),
+            // A row the user placed wearing the agent's voice keeps its mark. A share is a HUMAN-facing page —
+            // the one audience the flag exists for — and a recipient reading planted words as the agent's own
+            // is exactly the confusion the mark was added to prevent. (The agent-facing handoff stays blind to
+            // it; see RestoredMessageSchema.)
+            ...(message.placed === true ? { placed: true } : {}),
         };
         /* Attachments ride BOTH levels: a screenshot the user attached is part of what they said, not part of
          * what the agent did, so leaving it out of a messages-only share would cut the prompt in half. Ones we

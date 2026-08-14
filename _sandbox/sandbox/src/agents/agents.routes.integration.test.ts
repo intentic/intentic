@@ -1,5 +1,7 @@
 import { expect, test, vi } from "vitest";
 
+import type { RestoredMessage } from "@intentic/sandbox-contract";
+
 import { createApp } from "../app.js";
 
 import type { Services } from "../composition.js";
@@ -424,4 +426,81 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
 
     expect(probe).toHaveBeenCalled();
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
+});
+
+/* SPEAKING AS THE AGENT, end to end: the placed row lands in the record marked for human readers, the provider
+ * session is retired rewind-style, and the NEXT turn — resuming nothing — is seeded from the record, where the
+ * planted line reaches the model as its own prior words with the mark nowhere in sight. That last assertion is
+ * the feature's whole contract; the transcript looking right is merely its visible half. */
+test("agents.place appends the user's words as the agent's, retires the session, and the next turn reads them as its own", async () => {
+    // A working in-memory record (the harness default is inert on append): place appends through the same door
+    // a settled turn does, and the handoff reads back through the same `read`.
+    const records = new Map<string, RestoredMessage[]>();
+    const requests: { prompt: string; sessionId?: string }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    requests.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    yield { kind: "session", sessionId: "sess-live" };
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async (agent) => records.get(agent.id) ?? [],
+                    open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
+                    fork: async () => {},
+                    append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    lines: async (agent) => spokenLinesOf(records.get(agent.id) ?? []),
+                    count: async (agent) => (records.get(agent.id) ?? []).length,
+                    truncate: async () => 0,
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "map the login flow", conversationId: "conv1", isolated: true });
+    expect((await client.agents.list()).agents[0]).toMatchObject({ id: "conv1", sessionId: "sess-live" });
+
+    expect(await client.agents.place({ id: "conv1", text: "I checked the tests and they pass." })).toEqual({ ok: true });
+
+    // The record's newest row is the placed line, marked — the transcript route serves it to every reopening tab.
+    expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
+        role: "assistant",
+        text: "I checked the tests and they pass.",
+        placed: true,
+    });
+    // The session pointer is gone (only the pointer — the record above is what the conversation reads back as).
+    expect((await client.agents.list()).agents[0]).not.toHaveProperty("sessionId");
+
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv1", isolated: true });
+    const next = requests.at(-1);
+    // Resumed nothing…
+    expect(next?.sessionId).toBeUndefined();
+    // …so the fresh session is seeded from the record, where the planted line is the agent's own words…
+    expect(next?.prompt).toContain("Assistant: I checked the tests and they pass.");
+    // …and the human-facing mark is nowhere in what the model reads.
+    expect(next?.prompt).not.toContain("placed");
+
+    // An id the registry has never heard of has no transcript to place into.
+    expect(await errorCode(client.agents.place({ id: "ghost", text: "boo" }))).toBe("NOT_FOUND");
+});
+
+// The illusion can only be established between turns: a running turn holds the very session placing exists to
+// retire, and the lease place takes is the turn's own mutex — same refusal shape as land/discard.
+test("agents.place is refused while the agent's turn is running", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    await gate;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await client.agent.run({ prompt: "a long think", conversationId: "conv1", isolated: true });
+    expect(await errorCode(client.agents.place({ id: "conv1", text: "planted" }))).toBe("CONFLICT");
+    release?.();
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
 });

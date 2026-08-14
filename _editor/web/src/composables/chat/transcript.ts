@@ -243,6 +243,12 @@ export interface ChatMessage {
      * occupies a row of the record and a local one does not, so a fork that counts them the same way cuts the
      * copied prefix in the wrong place (see recordedRows). */
     readonly recorded?: boolean;
+    /* THE USER WROTE THIS BUBBLE WEARING THE AGENT'S VOICE (assistant bubbles only) — the composer's "as agent"
+     * mode, placed straight into the daemon's record with no turn behind it. The bubble renders as the agent's
+     * with a quiet mark, because the mark's one audience is the HUMAN re-reading the chat: months later, an
+     * unmarked planted line fools its own author. The agent never sees the flag — the daemon's handoff renders
+     * placed rows exactly like spoken ones (that indistinguishability is the feature's contract). */
+    readonly placed?: boolean;
     /* THE DAEMON-SIDE RUN THIS ROW CAME OUT OF — carried by everything a turn's frames drew (and by the notices
      * their effects raised), absent on everything else: a restored record, a fork's inherited turns, and every
      * write on the user's own clock.
