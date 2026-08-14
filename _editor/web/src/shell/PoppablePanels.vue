@@ -3,7 +3,7 @@ import { computed, onUnmounted, watch } from "vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
-import { chatFullscreen } from "../composables/chat/chatSurface";
+import { chatFullscreen, chatOnRail } from "../composables/chat/chatSurface";
 import ChatPanel from "../chat/ChatPanel.vue";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { chatDock, chatFullDock, terminalDock } from "./dockSlots";
@@ -51,8 +51,10 @@ onUnmounted(() => park.remove());
 
 // The chat's three homes, in rank: its own window, the /chat area filling the main one, the docked column.
 // The pop-out outranks the full-window slot so a URL restored to /chat can never steal a floating window the
-// reload path is busy re-adopting — recalling it is the area's own explicit button (ChatArea.vue).
-const chatTarget = computed(() => chatPopoutBody.value ?? chatFullDock.value ?? chatDock.value ?? park);
+// reload path is busy re-adopting — recalling it is the area's own explicit button (ChatArea.vue). And while
+// the RAIL is the chat's home, the column is never a fallback: away from /chat the panel waits on the parking
+// stage behind the rail's Chat tile, which is the whole meaning of that choice (chatSurface.ts).
+const chatTarget = computed(() => chatPopoutBody.value ?? chatFullDock.value ?? (chatOnRail.value ? park : (chatDock.value ?? park)));
 const terminalTarget = computed(() => terminalPopoutBody.value ?? terminalDock.value ?? park);
 
 // Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window. A decision

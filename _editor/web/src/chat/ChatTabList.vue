@@ -3,6 +3,7 @@ import { cmp, ContextMenu, type IconName, SearchBar, Segmented } from "@intentic
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { createInlineRename } from "../composables/inlineRename";
 import { type ChatGrouping, useChatGrouping } from "../composables/chat/chatGrouping";
 import ChatPersonaRail from "./ChatPersonaRail.vue";
@@ -31,7 +32,7 @@ import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLa
 import ChatShareDialog from "./ChatShareDialog.vue";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { chatWide } from "../composables/chat/chatSurface";
+import { chatWide, toggleChatPopout } from "../composables/chat/chatSurface";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
 import { openRunInChat } from "../composables/chat/openRun";
 import {
@@ -77,7 +78,8 @@ const emit = defineEmits<{
 const { conversations, activeId, tabReveal, panes, openBeside, closePane, collapsePanes, setPanes } = useChat();
 const { agentById, fleet, loadArchived, rename } = useAgents();
 
-const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+const { poppedOut, overlayTarget } = useChatPopout();
+const router = useRouter();
 /* WHICH LIST THIS IS RIGHT NOW — the open chats in their lanes, or the personas you can talk to
  * (ChatPersonaRail). Two answers to "what goes in the left column", not two views of one set, so the switch
  * swaps the whole list rather than regrouping it. */
@@ -666,7 +668,9 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         {
             label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
             shortcut: commandShortcut(`chat.togglePopout`),
-            command: togglePopout,
+            // The routed toggle, not the bare one: docking back while the rail is home walks to the tile's
+            // area instead of parking the chat out of sight (chatSurface.ts).
+            command: (): void => toggleChatPopout(router),
         },
     ];
 });

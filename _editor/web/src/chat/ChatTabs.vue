@@ -12,7 +12,7 @@ import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
-import { chatFullscreen, chatWide, toggleChatFullscreen } from "../composables/chat/chatSurface";
+import { chatFullscreen, chatOnRail, chatWide, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -54,16 +54,17 @@ const emit = defineEmits<{
 
 const { conversations, active, activeId, panes, openBeside, closePane, sessions, loadSessions } = useChat();
 const { agentById, rename } = useAgents();
-const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+const { poppedOut, overlayTarget } = useChatPopout();
 const router = useRouter();
 // The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
 // teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
 // has to say the way back.
 const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
-// Its sibling on the docked header — the same chat filling THIS window instead of a new one — and the way back
-// on the rail foot once it has. Both teach the palette's one toggle, so a chord bound there shows up on each.
-const fillHint = computed(() => withShortcut(`Fill the window with chat`, `chat.fullscreen`));
-const backHint = computed(() => withShortcut(`Back to side panel`, `chat.fullscreen`));
+// Its sibling on the docked header — moving the chat's home to the RAIL (a tile, full-window when opened) —
+// and the way back on the rail foot once it has. Both teach the palette's one toggle, so a chord bound there
+// shows up on each.
+const railHint = computed(() => withShortcut(`Dock chat to rail — full window, behind a rail tile`, `chat.toggleHome`));
+const sideHint = computed(() => withShortcut(`Dock chat back to the side`, `chat.toggleHome`));
 // Only where the /chat area exists to navigate to: the workspace shell, not a local-posture host window.
 const canFill = localPosture() === undefined;
 
@@ -257,23 +258,25 @@ const barMenuItems = computed<MenuItem[]>(() => [
     },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
-    // The chat's other two homes, in the header buttons' order (grow in place, then leave). The fill row is
-    // the shell command's move (toggleChatFullscreen — from a pop-out window it docks AND navigates, which is
-    // exactly what those words ask for there) and is absent where the /chat area doesn't exist (a
+    // The chat's other two homes, in the header buttons' order (move within this window, then leave it). The
+    // dock row is the shell command's move (toggleChatHome — from a pop-out window it docks AND navigates,
+    // which is exactly what those words ask for there) and is absent where the /chat area doesn't exist (a
     // local-posture host window).
     ...(canFill
         ? [
               {
-                  label: chatFullscreen.value ? `Back to side panel` : `Fill the window with chat`,
-                  shortcut: commandShortcut(`chat.fullscreen`),
-                  command: (): void => toggleChatFullscreen(router),
+                  label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
+                  shortcut: commandShortcut(`chat.toggleHome`),
+                  command: (): void => toggleChatHome(router),
               },
           ]
         : []),
     {
         label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
         shortcut: commandShortcut(`chat.togglePopout`),
-        command: togglePopout,
+        // The routed toggle, not the bare one: docking back while the rail is home walks to the tile's area
+        // instead of parking the chat out of sight (chatSurface.ts).
+        command: (): void => toggleChatPopout(router),
     },
 ]);
 const onBarContextMenu = (event: MouseEvent): void => {
@@ -570,17 +573,17 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!-- Docked: the ✚ / history / fill / pop-out run beside the switcher — a header row has width to spare
-             and no room for labels.
+        <!-- Docked: the ✚ / history / dock-to-rail / pop-out run beside the switcher — a header row has width
+             to spare and no room for labels.
              THE LAST TWO GLYPHS ARE THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL: the chat's other two homes.
-             The expand fills THIS window (the /chat area — the same wide form, no second window to manage); the
-             pop-out moves it into its own, a several-times-an-hour act for anyone running it beside an editor
-             or on a second screen that used to live only behind a right-click on chrome the tabs kept eating.
-             They sit last in that order — grow in place, then leave — hard against the window edge where window
-             controls live, and each tooltip teaches its command's chord so the pointer trip is one a hand only
-             has to make until it remembers. Both are absent from the rail form (which is already one of the
-             places they lead — out there the ways back are the rail foot's own controls, the window's ×, F9,
-             or the menu's "Dock chat back"). -->
+             The expand moves the chat's home to the RAIL (a tile, full-window when opened, no column beside
+             other views); the pop-out moves it into its own window, a several-times-an-hour act for anyone
+             running it beside an editor or on a second screen that used to live only behind a right-click on
+             chrome the tabs kept eating. They sit last in that order — move within this window, then leave it —
+             hard against the window edge where window controls live, and each tooltip teaches its command's
+             chord so the pointer trip is one a hand only has to make until it remembers. Both are absent from
+             the rail form (which is already one of the places they lead — out there the ways back are the rail
+             foot's own controls, the window's ×, F9, or the menu's "Dock chat back"). -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
@@ -592,16 +595,16 @@ const openHistory = (event: Event): void => {
                 v-if="canFill"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
-                @click="toggleChatFullscreen(router)"
-                v-tooltip.bottom="fillHint"
-                :aria-label="fillHint"
+                @click="toggleChatHome(router)"
+                v-tooltip.bottom="railHint"
+                :aria-label="railHint"
             >
                 <Icon name="expand" class="text-sm" />
             </button>
             <button
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
-                @click="togglePopout"
+                @click="toggleChatPopout(router)"
                 v-tooltip.bottom="popoutHint"
                 :aria-label="popoutHint"
             >
@@ -641,22 +644,22 @@ const openHistory = (event: Event): void => {
             <!-- FILLING THE MAIN WINDOW ONLY: the chat's two other homes, as the quiet pair after the list's
                  own actions. The pop-out window doesn't carry them — its ways back are the window's own ×, F9
                  and the menu's "Dock chat back" — but the /chat area has no window chrome to lean on, so the
-                 ways out have to live on the surface itself: back to the side column (the rail tiles are the
-                 other exit — any of them leaves too), or onward into a window of its own. -->
+                 ways out have to live on the surface itself: back to the side column (undoing the rail as
+                 home), or onward into a window of its own. -->
             <template v-if="chatFullscreen">
                 <button
                     type="button"
                     class="composer-ghost h-7 w-7 shrink-0"
-                    @click="toggleChatFullscreen(router)"
-                    v-tooltip.top="backHint"
-                    :aria-label="backHint"
+                    @click="toggleChatHome(router)"
+                    v-tooltip.top="sideHint"
+                    :aria-label="sideHint"
                 >
                     <Icon name="compress" class="text-sm" />
                 </button>
                 <button
                     type="button"
                     class="composer-ghost h-7 w-7 shrink-0"
-                    @click="togglePopout"
+                    @click="toggleChatPopout(router)"
                     v-tooltip.top="popoutHint"
                     :aria-label="popoutHint"
                 >

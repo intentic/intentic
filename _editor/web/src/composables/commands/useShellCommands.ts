@@ -2,7 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { type CommandRegistration, registerCommand } from "./useCommands";
-import { toggleChatFullscreen } from "../chat/chatSurface";
+import { chatOnRail, toggleChatHome, toggleChatPopout } from "../chat/chatSurface";
 import { useChatPopout } from "../chat/useChatPopout";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
@@ -104,20 +104,23 @@ export function useShellCommands(): void {
                 icon: `external-link`,
                 keybinding: `F9`,
                 when: `tabSurface != 'terminal'`,
-                handler: () => chat.toggle(),
+                // toggleChatPopout, not the bare window toggle: docking back must land the chat in its home,
+                // which with the rail as home means walking to /chat — the reasoning is on the function.
+                handler: () => toggleChatPopout(router),
             },
-            /* THE POP-OUT'S IN-WINDOW SIBLING: the same wide chat filling THIS window — the /chat area — with
-             * the same direction-aware title, for the same reason (the palette matches on words, and "fill
-             * window" promising a navigation while it leaves is worse than no row). The move itself is
-             * toggleChatFullscreen (chatSurface.ts), shared with the chat bar's menu row. Unbound by default —
-             * F9's bare-key trick is spent, and the header button and rail tile are one click. */
+            /* THE POP-OUT'S IN-WINDOW SIBLING: which of the two IN-APP homes the chat lives in — the side
+             * column beside every view, or the rail (a Chat tile whose area the chat fills, and no column
+             * anywhere else). The title says which direction the press will take, for the pop-out row's reason
+             * (the palette matches on words, and a row promising the rail while it undoes it is worse than no
+             * row). The move itself is toggleChatHome (chatSurface.ts), shared with the chat bar's button and
+             * menu row. Unbound by default — F9's bare-key trick is spent, and those two are one click. */
             {
-                command: `chat.fullscreen`,
+                command: `chat.toggleHome`,
                 get title(): string {
-                    return router.currentRoute.value.name === `chat` ? `Chat Back to Side Panel` : `Fill Window with Chat`;
+                    return chatOnRail.value ? `Dock Chat Back to the Side` : `Dock Chat to Rail`;
                 },
                 icon: `expand`,
-                handler: () => toggleChatFullscreen(router),
+                handler: () => toggleChatHome(router),
             },
             {
                 command: `terminal.togglePopout`,

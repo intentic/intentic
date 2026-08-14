@@ -16,7 +16,7 @@ import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { chatFullscreen, lastAreaPath } from "../composables/chat/chatSurface";
+import { chatOnRail, lastAreaPath } from "../composables/chat/chatSurface";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
@@ -156,17 +156,22 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
-    {
-        // FULL-SCREEN CHAT — the chat as a place rather than a column: opening it fills everything right of
-        // the rail with the panel in its wide (pop-out) form, and leaving it (any other tile) returns the chat
-        // to the side column exactly as it was. First in the Work band because talking to the agent is the
-        // product's primary surface; unbadged, because the docked header already carries the running/attention
-        // counts and the Agents tile below carries the debt.
-        id: `chat`,
-        to: `/chat`,
-        label: `Chat`,
-        icon: `comments`,
-    },
+    // THE CHAT'S SEAT, present exactly while the rail IS the chat's home (chatSurface.ts): opening it fills
+    // everything right of the rail with the panel in its wide (pop-out) form, and every other tile leaves the
+    // chat waiting behind this one — never in a side column, which is the whole meaning of the choice. Docked
+    // to the side instead, the tile would be a second door to a panel already on every screen, so it is
+    // absent. First in the Work band because talking to the agent is the product's primary surface; unbadged,
+    // because the Agents tile below carries the debt.
+    ...(chatOnRail.value
+        ? [
+              {
+                  id: `chat`,
+                  to: `/chat`,
+                  label: `Chat`,
+                  icon: `comments` as IconName,
+              },
+          ]
+        : []),
     {
         id: `agents`,
         to: `/agents`,
@@ -368,11 +373,11 @@ watch(
     { immediate: true },
 );
 
-// Collapse the chat column to nothing while the panel is drawn somewhere else — teleported into its own window
+// Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
 // (popped out), on its way back to one after a page reload (so a refresh doesn't flash the column open for a
-// few frames), or filling the /chat area — so the workspace reclaims the full width. Read off where the panel
-// actually is (chatSurface.ts), never off the route, so the column can't collapse around a panel still in it.
-// The rail variables flow into its child
+// few frames), or homed on the RAIL — where the chat is the /chat area and, away from it, waits parked behind
+// the tile rather than reappearing as a column beside other views. The workspace reclaims the full width in
+// all of them. The rail variables flow into its child
 // controls too, keeping every tile on one density without threading a presentation-only prop through the
 // switcher and account components.
 // THE RAIL DOES NOT TAKE THE APP'S TEXT SIZE. Everything else on screen grows with it — that is the point of
@@ -386,7 +391,7 @@ const rail = (value: string): string => `calc(${value} / var(--ui-scale))`;
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": poppedOut.value || chatRestoring.value || chatFullscreen.value ? `0px` : uiLength(layout.chatWidth.value),
+        "--chat-width": poppedOut.value || chatRestoring.value || chatOnRail.value ? `0px` : uiLength(layout.chatWidth.value),
         "--icon-rail-width": rail(compact ? `3.5rem` : `4rem`),
         "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),

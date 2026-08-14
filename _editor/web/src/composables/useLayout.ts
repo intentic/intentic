@@ -2,6 +2,11 @@ import { ref } from "vue";
 import { toAppPx } from "./uiScale";
 
 export type ChatPosition = "left" | "right";
+// Which HOME the chat lives in: the side column beside every view, or behind a rail tile as the full-screen
+// /chat area. A third home — its own pop-out window — is session state, not a preference, and stays with
+// usePopout. One value the user chooses, so the two in-app homes are exclusive: docked to the rail, the side
+// column never appears and the rail carries a Chat tile; docked to the side, the reverse.
+export type ChatHome = "side" | "rail";
 // What the ONE workspace sidebar shows: the file explorer, the agent-changes review, or the snapshot timeline
 // (VSCode's Source-Control-in-the-sidebar pattern — no second nav column stealing width from the diff view).
 export type SidebarPanel = "files" | "changes" | "history";
@@ -10,6 +15,7 @@ export type DiffLayout = "split" | "unified";
 
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
+const CHAT_HOME_KEY = `ui-chat-home`;
 
 // EVERY WIDTH IN THIS FILE IS IN APP PIXELS — pixels at the app's base text size, which is what all of the
 // measurements below were taken at. They are not screen pixels: the base size is a setting, so a column asked
@@ -181,6 +187,7 @@ const write = (key: string, value: string): void => {
 };
 
 const position = ref<ChatPosition>(readEnum(STORAGE_KEY, [`left`, `right`] as const, `left`));
+const chatHome = ref<ChatHome>(readEnum(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`));
 const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, DEFAULT_CHAT_WIDTH));
 const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH));
 const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, DEFAULT_REVIEW_LIST_WIDTH));
@@ -203,6 +210,13 @@ const set = (value: ChatPosition): void => {
 
 const toggle = (): void => {
     set(position.value === `left` ? `right` : `left`);
+};
+
+// The side (left/right) is kept even while the home is the rail, so docking back returns the column to the
+// edge the user had it on rather than resetting a second preference along the way.
+const setChatHome = (value: ChatHome): void => {
+    chatHome.value = value;
+    write(CHAT_HOME_KEY, value);
 };
 
 const setChatWidth = (px: number): void => {
@@ -307,6 +321,7 @@ const toggleMarkdownOutline = (): void => {
 export function useLayout() {
     return {
         position,
+        chatHome,
         chatWidth,
         sidebarWidth,
         reviewListWidth,
@@ -323,6 +338,7 @@ export function useLayout() {
         markdownOutline,
         set,
         toggle,
+        setChatHome,
         setChatWidth,
         resetChatWidth,
         setSidebarWidth,

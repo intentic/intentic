@@ -1,11 +1,11 @@
-<!-- FULL-SCREEN CHAT — the /chat area: a full-bleed dock slot for the one chat panel instance, desktop only.
+<!-- FULL-SCREEN CHAT — the /chat area: the rail-docked chat's whole surface, desktop only.
 
      The panel itself is mounted once per page by shell/WorkspaceRuntime's PoppablePanels and TELEPORTED to
-     whichever slot is published (shell/dockSlots.ts) — this route publishes the full-window one, which outranks
-     the shell's docked column while it is on screen. So entering the area is the chat moving out of its side
-     column into the whole workspace, and leaving it is the same move back: nothing chat-shaped is duplicated
-     here, and a streaming turn survives the trip exactly as it survives popping out. The URL is the whole of
-     the mode — no stored flag can disagree with it.
+     whichever slot is published (shell/dockSlots.ts) — this route publishes the full-window one. With the rail
+     as the chat's home (useLayout.chatHome, claimed below), this area is the only place in the main window the
+     chat appears at all: every other view leaves it parked behind the rail's Chat tile, never as a side
+     column. Nothing chat-shaped is duplicated here, and a streaming turn survives every trip exactly as it
+     survives popping out.
 
      The grid exists because the panel's own classes were written against the shell grid: it styles itself with
      `grid-area: chat`, so the slot's parent must BE a grid with that area or the panel gets no box (the local
@@ -19,9 +19,16 @@
 import Button from "primevue/button";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useLayout } from "../composables/useLayout";
 import { chatFullDock } from "../shell/dockSlots";
 
 const { poppedOut, restoring, dock } = useChatPopout();
+
+/* STANDING HERE IS CHOOSING THE RAIL AS THE CHAT'S HOME. Every control that leads here sets the home first,
+ * but a bookmark or a hand-typed /chat arrives without one — and this area with the home still on `side` would
+ * be a screen whose own tile is missing from the rail beside it. Claiming it in setup keeps the invariant (on
+ * /chat ⇒ the rail is home ⇒ its tile is lit) whatever the door; a no-op through every ordinary one. */
+useLayout().setChatHome(`rail`);
 
 const slot = useTemplateRef(`slot`);
 onMounted(() => {

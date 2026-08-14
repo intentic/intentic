@@ -119,9 +119,10 @@ const routes: RouteRecordRaw[] = [
                 path: ``,
                 redirect: () => (useDevice().mobile.value || !agentStarted(useSandbox().activeSandboxId.value) ? `/agents` : `/workspace`),
             },
-            // Full-screen chat: the docked panel filling the window (pages/ChatArea.vue lends it the slot).
-            // An area rather than a layout switch, so the rail, the back button and a reload all already know
-            // how to enter and leave it.
+            // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
+            // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
+            // than a layout switch, so the rail, the back button and a reload all already know how to enter
+            // and leave it.
             { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: () => import(`../pages/ChatArea.vue`) },
             { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
