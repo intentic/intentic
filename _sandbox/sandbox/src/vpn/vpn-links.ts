@@ -16,7 +16,7 @@ export interface VpnEntry {
     readonly config: VpnConfig;
 }
 
-export const vpnEntries = (capabilities: readonly Capability[]): VpnEntry[] =>
+const vpnEntries = (capabilities: readonly Capability[]): VpnEntry[] =>
     capabilities.flatMap((capability) => (capability.kind === "vpn" ? [{ id: capability.id, config: capability.config }] : []));
 
 // Epoch ms this tunnel came up, from the marker written on a successful dial. ADVISORY: liveness always comes

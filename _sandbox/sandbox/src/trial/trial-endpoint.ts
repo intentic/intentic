@@ -19,7 +19,7 @@ import type { TrialService } from "./trial.js";
 
 // The entry the rest of the daemon sees. `openai` protocol, so it rides the translator's openai-compatibility
 // list like any other user-configured endpoint — which is what buys the trial the whole existing turn path.
-export const trialCapability = (config: Config): Capability => ({
+const trialCapability = (config: Config): Capability => ({
     id: TRIAL_ENDPOINT_ID,
     kind: "endpoint",
     config: {

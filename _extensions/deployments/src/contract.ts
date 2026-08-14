@@ -206,7 +206,6 @@ export const DeployLogsParamSchema = z.object({
 // ordinary path. Same shape and same meaning as the core CI fix's (contract AgentRunPickSchema) — the two
 // buttons are the same act, so they take the same argument.
 export const DeployFixParamSchema = DeployLogsParamSchema.extend({ pick: AgentRunPickSchema });
-export type DeployFixParam = z.infer<typeof DeployFixParamSchema>;
 
 // Komodo returns a `Log` with both channels; the view renders them together, newest at the bottom, the way a
 // terminal would.

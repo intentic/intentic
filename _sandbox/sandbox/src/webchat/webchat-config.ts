@@ -46,7 +46,3 @@ export const usableAntiBot = (config: WebchatConfig): WebchatPublicConfig["antiB
     }
     return config.antiBot ?? "off";
 };
-
-// Sign-in is only enforceable when there is a client id to verify the token's audience against; without one
-// the daemon would have to trust an unverifiable token, so the gate opens instead of pretending.
-export const requiresGoogle = (config: WebchatConfig): boolean => config.access === "google" && config.googleClientId !== undefined;

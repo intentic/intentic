@@ -185,7 +185,7 @@ const listeningPortsFingerprint = async (procRoot = "/proc"): Promise<string> =>
     return [...ports].toSorted().join(",");
 };
 
-export const defaultRuntimeProbes: RuntimeProbes = {
+const defaultRuntimeProbes: RuntimeProbes = {
     terminals: tmuxFingerprint,
     ports: () => listeningPortsFingerprint(),
 };

@@ -26,14 +26,14 @@ import { SECRET_PATTERNS } from "../public/public-files.js";
 // having said something odd, where this reads as what it is.
 export const REDACTED = "[redacted]";
 
-export const redact = (text: string): string => SECRET_PATTERNS.reduce((value, pattern) => value.replace(new RegExp(pattern, "g"), REDACTED), text);
+const redact = (text: string): string => SECRET_PATTERNS.reduce((value, pattern) => value.replace(new RegExp(pattern, "g"), REDACTED), text);
 
 // What the page can actually draw. A path that is not one of these is not a picture, whatever a tool called it
 // — and since this list is also what decides which workspace bytes get copied out, it is the reason a share
 // cannot be talked into publishing an arbitrary file by naming it in an image entry.
 const PICTURE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"]);
 
-export const isPicture = (path: string): boolean => PICTURE_EXTS.has(extname(path).toLowerCase());
+const isPicture = (path: string): boolean => PICTURE_EXTS.has(extname(path).toLowerCase());
 
 // One picture to copy: where it is in the workspace, and what it is called beside the page.
 export interface SharePicture {

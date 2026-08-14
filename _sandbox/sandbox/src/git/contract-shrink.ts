@@ -21,7 +21,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 // Any file with this basename is read as a wire-contract lock: one JSON document whose top-level keys are
 // exported schema names (see _sandbox/sandbox-contract/src/contract-lock.ts for the format and why it exists).
-export const CONTRACT_LOCK_NAME = `contract.lock.json`;
+const CONTRACT_LOCK_NAME = `contract.lock.json`;
 
 /* Every surface `base` offers that `head` no longer does, as dotted paths. Arrays are the schema's COLLECTIONS
  * (`oneOf` alternatives, `enum` values, `required` names) and are kept unsorted by the lock writer, so a

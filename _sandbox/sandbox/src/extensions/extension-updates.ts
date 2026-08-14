@@ -390,7 +390,7 @@ const healthProblem = async (services: Services, id: string): Promise<string | u
 };
 
 // Resolves once the watch is ARMED (the "watching" record is on disk) — the probes themselves stay on timers.
-export const watchExtensionHealth = (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
+const watchExtensionHealth = (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
     const root = services.workspace.root;
     const record = (health: ExtensionHealth | undefined): Promise<void> =>
         patchRecord(root, identity, ({ health: previous, ...rest }) => {

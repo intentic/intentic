@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { MEMBERSHIP } from "../queryKeys";
 import { apiClient } from "../useApi";
-import { type CreditMeter, creditMeter } from "./creditMeter";
+import { creditMeter } from "./creditMeter";
 
 /* THE MEMBERSHIP AND ITS CREDIT METER, read once for the whole app.
  *
@@ -26,21 +26,6 @@ import { type CreditMeter, creditMeter } from "./creditMeter";
 // Long enough that a tab left open all afternoon is not chatty, short enough that a service run the agent
 // completed a minute ago is reflected before anyone goes looking for why the number is wrong.
 const REFETCH_MS = 60_000;
-
-export interface Membership {
-    /** The raw platform answer, for the one card that renders all of it. */
-    readonly state: MembershipState | undefined;
-    /** This platform sells a membership at all. False on a self-hosted platform with the pool switched off. */
-    readonly offered: boolean;
-    /** The caller is a paying (or trialing) member — the only state with an allowance. */
-    readonly member: boolean;
-    /** Today's allowance, or undefined for anyone who has not got one. */
-    readonly meter: CreditMeter | undefined;
-    /** What installing a premium extension donates to its creator — the one flat price in the product. */
-    readonly donationCredits: number;
-    /** The published daily allowance. A figure even a non-member can read: it is the offer. */
-    readonly dailyCredits: number;
-}
 
 export function useMembership() {
     const client = useQueryClient();

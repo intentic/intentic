@@ -7,7 +7,7 @@ import { ref } from "vue";
 
 // The thrown thing's user-facing message: Error instances and message-carrying objects (the host's transport
 // errors) speak for themselves; anything else — or an empty message — falls back to the caller's phrasing.
-export const errorMessage = (error: unknown, fallback: string): string =>
+const errorMessage = (error: unknown, fallback: string): string =>
     typeof error === `object` && error !== null && `message` in error && typeof error.message === `string` && error.message !== ``
         ? error.message
         : fallback;

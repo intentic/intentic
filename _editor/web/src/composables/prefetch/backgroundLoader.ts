@@ -226,7 +226,7 @@ export const runBackgroundLoader = async (
 // transcript's warm-up makes.
 const IDLE_FALLBACK_MS = 200;
 
-export const whenIdle = (): Promise<void> =>
+const whenIdle = (): Promise<void> =>
     new Promise((resolve) => {
         if (window.requestIdleCallback === undefined) {
             window.setTimeout(resolve, IDLE_FALLBACK_MS);

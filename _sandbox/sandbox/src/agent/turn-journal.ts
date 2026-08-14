@@ -72,7 +72,6 @@ const JournalledFireSchema = z.object({
     origin: AgentOriginSchema.optional(),
     title: z.string().optional(),
 });
-export type JournalledFire = z.infer<typeof JournalledFireSchema>;
 
 const JournalEntrySchema = z.discriminatedUnion("kind", [JournalledTurnSchema, JournalledFireSchema]);
 export type JournalEntry = z.infer<typeof JournalEntrySchema>;

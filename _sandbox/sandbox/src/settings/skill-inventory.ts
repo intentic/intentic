@@ -78,12 +78,12 @@ const capabilityFor = (capabilities: readonly Capability[], name: string): Capab
  * (plugin-dirs.ts, extensionAgentDirsOf), pointed one level deeper at the `skills` folder inside. Shared with the
  * read route rather than repeated there: the list and the reader must resolve one id to one file, and two
  * spellings of that path is how a row opens something other than what it named. */
-export const pluginSkillsDir = (root: string, capability: Extract<Capability, { kind: "plugin" }>): string => {
+const pluginSkillsDir = (root: string, capability: Extract<Capability, { kind: "plugin" }>): string => {
     const checkout = pluginDir(root, capability.id);
     return join(capability.config.path === undefined ? checkout : join(checkout, capability.config.path), "skills");
 };
 
-export const extensionSkillsDir = (extension: InstalledExtension): string | undefined => {
+const extensionSkillsDir = (extension: InstalledExtension): string | undefined => {
     const agent = extension.manifest.contributes?.agent;
     return agent === undefined ? undefined : join(agent.path === undefined ? extension.dir : join(extension.dir, agent.path), "skills");
 };

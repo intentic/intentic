@@ -194,7 +194,7 @@ const slots = (limit: number) => {
 // maxParallel below, so this is the outer bound that prevents several individually-reasonable fan-outs from
 // multiplying into an unbounded provider and worktree storm. Additional admitted runs wait here and remain
 // stoppable while queued.
-export const WORKFLOW_RUNS_MAX = 4;
+const WORKFLOW_RUNS_MAX = 4;
 const workflowSlots = slots(WORKFLOW_RUNS_MAX);
 
 // How a step turned out, as the steps after it need to read it. `ok` is the only thing the graph branches on;
@@ -475,7 +475,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
  */
 const RESUME_MAX = 2;
 
-export const resumeWorkflowRuns = async (services: Services, fn: TurnFn, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
+const resumeWorkflowRuns = async (services: Services, fn: TurnFn, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
     const resumed: string[] = [];
     for (const run of candidates ?? (await services.workflowRuns.list())) {
         if (run.state !== "running" || running.has(run.runId)) {

@@ -40,7 +40,7 @@ const NAIVE = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)$/;
 const ABSOLUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const NAMED = /^(today|tomorrow|yesterday)(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/i;
 
-export const ACCEPTED_WHEN =
+const ACCEPTED_WHEN =
     "accepted: `now`, `+2h` / `-30m` / `+3d` / `+1w`, `today 14:00`, `tomorrow`, `2026-08-12`, `2026-08-12 14:00`, or a full RFC-3339 timestamp";
 
 // What Google's event start/end object should be. `date` is an all-day event — a bare date means the whole

@@ -148,7 +148,7 @@ export interface StatusV2 {
     untracked: string[];
 }
 
-export const parseStatusV2 = (stdout: string): StatusV2 => {
+const parseStatusV2 = (stdout: string): StatusV2 => {
     const records = stdout.split("\0");
     const conflicted: GitChange[] = [];
     const staged: GitChange[] = [];

@@ -17,7 +17,7 @@ const minutes = (count: number): number => count * 60_000;
 // The chain's own conversation — steps 1 and 2 ran on it, which is what `continue` means.
 const CHAIN_CONVERSATION = `wf-a3f19c22-plan`;
 
-export const demoWorkflow = (): Workflow => ({
+const demoWorkflow = (): Workflow => ({
     id: `ship-a-reviewed-change`,
     name: `Ship a reviewed change`,
     description: `Plan it and build it on one branch, then have two reviewers who did none of the work read it independently.`,

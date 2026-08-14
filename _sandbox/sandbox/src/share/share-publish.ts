@@ -31,7 +31,7 @@ export const viewerDist = (): string => dirname(fileURLToPath(import.meta.resolv
 const MAX_PICTURE_BYTES = 25 * 1024 * 1024;
 
 export const shareRoot = (workspaceRoot: string): string => join(publicRoot(workspaceRoot), SHARE_DIR);
-export const shareDir = (workspaceRoot: string, id: string): string => join(shareRoot(workspaceRoot), id);
+const shareDir = (workspaceRoot: string, id: string): string => join(shareRoot(workspaceRoot), id);
 
 /* The page's assets, copied in once and refreshed when the daemon carries newer ones — which happens exactly
  * when the sandbox image is upgraded, since the two ship together. Compared by modification time rather than

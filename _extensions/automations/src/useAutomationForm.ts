@@ -25,7 +25,7 @@ import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
  * default (an absent `agent` MEANS claude), and `load` has to put the user back in front of the same form that
  * produced the record — so a save that changes nothing must round-trip to an identical automation. */
 
-export const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
 

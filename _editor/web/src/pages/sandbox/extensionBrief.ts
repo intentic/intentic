@@ -177,4 +177,4 @@ export const auditBrief = ({ label, url, ref, path }: AuditBrief): string =>
 /* AN UPDATE, READ AS A DIFF — now built in @intentic/sandbox-contract/chores, because the daemon's
  * agent-prepared update policy runs the same read unprompted; re-exported so this file stays the one place the
  * web reaches for an extension brief. */
-export { updateBrief, type UpdateBrief } from "@intentic/sandbox-contract/chores";
+export { updateBrief } from "@intentic/sandbox-contract/chores";

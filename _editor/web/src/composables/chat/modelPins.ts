@@ -13,7 +13,7 @@ import { modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 // The model's published label, falling back to the raw id — a pinned id the catalog has not caught up with (the
 // picker's custom-model escape hatch) has no label to show, and showing the id is more honest than showing
 // nothing.
-export const modelPinLabel = (choice: QuickModelChoice): string =>
+const modelPinLabel = (choice: QuickModelChoice): string =>
     modelOptionsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
 
 // What a resolved choice is CALLED, provider included: "Claude Haiku 4.5" already names its vendor, but

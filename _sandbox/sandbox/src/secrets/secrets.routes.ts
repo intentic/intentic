@@ -64,7 +64,7 @@ export type SecretsRoutesDeps = Pick<
 /* The use ledger's newest row for one inventory entry. Env/generated entries are keyed by the exact name a
  * reference carries; a capability entry is ONE row for a vault that may hold several named fields
  * (`reddit/password`, `reddit/totp`), so any of its fields' uses counts as the entry's. */
-export const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByName: ReadonlyMap<string, SecretUse>): SecretUse | undefined => {
+const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByName: ReadonlyMap<string, SecretUse>): SecretUse | undefined => {
     if (entry.kind === "provider") {
         return undefined;
     }

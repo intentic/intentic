@@ -92,9 +92,6 @@ export const splitRepo = (path: string, repos: readonly string[]): { repo: strin
     return { repo: owner, dir: owner === `` ? path : path.slice(owner.length + 1) };
 };
 
-// Where a repo's MAP lives. Not where its package pages live — those are on the packages, which is what
-// `publishedTail` decides and why nothing composes this with a package tail.
-export const publishedDir = (repo: string): string => underRepo(repo, DOCS_DIR);
 export const publishedPath = (repo: string, tail: string): string => underRepo(repo, publishedTail(tail));
 
 // The staging key for a repo. The root repo needs a NAME here — it is a directory under STAGING_ROOT, and an
@@ -108,7 +105,7 @@ export const stagingPath = (repo: string, tail: string): string => `${stagingDir
 /* A generation run's own directory, beside the staged documents rather than inside any repo: it is bookkeeping
  * about agents, not documentation, and it must never be publishable. */
 export const RUNS_DIR = `${STAGING_ROOT}/runs`;
-export const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
+const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
 
 // What the rail badge has already been shown, in the same tree as the runs it summarises — so acknowledging is
@@ -146,7 +143,7 @@ const CONVERSATION_ID_MAX = 64;
 // why the ids are derived rather than stored.
 /* Exported because THREE things filter on it — one run's agents, any run's agents, and the poll deciding whether
  * to keep polling — and the id scheme has to live in one place. */
-export const RUN_ID_PREFIX = "dg";
+const RUN_ID_PREFIX = "dg";
 
 // Every documentation-run conversation, across all runs.
 export const ANY_RUN_PREFIX = `${RUN_ID_PREFIX}-`;

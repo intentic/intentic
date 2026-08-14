@@ -60,8 +60,7 @@
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "sqlite-vec": "catalog:",
-        "tslib": "catalog:",
-        "zod": "catalog:"
+        "tslib": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

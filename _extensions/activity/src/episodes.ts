@@ -315,7 +315,7 @@ export const matches = (episode: Episode, query: string): boolean => {
 
 // Day dividers. "Today"/"Yesterday" beat a date for the two days that carry almost all of the traffic, and a
 // date is clearer than "6 days ago" for everything older.
-export const dayLabel = (at: number, now: number): string => {
+const dayLabel = (at: number, now: number): string => {
     const midnight = new Date(now).setHours(0, 0, 0, 0);
     if (at >= midnight) {
         return `Today`;

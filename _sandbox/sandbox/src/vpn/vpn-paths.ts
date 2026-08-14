@@ -11,7 +11,7 @@ export const vpnDir = (): string => join(homedir(), ".intentic-vpn");
 // Linux caps an interface name at IFNAMSIZ-1 = 15 bytes. An id short enough to be legal IS the interface name —
 // the readable, overwhelmingly common case — and a longer one falls back to a deterministic hash so two long
 // ids that share a prefix can never collide on one interface.
-export const INTERFACE_MAX = 15;
+const INTERFACE_MAX = 15;
 export const interfaceName = (id: string): string =>
     id.length <= INTERFACE_MAX
         ? id

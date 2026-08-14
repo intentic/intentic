@@ -32,7 +32,7 @@ export const runtimeHealth = (): RuntimeHealth | undefined => cached;
  * Never throws. An adapter's own probe already answers "unknown" for a failure it can see; this guards the
  * ones it cannot (a probe that throws outright), because a background timer that can reject is a daemon that
  * logs an unhandled rejection every five minutes. */
-export const refreshRuntimeHealth = async (services: Services): Promise<void> => {
+const refreshRuntimeHealth = async (services: Services): Promise<void> => {
     const entries = await Promise.all(
         ADAPTERS.map(async (adapter) => {
             // try/catch, not `.catch()`: an adapter that threw before returning a promise would have nothing to

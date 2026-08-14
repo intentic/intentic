@@ -94,7 +94,7 @@ export const installedApp = (entries: readonly UninstallEntry[], displayName: st
 };
 
 /** Strips one layer of surrounding double quotes, which is how Windows stores a path that may contain spaces. */
-export const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
+const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
 
 /* `docker info --format {{.OSType}}` — the question `connect.ps1` and `ic` both skip.
  *

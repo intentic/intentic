@@ -37,7 +37,7 @@ const MAX_BACKOFF_MS = 30_000;
 /* Stop after this long. Not a guess — it is how long the wizard is willing to hold somebody on the setup page
  * before it stops promising the sandbox is coming, and the two must agree or the page would wait on a report
  * that stopped being written. A restart re-arms the whole thing. */
-export const REACH_GIVE_UP_MS = 5 * 60_000;
+const REACH_GIVE_UP_MS = 5 * 60_000;
 
 // Where reachability stands, in the same shape (and for the same readers) as the announce block beside it:
 // /health carries both, so `ic sandbox doctor` and the connect postflight can name whichever link is broken

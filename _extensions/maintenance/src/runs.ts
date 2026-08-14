@@ -22,7 +22,7 @@ import type { ChoreOutcome } from "@intentic/sandbox-contract";
 
 export const RUNS_DIR = `${STATE_DIR}/chores/runs`;
 
-export const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
+const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;
 export const resultPath = (runId: string): string => `${runDir(runId)}/result.json`;
 

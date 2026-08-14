@@ -53,7 +53,7 @@ export const STEP_TONE: Record<WorkflowStepState, StepTone> = {
 
 // The designer's own tone: a step that has never run has no state to show, so it reads as neutral rather than
 // as `pending` — "waiting" would be a lie about a workflow that is not going.
-export const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
+const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
 
 export const toneFor = (node: WorkflowNode): StepTone => (node.run === undefined ? DESIGN_TONE : STEP_TONE[node.run.state]);
 

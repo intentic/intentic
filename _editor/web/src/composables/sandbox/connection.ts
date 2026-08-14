@@ -36,8 +36,6 @@ export type ConnectionFailure =
     // No daemon URL to dial: setup is unfinished, or the daemon has never announced itself.
     | { readonly kind: "unaddressed"; readonly message: string };
 
-export type ConnectionFailureKind = ConnectionFailure["kind"];
-
 // Retrying will not change the outcome — only the user (or the platform) can. Drives both the gate the shell
 // renders and the backoff the driver waits.
 export const isBlocked = (failure: ConnectionFailure): boolean => failure.kind === `forbidden` || failure.kind === `unaddressed`;

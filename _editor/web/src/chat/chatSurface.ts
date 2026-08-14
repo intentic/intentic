@@ -42,7 +42,7 @@ export interface ChatSurface {
 
 // A record with nothing to follow: no pictures resolve and nothing is clickable. What a published conversation
 // provides verbatim, and what a card mounted outside the chat falls back to.
-export const INERT_SURFACE: ChatSurface = { imageUrl: () => undefined };
+const INERT_SURFACE: ChatSurface = { imageUrl: () => undefined };
 
 export const CHAT_SURFACE: InjectionKey<ChatSurface> = Symbol(`chat-surface`);
 

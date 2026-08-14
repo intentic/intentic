@@ -14,7 +14,7 @@ export interface RepoWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
 }
 
-export const createRepoWatch = (
+const createRepoWatch = (
     root: string,
     changes: (listener: (paths: string[]) => void) => () => void,
     logger?: Logger,

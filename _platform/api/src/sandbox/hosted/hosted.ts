@@ -20,7 +20,7 @@ import { createApp, createMachine, createVolume, deleteApp, getMachine, listAppN
 export const hostedEnabled = (config: Config): boolean =>
     config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
 
-export const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
+const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
 
 export interface HostedProvisionArgs {
@@ -43,7 +43,7 @@ export interface HostedProvisionArgs {
  * One composer, so the two origins cannot drift: a machine claimed from the pool is byte-for-byte the machine
  * that would have been built to order. OWNER_EMAIL is in the env before the daemon ever runs, so the
  * first-bind trust story (only this Google identity may claim ownership) is origin-independent too. */
-export const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) =>
+const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) =>
     flyMachineConfig({
         name: machineName,
         image: config.hosted.image,

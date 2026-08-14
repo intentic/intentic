@@ -40,11 +40,6 @@ export interface DesktopInfo {
     installId: string;
 }
 
-export interface Settings {
-    appUrl: string | null;
-    platformUrl: string | null;
-}
-
 /* What the workspace window's × does. `tray` steps the window aside and leaves the app up; `quit` ends it, the
  * same exit the tray menu's Quit takes. Backing out of the question is not one of these — it is the dialog
  * closing its own window, which changes nothing. */
@@ -77,7 +72,6 @@ export type RunEvent =
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
 export const pendingSetup = (): Promise<SetupArgs | null> => invoke(`pending_setup`);
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
-export const signIn = (): Promise<void> => invoke(`sign_in`);
 export const setupRun = (args: SetupArgs): Promise<void> => invoke(`setup_run`, { args });
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
 export const sandboxPower = (slug: string, start: boolean): Promise<void> => invoke(`sandbox_power`, { slug, start });
@@ -97,8 +91,6 @@ export const workspaceOpen = (): Promise<void> => invoke(`workspace_open`);
 // `remember` is the dialog's "always do this": it makes this answer the × from now on, and takes the question
 // away for good. Without it the answer applies to this close only.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
-export const settingsGet = (): Promise<Settings> => invoke(`settings_get`);
-export const settingsSet = (settings: Settings): Promise<void> => invoke(`settings_set`, { settings });
 
 export const onRun = (handler: (event: RunEvent) => void): Promise<UnlistenFn> =>
     listen<RunEvent>(`desktop://run`, (event) => handler(event.payload));

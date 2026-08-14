@@ -70,7 +70,7 @@ export const listDirectory = async (path: string, scopes: HostScopes): Promise<D
     );
 };
 
-export const trashDir = (): string => join(homedir(), ".intentic", "host", "trash");
+const trashDir = (): string => join(homedir(), ".intentic", "host", "trash");
 
 export const trashFile = async (path: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "write");

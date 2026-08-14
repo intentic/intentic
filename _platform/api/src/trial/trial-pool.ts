@@ -18,7 +18,7 @@ import type { Config } from "../config.js";
 // refused identically by every key in the pool, so it comes back as-is rather than burning the whole pool.
 const isWorthRetrying = (status: number): boolean => status === 429 || status >= 500;
 
-export const trialKeys = (config: Config): string[] =>
+const trialKeys = (config: Config): string[] =>
     config.trial.keys
         .split(`,`)
         .map((key) => key.trim())
@@ -40,7 +40,7 @@ export const trialModelAllowlist = (config: Config): string[] =>
  * to be fair, not unpredictable. */
 let cursor = 0;
 
-export const keyOrder = (keys: readonly string[]): string[] => {
+const keyOrder = (keys: readonly string[]): string[] => {
     if (keys.length === 0) {
         return [];
     }

@@ -42,7 +42,7 @@ export const invalidateWorkspace = async (queryClient: QueryClient): Promise<voi
 
 // The restore action, standalone so surfaces without their own useHistory() can share it — the caller supplies
 // the setup-scoped queryClient.
-export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
+const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
     run(async () => {
         await sandboxJson(`/history/restore`, jsonBody(`POST`, { id }));
         await invalidateWorkspace(queryClient);

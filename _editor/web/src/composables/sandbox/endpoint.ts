@@ -29,7 +29,7 @@ import { sha256Hex } from "../workspace/contentHash";
 // A local candidate that does not answer within this is not worth waiting on — loopback is sub-millisecond
 // when it works, so anything approaching this is a hung socket, not a slow one. Deliberately far below the
 // connection watchdog: this must resolve inside the time the tunnel would have taken to answer anyway.
-export const PROBE_TIMEOUT_MS = 1500;
+const PROBE_TIMEOUT_MS = 1500;
 
 /* Where a daemon call goes. `tunnel` is the sandbox's public URL (the platform's registry value, and the only
  * address that works from anywhere); the other two are the same loopback port, differing only in what the

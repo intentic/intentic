@@ -50,7 +50,7 @@ const execFileAsync = promisify(execFile);
 
 // tmux user option carrying the owning conversation id — set once per session by bin/tmux-run, read back by
 // the sweep's list format. Contract between exactly those two places.
-export const TMUX_OWNER_OPTION = "@intentic_owner";
+const TMUX_OWNER_OPTION = "@intentic_owner";
 
 /* HOW LONG AN OWNER MAY BE STOPPED before each kind of resource goes.
  *

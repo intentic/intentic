@@ -117,7 +117,7 @@ export const enrollKey = async (
 
 // Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token,
 // so the sandbox drops just this machine's key + token. Best-effort — the caller ignores failures.
-export const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
+const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
     await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, { method: "DELETE", headers: { "x-intentic-sync": syncToken } });
 };
 

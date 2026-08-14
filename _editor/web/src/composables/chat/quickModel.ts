@@ -2,7 +2,7 @@ import { compareCheapestFirst, NATIVE_PROVIDERS, type QuickModelChoice, quickMod
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
-import { type DescribedPin, describeModelPin, modelChoiceLabel } from "./modelPins";
+import { modelChoiceLabel } from "./modelPins";
 import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 
 /* WHICH MODELS THE ONE-CLICK HELPERS RUN, AND IN WHAT ORDER, browser-side — the same rule the daemon walks
@@ -48,10 +48,6 @@ export const quickModelGroups = computed<readonly QuickModelGroup[]>(() =>
                 .map((option) => ({ key: quickModelKey({ provider: source.provider, model: option.value }), label: option.label })),
         })),
 );
-
-// One entry of the STORED list, as a person reads it — shared with the Agent runs row below it, which keeps a
-// list of the same keys and owes the reader the same answer about each (modelPins.ts).
-export const pinnedQuickModel = (key: string): DescribedPin => describeModelPin(key);
 
 export interface QuickModel {
     // Every model a helper may run, in the order it will try them — the pinned list, or Auto's own ladder when

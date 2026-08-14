@@ -53,7 +53,7 @@ const contentOf = (run: PipelineRun, type: string): string => {
 
 // `channelId` is the workspace repo and `branch` the ref — the two axes a `ci` trigger narrows on, so both are
 // message fields rather than keys in `extra`, which carries only what the woken agent reads.
-export const ciMessageOf = (run: PipelineRun, type: string, author: { id: string; name: string }): ListenerMessage => ({
+const ciMessageOf = (run: PipelineRun, type: string, author: { id: string; name: string }): ListenerMessage => ({
     provider: CI_PROVIDER,
     type,
     id: `${run.host}:${run.project}:${run.runId}:${type}`,

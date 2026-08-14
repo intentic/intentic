@@ -11,9 +11,9 @@ import type { Config } from "../config.js";
  * The allowance is config, never a row: pool.dailyCredits is the membership's cost ceiling, and a ceiling
  * that lived per-user in the database would be a price nobody published. */
 
-export const creditDay = (now: Date): string => now.toISOString().slice(0, 10);
+const creditDay = (now: Date): string => now.toISOString().slice(0, 10);
 
-export const creditsResetAt = (now: Date): string => {
+const creditsResetAt = (now: Date): string => {
     const next = new Date(now);
     next.setUTCHours(24, 0, 0, 0);
     return next.toISOString();

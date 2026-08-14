@@ -43,7 +43,6 @@
         "@intentic/constants": "workspace:*",
         "@intentic/iq-engine": "workspace:*",
         "@intentic/iq-recall": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
         "@puristic/env": "catalog:",
         "@stricli/core": "catalog:",
         "tslib": "catalog:",

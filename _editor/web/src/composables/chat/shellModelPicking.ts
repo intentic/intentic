@@ -18,7 +18,7 @@ import { useChat } from "./useChat";
 // and an empty label is the one thing this must never return — the provider is what will resolve one at run
 // time, so the provider is what it says. Read from the catalog first all the same: an installed ACP agent IS a
 // row with an empty model id, and that row has a name.
-export const namedChoice = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): AgentRunChoice => {
+const namedChoice = (provider: AgentProvider, model: string, account?: string, harness?: AgentHarness): AgentRunChoice => {
     const label = modelLabelFor(provider, model);
     return {
         provider,

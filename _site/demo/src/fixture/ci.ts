@@ -14,12 +14,12 @@ import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic
 
 const minutes = (count: number): number => count * 60_000;
 
-export const CI_REPOS: CiRepo[] = [
+const CI_REPOS: CiRepo[] = [
     { repo: `web`, host: `github`, project: `acme/shop-web`, url: `https://github.com/acme/shop-web` },
     { repo: `api`, host: `gitlab`, project: `acme/shop-api`, url: `https://gitlab.com/acme/shop-api` },
 ];
 
-export const ciRuns = (now: number): PipelineRun[] => [
+const ciRuns = (now: number): PipelineRun[] => [
     {
         repo: `web`,
         host: `github`,

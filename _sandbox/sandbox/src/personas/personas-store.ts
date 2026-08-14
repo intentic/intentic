@@ -1,6 +1,5 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
 import { jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/state-paths.js";
 
 /* THE SANDBOX'S NAMED PERSONAS — the first file under .intentic the workspace repo tracked, and the argument
  * the rest of the tracked config slice was later carved out on (workspace-state.ts `versioned`).
@@ -46,8 +45,6 @@ const rawId = (entry: unknown): string | undefined => {
     const id = (entry as { id?: unknown } | null)?.id;
     return typeof id === "string" ? id : undefined;
 };
-
-export const personasPath = (root: string): string => statePath(root, ".intentic/personas.json");
 
 // A card that could not be read is reported to both places it has to reach: `onInvalid` to the daemon log, and
 // the manifest-problem registry to the screen the persona vanished from. Same split as the capability manifest.

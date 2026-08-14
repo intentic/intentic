@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 import { lstat, readdir, readlink } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
 import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
@@ -189,19 +189,3 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
 
     return Readable.toWeb(gzip) as ReadableStream<Uint8Array>;
 };
-
-// Which repos a bundle will carry git dirs for — the report's "repos" line, and the check that answers the one
-// question a restored workspace lives or dies by. Read from `history/gits/` rather than from the workspace,
-// because a repo whose git dir never made it is a repo the restore cannot heal.
-export const bundledRepos = async (historyRoot: string): Promise<string[]> => {
-    const entries = await readdir(join(historyRoot, "gits"), { withFileTypes: true }).catch(() => []);
-    return entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => decodeURIComponent(entry.name))
-        .toSorted();
-};
-
-// The workspace-relative path of a repo's git dir inside the bundle, and its counterpart on disk. One
-// derivation, used by the restorer to rewrite pointers — `relative` keeps it honest if either root moves.
-export const gitDirEntryName = (historyRoot: string, absGitDir: string): string =>
-    `history/${relative(historyRoot, absGitDir).replaceAll("\\", "/")}`;

@@ -74,9 +74,3 @@ export const powershell = async (script: string, options: RunOptions = {}): Prom
         [`-NoProfile`, `-NonInteractive`, `-ExecutionPolicy`, `Bypass`, `-EncodedCommand`, encodeCommand(script)],
         options,
     );
-
-/** The single line of PowerShell that answers a yes/no question, as a boolean. */
-export const powershellTruthy = async (script: string, options: RunOptions = {}): Promise<boolean> => {
-    const result = await powershell(script, options);
-    return result.code === 0 && result.stdout.trim().toLowerCase() === `true`;
-};

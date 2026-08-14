@@ -11,7 +11,7 @@ import { dirname } from "node:path";
 // ability to dial and drop the tunnels the owner already configured and to mint codes that die within seconds —
 // never to read the credentials behind either, and never any other route.
 // It is regenerated every boot, so a leaked copy dies with the container.
-export const AGENT_TOKEN_PATH = "/run/intentic/agent.token";
+const AGENT_TOKEN_PATH = "/run/intentic/agent.token";
 
 export const writeAgentToken = async (token: string): Promise<void> => {
     await mkdir(dirname(AGENT_TOKEN_PATH), { recursive: true, mode: 0o700 });

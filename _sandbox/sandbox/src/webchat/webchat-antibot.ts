@@ -57,7 +57,7 @@ const leadingZeroBits = (digest: Buffer): number => {
 
 /* The widget sends back `<salt>:<nonce>` — the salt so the daemon can re-derive what it issued without having
  * kept it, the nonce as the answer. Verifying is one HMAC and one hash. */
-export const verifyProofOfWork = (answer: string, conversationId: string, now: number): boolean => {
+const verifyProofOfWork = (answer: string, conversationId: string, now: number): boolean => {
     const separator = answer.lastIndexOf(":");
     if (separator <= 0) {
         return false;
@@ -73,7 +73,7 @@ export const verifyProofOfWork = (answer: string, conversationId: string, now: n
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 // Cloudflare's server-side half. The secret never leaves the daemon — the widget only ever holds the site key.
-export const verifyTurnstile = async (secretKey: string, token: string, remoteIp: string | undefined): Promise<boolean> => {
+const verifyTurnstile = async (secretKey: string, token: string, remoteIp: string | undefined): Promise<boolean> => {
     const body = new URLSearchParams({ secret: secretKey, response: token, ...(remoteIp !== undefined ? { remoteip: remoteIp } : {}) });
     const response = await fetch(TURNSTILE_VERIFY_URL, { method: "POST", body });
     if (!response.ok) {

@@ -16,7 +16,7 @@ const config = (raw: VpnConfig): WireguardVpnConfig => raw as WireguardVpnConfig
 
 // The [Peer] Endpoint, for display. Parsed leniently — a conf with no endpoint (a peer that only ever dials in)
 // is legal, so a missing gateway label is not worth failing an add over.
-export const wireguardEndpoint = (conf: string): string | undefined => /^\s*Endpoint\s*=\s*(\S+)/im.exec(conf)?.[1];
+const wireguardEndpoint = (conf: string): string | undefined => /^\s*Endpoint\s*=\s*(\S+)/im.exec(conf)?.[1];
 
 // `wg show <if>` succeeds only for an existing WireGuard interface.
 const tunnelUp = async (name: string): Promise<boolean> =>

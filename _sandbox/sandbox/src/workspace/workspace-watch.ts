@@ -133,7 +133,7 @@ interface WorkerMessage {
  * Deliberately kept anyway — retiring it moves the batching timers back onto the daemon's loop, which is a
  * behaviour change worth making on its own rather than smuggling into a watcher swap. Whoever picks that up:
  * this comment is the argument that it is now safe to. */
-export const createIsolatedWorkspaceWatch = (root: string, logger: Logger): WorkspaceWatch => {
+const createIsolatedWorkspaceWatch = (root: string, logger: Logger): WorkspaceWatch => {
     const listeners = new Set<(paths: string[]) => void>();
     const worker = new Worker(new URL("./workspace-watch-worker.js", import.meta.url), { workerData: { root } });
     worker.on("message", (message: WorkerMessage) => {

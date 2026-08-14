@@ -64,7 +64,7 @@ export const isBakedSkill = (name: string): boolean => name in SKILLS;
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
 // Where the owner's own skills are kept, switched on or off.
-export const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/skills/");
+const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/skills/");
 export const ownSkillDir = (root: string, name: string): string => join(ownSkillsRoot(root), name);
 const ownSkillFile = (root: string, name: string): string => join(ownSkillDir(root, name), "SKILL.md");
 

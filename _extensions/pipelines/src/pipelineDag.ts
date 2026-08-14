@@ -35,7 +35,7 @@ export interface PipelineStage {
 // stage is only "success" when nothing in it did anything worse.
 const STATUS_WEIGHT: Record<PipelineStatus, number> = { failed: 0, running: 1, canceled: 2, skipped: 3, success: 4 };
 
-export const worstStatus = (jobs: readonly PipelineJob[]): PipelineStatus =>
+const worstStatus = (jobs: readonly PipelineJob[]): PipelineStatus =>
     jobs.reduce<PipelineStatus>((worst, job) => (STATUS_WEIGHT[job.status] < STATUS_WEIGHT[worst] ? job.status : worst), `success`);
 
 // One layer of the pipeline before its status is collapsed. Named only when the vendor named it.
@@ -161,7 +161,7 @@ export const stageLabel = (stage: PipelineStage, index: number): string => {
 
 // Stable per-job node id. Positional rather than name-based: GitHub matrix legs and reruns can repeat a name
 // within a run, and a duplicate id would silently drop a node from the graph.
-export const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageIndex}:${jobIndex}`;
+const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageIndex}:${jobIndex}`;
 
 // A node id back to the stage it belongs to. The ids are positional (jobNodeId), so this is a parse rather
 // than a lookup, and it is what every question about a job's place in the run is answered from.

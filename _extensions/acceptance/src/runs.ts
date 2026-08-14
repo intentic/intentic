@@ -143,7 +143,7 @@ export type Verdict = "pass" | "fail" | "blocked";
  * `blocked` is warning rather than danger because the run never got to judge the story, and a list that painted
  * "we could not reach the app" the same red as "this promise is broken" would send someone to the wrong file.
  * Plain strings: this module stays free of the UI kit, and the names are its StatusVariant's. */
-export const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
+const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
     verdict === `pass` ? `success` : verdict === `fail` ? `danger` : `warning`;
 
 /* WHERE ONE STORY OF ONE RUN STANDS, from the two facts that answer it: what the agent WROTE, and what its

@@ -79,7 +79,7 @@ export const ourForwardSessions = (mutagen: string, sandboxId?: string): string[
     parseForwardNames(listSessionNames(mutagen, "forward"), sandboxId);
 
 // Forward sessions no pairing in `keptSandboxIds` claims.
-export const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
+const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
     parseOrphanForwardNames(listSessionNames(mutagen, "forward"), keptSandboxIds);
 
 // `mutagen forward create` args: bind the SAME port on the local loopback and pipe it to the sandbox listener

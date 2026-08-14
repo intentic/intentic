@@ -15,7 +15,7 @@ const WAIT_MS = 5 * 60 * 1000;
 
 const redirectUri = (port: number): string => `http://127.0.0.1:${port}`;
 
-export const consentUrl = (clientId: string, port: number, scopes: readonly string[]): string =>
+const consentUrl = (clientId: string, port: number, scopes: readonly string[]): string =>
     `${CONSENT}?${new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri(port),
@@ -30,7 +30,7 @@ export const consentUrl = (clientId: string, port: number, scopes: readonly stri
 // A pasted `http://127.0.0.1:9004/?code=…&scope=…` is what an owner who approved in their OWN browser has in
 // front of them — the redirect failed to connect, but the address bar holds the answer. Both that and a bare
 // code are accepted, because which one arrives depends on whose browser it was.
-export const codeFrom = (input: string): string => {
+const codeFrom = (input: string): string => {
     const value = input.trim();
     if (!value.includes("://")) {
         return value;

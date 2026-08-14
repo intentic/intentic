@@ -19,7 +19,7 @@ import { host } from "./host";
 
 // A capability's `provider` is the slug a source and a template name it by — the connected INSTANCE, not the
 // card it was made from, which is why this reads config rather than the manifest.
-export const connectedProviders = (capabilities: readonly CapabilityFacts[]): ReadonlySet<string> =>
+const connectedProviders = (capabilities: readonly CapabilityFacts[]): ReadonlySet<string> =>
     new Set(capabilities.flatMap((capability) => (typeof capability.config[`provider`] === `string` ? [capability.config[`provider`]] : [])));
 
 /* WHETHER THIS CAN BE CHOSEN RIGHT NOW, which is a different question from whether it can be DESCRIBED. A pack

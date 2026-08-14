@@ -28,7 +28,7 @@ const SEPARATOR = "\n\n---\n\n";
  * opens the message, so the CLI's slash parser never claims it and the words reach the model instead of being
  * answered with "Unknown command" and dropped. It says something true and useful while it is there — the model
  * would otherwise have to guess whether `/workspace` names a command, a route, or a path. */
-export const LITERAL_SLASH_NOTE_HEADER = "## Reading the message below";
+const LITERAL_SLASH_NOTE_HEADER = "## Reading the message below";
 
 export const LITERAL_SLASH_NOTE =
     `${LITERAL_SLASH_NOTE_HEADER}\n\n` +
@@ -48,7 +48,7 @@ export const LITERAL_SLASH_NOTE =
  *
  * A note is second-best to a mechanism and says so in its own text; it is what these runtimes can be given
  * today. It names both trees, because "don't touch /work" without "your tree is HERE" just costs a retry. */
-export const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
+const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
 
 export const worktreeNote = (worktree: string, root: string): string =>
     `${WORKTREE_NOTE_HEADER}\n\n` +

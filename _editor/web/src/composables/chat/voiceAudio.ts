@@ -81,7 +81,7 @@ export interface SegmenterTuning {
     readonly keptTailMs: number;
 }
 
-export const SEGMENTER_DEFAULTS: SegmenterTuning = {
+const SEGMENTER_DEFAULTS: SegmenterTuning = {
     startThreshold: 0.015,
     sustainThreshold: 0.008,
     silenceMs: 1500,

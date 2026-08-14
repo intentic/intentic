@@ -11,8 +11,8 @@
  * Small on purpose: a page is a background, some blocks of text, a few cards and one cursor. Anything more and
  * this stops being a fixture and starts being a rendering engine. */
 
-export const WIDTH = 1280;
-export const HEIGHT = 800;
+const WIDTH = 1280;
+const HEIGHT = 800;
 
 const escape = (text: string): string => text.replaceAll(`&`, `&amp;`).replaceAll(`<`, `&lt;`).replaceAll(`>`, `&gt;`);
 

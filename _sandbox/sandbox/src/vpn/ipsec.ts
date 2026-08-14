@@ -73,8 +73,8 @@ const routedNetworks = (raw: IpsecVpnConfig): string => {
 // strongSwan refuses IKEv1 aggressive mode with a PSK unless this is set, and it is right to: the PSK hash goes
 // out unencrypted. FortiGate dial-up with a group PSK requires it anyway, so the grant is per sandbox and only
 // ever written when an aggressive connection actually exists.
-export const AGGRESSIVE_DROPIN_PATH = "/etc/strongswan.d/intentic-aggressive.conf";
-export const AGGRESSIVE_DROPIN = `# Written by the intentic sandbox daemon: an ipsec VPN capability configured for IKEv1 aggressive mode.
+const AGGRESSIVE_DROPIN_PATH = "/etc/strongswan.d/intentic-aggressive.conf";
+const AGGRESSIVE_DROPIN = `# Written by the intentic sandbox daemon: an ipsec VPN capability configured for IKEv1 aggressive mode.
 charon {
     i_dont_care_about_security_and_use_aggressive_mode_psk = yes
 }
@@ -127,14 +127,14 @@ export const ipsecSecretsConfig = (raw: IpsecVpnConfig): string => {
 
 // The daemon owns both top-level files: strongSwan has no drop-in directory of its own for connections, so the
 // include line is what makes per-connection files work at all.
-export const IPSEC_CONF = `# Written by the intentic sandbox daemon — do not edit by hand.
+const IPSEC_CONF = `# Written by the intentic sandbox daemon — do not edit by hand.
 # One file per vpn capability lives in the included directory.
 config setup
     charondebug="ike 1, knl 1, cfg 0"
 
 include ${IPSEC_INCLUDE_DIR}/*.conf
 `;
-export const IPSEC_SECRETS = `# Written by the intentic sandbox daemon — do not edit by hand.
+const IPSEC_SECRETS = `# Written by the intentic sandbox daemon — do not edit by hand.
 include ${IPSEC_INCLUDE_DIR}/*.secrets
 `;
 

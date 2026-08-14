@@ -277,7 +277,7 @@ export interface ResourceSampler {
     readonly stop: () => void;
 }
 
-export const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> = () => ({})): ResourceSampler => {
+const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> = () => ({})): ResourceSampler => {
     const loopDelay = monitorEventLoopDelay({ resolution: 20 });
     loopDelay.enable();
     let gcCount = 0;
@@ -425,7 +425,7 @@ export interface ResourceMetricsOptions {
     readonly sampler?: ResourceSampler;
 }
 
-export const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
+const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
 
 export const startResourceMetrics = ({
     historyRoot,

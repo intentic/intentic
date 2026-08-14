@@ -136,7 +136,7 @@ export const retrievalQueryOf = (prompt: string): string | undefined => {
     return lastSpace > 0 ? head.slice(0, lastSpace) : head;
 };
 
-export const turnContextNote = (query: string, answer: string): string =>
+const turnContextNote = (query: string, answer: string): string =>
     `${TURN_CONTEXT_NOTE_HEADER}\n\n` +
     `Not the user's words. Before this turn the daemon searched this workspace for the message below and pasted ` +
     `the ranked answer here, so the first search is already paid for. It ran \`iq "${query}"\`.\n\n` +

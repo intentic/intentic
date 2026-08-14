@@ -50,8 +50,7 @@ export const compositeOver = (fg: Rgba, bg: Rgb): Rgb => ({
 });
 
 const clamp = (value: number): number => Math.max(0, Math.min(255, Math.round(value)));
-export const toHex = (color: Rgb): string =>
-    `#${[color.r, color.g, color.b].map((channel) => clamp(channel).toString(16).padStart(2, `0`)).join(``)}`;
+const toHex = (color: Rgb): string => `#${[color.r, color.g, color.b].map((channel) => clamp(channel).toString(16).padStart(2, `0`)).join(``)}`;
 
 // Perceived luminance (0..1) — used to guess light vs dark when the theme omits `type`.
 const luminance = (color: Rgb): number => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;

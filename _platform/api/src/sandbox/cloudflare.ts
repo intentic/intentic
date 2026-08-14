@@ -30,7 +30,7 @@ export class CloudflareTokenError extends Error {}
 // the numeric error codes from the response envelope (e.g. 1022 = tunnel has active connections) so callers can
 // branch on the code rather than the human message, which Cloudflare rewords. Extends Error so the existing
 // `instanceof Error` → BAD_GATEWAY catchers keep mapping it.
-export class CloudflareApiError extends Error {
+class CloudflareApiError extends Error {
     constructor(
         message: string,
         readonly codes: number[],
@@ -276,11 +276,6 @@ const sandboxTunnelId = (connectToken: string): string => {
     if (id === undefined) throw new Error(`sandboxTunnelId called with an empty connect token`);
     return id;
 };
-
-// The stable public hostname for a sandbox's intentic tunnel, derivable from the token alone. The mint
-// provisions the tunnel/DNS behind this name before returning it, so the wizard never probes an unresolvable
-// hostname (an early NXDOMAIN gets negative-cached by resolvers for the zone's SOA TTL).
-export const sandboxHostname = (zone: string, connectToken: string): string => sandboxHost(sandboxTunnelId(connectToken), zone);
 
 // The in-container origin the sandbox preview proxy listens on — fixed like the daemon's :8787 and sshd's :22.
 // On the intentic-provided path the ingress is platform-owned, so a container-side PREVIEW_PORT override is

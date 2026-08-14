@@ -25,7 +25,7 @@ import type { Config } from "./env.config.js";
 
 // The real first-party connectors/discord extensions, so a cli capability's image fragment and a
 // cli-capability test's provider data both resolve against the tree the daemon actually ships.
-export const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // A manifest listener contribution whose wording is deliberately plain: route/process tests care about the
 // provider and event vocabulary, while the required automation metadata keeps the fixture on the public shape.

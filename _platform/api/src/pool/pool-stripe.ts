@@ -15,7 +15,7 @@ const API_BASE = `https://api.stripe.com/v1`;
  * names the fix, where a dump of the response body names nothing. It is pulled out here because the routes
  * hand it to the screen (the cloudflare.ts precedent): a creator whose payout setup will not open is owed the
  * reason, and a bare "Internal server error" on that card is the one answer that helps nobody. */
-export class StripeError extends Error {}
+class StripeError extends Error {}
 
 const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
 

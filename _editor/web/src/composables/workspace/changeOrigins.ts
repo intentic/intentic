@@ -149,7 +149,7 @@ const seconds = (ms: number): string => {
  *   answered — done, with what it cost;
  *   refused  — done, with what it cost AND its own words, because "refused" alone sends the user hunting;
  *   skipped  — never asked, on the strength of its own refusal minutes ago — the memo working, said as such. */
-export const draftStepLine = (step: LandedMessageStep, now: number): string => {
+const draftStepLine = (step: LandedMessageStep, now: number): string => {
     switch (step.status) {
         case `asking`:
             return `Asking ${step.model}… ${step.at === undefined ? `` : seconds(Math.max(0, now - step.at))}`.trimEnd();

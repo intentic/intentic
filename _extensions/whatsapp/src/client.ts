@@ -73,7 +73,7 @@ export interface OpenOptions {
 }
 
 // Baileys wants digits only ("4915112345678"), people write numbers with +, spaces and dashes.
-export const digitsOf = (phoneNumber: string): string => phoneNumber.replaceAll(/\D/g, "");
+const digitsOf = (phoneNumber: string): string => phoneNumber.replaceAll(/\D/g, "");
 
 // A no-op pino-shaped logger: baileys' default logs its internals to stdout, and a protocol trace is noise the
 // tmux capture doesn't need. Structural, cast at the boundary — pulling pino in for silence would be absurd.
@@ -88,7 +88,7 @@ const silentLogger = {
 };
 
 // The extension a downloaded medium gets, from its declared mimetype ("audio/ogg; codecs=opus" → .ogg).
-export const extensionOf = (mimetype: string | undefined): string => {
+const extensionOf = (mimetype: string | undefined): string => {
     const subtype = mimetype?.split("/")[1]?.split(";")[0]?.trim();
     return subtype === undefined || subtype === "" ? "bin" : subtype.replace("jpeg", "jpg");
 };

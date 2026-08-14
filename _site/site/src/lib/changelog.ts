@@ -70,8 +70,8 @@ const sectionBullets = (body: string, heading: RegExp): string[] => {
     return notes.filter((note) => note !== "");
 };
 
-export const parseNotes = (body: string): string[] => sectionBullets(body, WHATS_NEW_HEADING);
-export const parseBreaking = (body: string): string[] => sectionBullets(body, BREAKING_HEADING);
+const parseNotes = (body: string): string[] => sectionBullets(body, WHATS_NEW_HEADING);
+const parseBreaking = (body: string): string[] => sectionBullets(body, BREAKING_HEADING);
 
 interface GithubRelease {
     tag_name?: unknown;

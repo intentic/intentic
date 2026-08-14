@@ -46,6 +46,6 @@ export const bySection = (left: SkillSummary, right: SkillSummary): number =>
  * provenance chip is the other one, and it is what a reader actually types — "connection", "producthunt", the
  * extension they are trying to account for. Searching only the name would make this list findable exactly to the
  * extent it is already scannable, which is backwards for the rows that are folded away. */
-export const skillHaystack = (skill: SkillSummary): string => `${skill.name} ${skill.description} ${provenanceOf(skill)}`.toLowerCase();
+const skillHaystack = (skill: SkillSummary): string => `${skill.name} ${skill.description} ${provenanceOf(skill)}`.toLowerCase();
 
 export const matchesSkill = (skill: SkillSummary, needle: string): boolean => needle === `` || skillHaystack(skill).includes(needle);

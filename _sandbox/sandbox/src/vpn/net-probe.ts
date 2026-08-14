@@ -33,9 +33,6 @@ const ipJson = async <T>(args: readonly string[]): Promise<T[]> => {
     }
 };
 
-// True once the kernel has the interface, whatever its state — the first observable step of a dial.
-export const interfaceExists = async (name: string): Promise<boolean> => (await ipJson<IpAddrEntry>(["addr", "show", "dev", name])).length > 0;
-
 // The IPv4 address the gateway assigned, as "10.212.134.200/32". Undefined while the interface exists but has
 // not been configured yet — which is exactly the "connecting" window.
 export const interfaceAddress = async (name: string): Promise<string | undefined> => {

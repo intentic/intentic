@@ -170,7 +170,7 @@ export const liveSessions = (run: WorkflowRun): RunSession[] => {
  * Only while the run is GOING. A finished run's pending steps are pending forever — they were skipped or the
  * run was stopped — and offering them would be offering chats that will never exist.
  */
-export const frontSessions = (run: WorkflowRun): RunSession[] => {
+const frontSessions = (run: WorkflowRun): RunSession[] => {
     const live = liveSessions(run);
     if (live.length > 0 || run.state !== `running`) {
         return live;

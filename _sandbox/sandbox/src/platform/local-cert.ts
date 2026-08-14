@@ -52,7 +52,7 @@ const pathsFor = (config: Config): { dir: string; cert: string; key: string; acc
 
 // The name this sandbox's loopback listener is certified for, or undefined when it cannot have one — no
 // connect token (nothing to derive an id from) or no public URL to read a zone off (a loopback/dev daemon).
-export const localCertHostname = (config: Config): string | undefined => {
+const localCertHostname = (config: Config): string | undefined => {
     const id = sandboxIdFromToken(config.connectToken);
     const zone = zoneFromUrl(config.sandbox.publicUrl);
     return id === undefined || zone === undefined ? undefined : localHostname(id, zone);
@@ -103,7 +103,7 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
 
 /* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one —
  * every branch is a normal state, never an error the caller has to handle. */
-export const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
+const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
     const hostname = localCertHostname(config);
     if (hostname === undefined || config.platform.url === "" || config.connectToken === "") {
         return undefined;

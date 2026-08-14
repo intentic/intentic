@@ -12,7 +12,7 @@ interface CodexImageResult {
     readonly saved_path?: string;
 }
 
-export const codexImageOutputDir = (workspaceRoot: string): string => statePath(workspaceRoot, ".intentic/artifacts/", "imagegen");
+const codexImageOutputDir = (workspaceRoot: string): string => statePath(workspaceRoot, ".intentic/artifacts/", "imagegen");
 
 const safeFilename = (id: string): string => {
     const safe = id

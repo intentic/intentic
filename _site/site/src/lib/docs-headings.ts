@@ -51,7 +51,7 @@ function plainText(html: string): string {
  * Dots and slashes become hyphens rather than vanishing, so `api.views` and `apiviews` cannot collide, and the
  * result stays readable in a URL bar: a shared link should say which section it points at.
  */
-export function slugify(text: string): string {
+function slugify(text: string): string {
     return (
         text
             .toLowerCase()

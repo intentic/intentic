@@ -9,7 +9,7 @@
 
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { powershell, run, type RunResult } from "./run.js";
+import { powershell, type RunResult } from "./run.js";
 
 /** How long an install may take. Generous because it may fetch the WebView2 runtime on a machine without one. */
 const INSTALL_TIMEOUT_MS = 15 * 60 * 1_000;
@@ -85,10 +85,4 @@ export const quitApp = async (executable: string): Promise<void> => {
         `$ErrorActionPreference='SilentlyContinue'
          Get-Process | Where-Object { $_.Path -eq '${executable}' } | Stop-Process -Force`,
     );
-};
-
-/** The app's last words, for a failure that would otherwise be an empty log. */
-export const recentAppLog = async (logPath: string): Promise<string> => {
-    const result = await run(`powershell.exe`, [`-NoProfile`, `-Command`, `Get-Content -Tail 80 -Path '${logPath}'`]);
-    return result.code === 0 ? result.stdout : ``;
 };

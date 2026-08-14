@@ -37,8 +37,7 @@
     "dependencies": {
         "@intentic/sandbox-contract": "workspace:*",
         "@orpc/contract": "catalog:",
-        "tslib": "catalog:",
-        "zod": "catalog:"
+        "tslib": "catalog:"
     },
     "peerDependencies": {
         "vue": "3"

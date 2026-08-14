@@ -82,7 +82,7 @@ export const usageTone = (percent: number): string =>
  * being one you'd start a long turn on. Named rather than left as the bare 75 this tone scale used to carry,
  * because the capacity counts below have to draw their bands on the SAME two thresholds. */
 export const SPENT_PERCENT = 90;
-export const TIGHT_PERCENT = 75;
+const TIGHT_PERCENT = 75;
 export const isSpent = (usage: AccountUsage | undefined): boolean => {
     const percent = usagePercent(usage);
     return percent !== undefined && percent >= SPENT_PERCENT;
@@ -135,7 +135,7 @@ export interface PlanLimitPool {
  * plan limits starts here: the Usage tab's meters (planLimitRow), the ring's hover card, the sentence a screen
  * reader hears. A pool that reads "Weekly · Opus 91% (resets Sun 5:00 AM)" in one of them therefore reads the
  * same in the others, which is the whole reason this is a projection rather than three formatters. */
-export const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
+const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
     orderedWindows(usage).map((window) => ({
         kind: window.kind,
         label: usageWindowLabel(window),
@@ -145,7 +145,7 @@ export const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
 
 // The fullest of them — the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
 // headline number and the pool it names can never come from different arithmetic.
-export const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>
+const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>
     pools.reduce<PlanLimitPool | undefined>((worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst), undefined);
 
 export interface PlanHeadroom {

@@ -382,13 +382,13 @@ const BULLET = /^[-*]\s+/;
  * --format=%(trailers:key=Release-Note,valueonly)` reads it back at release time, `git interpret-trailers`
  * understands it, and anyone who opens the commit sees a labelled line instead of a stray sentence. The
  * harvest and the writer therefore share ONE spelling, which is this constant. */
-export const RELEASE_NOTE_TRAILER = `Release-Note:`;
+const RELEASE_NOTE_TRAILER = `Release-Note:`;
 
 /* The note's rarer sibling: the sentence for a change that TAKES something away from users — harvested into
  * the Release's "Breaking changes" section the same way (publish-github.sh), and the reason the update card
  * can warn before the update instead of the user finding out after. Same trailer convention, same one
  * spelling shared by writer and harvest. */
-export const BREAKING_NOTE_TRAILER = `Breaking-Note:`;
+const BREAKING_NOTE_TRAILER = `Breaking-Note:`;
 
 const startsWithTrailer = (line: string, trailer: string): boolean => line.toLowerCase().startsWith(trailer.toLowerCase());
 

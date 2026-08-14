@@ -27,7 +27,7 @@ const registryUrl = ref(OFFICIAL_REGISTRY_URL);
 const registryToken = ref(``);
 
 /** True while the surface is reading the registry it ships with rather than one somebody typed. */
-export const isOfficialRegistry = computed(() => registryUrl.value.trim() === OFFICIAL_REGISTRY_URL);
+const isOfficialRegistry = computed(() => registryUrl.value.trim() === OFFICIAL_REGISTRY_URL);
 
 /* `read: false` is for a caller that wants the ANSWER but must not cause the question — the hub row that
  * badges how many installed extensions have a newer listed commit. Browsing a registry is a git clone on the

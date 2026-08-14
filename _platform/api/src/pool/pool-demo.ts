@@ -46,7 +46,7 @@ export const seedDemoService = async (prisma: PrismaClient, config: Config): Pro
 
 // The canned answer the demo upstream serves — deliberately shaped like a real research result, so an agent
 // quoting it in chat reads plausibly, and deliberately labelled, so nobody mistakes it for one.
-export const demoAnswer = (query: string): object => ({
+const demoAnswer = (query: string): object => ({
     demo: true,
     query,
     summary: `Demo summary for "${query}": this canned answer proves the metered path end to end — your credits were spent, the call was signature-verified, and a real provider would answer here.`,

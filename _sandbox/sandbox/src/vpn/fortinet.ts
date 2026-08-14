@@ -21,11 +21,11 @@ const config = (raw: VpnConfig): FortinetVpnConfig => raw as FortinetVpnConfig;
 // answer). Killed rather than left to hold the connect stream open forever.
 const DIAL_TIMEOUT_MS = 90_000;
 
-export const fortinetGateway = (raw: FortinetVpnConfig): string => `${raw.server}:${raw.port}`;
+const fortinetGateway = (raw: FortinetVpnConfig): string => `${raw.server}:${raw.port}`;
 
 // openconnect's argv. Credentials never appear here — the password and any OTP ride stdin — so the full command
 // is safe to log, and `ps` in the sandbox never shows a VPN password.
-export const openconnectArgs = (id: string, raw: FortinetVpnConfig): string[] => [
+const openconnectArgs = (id: string, raw: FortinetVpnConfig): string[] => [
     "--protocol=fortinet",
     "--background",
     `--pid-file=${pidPath(id)}`,
@@ -41,11 +41,11 @@ export const openconnectArgs = (id: string, raw: FortinetVpnConfig): string[] =>
 
 // What openconnect reads from stdin, in prompt order: the password, then the 2FA code when the gateway asks
 // for one. A trailing newline on each is what makes openconnect treat them as complete answers.
-export const dialStdin = (password: string, otp: string | undefined): string => (otp === undefined ? `${password}\n` : `${password}\n${otp}\n`);
+const dialStdin = (password: string, otp: string | undefined): string => (otp === undefined ? `${password}\n` : `${password}\n${otp}\n`);
 
 // The line worth showing when a dial fails. openconnect's untrusted-certificate refusal prints the exact
 // --servercert value to pin, which is the one message a user must see verbatim to recover.
-export const dialFailureHint = (log: string): string | undefined => {
+const dialFailureHint = (log: string): string | undefined => {
     const pin = /--servercert\s+(sha256:[0-9a-f]+)/i.exec(log)?.[1];
     if (pin !== undefined) {
         return `The gateway's certificate is not signed by a trusted CA. Re-add this VPN with "Trusted certificate" set to ${pin} to pin it.`;

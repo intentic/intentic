@@ -16,11 +16,11 @@ import type { Config } from "../config.js";
 // The UTC day an allowance is counted against. UTC rather than the user's zone deliberately: the reset has to be
 // a fact the server can state without asking the client what time it thinks it is, and a client-chosen midnight
 // is a client-chosen second allowance.
-export const trialDay = (now: Date): string => now.toISOString().slice(0, 10);
+const trialDay = (now: Date): string => now.toISOString().slice(0, 10);
 
 // When the current allowance resets — the next UTC midnight, as an ISO stamp the browser can render in local
 // time. Derived from `now` rather than read from the row, so it is answerable before a user has spent anything.
-export const trialResetsAt = (now: Date): string => {
+const trialResetsAt = (now: Date): string => {
     const next = new Date(now);
     next.setUTCHours(24, 0, 0, 0);
     return next.toISOString();

@@ -23,7 +23,7 @@ const DATA_OPEN = `<script id="intentic-conversation" type="application/json">`;
 const DATA_CLOSE = `</script>`;
 const TITLE = /<title>[^<]*<\/title>/;
 
-export const encodePayload = (payload: SharePayload): string => JSON.stringify(payload).replaceAll("<", "\\u003c");
+const encodePayload = (payload: SharePayload): string => JSON.stringify(payload).replaceAll("<", "\\u003c");
 
 export const sharePage = (template: string, payload: SharePayload): string => {
     const open = template.indexOf(DATA_OPEN);

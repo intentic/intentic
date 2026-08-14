@@ -35,7 +35,7 @@ export const publicRoot = (workspaceRoot: string): string => join(workspaceRoot,
 
 // Beyond this a file is refused rather than streamed. Generous on purpose: a screen recording is a normal thing
 // to hand someone, and this exists to stop a dev box quietly becoming a download mirror.
-export const MAX_BYTES = 512 * 1024 * 1024;
+const MAX_BYTES = 512 * 1024 * 1024;
 
 // Bounds on the listing walk (the /public route), not on serving: a published `dist/` is thousands of files and
 // the view showing them is not where that has to be paginated.
@@ -131,7 +131,7 @@ export const blockByName = (relPath: string): PublicBlock | undefined => {
 };
 
 // Rule 5, on the bytes. Reads the head of the file, never the whole thing.
-export const blockByContent = async (absPath: string, contentType: string): Promise<PublicBlock | undefined> => {
+const blockByContent = async (absPath: string, contentType: string): Promise<PublicBlock | undefined> => {
     if (!sniffable(contentType)) {
         return undefined;
     }
@@ -149,7 +149,7 @@ export const blockByContent = async (absPath: string, contentType: string): Prom
     }
 };
 
-export const contentTypeOf = (name: string): { readonly type: string; readonly inline: boolean } => TYPES[extname(name).toLowerCase()] ?? DOWNLOAD;
+const contentTypeOf = (name: string): { readonly type: string; readonly inline: boolean } => TYPES[extname(name).toLowerCase()] ?? DOWNLOAD;
 
 // What the outbox answers with: a file to stream, or a branded status page.
 export type PublicResolution =
@@ -175,7 +175,7 @@ const notFound = (): PublicResolution => ({
 
 // The request path, minus query/fragment and percent-decoded. undefined for malformed encoding or an embedded
 // NUL — both are only ever an attempt to confuse the path resolution below.
-export const requestPath = (url: string | undefined): string | undefined => {
+const requestPath = (url: string | undefined): string | undefined => {
     const raw = (url ?? "/").split("?")[0]?.split("#")[0] ?? "/";
     let decoded: string;
     try {

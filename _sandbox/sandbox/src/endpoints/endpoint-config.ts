@@ -55,7 +55,7 @@ export const parseHeaders = (headers: string | undefined): Record<string, string
  * A missing key is an ordinary configuration, not an omission to warn about: a model server on the docker host
  * usually has no auth at all, and Ollama in particular ignores whatever is sent. So the header is simply absent
  * and the request goes out unauthenticated. */
-export const endpointAuthHeaders = (config: EndpointConfig): Record<string, string> => {
+const endpointAuthHeaders = (config: EndpointConfig): Record<string, string> => {
     const key = config.apiKey ?? "";
     if (config.protocol === "anthropic") {
         return { "anthropic-version": "2023-06-01", ...(key === "" ? {} : { "x-api-key": key }) };

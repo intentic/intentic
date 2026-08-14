@@ -15,7 +15,7 @@ import { registry } from "./registry.js";
  * key and a passphrase, or a vpn conf beside its pre-shared key would each leave a credential behind if this
  * followed the rotatable one.
  */
-export const secretFieldsOf = (capability: Capability, connectors: Map<string, ResolvedContribution>): readonly string[] => {
+const secretFieldsOf = (capability: Capability, connectors: Map<string, ResolvedContribution>): readonly string[] => {
     const config = capability.config as Record<string, unknown>;
     const echoed = new Set(Object.keys(registry[capability.kind].echo(config, connectors)));
     return Object.keys(config).filter((key) => !echoed.has(key));

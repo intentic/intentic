@@ -270,7 +270,7 @@ const probeScript = (dir: string): string =>
         `mount -t overlay ${OVERLAY_FS_NAME} -o ${shellQuote(overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work")))} ${shellQuote(join(dir, "merged"))}`,
     ].join("\n");
 
-export const isolationAvailable = async (historyRoot: string): Promise<boolean> => {
+const isolationAvailable = async (historyRoot: string): Promise<boolean> => {
     const dir = join(historyRoot, ".isolation-probe");
     try {
         await rm(dir, { recursive: true, force: true });

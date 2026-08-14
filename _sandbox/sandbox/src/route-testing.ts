@@ -76,7 +76,7 @@ export const TURN_SETTLES = { timeout: 30_000 } as const;
  * sandbox, where the land then shelled git at a worktree that was never created and failed the turn. Absent
  * everywhere, the pass reports "main checkout vanished" and returns without spawning anything.
  */
-export const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
+const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
 
 // Where a conversation's checkout lives, in the layout the daemon uses. Shared by the worktree fake and by the
 // workspace scope composed from it, so the two cannot name different directories for the same conversation.
@@ -165,7 +165,7 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
 // An in-memory thread-session store, so the routes that turn an inbound message into a CONVERSATION (the
 // Doorbell, a listener gateway's dispatch) are testable without the fs. Honours the TTL, because "a quiet
 // thread starts over" is behaviour and not bookkeeping.
-export const memoryThreadSessionsStore = (): ThreadSessionsStore => {
+const memoryThreadSessionsStore = (): ThreadSessionsStore => {
     const sessions = new Map<string, ThreadSession>();
     const live = (key: string, ttlMs: number, now: number): ThreadSession | undefined => {
         const record = sessions.get(key);

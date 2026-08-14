@@ -19,7 +19,7 @@ import { HOST_VERSION } from "./version.js";
 // Redeem the pairing for this machine's durable token. Retried through a tunnel that may still be warming (the
 // sync agent's lesson: Cloudflare's edge answers before the origin registers), but never through a 401 — an
 // expired pairing is a definitive answer, and retrying it only delays the "click Connect again" the user needs.
-export const enroll = async (
+const enroll = async (
     sandboxUrl: string,
     pairToken: string,
     { attempts = 10, delayMs = 3000 }: { attempts?: number; delayMs?: number } = {},

@@ -31,7 +31,7 @@ const packsDir = join(packageRoot(import.meta.url), "packs");
 
 // Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp —
 // core image, dev run, or a pack newer than this base — reads as "not baked".
-export const PACK_STAMPS_DIR = "/opt/packs";
+const PACK_STAMPS_DIR = "/opt/packs";
 
 export interface Pack {
     readonly name: string;

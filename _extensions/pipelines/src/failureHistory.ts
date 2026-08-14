@@ -28,9 +28,9 @@ export interface RecurringFailure {
 }
 
 // Two runs in a row is already a pattern worth naming; one is just a failure, which the row itself shows.
-export const RECURRING_MIN = 2;
+const RECURRING_MIN = 2;
 
-export const failedJobNames = (jobs: readonly PipelineJob[]): string[] => jobs.filter((job) => job.status === `failed`).map((job) => job.name);
+const failedJobNames = (jobs: readonly PipelineJob[]): string[] => jobs.filter((job) => job.status === `failed`).map((job) => job.name);
 
 // A run's failed-job names, preferring the jobs we fetched and falling back to the summary the daemon attaches
 // to failed runs (webhook-delivered runs carry it; the REST backfill does not fill it).

@@ -31,7 +31,7 @@ import type { PersonasStore } from "./personas-store.js";
 export const FRONT_DESK_GUIDANCE =
     "You are the front desk: you answer people who arrive from outside. Be brief and concrete, answer only from what is in the workspace, and say plainly when something is not something you can help with here.";
 
-export const FRONT_DESK_CARD: Persona = {
+const FRONT_DESK_CARD: Persona = {
     id: FRONT_DESK_PERSONA,
     label: "Front desk",
     // Speaks for nobody. A card names accounts by capability id and this workspace's ids are not knowable from

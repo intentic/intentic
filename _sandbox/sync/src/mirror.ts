@@ -127,7 +127,7 @@ export interface ForwardExecutor {
 
 // The real executor: Mutagen forward sessions named per sandbox+port (so reconcile targets them without listing,
 // and one pairing's teardown can never reach another's).
-export const mutagenExecutor = (mutagen: string, pairing: Pairing): ForwardExecutor => ({
+const mutagenExecutor = (mutagen: string, pairing: Pairing): ForwardExecutor => ({
     terminate: (port) =>
         void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], { stdio: "ignore", windowsHide: true }),
     create: (summary) =>

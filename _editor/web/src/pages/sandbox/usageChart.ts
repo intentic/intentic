@@ -124,7 +124,7 @@ export const PROVIDER_SERIES = [`claude`, `codex`, `kimi`, `grok`, `gemini`] as 
  * design system's own `seriesColor` (a figure's authored slot → the same CSS var). Two functions of one name
  * mapping different domains into one palette is a collision an import line cannot show you. This one owns the
  * provider→slot half only; the slot→var half stays where it always was. */
-export const providerAccent = (key: string): FigureAccent => {
+const providerAccent = (key: string): FigureAccent => {
     const slot = PROVIDER_SERIES.indexOf(key as (typeof PROVIDER_SERIES)[number]);
     return slot === -1 ? `neutral` : (String(slot + 1) as FigureAccent);
 };

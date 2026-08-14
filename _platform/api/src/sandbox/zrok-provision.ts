@@ -24,7 +24,7 @@ export const zrokEnabled = (config: Config): boolean => config.zrok.adminToken !
 export const sandboxHostname = (zone: string, connectToken: string): string => `${sandboxSubdomain(sandboxIdFromToken(connectToken) ?? ``)}.${zone}`;
 
 let cachedNamespace: string | undefined;
-export const resolveNamespace = async (config: Config): Promise<string> => {
+const resolveNamespace = async (config: Config): Promise<string> => {
     cachedNamespace ??= await publicNamespaceToken(config.zrok);
     return cachedNamespace;
 };

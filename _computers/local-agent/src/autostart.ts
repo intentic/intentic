@@ -121,7 +121,7 @@ export const windowsRunDeleteArgs = (spec: AutostartSpec): string[] => ["delete"
  * non-systemd distributions all run Linux and have no user manager. */
 const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
 
-export const systemdUserAvailable = (): boolean => {
+const systemdUserAvailable = (): boolean => {
     const result = spawnSync("systemctl", ["--user", "is-system-running"], { encoding: "utf8" });
     if (result.error !== undefined) {
         return false; // no systemctl on PATH

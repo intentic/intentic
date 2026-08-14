@@ -40,7 +40,7 @@ import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 // either way, because an isolated turn's worktree is bind-mounted over /work with `.intentic` bound back in
 // SHARED, so this one spelling reaches it from inside a worktree, from the main tree, and from the daemon.
 export const loopDirIn = (root: string, conversationId: string): string => join(root, LOOP_DIR, conversationId);
-export const progressPathIn = (root: string, conversationId: string): string => join(loopDirIn(root, conversationId), `progress.md`);
+const progressPathIn = (root: string, conversationId: string): string => join(loopDirIn(root, conversationId), `progress.md`);
 export const verdictPathIn = (root: string, conversationId: string, iteration: number): string =>
     join(loopDirIn(root, conversationId), `iteration-${iteration}.json`);
 

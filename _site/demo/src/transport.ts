@@ -12,7 +12,7 @@
  * ever escapes the handlers below, it dies in the client instead of reaching a real host. */
 
 // The platform. useApi appends /rpc; better-auth appends /api/auth.
-export const DEMO_API_ORIGIN = `https://api.demo.invalid`;
+const DEMO_API_ORIGIN = `https://api.demo.invalid`;
 // The active sandbox's daemon, as announced by the demo platform's sandbox row.
 export const DEMO_DAEMON_ORIGIN = `https://sandbox.demo.invalid`;
 

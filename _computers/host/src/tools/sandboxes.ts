@@ -177,7 +177,7 @@ export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", sl
  * what lets the browser show progress on an operation that takes minutes — and the same lines are collected for
  * the callers that want one answer at the end (an MCP tool result). Both streams go to one place on purpose:
  * `ic` writes progress to stdout and diagnostics to stderr, and the failure detail is always in the second. */
-export const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
+const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
     const candidates = icCandidates(process.platform, homedir());
     const lines: string[] = [];
     const emit = (chunk: string): void => {

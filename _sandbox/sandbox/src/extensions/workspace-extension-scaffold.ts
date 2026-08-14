@@ -26,11 +26,6 @@ import { extensionApiVersion } from "@intentic/extension-api";
  * The engines range is derived from the host's own extensionApiVersion rather than written down, so a draft
  * created today is compatible with the app that created it and nothing has to remember to bump it. */
 
-// A directory name that cannot escape the workspace-extensions root and cannot collide with the dot-prefixed
-// names the enumerator skips. The same shape the manifest schema demands of `name`, checked here because this is
-// where it becomes a path.
-export const WORKSPACE_EXTENSION_NAME = /^[a-z0-9][a-z0-9-]*$/;
-
 // Title Case for the label a tile carries, derived from the slug so the author names the thing once.
 const labelOf = (name: string): string =>
     name

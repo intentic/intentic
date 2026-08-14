@@ -9,8 +9,8 @@
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
-            "entry": ["_tools/scripts/*.sh", "test/**/*.ts"],
-            "ignore": ["desired-state/**", "intent/**"]
+            "entry": ["_tools/scripts/*.sh"],
+            "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**"]
         },
         "_editor/web": {
             "entry": [
@@ -26,7 +26,7 @@
             "ignore": ["public/**"]
         },
         "_site/demo": {
-            "entry": ["src/main.ts", "index.html", "popout.html", "vite.config.ts"]
+            "entry": ["src/main.ts", "src/popout.ts", "index.html", "popout.html", "vite.config.ts"]
         },
         "_editor/desktop-app": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
@@ -68,10 +68,22 @@
             "ignore": ["public/**"]
         },
         "_extensions/discord": {
-            "entry": ["src/index.ts", "src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
         },
         "_extensions/imap": {
-            "entry": ["src/index.ts", "src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/slack": {
+            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/telegram": {
+            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/whatsapp": {
+            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/google-workspace": {
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
         },
         "_extensions/deployments": {
             "entry": ["src/server/server.ts", "src/**/*.test.ts"]
@@ -119,7 +131,7 @@
             "entry": ["src/**/*.ts"]
         },
         "_tools/e2e": {
-            "entry": ["playwright.config.ts", "specs/**/*.ts", "global-setup.ts", "global-teardown.ts"]
+            "entry": ["playwright.config.ts", "specs/**/*.ts", "global-setup.ts", "global-teardown.ts", "promo/*.{mjs,js}", "shots/*.mts"]
         }
     }
 }
