@@ -153,11 +153,24 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
         }),
 
         /* Start or resume payout setup. Answers a Stripe-hosted URL for the browser to navigate to; a creator
-         * who abandons it and returns later continues on the same connected account. */
+         * who abandons it and returns later continues on the same connected account.
+         *
+         * A Stripe refusal is passed on in Stripe's own words rather than left to become a 500 — the cloud
+         * lane's precedent, and it matters more here: the two things that stop this route (Connect not yet
+         * enabled on the platform's Stripe account, an account that cannot be onboarded) are both fixed by
+         * someone reading the sentence, and "Internal server error" on a card whose whole job is telling a
+         * creator what to do next tells them nothing at all. */
         connectPayouts: os.creator.connectPayouts.handler(async ({ context }) => {
             requirePool(context);
             const user = requireUser(context);
-            return startPayoutSetup(context.prisma, stripeOf(context), context.config, user);
+            try {
+                return await startPayoutSetup(context.prisma, stripeOf(context), context.config, user);
+            } catch (error) {
+                if (error instanceof Error) {
+                    throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
+                }
+                throw error;
+            }
         }),
     };
 };

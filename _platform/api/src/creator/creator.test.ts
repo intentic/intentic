@@ -249,6 +249,24 @@ describe(`payout connection`, () => {
         expect(accountLink).toHaveBeenCalledTimes(2);
     });
 
+    it(`passes a Stripe refusal on in words, rather than letting it become a bare 500`, async () => {
+        // The two things that really stop this route — Connect not enabled on the platform's account, an
+        // account that cannot be onboarded — are both fixed by someone READING the reason. A raw throw
+        // serializes as "Internal server error" on the one card whose job is saying what to do next.
+        const createAccount = vi.fn(async () => Promise.reject(new Error(`Stripe refused: sign up for Connect to create accounts.`)));
+        const prisma = fakePrisma({ payoutAccount: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() } });
+        const routes = creatorRoutes({ gateway: gatewayWith({ createAccount }) });
+
+        const error = await call(routes.connectPayouts, {}, { context: context({ prisma }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+
+        expect(error).toBeInstanceOf(ORPCError);
+        expect((error as ORPCError<string, unknown>).code).toBe(`BAD_GATEWAY`);
+        expect((error as ORPCError<string, unknown>).message).toContain(`sign up for Connect`);
+    });
+
     it(`status refreshes an unfinished account through to Stripe and mirrors what comes back`, async () => {
         const account = vi.fn(async () => ({ id: `acct_1`, payoutsEnabled: true, detailsSubmitted: true }));
         const update = vi.fn();

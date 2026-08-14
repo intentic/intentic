@@ -10,6 +10,27 @@ import { z } from "zod";
 
 const API_BASE = `https://api.stripe.com/v1`;
 
+/* WHY A REFUSAL HAPPENED, NOT MERELY THAT ONE DID. Every non-2xx from Stripe carries `{ error: { message } }`,
+ * and that message is written for a person to act on — "you must complete your Connect platform profile"
+ * names the fix, where a dump of the response body names nothing. It is pulled out here because the routes
+ * hand it to the screen (the cloudflare.ts precedent): a creator whose payout setup will not open is owed the
+ * reason, and a bare "Internal server error" on that card is the one answer that helps nobody. */
+export class StripeError extends Error {}
+
+const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
+
+const refusal = async (call: string, response: Response): Promise<StripeError> => {
+    const body = await response.text();
+    let said: string | undefined;
+    try {
+        said = RefusalSchema.parse(JSON.parse(body)).error.message;
+    } catch {
+        // Not Stripe's envelope — a proxy's HTML error page, a truncated body. Keep the raw evidence instead.
+        said = undefined;
+    }
+    return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`);
+};
+
 // Stripe's request encoding is application/x-www-form-urlencoded with bracketed nesting; the pool only ever
 // needs one level of it, spelled literally at the call sites below.
 /* `idempotencyKey` is the difference between a retry and a second payment. Stripe remembers a key for 24 hours
@@ -33,7 +54,7 @@ const post = async (
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-        throw new Error(`Stripe POST ${path} failed (HTTP ${response.status}): ${await response.text()}`);
+        throw await refusal(`POST ${path}`, response);
     }
     return response.json();
 };
@@ -44,7 +65,7 @@ const get = async (fetchFn: typeof fetch, secretKey: string, path: string): Prom
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-        throw new Error(`Stripe GET ${path} failed (HTTP ${response.status}): ${await response.text()}`);
+        throw await refusal(`GET ${path}`, response);
     }
     return response.json();
 };

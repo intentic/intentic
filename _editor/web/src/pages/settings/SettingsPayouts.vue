@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ClaimChallenge, CreatorState } from "@intentic-app/api-contract";
-import { Card, Row } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { Card, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import { computed, onMounted, ref } from "vue";
@@ -19,13 +19,18 @@ import { apiClient } from "../../composables/useApi";
  * usefully do. */
 
 const state = ref<CreatorState | null>(null);
-const loadError = ref<string | undefined>(undefined);
+const loadError = ref<NoticeModel | undefined>(undefined);
 
 const publisher = ref(``);
 const challenge = ref<ClaimChallenge | null>(null);
-const claimError = ref<string | undefined>(undefined);
-const working = ref(false);
 const copied = ref(false);
+
+/* THREE ACTIONS, THREE BUSY FLAGS. One shared flag made every button on the card spin whenever any of them
+ * was pressed — checking a publisher name lit up "Set up payouts" too — which reads as "the whole card is
+ * doing something" when only one thing is. Each failure likewise belongs beside the button that caused it,
+ * not in a single slot at the foot of the card where a payout problem appears under the claim step. */
+const { busy: checking, notice: checkNotice, run: runCheck } = useAsyncAction();
+const { busy: verifying, notice: verifyNotice, run: runVerify } = useAsyncAction();
 
 // Stripe returns the browser here after its hosted onboarding. `done` is informational — the status read below
 // refreshes through to Stripe while an account is unfinished, so the answer on screen is already the fresh one.
@@ -36,7 +41,7 @@ const load = async (): Promise<void> => {
     try {
         state.value = await apiClient.creator.status();
     } catch (err) {
-        loadError.value = errorMessage(err, `Couldn't load your creator status.`);
+        loadError.value = noticeFrom(err, `Couldn't load your creator status.`);
     }
 };
 
@@ -76,19 +81,16 @@ const payoutLine = computed(() => {
 
 const askChallenge = async (): Promise<void> => {
     const name = publisher.value.trim().toLowerCase();
-    if (name === `` || working.value) {
+    if (name === ``) {
         return;
     }
-    working.value = true;
-    claimError.value = undefined;
-    copied.value = false;
-    try {
+    await runCheck(async () => {
+        copied.value = false;
+        // A fresh look-up retires whatever the last verify attempt said — that answer was about a name and a
+        // push that are no longer the ones on screen.
+        verifyNotice.value = undefined;
         challenge.value = await apiClient.creator.challenge({ publisher: name });
-    } catch (err) {
-        claimError.value = errorMessage(err, `Couldn't look that publisher up.`);
-    } finally {
-        working.value = false;
-    }
+    }, `Couldn't look that publisher up.`);
 };
 
 const copyToken = async (): Promise<void> => {
@@ -102,37 +104,38 @@ const copyToken = async (): Promise<void> => {
 
 const finishClaim = async (): Promise<void> => {
     const name = challenge.value?.publisher;
-    if (name === undefined || working.value) {
+    if (name === undefined) {
         return;
     }
-    working.value = true;
-    claimError.value = undefined;
-    try {
+    // The common failure is "the file isn't readable yet" — a push that hasn't landed, or the wrong branch.
+    // The platform's own message says which, and rides along under this sentence rather than replacing it.
+    await runVerify(async () => {
         await apiClient.creator.claim({ publisher: name });
         challenge.value = null;
         publisher.value = ``;
         await load();
-    } catch (err) {
-        // The common failure is "the file isn't readable yet" — a push that hasn't landed, or the wrong branch.
-        // The platform's own message says which, so it is shown verbatim rather than replaced with a guess.
-        claimError.value = errorMessage(err, `That claim couldn't be verified yet.`);
-    } finally {
-        working.value = false;
-    }
+    }, `That claim couldn't be verified yet.`);
 };
 
+/* Connecting is hand-rolled rather than another useAsyncAction for one reason: on success the browser leaves
+ * for Stripe, and the button must stay busy until it does. A flag cleared the moment the URL comes back would
+ * flick the button to idle while the page is still navigating, which reads as "nothing happened" at exactly
+ * the moment something did. */
+const connecting = ref(false);
+const connectNotice = ref<NoticeModel | undefined>(undefined);
+
 const connect = async (): Promise<void> => {
-    if (working.value) {
+    if (connecting.value) {
         return;
     }
-    working.value = true;
-    claimError.value = undefined;
+    connecting.value = true;
+    connectNotice.value = undefined;
     try {
         const { url } = await apiClient.creator.connectPayouts();
         window.location.href = url;
     } catch (err) {
-        claimError.value = errorMessage(err, `Couldn't open the payout setup page.`);
-        working.value = false;
+        connectNotice.value = noticeFrom(err, `Couldn't open the payout setup page.`);
+        connecting.value = false;
     }
 };
 </script>
@@ -142,7 +145,7 @@ const connect = async (): Promise<void> => {
         <Row flush :heading="2" icon="credit-card" title="Getting paid" description="Claim what you publish, and connect where the money goes." />
 
         <div class="mt-3 flex flex-col gap-4">
-            <p v-if="loadError" class="text-2xs text-danger">{{ loadError }}</p>
+            <Notice v-if="loadError" :of="loadError" />
             <p v-else-if="state && !state.enabled" class="text-xs text-muted">This platform doesn't run a creator pool.</p>
 
             <template v-else-if="state">
@@ -197,8 +200,9 @@ const connect = async (): Promise<void> => {
                     </p>
                     <div class="flex gap-2">
                         <InputText v-model="publisher" placeholder="your publisher name" size="small" class="flex-1" @keyup.enter="askChallenge" />
-                        <Button label="Check" severity="secondary" size="small" :loading="working" @click="askChallenge" />
+                        <Button label="Check" severity="secondary" size="small" :loading="checking" @click="askChallenge" />
                     </div>
+                    <Notice v-if="checkNotice" :of="checkNotice" />
 
                     <template v-if="challenge">
                         <p v-if="challenge.claimedByYou" class="text-xs text-muted">You already hold this name.</p>
@@ -218,8 +222,9 @@ const connect = async (): Promise<void> => {
                                 <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyToken" />
                             </div>
                             <div>
-                                <Button label="I've pushed it — verify" size="small" :loading="working" @click="finishClaim" />
+                                <Button label="I've pushed it — verify" size="small" :loading="verifying" @click="finishClaim" />
                             </div>
+                            <Notice v-if="verifyNotice" :of="verifyNotice" />
                         </template>
                     </template>
                 </div>
@@ -240,14 +245,13 @@ const connect = async (): Promise<void> => {
                             :label="payouts?.connected ? `Continue on Stripe` : `Set up payouts`"
                             severity="secondary"
                             size="small"
-                            :loading="working"
+                            :loading="connecting"
                             @click="connect"
                         />
                     </div>
+                    <Notice v-if="connectNotice" :of="connectNotice" />
                 </div>
             </template>
-
-            <p v-if="claimError" class="text-2xs text-danger">{{ claimError }}</p>
         </div>
     </Card>
 </template>
