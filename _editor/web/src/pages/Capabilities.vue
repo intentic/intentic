@@ -1346,15 +1346,29 @@ const submitLabel = computed(() => {
                             <!-- Container queries, not viewport ones: the grid is what is left of the page after the
                              index column takes its 16rem, so how many tiles fit is a fact about this pane. -->
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
+                                <!-- The padding is the TEXT's, not the tile's, so the mark can reach the tile's own edges;
+                                     `overflow-hidden` is what then cuts its corners to the tile's radius. -->
                                 <button
                                     v-for="card in group.entries"
                                     :key="card.entry.id"
                                     type="button"
-                                    class="flex h-full w-full items-start gap-2 rounded-lg border border-line bg-card px-2.5 py-2 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                     @click="pick(card.entry)"
                                 >
-                                    <BrandMark :size="24" :name="card.entry.name" :logo="card.entry.logo" :icon="entryIcon(card.entry)" />
-                                    <div class="min-w-0 flex-1">
+                                    <!-- THE MARK IS THE TILE'S FULL HEIGHT — a band down the left edge, which is what makes
+                                     a grid of forty scannable by logo rather than by reading forty names. Stretched
+                                     rather than sized: the height belongs to the two lines of text beside it, and those
+                                     are in rem, so any pixel passed here would be right at one browser font size and
+                                     wrong at every other. `size` is left to scale what is INSIDE the plate (the glyph,
+                                     the monogram, the brand mask), which is the only thing it still decides. -->
+                                    <BrandMark
+                                        :size="44"
+                                        :name="card.entry.name"
+                                        :logo="card.entry.logo"
+                                        :icon="entryIcon(card.entry)"
+                                        :style="{ width: `auto`, height: `auto`, aspectRatio: `1`, borderRadius: `0` }"
+                                    />
+                                    <div class="min-w-0 flex-1 px-2.5 py-2">
                                         <!-- ONE LINE, NEVER TWO. A grid row is as tall as its tallest tile, so any line
                                          a single card can grow is a line every card beside it pays for in white
                                          space — which is what a catalog of ragged tiles looked like. The name gives

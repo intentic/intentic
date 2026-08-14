@@ -125,7 +125,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `PostgreSQL`,
                             logo: `postgresql`,
-                            description: `Query your database with psql, before it writes.`,
+                            description: `Query your PostgreSQL database with psql.`,
                             category: `data`,
                         },
                         fields: [
@@ -145,7 +145,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Sentry`,
                             logo: `sentry`,
-                            description: `Start a fix from the error that actually fired.`,
+                            description: `Query issues and traces from Sentry.`,
                             category: `observability`,
                         },
                         fields: [
@@ -162,7 +162,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Outline`,
                             logo: `outline/f5f5f5`,
-                            description: `Search and write your team's knowledge base.`,
+                            description: `Docs and knowledge base from Outline.`,
                             category: `business`,
                         },
                         fields: [
@@ -193,7 +193,7 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         catalog: {
                             name: `Discord`,
                             logo: `discord`,
-                            description: `Reads and sends as a real participant.`,
+                            description: `Read and post in your Discord server.`,
                             category: `communication`,
                         },
                         fields: [

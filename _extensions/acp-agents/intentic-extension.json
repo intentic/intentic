@@ -54,7 +54,7 @@
                 "kind": "agent",
                 "catalog": {
                     "name": "Custom ACP agent",
-                    "description": "Any ACP agent — Goose, Qwen Code, your own.",
+                    "description": "Goose, Qwen Code, or one of your own.",
                     "category": "extend",
                     "hint": "The command must be on the sandbox PATH and speak ACP over stdio (split on whitespace — no shell quoting). Credentials go in the environment block, or run the login command in a Terminal once.",
                     "guide": {
