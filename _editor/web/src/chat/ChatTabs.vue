@@ -12,7 +12,7 @@ import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
-import { chatFullscreen, chatOnRail, chatWide, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
+import { chatOnRail, chatWide, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -25,7 +25,7 @@ import PastChatList from "./PastChatList.vue";
 
 /* THE CHAT PANEL'S OWN BAR — one line that says which conversation you are in, and drops the list of every
  * other one on click. Docked it is a header across the top of the chat column; popped out it stands up the
- * window's left edge as a rail, with that same list permanently open in it.
+ * window's right edge as a rail, with that same list permanently open in it.
  *
  * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
  * and then scrolled, so a fleet of a dozen showed two or three truncated titles ("Migrate the users tab…",
@@ -60,20 +60,19 @@ const router = useRouter();
 // teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
 // has to say the way back.
 const popoutHint = computed(() => withShortcut(`Move chat into new window`, `chat.togglePopout`));
-// Its sibling on the docked header — moving the chat's home to the RAIL (a tile, full-window when opened) —
-// and the way back on the rail foot once it has. Both teach the palette's one toggle, so a chord bound there
-// shows up on each.
+// Its sibling on the docked header — moving the chat's home to the RAIL (a tile, full-window when opened).
+// The ways back live on the tile itself (its right-click menu, ShellDesktop) and on this bar's own menu, so
+// the rail form carries no window-management chrome of its own.
 const railHint = computed(() => withShortcut(`Dock chat to rail — full window, behind a rail tile`, `chat.toggleHome`));
-const sideHint = computed(() => withShortcut(`Dock chat back to the side`, `chat.toggleHome`));
 // Only where the /chat area exists to navigate to: the workspace shell, not a local-posture host window.
 const canFill = localPosture() === undefined;
 
-/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
- * EDGE as a resizable rail with the chat list always open in it. A wide surface has the width to keep the list
- * open beside the transcript, and a top bar there would spend the one axis the chat is short of (height) on a
- * row that has width to burn — while a rail has room to be a slice of the fleet board. Docked, the chat column
- * is ~22rem: a permanent rail there would halve the transcript, so the list lives in a sheet the header drops
- * and takes back. */
+/* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the RIGHT
+ * EDGE as a resizable rail with the chat list always open in it (ChatPanel's row-reverse says why that side).
+ * A wide surface has the width to keep the list open beside the transcript, and a top bar there would spend
+ * the one axis the chat is short of (height) on a row that has width to burn — while a rail has room to be a
+ * slice of the fleet board. Docked, the chat column is ~22rem: a permanent rail there would halve the
+ * transcript, so the list lives in a sheet the header drops and takes back. */
 const vertical = computed(() => chatWide.value);
 
 /* --- The counts the header carries -------------------------------------------------------------
@@ -178,9 +177,10 @@ watch(
 );
 
 // --- Rail width ---------------------------------------------------------------------------------
-// The rail resizes off its right edge (pointer capture, double-click resets) and persists like the panel
-// widths in useLayout — but locally, because it exists only in the pop-out window. In app pixels for the same
-// reason as those: the rail holds chat cards, so the width that fits their titles moves with the text size.
+// The rail resizes off its LEFT edge (pointer capture, double-click resets) — it stands at the right of every
+// wide surface — and persists like the panel widths in useLayout, but locally, because it exists only in the
+// wide forms. In app pixels for the same reason as those: the rail holds chat cards, so the width that fits
+// their titles moves with the text size.
 const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
 const DEFAULT_RAIL_WIDTH = 240;
 const clampRailWidth = (px: number): number => Math.round(Math.max(176, Math.min(px, 480)));
@@ -207,10 +207,12 @@ const startRailResize = (event: PointerEvent): void => {
     railResizing.value = true;
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 };
-// The rail is flush with the pop-out window's left edge, so its width IS the pointer's x in that window.
+// The rail is flush with its window's RIGHT edge, so its width is the distance from the pointer to it — asked
+// of the rail's OWN window, which is the pop-out's whenever the panel floats there.
 const onRailResize = (event: PointerEvent): void => {
     if (railResizing.value) {
-        setRailWidth(toAppPx(event.clientX));
+        const view = bar.value?.ownerDocument.defaultView ?? window;
+        setRailWidth(toAppPx(view.innerWidth - event.clientX));
     }
 };
 const endRailResize = (event: PointerEvent): void => {
@@ -465,7 +467,7 @@ const openHistory = (event: Event): void => {
 
 <template>
     <!-- Docked: one line across the top of the chat column, with the list on a sheet beneath it. Undocked: a
-         resizable rail down the window's left edge with the list always open, over a foot that carries the
+         resizable rail down the window's right edge with the list always open, over a foot that carries the
          same ✚ / history pair the header wears beside it — there as two bare glyphs, here as a labelled
          "Past chats" row and a filled "New agent". -->
     <component
@@ -582,8 +584,8 @@ const openHistory = (event: Event): void => {
              chrome the tabs kept eating. They sit last in that order — move within this window, then leave it —
              hard against the window edge where window controls live, and each tooltip teaches its command's
              chord so the pointer trip is one a hand only has to make until it remembers. Both are absent from
-             the rail form (which is already one of the places they lead — out there the ways back are the rail
-             foot's own controls, the window's ×, F9, or the menu's "Dock chat back"). -->
+             the rail form (which is already one of the places they lead — out there the ways back are the
+             Chat tile's own right-click menu, the window's ×, F9, or this bar's menu rows). -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
@@ -599,7 +601,9 @@ const openHistory = (event: Event): void => {
                 v-tooltip.bottom="railHint"
                 :aria-label="railHint"
             >
-                <Icon name="expand" class="text-sm" />
+                <!-- A panel docked at the left edge — the rail — not `expand`, whose fullscreen glyph promised
+                     a maximise this press doesn't do. -->
+                <Icon name="layout-left" class="text-sm" />
             </button>
             <button
                 type="button"
@@ -641,31 +645,6 @@ const openHistory = (event: Event): void => {
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats</span>
             </button>
-            <!-- FILLING THE MAIN WINDOW ONLY: the chat's two other homes, as the quiet pair after the list's
-                 own actions. The pop-out window doesn't carry them — its ways back are the window's own ×, F9
-                 and the menu's "Dock chat back" — but the /chat area has no window chrome to lean on, so the
-                 ways out have to live on the surface itself: back to the side column (undoing the rail as
-                 home), or onward into a window of its own. -->
-            <template v-if="chatFullscreen">
-                <button
-                    type="button"
-                    class="composer-ghost h-7 w-7 shrink-0"
-                    @click="toggleChatHome(router)"
-                    v-tooltip.top="sideHint"
-                    :aria-label="sideHint"
-                >
-                    <Icon name="compress" class="text-sm" />
-                </button>
-                <button
-                    type="button"
-                    class="composer-ghost h-7 w-7 shrink-0"
-                    @click="toggleChatPopout(router)"
-                    v-tooltip.top="popoutHint"
-                    :aria-label="popoutHint"
-                >
-                    <Icon name="external-link" class="text-sm" />
-                </button>
-            </template>
         </div>
 
         <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never
@@ -716,10 +695,11 @@ const openHistory = (event: Event): void => {
 </template>
 
 <style scoped>
-/* Drag-to-resize handle on the rail's right edge (pointer-capture, mirrors the panel's .resize-handle). */
+/* Drag-to-resize handle on the rail's LEFT edge — the seam against the panes it stands beside (pointer-capture,
+ * mirrors the panel's .resize-handle). */
 .rail-resize {
     position: absolute;
-    inset: 0 0 0 auto;
+    inset: 0 auto 0 0;
     width: 6px;
     cursor: col-resize;
     z-index: 20;

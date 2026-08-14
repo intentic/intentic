@@ -74,6 +74,7 @@ export type IconName =
     | "image"
     | "info-circle"
     | "key"
+    | "layout-left"
     | "link"
     | "list-check"
     | "lock"
@@ -197,6 +198,9 @@ export const ICONS: Record<IconName, string> = {
     image: "ri:image-line",
     "info-circle": "ri:information-line",
     key: "ri:key-2-line",
+    // A panel docked at a frame's left edge — the chat's "dock to rail" verb (the rail is the app's left
+    // column). Not `expand`: that glyph promises fullscreen, and the action is a docking, not a maximise.
+    "layout-left": "ri:layout-left-line",
     link: "ri:link",
     "list-check": "ri:list-check",
     lock: "ri:lock-2-line",

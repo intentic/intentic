@@ -119,7 +119,9 @@ export function useShellCommands(): void {
                 get title(): string {
                     return chatOnRail.value ? `Dock Chat Back to the Side` : `Dock Chat to Rail`;
                 },
-                icon: `expand`,
+                // A panel docked at the left edge — the rail — not `expand`, whose fullscreen glyph promises a
+                // maximise this command doesn't do.
+                icon: `layout-left`,
                 handler: () => toggleChatHome(router),
             },
             {

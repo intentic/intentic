@@ -25,7 +25,8 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * All state lives in the useChat singleton, so a transcript persists as the user moves between workspace
  * areas. On mobile the bar becomes a taller touch header over a bottom sheet and the resize handle disappears.
  * On a WIDE surface — the pop-out window, or the /chat area filling the main one (chatSurface.ts) — the panel
- * turns on its side: the strip becomes a left rail, and the panes stand side by side in the room that leaves. */
+ * turns on its side: the strip becomes a rail down the right edge, and the panes stand side by side in the
+ * room that leaves. */
 
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
@@ -277,12 +278,15 @@ const endResize = (event: PointerEvent): void => {
 
 <template>
     <!-- Docked, the panel is a column: the switcher bar on top, then the pane. On a wide surface (its own
-         window, or the /chat area) that bar becomes a rail of chat cards down the left edge, so the panel's
-         own axis flips and the panes stand in the room beside it. -->
+         window, or the /chat area) that bar becomes a rail of chat cards down the RIGHT edge — row-reverse,
+         so the panes stand in the room beside it. The right, in both wide forms alike: in the /chat area the
+         window's left edge is already the icon rail's, and two adjacent rails read as one muddled column; the
+         pop-out matches so the wide chat is ONE shape wherever it appears, and the transcript keeps the
+         leading edge the eye starts at in either. -->
     <div
         ref="root"
         class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
-        :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
+        :class="[chatWide ? 'flex-row-reverse' : 'flex-col', { 'is-resizing': resizing }]"
     >
         <div
             v-if="!chatWide && !mobile"

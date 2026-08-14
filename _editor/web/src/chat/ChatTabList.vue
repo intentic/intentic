@@ -51,7 +51,7 @@ import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
 
 /* THE OPEN CHATS, as the fleet board's three lanes in miniature — the switcher for every conversation this
  * window holds. It has two hosts and is the same list in both: the sheet the docked panel's header drops
- * (ChatTabs), and the rail down the left edge of a popped-out window. It used to be rail-only, while the
+ * (ChatTabs), and the rail down the right edge of every wide surface. It used to be rail-only, while the
  * docked panel wore a row of pill tabs that wrapped to a second line — a strictly worse switcher (a dot and
  * ~28 characters of a title, in rows that reflowed on every open and close) built out of a second set of
  * components. One list, two frames.

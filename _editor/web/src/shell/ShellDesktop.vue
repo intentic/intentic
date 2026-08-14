@@ -2,8 +2,9 @@
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
-import { cmp, type IconName, initialsOf } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { cmp, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
+import type { MenuItem } from "primevue/menuitem";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useBrowsersQuery } from "../composables/browser/browsersQuery";
@@ -16,7 +17,7 @@ import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { chatOnRail, lastAreaPath } from "../composables/chat/chatSurface";
+import { chatOnRail, lastAreaPath, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
@@ -361,8 +362,9 @@ onUnmounted(() => {
     areaCommands = [];
 });
 
-// Where full-screen chat's "Back to side panel" returns to: the last route that wasn't the chat area. Tracked
-// off the path the user actually stands on rather than history, which may START on /chat (a reload, a link).
+// Where the rail-docked chat's "dock back to the side" returns to: the last route that wasn't the chat area.
+// Tracked off the path the user actually stands on rather than history, which may START on /chat (a reload,
+// a link).
 watch(
     () => route.path,
     (path) => {
@@ -372,6 +374,32 @@ watch(
     },
     { immediate: true },
 );
+
+/* THE CHAT TILE'S OWN MENU — where the chat goes next, asked of the thing that holds it. While the rail is the
+ * chat's home, the tile IS the chat's presence in this window, so a right-click on it is the natural place to
+ * ask for one of the other homes: back to the side column, or out into a window of its own. The only tile
+ * with a menu — the other areas are places, not a panel that can be re-homed. Rows share the one toggle each
+ * verb already runs everywhere else (chatSurface.ts), and each carries its command's chord when one is bound. */
+const chatTileMenu = ref<{ show: (event: Event) => void }>();
+const chatTileMenuItems = computed<MenuItem[]>(() => [
+    {
+        label: `Dock chat back to the side`,
+        shortcut: commandShortcut(`chat.toggleHome`),
+        command: (): void => toggleChatHome(router),
+    },
+    {
+        label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
+        shortcut: commandShortcut(`chat.togglePopout`),
+        command: (): void => toggleChatPopout(router),
+    },
+]);
+const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
+    if (tile.id !== `chat`) {
+        return; // every other tile keeps the browser's own menu
+    }
+    event.preventDefault();
+    chatTileMenu.value?.show(event);
+};
 
 // Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
 // (popped out), on its way back to one after a page reload (so a refresh doesn't flash the column open for a
@@ -472,6 +500,7 @@ useKeybindings();
                             :aria-disabled="!reachable"
                             :aria-label="tileLabel(tile)"
                             v-tooltip.right="tileLabel(tile)"
+                            @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
                             <Icon v-else :name="tile.icon!" class="text-lg" />
@@ -624,6 +653,9 @@ useKeybindings();
         <!-- Quick Open (Ctrl/Cmd+P) file palette — a Dialog that portals to body, so it overlays the whole shell
              regardless of where it sits in the grid. -->
         <QuickOpen />
+
+        <!-- The Chat tile's right-click menu (see chatTileMenuItems) — main window only, so the default body. -->
+        <ContextMenu ref="chatTileMenu" :model="chatTileMenuItems" :min-width="15" />
     </div>
 </template>
 
