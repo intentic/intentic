@@ -164,7 +164,9 @@ const submit = async (): Promise<void> => {
                     class="flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors"
                     :class="editing === persona.id ? `border-link bg-link/10` : `border-line`"
                 >
-                    <PersonaFace :seed="persona.label ?? persona.id" :size="24" />
+                    <!-- Smaller than the lists that exist to show personas off: this panel is about a FOLDER,
+                         and these are the cards that happen to start in it. -->
+                    <PersonaFace :persona :size="24" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     <button type="button" :class="cmp.iconButton()" :aria-label="`Edit ${persona.label ?? persona.id}`" @click="startEdit(persona)">

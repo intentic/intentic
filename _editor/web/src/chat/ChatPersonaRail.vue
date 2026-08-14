@@ -227,12 +227,17 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                      without reading, and the row's text sits beside it. Generated from the persona's id, so
                      it is the same face here, in the composer's picker and on the personas page. -->
                     <template #aside>
-                        <!-- A FIXED NUMBER, and it is what sets the row's height: a face this size is taller
-                             than the two lines of text beside it, so the card is as tall as its mark and every
-                             row in the column matches. Sizing it from the card instead (`h-full`) reads as the
-                             tidier idea and resolves its percentage against a box that is itself waiting on
-                             the mark to know how tall it is. -->
-                        <PersonaFace :seed="row.label" :size="44" />
+                        <!-- NO SIZE HERE, which is deliberate: the face's own default is this list size, and
+                             the personas page asks for it the same way, so the two cannot drift apart the way a
+                             hand-written 44 here and a 32 there did. It is a fixed number rather than a share of
+                             the card because it is what SETS the row's height — a face this size is taller than
+                             the two lines of text beside it, so the card is as tall as its mark and every row in
+                             the column matches. Sizing it from the card instead (`h-full`) reads as the tidier
+                             idea and resolves its percentage against a box that is itself waiting on the mark to
+                             know how tall it is.
+                             The row satisfies the face's persona shape on its own — it carries the id and the
+                             resolved label — so nothing here re-states what a persona's face is made of. -->
+                        <PersonaFace :persona="row" />
                     </template>
                     <!-- The clock, where the rail's session rows keep theirs. Only once this persona has a chat to
                      have a clock about. It rides the TITLE's line, so gaining one never changes the row's

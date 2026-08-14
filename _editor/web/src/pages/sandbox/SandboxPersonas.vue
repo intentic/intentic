@@ -312,18 +312,22 @@ const confirmRemove = async (): Promise<void> => {
                     interactive
                     @click="toggleOpen(persona)"
                 >
-                    <!-- A persona is a person, so it gets a person's mark and keeps the same colour on every
-                         surface it appears on. Keyed by the id, not the label, so renaming does not recolour
-                         somebody you have learned to recognise. The disclosure arrow rides in front of it —
-                         where a reader looks for one — rather than in the row's trailing cluster, which is
-                         where facts and actions live. -->
+                    <!-- A persona is a person, so it gets a person's face — the SAME one, at the same size and
+                         in the same colours, that the chat's persona rail draws it with. This page is where you
+                         come to look at your personas, so of all the surfaces it is the last one that should
+                         show them smaller or greyer than everywhere else; it used to do both. Neither the size
+                         nor the colour is decided here any more (PersonaFace holds both), which is what keeps
+                         the two lists in step.
+
+                         The disclosure arrow rides in front of the face — where a reader looks for one —
+                         rather than in the row's trailing cluster, which is where facts and actions live. -->
                     <template #lead>
                         <span class="flex items-center gap-1.5">
                             <Icon
                                 :name="isOpen(persona) ? `chevron-down` : `chevron-right`"
                                 class="w-3 shrink-0 text-2xs text-subtle transition-colors"
                             />
-                            <PersonaFace :seed="persona.label ?? persona.id" :size="32" :idle="!ready(persona)" />
+                            <PersonaFace :persona />
                         </span>
                     </template>
 

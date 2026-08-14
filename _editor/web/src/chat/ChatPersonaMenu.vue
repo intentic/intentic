@@ -82,9 +82,15 @@ const openPersonas = (): void => {
                 :class="{ 'ui-row-select-on': persona.id === picked }"
                 @click="emit(`picked`, persona.id)"
             >
-                <!-- The same face this persona wears on its own page and in the chat rail — assembled from
-                     its name, so one persona is one character wherever you meet it. -->
-                <PersonaFace :seed="persona.label ?? persona.id" :size="20" :idle="!ready(persona)" class="mt-0.5" />
+                <!-- The same face this persona wears on its own page and in the chat rail — assembled from its
+                     name, so one persona is one character wherever you meet it. Smaller here, and that is the
+                     only thing this row gets to say about it: a picker is a list of rows that happen to name
+                     personas, not a place you go to look at them.
+                     It is drawn at FULL COLOUR even when the card cannot post yet. That was the one place a
+                     dimmed face could still be argued for — you are choosing who to send as — but the line
+                     underneath already says "not signed in yet" in words, and a greyed face said it in a way
+                     that read as "this row is disabled" about a row that is perfectly pickable. -->
+                <PersonaFace :persona :size="20" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>

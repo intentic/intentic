@@ -18,13 +18,42 @@
 
      WHY NOT INITIALS, which this drew first: a member's initials are their actual name and you already know
      them, but a persona's are two letters of an invented noun ("SS" over "MA"), so you end up reading the name
-     underneath anyway — exactly the work the mark was supposed to save. -->
+     underneath anyway — exactly the work the mark was supposed to save.
+
+     IT TAKES THE PERSONA, NOT A SEED, and that is load-bearing rather than tidy. Every caller used to write
+     `persona.label ?? persona.id` at the call site, which is a RULE — "a card's face is made of the name you
+     gave it, falling back to its id" — copied into four templates that were each free to disagree, and the
+     whole point of a derived avatar is that one persona is one character everywhere. The rule lives here now,
+     written once, and a surface can only ask for a persona's face; it cannot describe one.
+
+     THERE IS NO DIMMED VARIANT. This drew a persona whose accounts were all signed out (or that had none yet)
+     in greyscale on the personas page and in the composer's picker, but at full colour in the chat rail — so
+     the same card wore two different faces depending on where you met it, and the commonest case of all, a
+     persona somebody made a minute ago, met you as a grey smudge on the very page that exists to show it off.
+     A face is identity and identity does not have a disabled state: whether a card can post is a fact ABOUT it,
+     and it is already stated in words on every surface that knows it ("No accounts — this persona can't post
+     anywhere", "— not signed in yet", the Not signed in badge, the dimmed account marks beside it). -->
 <script setup lang="ts">
 import * as adventurer from "@dicebear/adventurer";
 import { createAvatar } from "@dicebear/core";
 import { computed } from "vue";
 
-const { seed, size, idle = false } = defineProps<{ seed: string; size: number; idle?: boolean }>();
+/* Everything this needs of a persona, and nothing more — so the folder panel's cards, the rail's rows and the
+ * page's own list all satisfy it without any of them having to hold a whole Persona to draw one. */
+interface PersonaLike {
+    readonly id: string;
+    readonly label?: string;
+}
+
+/* THE SIZE DEFAULTS TO THE LIST SIZE, so the two surfaces that show a persona AS A PERSON — its own page and
+ * the chat's persona rail — both say `<PersonaFace :persona />` and cannot drift apart the way a 32 here and a
+ * 44 there did. The smaller numbers are the ones worth writing down: a picker row and a folder card are lists
+ * of something else that happen to name a persona. */
+const { persona, size = 44 } = defineProps<{ persona: PersonaLike; size?: number }>();
+
+// The name somebody chose, or the id it was filed under — see the note above for why this lives here and not
+// at four call sites.
+const seed = computed<string>(() => persona.label ?? persona.id);
 
 /* The skin tones, curated rather than taken from the collection's own defaults — this is the one list where
  * the full range is not what you want, because it is the part a reader recognises a face by from across a
@@ -81,11 +110,11 @@ const hex = (byte: number): string => byte.toString(16).padStart(2, `0`);
 const cache = new Map<string, string>();
 
 const svg = computed<string>(() => {
-    const cached = cache.get(seed);
+    const cached = cache.get(seed.value);
     if (cached !== undefined) {
         return cached;
     }
-    const bytes = bytesOf(seed);
+    const bytes = bytesOf(seed.value);
     const drawn = createAvatar(adventurer, {
         base: [`default`],
         /* The collection draws its head with generous margin, which at rail size left the character floating in
@@ -108,7 +137,7 @@ const svg = computed<string>(() => {
         earrings: [pick(EARRINGS, bytes[7]!)],
         earringsProbability: 100,
     }).toString();
-    cache.set(seed, drawn);
+    cache.set(seed.value, drawn);
     return drawn;
 });
 </script>
@@ -119,8 +148,7 @@ const svg = computed<string>(() => {
          A surface behind it because the collection draws on transparency: without one the face floats on
          whatever the card is painted in, and the round silhouette every other avatar in the app has is lost. -->
     <span
-        class="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-content/10 transition-opacity"
-        :class="idle ? `opacity-50 grayscale` : ``"
+        class="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-content/10"
         :style="{ width: `${size}px`, height: `${size}px` }"
         role="img"
         :aria-label="seed"
