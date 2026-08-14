@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Card, formatDateTime, type NoticeModel, NoticeStack, Row, StatusBadge } from "@intentic/ui";
+import { Card, cmp, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -78,7 +78,14 @@ const sizeLabel = (bytes: number): string => {
             <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
                  inset, which read as a second card inside the first for a border that said nothing the hairline
                  doesn't. The lock is the state at a glance — it opens and goes warning-coloured the moment the
-                 bundle stops being safe to hand over, so the danger is legible before the sentence is read. -->
+                 bundle stops being safe to hand over, so the danger is legible before the sentence is read.
+
+                 FULL-BLEED, because the whole row is the click target and the hover tint has to show that. A
+                 `flush` row keeps no padding of its own, so the tint was painted on the text's own box: a
+                 rectangle starting at the divider and stopping dead against the lock on one side and the toggle
+                 on the other, with no air anywhere. The negative margin plus padding here is the CARD'S padding
+                 restated (both `5`, like `--ui-card-padding`), so the words stay lined up with everything else
+                 on the card while the tint runs edge to edge and reads as a band. -->
             <Row
                 flush
                 as="label"
@@ -86,7 +93,7 @@ const sizeLabel = (bytes: number): string => {
                 :tone="withSecrets ? `warning` : `default`"
                 title="Include secrets"
                 description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else — the restore then lists what to re-enter."
-                class="border-t border-line pt-4"
+                class="-mx-5 border-t border-line px-5 py-2.5"
                 :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
             >
                 <template #control>
@@ -119,36 +126,56 @@ const sizeLabel = (bytes: number): string => {
         </template>
         <p v-else class="text-2xs text-subtle">Only the sandbox owner can export or restore an environment.</p>
 
-        <!-- THE ANSWER TO "where do I get it later": the exports that exist, whatever this tab has been doing. -->
-        <div v-if="exports.length > 0" class="flex flex-col divide-y divide-line rounded-lg border border-line">
-            <div v-for="entry in exports" :key="entry.name" class="flex items-center gap-3 p-3">
-                <div class="min-w-0 flex-1">
-                    <p class="truncate font-mono text-2xs text-content">{{ entry.name }}</p>
-                    <p class="text-2xs text-subtle">
-                        <template v-if="entry.status === 'packing'">Packing… {{ sizeLabel(entry.bytes) }} so far</template>
-                        <template v-else-if="entry.status === 'failed'">{{ entry.error ?? `The export failed.` }}</template>
-                        <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
-                    </p>
-                </div>
-                <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="Secrets" />
-                <StatusBadge v-if="entry.status === 'packing'" variant="info" label="Packing" dot />
-                <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="Failed" dot />
-                <Button v-if="entry.status === 'ready'" label="Download" size="small" severity="secondary" :text="true" @click="download(entry)">
-                    <template #icon><Icon name="download" /></template>
-                </Button>
-                <Button
-                    v-if="isOwner && entry.status !== 'packing'"
-                    size="small"
-                    severity="danger"
-                    :text="true"
-                    aria-label="Delete export"
-                    v-tooltip.top="'Delete this export'"
-                    @click="remove(entry.name)"
+        <!-- THE ANSWER TO "where do I get it later": the exports that exist, whatever this tab has been doing.
+             A <RowGroup> of <Row>s rather than the hand-drawn list this was — the anatomy is a record list's
+             (a name, a line of facts under it, a badge, two actions), which is the shape those two components
+             exist to state once.
+
+             BOTH ACTIONS ARE THE SAME AFFORDANCE, and that is the fix to a row that had two. Download was a
+             bordered chip and delete a bare glyph, so the quieter of the two — throwing the file away — was
+             the one drawing a box, and the row read as a button with a stray mark after it. `cmp.iconButton`
+             is the app's toolbar action: no chrome until the pointer is on it, the tone arriving with the
+             hover. Neither needs a label because the row is one file and these are the only two things anyone
+             does to a file; the tooltip carries the word. -->
+        <RowGroup v-if="exports.length > 0">
+            <Row v-for="entry in exports" :key="entry.name" density="compact">
+                <template #title
+                    ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
                 >
-                    <template #icon><Icon name="trash" /></template>
-                </Button>
-            </div>
-        </div>
+                <template #description>
+                    <template v-if="entry.status === 'packing'">Packing… {{ sizeLabel(entry.bytes) }} so far</template>
+                    <template v-else-if="entry.status === 'failed'">{{ entry.error ?? `The export failed.` }}</template>
+                    <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
+                </template>
+                <template #meta>
+                    <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="Secrets" />
+                    <StatusBadge v-if="entry.status === 'packing'" variant="info" label="Packing" dot />
+                    <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="Failed" dot />
+                </template>
+                <template #control>
+                    <button
+                        v-if="entry.status === 'ready'"
+                        type="button"
+                        :class="cmp.iconButton()"
+                        aria-label="Download export"
+                        v-tooltip.top="'Download'"
+                        @click="download(entry)"
+                    >
+                        <Icon name="download" class="text-sm" />
+                    </button>
+                    <button
+                        v-if="isOwner && entry.status !== 'packing'"
+                        type="button"
+                        :class="cmp.iconButton(`hover:text-danger`)"
+                        aria-label="Delete export"
+                        v-tooltip.top="'Delete this export'"
+                        @click="remove(entry.name)"
+                    >
+                        <Icon name="trash" class="text-sm" />
+                    </button>
+                </template>
+            </Row>
+        </RowGroup>
 
         <p v-if="isOwner" class="text-2xs text-subtle">
             Exports stay on the sandbox until you delete them, so you can come back for one later. Restore onto a FRESH sandbox — it overwrites files

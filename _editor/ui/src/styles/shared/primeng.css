@@ -54,10 +54,22 @@
     /* A compact LABEL is 11px; a bare glyph is not. PrimeVue applies the small button's font size to every
      * icon too, which left icon-only actions (most visibly the export row's trash button) drawing an 11px
      * mark in a 28px target. Give a button whose icon carries its whole meaning the normal UI glyph size,
-     * while icons beside compact labels continue to match those labels. */
+     * while icons beside compact labels continue to match those labels.
+     *
+     * `padding-inline: 0` IS THE REST OF THAT FIX, and without it the size above changes nothing visible.
+     * PrimeVue zeroes the side padding on `.p-button-icon-only` — the button is a fixed square, so every
+     * pixel of padding comes out of the glyph — and then `.p-button-sm` re-sets `padding` as a SHORTHAND
+     * further down the same sheet. Equal specificity, later in source: the shorthand wins and puts the side
+     * padding back. A small icon-only button is therefore a 28px box with 22px of padding and 2px of border
+     * in it, leaving under 7px for a 15px mark — a glyph squeezed to a sliver, which is what "the trash icon
+     * is tiny, like 4px" is. It hits every icon-only `size="small"` button in the app, not just this one. */
     .p-button.p-button-sm.p-button-icon-only,
     .p-button.p-button-sm.p-button-icon-only .p-button-icon {
         font-size: var(--text-sm);
+    }
+
+    .p-button.p-button-sm.p-button-icon-only {
+        padding-inline: 0;
     }
 
     /* Secondary's own hover is defined with the tier, below in @layer components — a later layer, so it wins
