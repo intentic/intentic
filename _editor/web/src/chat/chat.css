@@ -47,9 +47,9 @@
    so the paint is needed only once it lifts.
    content-visibility is dropped for the same reason — a pinned row is on screen for the whole turn, so it must
    never be skipped.
-   `top: -1px` rather than 0 so the row is clipped by a pixel the moment it pins, which is what the
-   IntersectionObserver in ChatMessageView watches for (there is no :stuck selector). The pixel is spent out of
-   the padding above the bubble and never shows.
+   `top: -1px` rather than 0 so the row's top edge lifts a pixel clear of the scroller's the moment it pins,
+   which is the difference ChatMessageView measures to know that it has (there is no :stuck selector). The pixel
+   is spent out of the padding above the bubble and never shows.
    The band's own inset is the transcript's gap (see --chat-gap), not a second number — but a padding is air the
    row PAYS FOR, and the column has already spaced this row by that same gap, so in flow the two stacked: a
    prompt sat twice as far from the answer under it as any other two events sat from each other (measured 22px

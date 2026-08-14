@@ -564,11 +564,34 @@ const trailer = computed(() => {
 const { showToolCalls } = useToolCalls();
 
 // --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
-// CSS has no way to ask whether a sticky element is currently stuck, and the edge under a prompt must only
-// be drawn while it is — on an in-flow row it would read as a card floating over the transcript. The row is
-// offset by a pixel above
-// the scroller's top edge (`top: -1px`), so the moment it pins that pixel is clipped and the ratio drops below
-// 1. The observer is rooted at the transcript scroller, the only scrolling ancestor the pin is relative to.
+/* CSS has no way to ask whether a sticky element is currently stuck, and the band under a prompt must only be
+ * painted while it is — on an in-flow row it would read as a card floating over the transcript, and it would
+ * paint over the neighbouring rows the negative margins reach into.
+ *
+ * THE STATE IS MEASURED, NOT INFERRED. The row is offset a pixel above the scroller's top edge (`top: -1px`),
+ * so a stuck row's top edge sits above that edge and an in-flow one's does not — one comparison, true whenever
+ * it is asked.
+ *
+ * It used to be inferred instead, from an IntersectionObserver's ratio: that same pixel is clipped once the row
+ * pins, so the ratio drops below 1. That reads the same in the ordinary case, and is wrong in a way that LASTS,
+ * because the flag was then a remembered answer and an observer only speaks at a threshold crossing. Two ways
+ * it stops speaking, both leaving the flag frozen at whatever it last held:
+ *
+ *   - AN OBSERVER GOES SILENT WHEN ITS TARGET CHANGES DOCUMENT. Popping the chat out adopts these very rows
+ *     into another window (see the clamp's observer above), and an observer built in the window they came from
+ *     reports nothing about them afterwards — measured, not inferred: it reported once before the move and
+ *     never again, through a scroll that pinned the row in its new home. The flag is reset to false as the row
+ *     is rebuilt, so the band simply never painted there.
+ *   - A report that arrives stale. The callback takes a queue, not a state, and reading the first of a batch
+ *     answers with the older of two frames.
+ *
+ * Either way the prompt sticks with the flag still saying otherwise, and the band goes unpainted for the rest
+ * of the turn — the answer then scrolls visibly THROUGH the pinned prompt, which is the bug this replaces.
+ *
+ * So the observer is demoted to a gate over a listener that carries the correctness on its own. The scroller's
+ * own scroll is what re-reads the box — one rect per on-screen prompt, on an event where layout is already
+ * settled — and the gate only takes that listener OFF a row scrolled out of the transcript. A gate that never
+ * speaks therefore costs a listener that never comes off, which is the harmless direction to fail in. */
 const row = ref<HTMLElement>();
 const pinned = ref(false);
 
@@ -580,13 +603,55 @@ watch(
         if (element === undefined || props.message.role !== `user` || defers.value) {
             return;
         }
+        /* The transcript scroller is the only scrolling ancestor the pin is relative to, so it is both what the
+         * row is measured against and what the gate is rooted at. A row mounted outside one cannot be stuck to
+         * anything — it stays an ordinary bubble rather than pinning against the viewport by accident. */
+        const scroller = element.closest(`.chat-scroller`);
+        if (scroller === null) {
+            return;
+        }
+        /* Half a pixel into the row's one-pixel offset: below the stick point the row's top edge is still at or
+         * under the scroller's, above it the offset has lifted it clear, and the midpoint separates the two
+         * whatever fractional scroll position or display scaling the two rects come back with. The scroller's
+         * own edge is its PADDING edge, which is what a sticky offset resolves against. */
+        const sync = (): void => {
+            const edge = scroller.getBoundingClientRect().top + scroller.clientTop;
+            pinned.value = element.getBoundingClientRect().top < edge - 0.5;
+        };
+        let listening = false;
+        const listen = (on: boolean): void => {
+            if (on === listening) {
+                return;
+            }
+            listening = on;
+            if (on) {
+                scroller.addEventListener(`scroll`, sync, { passive: true });
+            } else {
+                scroller.removeEventListener(`scroll`, sync);
+            }
+        };
         const view = element.ownerDocument.defaultView ?? window;
-        const observer = new view.IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
-            root: element.closest(`.chat-scroller`),
-            threshold: [1],
-        });
+        // Default threshold: the gate asks only whether the row is in the scrollport, and an isIntersecting
+        // flip is the one transition an observer always reports. Scrolled away, the flag is nobody's business
+        // and the listener comes off; arriving, this is also what re-measures the row. The freshest entry, since
+        // a callback takes a queue and the last of it is the frame that just happened.
+        const observer = new view.IntersectionObserver(
+            (entries) => {
+                listen(entries.at(-1)?.isIntersecting === true);
+                sync();
+            },
+            { root: scroller },
+        );
         observer.observe(element);
-        onCleanup(() => observer.disconnect());
+        // Measured and listening from the outset, rather than from the gate's first word: a row mounted where it
+        // already sticks (a transcript restored to its own bottom) is pinned before anything scrolls, and a gate
+        // that never reports at all must not be what decides whether this row is ever measured again.
+        sync();
+        listen(true);
+        onCleanup(() => {
+            observer.disconnect();
+            listen(false);
+        });
     },
     { immediate: true, flush: `post` },
 );
