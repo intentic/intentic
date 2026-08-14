@@ -88,6 +88,29 @@ const GROUPINGS: readonly { label: string; value: ChatGrouping; title: string }[
     { label: `Personas`, value: `persona`, title: `The people this sandbox can be — pick one and talk to them` },
 ];
 
+/* THE CHAT THE AGENTS CUT WAS READING, held while the column is showing people.
+ *
+ * The two cuts share one transcript, so talking to a persona necessarily moves it — and without this, coming
+ * back landed you in that persona's conversation rather than the one you had been working in, so a trip to see
+ * who you can send as cost you your place. Going over to look at something and finding your desk rearranged on
+ * the way back is the failure; this is the undo for it.
+ *
+ * Per-INSTANCE, so each window parks its own. Restored only if the conversation is still open (it can be
+ * closed from anywhere while the rail is up) and only when it actually moved, so a visit that picked nobody
+ * ends in no reveal at all. */
+let parked: string | undefined;
+watch(grouping, (next, previous) => {
+    if (next === `persona`) {
+        parked = activeId.value;
+        return;
+    }
+    const restore = previous === `persona` && parked !== undefined && parked !== activeId.value;
+    if (restore && conversations.value.some((conversation) => conversation.conversationId === parked)) {
+        emit(`select`, parked!);
+    }
+    parked = undefined;
+});
+
 interface OpenChat {
     readonly conversation: Conversation;
     readonly agent: FleetAgent | undefined;

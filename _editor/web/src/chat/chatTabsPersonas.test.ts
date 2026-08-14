@@ -105,14 +105,16 @@ const rowFor = (el: HTMLElement, label: string): HTMLElement | undefined =>
  * chat to a persona still gets a full rail, because the rows come from the CARDS. */
 it("lists the workspace's personas without anyone having pinned a chat to them", async () => {
     const el = await mountList();
-    expect(rows(el)).toEqual([`Work`, `Inbox Manager`, `Anyone`]);
+    expect(rows(el)).toEqual([`Work`, `Inbox Manager`]);
 });
 
-// Anyone is a real row and it is last: a chat bound to nobody keeps every connected account, which is a
-// different thing from any one card rather than the absence of a choice.
-it("keeps Anyone as the final row", async () => {
+/* NO "ANYONE" ROW. The composer's picker has one and means something precise by it; as a row in a list of
+ * PEOPLE it meant "every chat nobody pinned", which is nearly all of them — eleven conversations and their
+ * attention bar, at the bottom of a list about personas. Unpinned chats belong to the Agents cut. */
+it("lists no Anyone row", async () => {
     const el = await mountList();
-    expect(rows(el).at(-1)).toBe(`Anyone`);
+    expect(rows(el)).not.toContain(`Anyone`);
+    expect(el.textContent).not.toContain(`Every account you've connected`);
 });
 
 /* A WORKSPACE WITH NO CARDS MUST EXPLAIN ITSELF. Showing a lone "Anyone" row is how this shipped the first
@@ -195,7 +197,7 @@ const disclosureFor = (el: HTMLElement, label: string): HTMLElement | undefined 
 
 // The chats drawn UNDER a persona — everything the list holds that is not one of the persona rows themselves.
 const sessionRows = (el: HTMLElement): string[] => {
-    const personaNames = new Set([`Work`, `Inbox Manager`, `Anyone`]);
+    const personaNames = new Set([`Work`, `Inbox Manager`]);
     return [...el.querySelectorAll(`[data-chat-tab], .rail-card`)]
         .map((card) => card.querySelector(`.line-clamp-2`)?.textContent?.trim() ?? ``)
         .filter((title) => !personaNames.has(title));
@@ -204,21 +206,29 @@ const sessionRows = (el: HTMLElement): string[] => {
 it("lists a persona's chats and switches to the one you pick", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`, `second`]);
+    // Shut until asked: the rail stays a list of people, and nothing about what is active elsewhere opens it.
+    expect(sessionRows(el)).toEqual([]);
+
+    disclosureFor(el, `Work`)?.click();
+    await settle();
     expect(sessionRows(el)).toHaveLength(2);
 
-    // A SESSION row, addressed by what it offers to do — the persona cards below it are also `.rail-card`, and
-    // pressing one of those would start a chat rather than switch to one.
+    // A SESSION row, addressed by what it offers to do — the persona cards are also `.rail-card`, and pressing
+    // one of those would start a chat rather than switch to one.
     selected = [];
     el.querySelector(`[aria-label^="Open "]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
     await settle();
     expect(selected).toHaveLength(1);
 });
 
-// The count is the door, and it closes as well as opens — a reader who wants the rail back as a list of people
-// says so once and it stays said (the auto-expand below only fires when the ACTIVE chat changes).
+// The count is the door, and it closes as well as opens.
 it("collapses the list again from the same control", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`, `second`]);
+    disclosureFor(el, `Work`)?.click();
+    await settle();
+    expect(sessionRows(el)).toHaveLength(2);
+
     disclosureFor(el, `Work`)?.click();
     await settle();
     expect(sessionRows(el)).toEqual([]);
@@ -230,6 +240,8 @@ it("collapses the list again from the same control", async () => {
 it("offers a new chat as that persona once its existing ones are on screen", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`]);
+    disclosureFor(el, `Work`)?.click();
+    await settle();
     expect(el.textContent).toContain(`New chat as Work`);
 });
 
@@ -240,13 +252,52 @@ it("shows no disclosure on a persona with no chats", async () => {
     expect(disclosureFor(el, `Work`)).toBeUndefined();
 });
 
-/* THE PERSONA YOU ARE TALKING THROUGH OPENS ITSELF, so the rail shows where you are rather than making you
- * find it — the same reason the board pins the card its chat panel is pointing at. */
-it("expands the persona whose chat is on screen", async () => {
+/* THE PERSONA YOU OPENED FROM HERE expands itself, so the rail shows where the press landed. Keyed to this
+ * rail's own pick rather than to the window's active chat — which is what keeps walking in from the Agents cut
+ * from flinging a group open about a conversation you were reading somewhere else. */
+it("expands the persona you press, and only then", async () => {
     const el = await mountList();
-    await pinTo(`work`, [`first`, `second`]);
+    await pinTo(`work`, [`first`]);
+    expect(sessionRows(el)).toEqual([]);
+
+    rowFor(el, `Work`)?.click();
     await settle();
-    expect(sessionRows(el).length).toBeGreaterThan(0);
+    expect(sessionRows(el)).toHaveLength(1);
+});
+
+/* --- Detached from the Agents cut -------------------------------------------------------------------------
+ * The two cuts share one transcript, so talking to a persona necessarily moves it. Going to look at who you
+ * can send as must not cost you the conversation you were working in. */
+it("leaves the Agents cut on the chat it was reading", async () => {
+    useChatGrouping().set(`lane`);
+    const el = await mountList();
+    openAgentConversation({ id: `working-on-this`, provider: `claude`, harness: `native` });
+    await settle();
+
+    useChatGrouping().set(`persona`);
+    await settle();
+    rowFor(el, `Work`)?.click(); // opens a chat as Work — the transcript moves
+    await settle();
+
+    selected = [];
+    useChatGrouping().set(`lane`);
+    await settle();
+    expect(selected).toEqual([`working-on-this`]);
+});
+
+// ...and a visit that picked nobody ends in no reveal at all, rather than a redundant one.
+it("reveals nothing when the visit changed no chat", async () => {
+    useChatGrouping().set(`lane`);
+    await mountList();
+    openAgentConversation({ id: `working-on-this`, provider: `claude`, harness: `native` });
+    await settle();
+
+    useChatGrouping().set(`persona`);
+    await settle();
+    selected = [];
+    useChatGrouping().set(`lane`);
+    await settle();
+    expect(selected).toEqual([]);
 });
 
 // The switch swaps the whole column, so the chats are still there on the way back.

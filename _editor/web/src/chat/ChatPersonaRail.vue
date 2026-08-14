@@ -14,13 +14,18 @@
      the composer exactly as it does everywhere else. So the rail reads as a correspondent list even though
      nothing behind it is stored per person: it is the persona card plus the chats that name it.
 
-     ANYONE IS A ROW, last, and it is not the absence of a pick — a chat bound to nobody keeps every connected
-     account, which is a different and more powerful thing than any single card. The composer's own picker
-     makes exactly this call, in those words.
+     IT IS A LIST OF PEOPLE AND NOTHING ELSE. There is no "Anyone" row: the composer's picker has one because
+     there it means "send this turn through every account rather than one person's", but as a row HERE it meant
+     every chat nobody had pinned — which on a real workspace is nearly all of them. It sat at the bottom
+     holding eleven conversations and wearing their attention bar, outweighing the personas the list exists to
+     show. Unpinned chats already have a home, and it is the Agents cut.
 
-     WITH NO CARDS AT ALL the rail says so and offers the way to make one, rather than showing a lone "Anyone"
-     row. A mode whose whole subject is personas, on a workspace with none, has to explain itself — a list of
-     one unexplained row is how this feature first shipped, and it read as broken. -->
+     ITS SELECTION IS ITS OWN (`picked`). Walking in from the Agents cut leaves this list unringed and every
+     group shut, and walking back out leaves that cut on the conversation it was already reading — the two are
+     a list of work and a list of people, not one selection drawn twice.
+
+     WITH NO CARDS AT ALL the rail says what a persona is and offers the way to make one. A mode whose whole
+     subject is personas, on a workspace with none, has to explain itself. -->
 <script setup lang="ts">
 import { personaBounds } from "@intentic/sandbox-contract";
 import { cmp, Icon, type IconName, StatusBadge } from "@intentic/ui";
@@ -43,22 +48,35 @@ const emit = defineEmits<{ select: [id: string] }>();
 
 const router = useRouter();
 const { personas } = usePersonas();
-const { conversations, activeId } = useChat();
+const { conversations } = useChat();
 const { agentById } = useAgents();
 
 /* WHAT THIS WINDOW IS HOLDING FOR EACH PERSONA. The pick lives on the conversation (Conversation.actsAs) and
  * nowhere else — the sandbox files it against each turn, never against the session — so the chats a row can
  * speak for are this window's own tabs. That is a real limit and the row is careful never to imply otherwise:
  * it reports what it can see ("2 chats", when they last moved) and claims nothing about the rest. */
-const chatsOf = (id: string | undefined) =>
+const chatsOf = (id: string) =>
     conversations.value
         .filter((conversation) => conversation.actsAs.value === id)
         .map((conversation) => ({ conversation, agent: agentById(conversation.conversationId) }))
         .toSorted((a, b) => (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0));
 
+/* THE CHAT THIS RAIL ITSELF PUT ON SCREEN, and the only thing it draws a selection ring from.
+ *
+ * IT IS DELIBERATELY NOT THE WINDOW'S ACTIVE CHAT. This list used to ring whichever persona owned whatever was
+ * active, which meant walking in from the Agents cut lit up a row you had not chosen — the persona that
+ * happened to own the conversation you were last reading — and made the two cuts feel like one selection seen
+ * twice. They are not: one is a list of work and the other a list of people, and picking somebody here should
+ * not read as a statement about where you were.
+ *
+ * It lives in a plain ref rather than anywhere shared because the rail is unmounted the moment the switch goes
+ * back to Agents (the host swaps the whole column), so entering this cut always starts clean — which is
+ * exactly the intent, and needs no clearing written for it. */
+const picked = ref<string | undefined>(undefined);
+
 interface PersonaRow {
     readonly key: string;
-    readonly id: string | undefined;
+    readonly id: string;
     readonly label: string;
     /* The accounts under the name — a mark cannot tell `reddit-work` from `reddit-personal`, and those being
      * different accounts is the entire reason a persona exists.
@@ -75,49 +93,54 @@ interface PersonaRow {
     readonly open: boolean;
 }
 
-const rowFor = (id: string | undefined, label: string, detail: string, bounds?: string): PersonaRow => {
-    const mine = chatsOf(id);
-    return {
-        key: id ?? `anyone`,
-        id,
-        label,
-        detail,
-        bounds,
-        chats: mine.length,
-        lastAt: mine[0]?.agent?.updatedAt,
-        // The bar down the row's edge, on the same channel a session card uses: one of this persona's chats is
-        // waiting on you, which is the only thing here worth interrupting a scan for.
-        needsYou: mine.some((entry) => entry.agent !== undefined && blocked(entry.agent)),
-        // Whether the chat on screen right now is one of theirs — the rail's selection ring, so the row you are
-        // talking through is the one wearing it.
-        open: mine.some((entry) => entry.conversation.conversationId === activeId.value),
-    };
-};
-
-const rows = computed<PersonaRow[]>(() => [
-    ...personas.value.map((persona) =>
-        rowFor(
-            persona.id,
-            persona.label ?? persona.id,
-            persona.capabilities.join(` · `),
-            persona.powers === undefined ? undefined : personaBounds(persona),
-        ),
-    ),
-    rowFor(undefined, `Anyone`, `Every account you've connected`),
-]);
+/* ONE ROW PER PERSONA CARD, and nothing else on the list.
+ *
+ * THERE IS NO "ANYONE" ROW. It was here because the composer's picker has one, where it means something
+ * precise: "send this turn through every account rather than one person's". As a row in a list of PEOPLE it
+ * meant something else entirely — every chat that had never been pinned, which on a real workspace is almost
+ * all of them. So it sat at the bottom holding eleven conversations, wearing their attention bar, outweighing
+ * the personas the list exists to show, and answering a question nobody asked it. Unpinned chats already have
+ * a home: the Agents cut, which is the whole list of them. */
+const rows = computed<PersonaRow[]>(() =>
+    personas.value.map((persona) => {
+        const mine = chatsOf(persona.id);
+        return {
+            key: persona.id,
+            id: persona.id,
+            label: persona.label ?? persona.id,
+            detail: persona.capabilities.join(` · `),
+            bounds: persona.powers === undefined ? undefined : personaBounds(persona),
+            chats: mine.length,
+            lastAt: mine[0]?.agent?.updatedAt,
+            // The bar down the row's edge, on the same channel a session card uses: one of this persona's chats
+            // is waiting on you, which is the only thing here worth interrupting a scan for.
+            needsYou: mine.some((entry) => entry.agent !== undefined && blocked(entry.agent)),
+            // Ringed only for a chat opened FROM HERE — see `picked`.
+            open: mine.some((entry) => entry.conversation.conversationId === picked.value),
+        };
+    }),
+);
 
 const empty = computed(() => personas.value.length === 0);
 
 /* THE PRESS. The most recent chat already acting as them, or a new one pinned to them — see the note at the
  * top for why those are the same act from the reader's side ("put me in a chat with this persona"). */
 const open = (row: PersonaRow): void => {
-    const mine = chatsOf(row.id);
-    const first = mine[0];
+    const first = chatsOf(row.id)[0];
+    picked.value = first === undefined ? startAgent(undefined, row.id) : first.conversation.conversationId;
     if (first !== undefined) {
         emit(`select`, first.conversation.conversationId);
-        return;
     }
-    startAgent(undefined, row.id);
+};
+
+// Switching to one of a persona's other chats, and starting a fresh one, both land here — the ring follows
+// what this rail put on screen either way.
+const show = (conversationId: string): void => {
+    picked.value = conversationId;
+    emit(`select`, conversationId);
+};
+const startAs = (row: PersonaRow): void => {
+    picked.value = startAgent(undefined, row.id);
 };
 
 /* --- The persona's other chats ---------------------------------------------------------------------------
@@ -144,9 +167,10 @@ const toggleExpanded = (row: PersonaRow): void => {
     expanded.value = next;
 };
 
-/* The persona you are TALKING THROUGH opens itself, so the rail always shows where you are rather than making
- * you find it. Only when the active chat changes — a reader who then collapses it has said something, and it
- * must not spring back open under them on the next repaint. */
+/* The persona you have OPENED FROM HERE expands itself, so the rail shows where the press landed rather than
+ * making you find it. Keyed to this rail's own pick, not to the window's active chat: walking in from the
+ * Agents cut must not fling a group open about a conversation you were reading somewhere else. Fires only when
+ * that pick changes — a reader who then collapses it has said something, and it must not spring back open. */
 watch(
     () => rows.value.find((row) => row.open)?.key,
     (key) => {
@@ -203,17 +227,12 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                      without reading, and the row's text sits beside it. Generated from the persona's id, so
                      it is the same face here, in the composer's picker and on the personas page. -->
                     <template #aside>
-                        <!-- ONE NUMBER FOR BOTH MARKS, and it is what sets the row's height: a face this size is
-                         taller than the two lines of text beside it, so the card is as tall as its mark and
-                         every row in the column matches. Sizing it from the card instead (`h-full`) reads as
-                         the tidier idea and is not: the face and the Anyone glyph resolve their percentage
-                         against slightly different boxes, so the column came out 44px next to 42px — a
-                         mismatch you can see in a vertical list even when you cannot name it. -->
-                        <PersonaFace v-if="row.id !== undefined" :seed="row.label" :size="44" />
-                        <!-- Anyone is not a person and gets no invented face: the neutral glyph at that same size. -->
-                        <span v-else class="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full border border-line bg-content/5">
-                            <Icon name="users" class="text-base text-muted" />
-                        </span>
+                        <!-- A FIXED NUMBER, and it is what sets the row's height: a face this size is taller
+                             than the two lines of text beside it, so the card is as tall as its mark and every
+                             row in the column matches. Sizing it from the card instead (`h-full`) reads as the
+                             tidier idea and resolves its percentage against a box that is itself waiting on
+                             the mark to know how tall it is. -->
+                        <PersonaFace :seed="row.label" :size="44" />
                     </template>
                     <!-- The clock, where the rail's session rows keep theirs. Only once this persona has a chat to
                      have a clock about. It rides the TITLE's line, so gaining one never changes the row's
@@ -268,10 +287,10 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                         :title="tabLabel(entry.conversation)"
                         :provider="entry.agent?.provider ?? entry.conversation.provider.value"
                         :status="statusOf(entry)"
-                        :selected="entry.conversation.conversationId === activeId"
+                        :selected="entry.conversation.conversationId === picked"
                         :attention="entry.agent !== undefined && blocked(entry.agent)"
                         :aria-label="`Open ${tabLabel(entry.conversation)}`"
-                        @click="emit(`select`, entry.conversation.conversationId)"
+                        @click="show(entry.conversation.conversationId)"
                     >
                         <template #trailing>
                             <span v-if="entry.agent !== undefined && entry.agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{
@@ -283,7 +302,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                      still not make another one — the gap the disclosure exists to close as much as switching
                      is. It sits under them because that is the order the question arrives in: none of these,
                      then a new one. -->
-                    <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAgent(undefined, row.id)">
+                    <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
                         <Icon name="plus" class="text-2xs" />
                         New chat as {{ row.label }}
                     </button>

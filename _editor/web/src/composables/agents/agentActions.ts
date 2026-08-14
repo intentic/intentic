@@ -49,7 +49,9 @@ import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 // (ChatPersonaRail). It rides THIS action rather than the rail setting `actsAs` on a draft it summoned itself,
 // for the reason the note above gives: a surface that assembles its own half of "new agent" is a surface that
 // will one day skip one of the three steps. Undefined is "anyone", which is also a real thing to press.
-export const startAgent = (prompt?: string, actsAs?: string): void => {
+// Returns the conversation it summoned, so a caller that has to keep pointing at the new chat (the persona
+// rail rings the one it opened) does not have to guess which one that was.
+export const startAgent = (prompt?: string, actsAs?: string): string => {
     // This workspace has now been delegated to, which is what the desktop's first landing waits for: from here
     // on, opening the app lands on the workspace rather than the board (firstRun.ts). Recorded on the press
     // rather than on the turn completing — the user has seen what the board is for either way.
@@ -62,6 +64,7 @@ export const startAgent = (prompt?: string, actsAs?: string): void => {
     if (prompt !== undefined) {
         void conversation.enqueue(prompt);
     }
+    return conversation.conversationId;
 };
 
 /* THE SAME PRESS WITH THE TURN WRITTEN BUT NOT SENT — what a surface offering a SUGGESTION does (the empty

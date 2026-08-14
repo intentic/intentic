@@ -51,7 +51,9 @@ const submitClone = async (): Promise<void> => {
 };
 // The door for code that is neither on a host nor on this machine — a private host needing setup, a tarball, a
 // checkout on a server. The agent has the shell and the credentials, so the honest answer is to ask it.
-const askAgent = (): void => startAgent(`Help me get my code into this workspace. Ask me where it currently lives before you do anything.`);
+const askAgent = (): void => {
+    startAgent(`Help me get my code into this workspace. Ask me where it currently lives before you do anything.`);
+};
 </script>
 
 <template>
