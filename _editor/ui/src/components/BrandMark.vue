@@ -38,7 +38,14 @@
      them in CSS, so flipping the theme repaints without a second fetch.
 
      `idle` is for a thing that is present but switched off. It drains the colour and dims — which is what makes
-     a row go quiet, and now says the same thing to someone who cannot see the colour. -->
+     a row go quiet, and now says the same thing to someone who cannot see the colour.
+
+     `flush` is for the other shape this gets used in: not a badge sitting on a surface, but a band filling one
+     edge of somebody else's card. There the mark's own rounding and its own border are both wrong, and wrong in
+     a way that shows — its border doubles the card's along every edge the two share, and its square corner
+     cannot follow the card's rounded one, so the doubled edge steps back to a single line exactly at the curve
+     and reads as two radii fighting. A flush mark therefore draws neither: the card's border is already the
+     outline, and any divider between the band and the text beside it belongs to the caller's layout. -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { type Brand, brandUrl, loadBrand } from "./brandMark.js";
@@ -52,9 +59,11 @@ const {
     logo,
     icon,
     idle = false,
+    flush = false,
 } = defineProps<{
     /** PIXELS, like <Avatar> and for the same reason: the sizes in use are 20, 22, 24, 32 and 40, and snapping
-     *  them to a scale would move five surfaces to make a prop look tidier. Everything inside tracks it. */
+     *  them to a scale would move five surfaces to make a prop look tidier. Everything inside tracks it.
+     *  Under `flush` the box is the container's to size and this scales only what is drawn INSIDE it. */
     size: number;
     /** The monogram tier — the one thing every caller can always supply. Not an accessible label: see below. */
     name: string;
@@ -67,6 +76,9 @@ const {
     icon?: string | undefined;
     /** Installed but switched off, listed but disabled — present, and not currently doing anything. */
     idle?: boolean;
+    /** A band filling one edge of the container rather than a badge sitting on it: no rounding, no border, and
+     *  a square box stretched to the container instead of one `size` px across. See the note above. */
+    flush?: boolean;
 }>();
 
 const glyph = computed(() => (icon !== undefined && isIconName(icon) ? icon : undefined));
@@ -101,17 +113,20 @@ watch(
 
 <template>
     <span
-        class="relative flex shrink-0 items-center justify-center overflow-hidden border border-line transition-opacity"
+        class="relative flex shrink-0 items-center justify-center overflow-hidden transition-opacity"
         :class="[
             idle ? `opacity-50 grayscale` : ``,
-            size >= 28 ? `rounded-lg` : `rounded-md`,
+            // Both belong to the badge shape only — a flush mark is inside a border that is already drawn.
+            flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
             // The brand's own plate replaces the neutral one only once its colour is known — a tinted tile
             // under a fallback glyph would claim a brand that never loaded.
             brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
-            width: `${size}px`,
-            height: `${size}px`,
+            // Stretched to the container and held square, rather than sized here: the height belongs to
+            // whatever sits beside it, and that is in rem, so a pixel written here would be right at one
+            // browser font size and wrong at every other.
+            ...(flush ? { width: `auto`, height: `auto`, aspectRatio: `1` } : { width: `${size}px`, height: `${size}px` }),
             ...(brand === undefined
                 ? {}
                 : {

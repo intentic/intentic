@@ -1356,17 +1356,19 @@ const submitLabel = computed(() => {
                                     @click="pick(card.entry)"
                                 >
                                     <!-- THE MARK IS THE TILE'S FULL HEIGHT — a band down the left edge, which is what makes
-                                     a grid of forty scannable by logo rather than by reading forty names. Stretched
-                                     rather than sized: the height belongs to the two lines of text beside it, and those
-                                     are in rem, so any pixel passed here would be right at one browser font size and
-                                     wrong at every other. `size` is left to scale what is INSIDE the plate (the glyph,
-                                     the monogram, the brand mask), which is the only thing it still decides. -->
+                                     a grid of forty scannable by logo rather than by reading forty names. `flush` is
+                                     what says so: it stretches the plate to the row and drops the mark's own rounding
+                                     and border, which inside the tile's border would be a second outline along three
+                                     shared edges. `size` is left to scale what is INSIDE the plate (the glyph, the
+                                     monogram, the brand mask), which is the only thing it still decides. The one line
+                                     that IS wanted is the divider from the text, and that is this layout's to draw. -->
                                     <BrandMark
+                                        flush
+                                        class="border-r border-line"
                                         :size="44"
                                         :name="card.entry.name"
                                         :logo="card.entry.logo"
                                         :icon="entryIcon(card.entry)"
-                                        :style="{ width: `auto`, height: `auto`, aspectRatio: `1`, borderRadius: `0` }"
                                     />
                                     <div class="min-w-0 flex-1 px-2.5 py-2">
                                         <!-- ONE LINE, NEVER TWO. A grid row is as tall as its tallest tile, so any line
