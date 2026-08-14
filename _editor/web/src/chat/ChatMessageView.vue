@@ -676,9 +676,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <!-- A folded message keeps the prompt's breathing room (.chat-defers takes the same inset .chat-prompt
-         does) but not its stickiness — see `defers`. An acknowledgment keeps its alignment too, because it is
-         still the user talking; an errand is the app talking, so it sits at the left edge with the machinery. -->
+    <!-- A folded message (see `defers`) is a row like any other: no pin, and no inset of its own either — the
+         column's gap is the air around every event in it, and .chat-prompt's band adds none on top of that
+         (see chat.css). An acknowledgment keeps the prompt's alignment, because it is still the user talking;
+         an errand is the app talking, so it sits at the left edge with the machinery. -->
     <!-- The blocks of one message stack on the transcript's own gap (.chat-stack, see --chat-gap): a turn's
          calls, its answer and the card it ends on are three events in the column, spaced like any other two. -->
     <div
@@ -687,7 +688,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         :class="{
             'chat-prompt': message.role === 'user' && !defers,
             'items-end': message.role === 'user' && errand === undefined,
-            'chat-defers': defers,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
         }"

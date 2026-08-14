@@ -44,23 +44,26 @@
    `top: -1px` rather than 0 so the row is clipped by a pixel the moment it pins, which is what the
    IntersectionObserver in ChatMessageView watches for (there is no :stuck selector). The pixel is spent out of
    the padding above the bubble and never shows.
-   The band's own inset is the transcript's gap (see --chat-gap), not a second number: in flow it is the air
-   after the turn above and before the answer below, so a value of its own would simply stack on top of the gap
-   and make one boundary in the column wider than the rest for no stated reason. Pinned, the same value is the
-   band's padding, which is what it has to be either way. */
+   The band's own inset is the transcript's gap (see --chat-gap), not a second number — but a padding is air the
+   row PAYS FOR, and the column has already spaced this row by that same gap, so in flow the two stacked: a
+   prompt sat twice as far from the answer under it as any other two events sat from each other (measured 22px
+   above the run bar against 13 below it), which is exactly the unevenness the single gap exists to prevent. The
+   band therefore gives the padding straight back as a negative margin: pinned, the row still has its inset,
+   because that is what the padding is for; in flow it occupies the height it would with no padding at all and
+   the column's one gap is the only air around it. The same cancelling the run bar's row does for its mark
+   (see .chat-message:has(.chat-run-bar)).
+   The sentinel pixel is NOT given back — margin cancels the gap alone. Handed back too, the band's opaque top
+   edge would start a pixel above the previous surface and paint over its last row of pixels; left in, the
+   prompt sits one pixel lower than a perfectly even gap, which is not a distance anybody can see. */
 .chat-prompt {
     position: sticky;
     top: -1px;
     z-index: 5;
+    margin-block: calc(-1 * var(--chat-gap));
     padding-top: calc(var(--chat-gap) + 1px);
     padding-bottom: var(--chat-gap);
     background: var(--color-card);
     content-visibility: visible;
-}
-/* A folded message (an acknowledgment, an app errand — see `defers` in ChatMessageView) keeps the prompt's
-   breathing room without its stickiness, so it takes the same inset from the same place. */
-.chat-defers {
-    padding-block: var(--chat-gap);
 }
 /* The clip edge, named — and ONLY while the row is actually pinned. That opaque background is a rectangle
    ending at the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph
