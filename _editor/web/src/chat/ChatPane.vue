@@ -37,7 +37,7 @@ import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { useSpeechInput } from "../composables/chat/useSpeechInput";
+import { useVoiceInput } from "../composables/chat/useVoiceInput";
 import { useStickToBottom } from "../composables/chat/useStickToBottom";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
 import { jsonBody } from "../composables/sandbox/jsonBody";
@@ -483,42 +483,89 @@ const grow = (): void => {
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
 };
 
-// Browser-native voice input: while listening, the running transcript is appended to whatever was already in
-// the draft when the mic was toggled on (base), so interim results replace rather than stack.
-const { supported: speechSupported, listening, error: speechError, start: startSpeech, stop: stopSpeech } = useSpeechInput();
-const toggleSpeech = (): void => {
-    if (listening.value) {
-        stopSpeech();
-        return;
-    }
-    const base = draft.value;
-    startSpeech((transcript) => {
-        draft.value = base.length > 0 ? `${base} ${transcript}` : transcript;
-        void nextTick(() => {
-            grow();
-            input.value?.focus();
-        });
-    });
+/* HANDS-FREE VOICE MODE. One mic tap arms it; from there the gesture is speech itself: talk, and the pause is
+ * the send. The capture and the transcription are useVoiceInput's (sandbox-side whisper — every browser, and
+ * audio never leaves the user's infrastructure); what the pane owns is what "send" means: each transcribed
+ * utterance lands in the draft and goes out after a short beat — long enough to glance at, and Escape (or
+ * typing) catches it, keeping the words in the box for editing. The mode then STAYS on between turns, because
+ * a conversation is the point of hands-free — until the mic is tapped again, the user starts typing, or this
+ * pane stops being the one they're working in (focus loss, tab switch, unmount): the mic never records where
+ * nobody is looking. */
+const { state: voiceState, level: voiceLevel, pending: voicePending, error: voiceError, start: startVoice, stop: stopVoice } = useVoiceInput();
+const voiceOn = computed(() => voiceState.value !== `idle`);
+
+// The glance-window between the words appearing and the message going. A countdown, not a confirmation: the
+// default is that speaking sends, and this is only how long the catch stays possible.
+const VOICE_SEND_DELAY_MS = 1200;
+let voiceSendTimer: ReturnType<typeof setTimeout> | undefined;
+const voiceSendArmed = ref(false);
+const cancelVoiceSend = (): void => {
+    clearTimeout(voiceSendTimer);
+    voiceSendArmed.value = false;
 };
 
-// Web Speech failure codes → a human message. `aborted` (user stopped) and `no-speech` (heard nothing) are
-// benign, so they show nothing. `network` is the Brave / de-Googled-Chromium case: those builds ship no Google
-// speech key, so the native recognizer can't transcribe — only Chrome/Edge (or a backend STT path) will.
-const speechErrorMessage = computed(() => {
-    switch (speechError.value) {
-        case undefined:
-        case `aborted`:
-        case `no-speech`:
-            return undefined;
-        case `not-allowed`:
-        case `service-not-allowed`:
-            return `Microphone access is blocked. Allow it in your browser's site settings, then try again.`;
-        case `audio-capture`:
-            return `No microphone was found.`;
-        case `network`:
-            return `This browser doesn't support voice dictation. Use Chrome or Edge.`;
+// An utterance's words join whatever the box already holds (a typed half-sentence stays the user's), then the
+// countdown re-arms — a second utterance inside the glance window extends the message rather than racing it.
+const onVoiceTranscript = (text: string): void => {
+    cancelVoiceSend();
+    const base = draft.value.trim();
+    draft.value = base.length > 0 ? `${base} ${text}` : text;
+    void nextTick(() => grow());
+    voiceSendArmed.value = true;
+    voiceSendTimer = setTimeout(() => {
+        voiceSendArmed.value = false;
+        // oxlint-disable-next-line no-use-before-define -- the countdown fires long after setup; `submit` sits below with the other send paths
+        submit();
+    }, VOICE_SEND_DELAY_MS);
+};
+
+const toggleVoice = (): void => {
+    if (voiceOn.value) {
+        stopVoice();
+        cancelVoiceSend();
+        return;
+    }
+    startVoice(onVoiceTranscript);
+};
+
+// Typing or leaving exits hands-free — a mode that talked over the user's own keystrokes, or kept recording a
+// pane they left, would be the feature at its worst. The draft is untouched either way.
+const quitVoice = (): void => {
+    if (voiceOn.value || voiceSendArmed.value) {
+        stopVoice();
+        cancelVoiceSend();
+    }
+};
+watch([() => props.conversation, () => props.focused], quitVoice);
+onBeforeUnmount(quitVoice);
+
+const voiceHint = computed(() => {
+    switch (voiceState.value) {
+        case `preparing`:
+            return `Preparing voice…`;
+        case `listening`:
+            return `Stop voice mode`;
         default:
-            return `Dictation failed (${speechError.value}).`;
+            return `Talk hands-free — pause to send, tap again to stop`;
+    }
+});
+
+// The capture's failure modes, in the user's words. `needs-rebuild` is the one with an errand attached: the
+// image predates the whisper pack, and the Environment card's rebuild is what adds it.
+const voiceErrorMessage = computed(() => {
+    switch (voiceError.value) {
+        case undefined:
+            return undefined;
+        case `mic-blocked`:
+            return `Microphone access is blocked. Allow it in your browser's site settings, then try again.`;
+        case `no-mic`:
+            return `No microphone was found.`;
+        case `needs-rebuild`:
+            return `Voice needs a one-time sandbox update — run the rebuild on the Sandbox page's Environment card first.`;
+        case `unavailable`:
+            return `Voice isn't available on this sandbox — update it, then try again.`;
+        default:
+            return `Couldn't transcribe that — try again.`;
     }
 });
 
@@ -835,6 +882,22 @@ const commandRun = computed<AgentCommand | undefined>(() => {
 // advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
 // just filled the ring.
 const composerHint = computed(() => {
+    /* The live voice mode outranks everything below: while it is on, Escape means "catch the mic", so the
+     * streaming hint's "Esc to stop" would name the wrong action — and each of these states is the only place
+     * the user learns what the mode is doing right now. Armed-send first (the narrowest window), then the two
+     * working states, then plain listening. */
+    if (voiceSendArmed.value) {
+        return `Sending — Esc to edit`;
+    }
+    if (voicePending.value > 0) {
+        return `Transcribing…`;
+    }
+    if (voiceState.value === `preparing`) {
+        return `Preparing voice (first use)…`;
+    }
+    if (voiceState.value === `listening`) {
+        return `Listening — pause to send, Esc to stop`;
+    }
     // While the agent is generating, the shortcut worth the slot is the way out of it — the same slot is how
     // the user learns Escape does this at all.
     if (streaming.value && !awaitingDecision.value) {
@@ -1170,7 +1233,10 @@ const onInput = (): void => {
     syncCaret();
     // Typing makes the text the user's own again — a recalled message they have started editing is a draft, so
     // the stashed one it displaced is no longer anyone's to restore. Only real keystrokes land here: the
-    // programmatic draft writes (recall, mention/command picks) go through v-model and fire no input event.
+    // programmatic draft writes (recall, mention/command picks, voice transcripts) go through v-model and fire
+    // no input event — which is exactly what lets a keystroke mean "I'm taking over from the mic": it catches
+    // the armed voice send and ends hands-free, with the words kept in the box.
+    quitVoice();
     history.value?.reset();
 };
 const popoverDismissed = ref(false);
@@ -1293,6 +1359,15 @@ const onKeydown = (event: KeyboardEvent): void => {
     // After the popovers: an open @/-list owns the arrows for the token being typed, and recall's own Escape
     // must not pre-empt dismissing that list.
     if (recallKeydown(event)) {
+        return;
+    }
+    // Escape's next claim is the live voice mode: it catches a message counting down to send (the words stay
+    // in the box for editing) and ends hands-free either way. Ahead of the turn-stop below on purpose — with
+    // the mic on, the thing the user is escaping is the mic, and stopping a streaming turn instead would be a
+    // far bigger action than the key meant.
+    if (event.key === `Escape` && (voiceOn.value || voiceSendArmed.value)) {
+        event.preventDefault();
+        quitVoice();
         return;
     }
     // Escape interrupts the turn (Claude Code's shortcut), once the popovers and message recall have had their
@@ -2012,17 +2087,27 @@ watch(
                                         <span v-if="voiceAgent" class="@max-md:hidden">As agent</span>
                                     </button>
 
+                                    <!-- HANDS-FREE VOICE — one tap arms it, and from there the pause is the send
+                                     (see the voice section in the script). Every browser gets this button now:
+                                     the transcription is the sandbox's own, so there is no per-browser support
+                                     to gate on — only the viewer role, which cannot send at all. While
+                                     listening the icon breathes with the microphone level, which is the whole
+                                     "it can hear you" indicator; a state label rides the hint slot below. -->
                                     <button
-                                        v-if="speechSupported"
+                                        v-if="canDrive"
                                         type="button"
                                         class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
-                                        :class="{ 'composer-active': listening }"
-                                        @click="toggleSpeech"
-                                        v-tooltip.top="listening ? 'Stop dictation' : 'Dictate'"
-                                        :aria-pressed="listening"
-                                        aria-label="Dictate"
+                                        :class="{ 'composer-active': voiceOn }"
+                                        @click="toggleVoice"
+                                        v-tooltip.top="voiceHint"
+                                        :aria-pressed="voiceOn"
+                                        aria-label="Talk hands-free"
                                     >
-                                        <Icon name="microphone" class="text-xs max-md:text-base" />
+                                        <Icon
+                                            name="microphone"
+                                            class="text-xs transition-transform max-md:text-base"
+                                            :style="voiceState === 'listening' ? { transform: `scale(${1 + Math.min(0.5, voiceLevel * 3)})` } : undefined"
+                                        />
                                     </button>
 
                                     <!-- Stop is present for the whole live turn — generating OR parked on a plan /
@@ -2055,7 +2140,7 @@ watch(
                                 </div>
                             </form>
 
-                            <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
+                            <p v-if="voiceErrorMessage" class="px-1 text-2xs text-danger">{{ voiceErrorMessage }}</p>
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
                             <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
                             <!-- What the badge changes about the press, said under the box that is about to do

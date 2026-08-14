@@ -37,6 +37,10 @@ reports the profile.
   (ScheduleWakeup, the Cron family) are disallowed on every turn: they live in a process that dies with the
   turn, so they accept schedules that can never fire.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
+- Turn the composer's voice into text without the audio leaving the box: the browser records and segments
+  utterances itself and posts each one's WAV to `/speech/transcribe`, where whisper.cpp answers
+  (src/speech/transcribe.ts — the `whisper` feature pack, baked into standard images; the model downloads into
+  the workspace volume on first use, shared with Discord voice).
 - Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the

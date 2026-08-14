@@ -163,6 +163,7 @@ import {
 } from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
+import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
@@ -620,6 +621,9 @@ export interface Services {
     /* Which conversations have been published as pages anyone with the link can read (historyRoot/shares.json).
      * The index only — the pages themselves live in the workspace's outbox. See share/share-store.ts. */
     readonly shares: ShareStore;
+    // The composer's voice input: whisper.cpp over browser-recorded WAV utterances, with the serialized run
+    // queue and the first-use model download that make it stateful (see speech/transcribe.ts).
+    readonly speech: Speech;
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
     // Attaches a batch of share names (`preview-<panel>` / `port-<slot>` labels) to this box's own account on
     // the tunnel fabric before the hostnames reach a browser; never rejects (see panels/preview-route.ts).
@@ -1128,6 +1132,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             truncate: (agent, keep) => transcriptDeps.record.truncate(agent.id, keep),
         },
         shares: fileShareStore(join(config.historyRoot, "shares.json")),
+        speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
         purgeConversationState: (removed, retained) => purgeConversationState(workspace.root, config.historyRoot, removed, retained),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,

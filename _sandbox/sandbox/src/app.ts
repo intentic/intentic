@@ -25,6 +25,7 @@ import { installedExtensions } from "./extensions/installed-extensions.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./context.js";
 import { createDiffRawRoute } from "./git/diff-raw.js";
+import { createSpeechRoute } from "./speech/speech.routes.js";
 import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
@@ -459,6 +460,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it
     // is not an oRPC route: the body is a streamed binary, not JSON.
     app.route("/", createDiffRawRoute(services));
+
+    // The composer's voice input — a WAV utterance in, its text out. A byte route for the same reason as its
+    // neighbours: the JSON contract has no business carrying audio (see speech/speech.routes.ts).
+    app.route("/", createSpeechRoute(services));
 
     /* The scoped read, in the shape these two byte routes can answer in. `scopedTarget` is the one resolver
      * (workspace/workspace-scope.ts) and it signals through ORPCError, because every other caller is an oRPC

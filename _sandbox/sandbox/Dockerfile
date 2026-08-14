@@ -33,9 +33,11 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # baked — docker-entrypoint.sh generates it onto the /history volume at boot (see there for why).
 # openssh-client + sshpass + rsync back the `ssh` capability: the agent runs `ssh <alias>` / `rsync` against
 # connected machines, with sshpass -f for the password-auth ones. iproute2 gives `ip`/`ss` diagnostics.
-# Heavy or privilege-coupled capability tools (WireGuard, whisper.cpp) are NOT baked here — each capability
-# carries a Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable
-# (see capabilities/capability.ts `fragment`), applied by an owner-run rebuild.
+# Heavy or privilege-coupled capability tools (WireGuard) are NOT baked here — each capability carries a
+# Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable (see
+# capabilities/capability.ts `fragment`), applied by an owner-run rebuild. whisper.cpp graduated out of that
+# set into the `whisper` feature pack (composer voice input needs it on every standard image); Discord's
+# connector still composes it as a fragment for images without the pack.
 # python3 + make + g++ are the node-gyp toolchain: runtime `pnpm install` (ensure-intent.ts, scaffold
 # inject-template.ts, or a dev in /work) compiles native deps from source — node-pty ships no linux
 # prebuild, so it ALWAYS builds here. Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
