@@ -39,8 +39,14 @@
    The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
    prompt would stick to the same top edge and stack.
    Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
-   above: invisible in place, solid once it lifts. content-visibility is dropped for the same reason — a pinned
-   row is on screen for the whole turn, so it must never be skipped.
+   above: invisible in place, solid once it lifts. Applied ONLY in the pinned state, though: the padding above
+   and below the bubble is air the next and previous rows' margins reach into, and a run bar's row is pulled a
+   half-rem into exactly that space (see .chat-message:has(.chat-run-bar)) — with the band painted in flow, its
+   bottom strip lay over the count mark's top and shaved its ring off whenever a turn's calls sat right under
+   their prompt (and the top strip did the same to a run just above one). In flow nothing passes under the band,
+   so the paint is needed only once it lifts.
+   content-visibility is dropped for the same reason — a pinned row is on screen for the whole turn, so it must
+   never be skipped.
    `top: -1px` rather than 0 so the row is clipped by a pixel the moment it pins, which is what the
    IntersectionObserver in ChatMessageView watches for (there is no :stuck selector). The pixel is spent out of
    the padding above the bubble and never shows.
@@ -62,12 +68,12 @@
     margin-block: calc(-1 * var(--chat-gap));
     padding-top: calc(var(--chat-gap) + 1px);
     padding-bottom: var(--chat-gap);
-    background: var(--color-card);
     content-visibility: visible;
 }
-/* The clip edge, named — and ONLY while the row is actually pinned. That opaque background is a rectangle
-   ending at the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph
-   against nothing — which reads as a rendering fault rather than as one layer passing under another. A
+/* The clip edge, named — and ONLY while the row is actually pinned. The opaque background arrives with the
+   pin (see .chat-prompt for why it is not always on): a rectangle ending at the row's own last pixel, so the
+   turn sliding beneath a pinned prompt was cut off mid-glyph against nothing — which reads as a rendering
+   fault rather than as one layer passing under another. A
    hairline at the row's bottom edge draws the boundary the way a sticky header's divider does: the surface
    ends here, and what is cut below is passing under it. It replaced a drop shadow, which read as a halo
    hanging off the prompt rather than an edge of the band — worst in the popped-out window, where the band
@@ -76,6 +82,7 @@
    the pin threshold, and any height change there yanks the transcript (see .chat-prompt-text). Gated
    because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
 .chat-prompt-pinned {
+    background: var(--color-card);
     box-shadow: 0 1px 0 0 var(--color-line);
 }
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
