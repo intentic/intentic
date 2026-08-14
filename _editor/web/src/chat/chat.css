@@ -78,12 +78,25 @@
    ends here, and what is cut below is passing under it. It replaced a drop shadow, which read as a halo
    hanging off the prompt rather than an edge of the band — worst in the popped-out window, where the band
    runs wide of the bubble and the dark-mode alpha the shadow needed to register smeared the first line of
-   every reply. A box-shadow rather than border-bottom because a border is a pixel of height appearing at
-   the pin threshold, and any height change there yanks the transcript (see .chat-prompt-text). Gated
-   because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
+   every reply.
+   A pseudo-element rather than border-bottom because a border is a pixel of height appearing at the pin
+   threshold, and any height change there yanks the transcript (see .chat-prompt-text) — and rather than a
+   box-shadow because a shadow follows the BORDER box, which in a wide pane reaches 3.75rem into the right
+   margin so run marks pass under it (see below): the hairline ran on past the column's edge, a divider
+   ruling off empty air. The margin strip stays covered — the background is the band's own — only the line
+   stops at the edge of the reading measure. Gated because a divider under an in-flow row would fence the
+   prompt off from the transcript it sits in. */
 .chat-prompt-pinned {
     background: var(--color-card);
-    box-shadow: 0 1px 0 0 var(--color-line);
+}
+.chat-prompt-pinned::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--color-line);
 }
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
    to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the
@@ -346,6 +359,11 @@
     .chat-pane .chat-prompt {
         margin-right: -3.75rem;
         padding-right: 3.75rem;
+    }
+    /* ...but the edge the pin names ends at the column, where the reading does — the strip past it is cover,
+       not surface. */
+    .chat-pane .chat-prompt-pinned::after {
+        right: 3.75rem;
     }
 }
 /* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). A single grid row taken from no height to its
