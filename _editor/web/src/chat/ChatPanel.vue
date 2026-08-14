@@ -7,7 +7,7 @@ import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { openRunSessions } from "../composables/chat/openRun";
 import { DEFAULT_RAIL_WIDTH } from "../composables/chat/chatRail";
-import { chatWide } from "../composables/chat/chatSurface";
+import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
@@ -163,9 +163,16 @@ watch([activeId, tabReveal], () => {
  * held the width it had would answer that by showing one of them — so the column asks for the width its own
  * floor says those panes need, exactly as the popped-out window asks itself to widen (`fit`). Clamped by the
  * layout to a sliver short of the viewport, and left there for the reader to drag back: a width the app chose
- * is still a width, and the seam is where it is undone. */
+ * is still a width, and the seam is where it is undone.
+ *
+ * ONLY WHILE THE PANEL IS ACTUALLY IN THAT COLUMN. `chatWide` answers for the two forms that are on screen
+ * without one (a window of its own, the /chat area), but the chat homed on the rail has a third state neither
+ * of them covers: parked behind its tile while the reader is somewhere else entirely. A run starting there
+ * fired this against a column nobody was looking at — and the width it set was still sitting on the panel days
+ * later, so docking back to the side produced a column half the screen wide that the reader never dragged.
+ * The width of a column the panel does not live in is not the panel's to set. */
 const makeRoomFor = (count: number): void => {
-    if (chatWide.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
+    if (chatWide.value || chatOnRail.value || mobile.value || layout.chatWidth.value >= dockedRoom(count)) {
         return;
     }
     layout.setChatWidth(dockedRoom(count));
