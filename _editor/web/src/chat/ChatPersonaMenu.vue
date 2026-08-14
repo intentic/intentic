@@ -46,7 +46,9 @@ const openPersonas = (): void => {
 </script>
 
 <template>
-    <div class="flex flex-col p-1">
+    <!-- A hairline between rows so a picked row and the row you are hovering next to it read as two highlights
+         rather than one merged block — the same seam the other picker lists keep. -->
+    <div class="flex flex-col gap-0.5 p-1">
         <!-- Nothing set up is the ordinary state, not an error, and the sentence's job is to say what that
              MEANS here (this chat can reach everything) and where personas come from. -->
         <template v-if="empty">
@@ -113,7 +115,7 @@ const openPersonas = (): void => {
                  the sandbox hub from here is how a two-second fix becomes a task for later. -->
             <button
                 type="button"
-                class="ui-row-select mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="openPersonas"
             >
                 <Icon name="cog" class="shrink-0 text-xs text-subtle" />
