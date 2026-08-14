@@ -15,6 +15,11 @@ import { captureScrollback } from "./terminal-session.js";
  * a `git status` after its publish stalls, and picking "the last window" would send the owner to a dead pane
  * with the real prompt one keystroke away in a tab they were never shown.
  *
+ * NO TAB IN A `-F` FORMAT, here or in the code under test. tmux sanitizes what it prints back to a client
+ * whose locale does not say UTF-8, and every control character comes back as an underscore. In an image that
+ * sets no LANG — CI's, where this runs; not the sandbox's, where the daemon does — a tab-separated window
+ * line reads `publish_0`, so nothing below finds a window at all. A space says the same thing in every locale.
+ *
  * EVERY WAIT IS A POLL, never a sleep. This test drives the machine's SHARED tmux server while the rest of the
  * suite runs beside it, so "a command has surely started by now" is a guess about a loaded box — and the shape
  * of that guess going wrong is an intermittent failure in somebody else's afternoon. The session name carries
@@ -44,9 +49,9 @@ const addWindow = async (name: string, command: string, settled: "dead" | "waiti
     await execFileAsync("tmux", ["new-window", "-t", `=${SESSION}:`, "-n", name, command]);
     await vi.waitFor(
         async () => {
-            const { stdout } = await execFileAsync("tmux", ["list-panes", "-s", "-t", `=${SESSION}`, "-F", "#{window_name}\t#{pane_dead}"]);
-            const pane = stdout.split("\n").find((line) => line.startsWith(`${name}\t`));
-            expect(pane).toBe(`${name}\t${settled === "dead" ? "1" : "0"}`);
+            const { stdout } = await execFileAsync("tmux", ["list-panes", "-s", "-t", `=${SESSION}`, "-F", "#{window_name} #{pane_dead}"]);
+            const pane = stdout.split("\n").find((line) => line.startsWith(`${name} `));
+            expect(pane).toBe(`${name} ${settled === "dead" ? "1" : "0"}`);
             if (settled === "waiting") {
                 expect((await captureScrollback(SESSION, 50))?.text ?? "").toContain("OTP:");
             }

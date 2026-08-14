@@ -61,6 +61,15 @@ const asks = new Map<string, TerminalHelp>();
  *
  * `window_activity` rather than list order: tmux renumbers, and the sort has to mean "most recent".
  *
+ * THE FORMAT IS SPACE-SEPARATED AND THE NAME COMES LAST, because a tab does not survive the trip out of tmux.
+ * What a command prints back to a client is sanitized unless that client's locale says UTF-8 (LC_ALL, LC_CTYPE
+ * or LANG), and sanitizing turns every control character — a tab included — into an underscore. The sandbox
+ * image sets LANG (its Dockerfile), so a tab-separated format reads fine wherever the daemon actually runs and
+ * silently stops parsing anywhere else: `#{window_name}\t#{pane_dead}` comes back `publish_0`, every field
+ * lands in the first one, and this returns "nothing is waiting" over a session with a prompt in it. That is
+ * what CI saw. A space costs nothing here — the only free-form field is the window name, so it goes last and
+ * takes the whole rest of the line, spaces and all.
+ *
  * Exported for the integration test alone (terminal-help.integration.test.ts): "which window is the owner
  * sent to" is the one piece of this feature that is entirely tmux's answer rather than this module's, and it
  * is worth pinning against a real server — a stub can only confirm the flags it was written to expect.
@@ -74,7 +83,7 @@ export const liveWindow = async (session: string): Promise<{ id: string; name: s
             "-t",
             `=${session}`,
             "-F",
-            "#{pane_dead}\t#{window_id}\t#{window_name}\t#{window_activity}",
+            "#{pane_dead} #{window_id} #{window_activity} #{window_name}",
         ]));
     } catch {
         // No such session, or no tmux server at all — both are "nothing to hand over".
@@ -83,12 +92,12 @@ export const liveWindow = async (session: string): Promise<{ id: string; name: s
     const live = stdout
         .split("\n")
         .flatMap((line) => {
-            const [dead, id, name, activity] = line.split("\t");
+            const [dead, id, activity, ...name] = line.split(" ");
             if (dead !== "0" || id === undefined || id === "") {
                 return [];
             }
             const at = Number(activity);
-            return [{ id, name: name ?? "run", at: Number.isFinite(at) ? at : 0 }];
+            return [{ id, name: name.join(" ") || "run", at: Number.isFinite(at) ? at : 0 }];
         })
         .toSorted((a, b) => a.at - b.at);
     const newest = live.at(-1);

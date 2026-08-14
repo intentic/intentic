@@ -321,15 +321,21 @@ test("the sandbox-wide workflow limit bounds several fan-outs together", async (
     const runs = await Promise.all(Array.from({ length: 5 }, () => services.workflowRuns.start(openRun(design, REPOS, Date.now()))));
     const executions = runs.map((run) => runWorkflow(services, run, blocking));
 
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (peak >= 4) {
-            break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1));
+    /* Wait for the ceiling to be the thing holding the fan-out back — a HANG BOUND, never a latency
+     * measurement. Five runs each write their opening state before their first turn is in flight, so the
+     * hundred 1ms sleeps this used to be were a guess about how loaded the box is: under the repo-wide gate
+     * they ran out with `peak` still 0.
+     *
+     * Releasing in a `finally` because these turns are parked on `held` and the slots they hold are the
+     * SANDBOX-WIDE ones (module state, shared by every test in this file). A wait that gave up without
+     * releasing left four of the four slots held for the rest of the run, and every later test here failed
+     * waiting for one — which is how one slow moment read as five broken tests.
+     */
+    try {
+        await vi.waitFor(() => expect(peak).toBe(4), { timeout: 10_000, interval: 5 });
+    } finally {
+        release();
     }
-    expect(peak).toBe(4);
-
-    release();
     await Promise.all(executions);
     expect(peak).toBe(4);
     expect((await services.workflowRuns.list()).every((run) => run.state === "done")).toBe(true);
