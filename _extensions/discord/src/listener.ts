@@ -1,4 +1,4 @@
-import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
+import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { Client, Message } from "discord.js";
 
 // The text side of the gateway: for every human-authored message a subscribed bot sees, build a normalized
@@ -164,7 +164,12 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
             try {
                 await ctx.daemon.dispatchStreaming(
                     payload,
-                    framePainter(() => createStreamingPainter(poster, onError, { maxChars: DISCORD_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+                    framePainter(
+                        () => createStreamingPainter(poster, onError, { maxChars: DISCORD_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
+                        // Its own message rather than through the painter: the painter owns the reply text, and a
+                        // turn that failed usually has none to flush.
+                        (reason) => void poster.post(failureNotice(reason, DISCORD_MAX)).catch(onError),
+                    ),
                 );
             } finally {
                 // The turn(s) ended (or the stream broke) — drop the typing heartbeat if our own reply didn't

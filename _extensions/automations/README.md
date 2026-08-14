@@ -54,6 +54,12 @@ disagreement waiting for whichever was edited second.
   approval wins.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
   row therefore preserves webhook identity, disabled state, provider-owned settings and security restrictions.
+- "Run now" answers "I wrote a 3 a.m. cron and cannot try it", so it exists for the triggers you would otherwise
+  have to wait for or forge — and NOT on a chat listener, whose whole prompt is a brief about handling the
+  messages riding with the fire. By hand there are none, so the button could only ever produce an agent asking
+  where the events went, while its turn held the automation against the real mention queued behind it. Testing
+  a listener means sending the bot a message, which exercises the entire path. The daemon refuses it too, so
+  the row's missing button is a rule rather than a decoration.
 - Two automations arrive seeded, each defined once in the contract and offered again as a template only after
   the owner deletes it: the dependency fix chore ("Fix what a dependency change broke"), enabled with a
   60-second hold, and the drafts publisher ("Publish approved drafts"), which the daemon also fires by id the

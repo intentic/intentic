@@ -5,14 +5,17 @@ that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to eac
 
 ## Responsibilities
 
-- Run a connector's gateway process: reconcile provider connections against the daemon's listener state, post
-  liveness status, serve the loopback `/health` (and a connector's own control routes), die cleanly on signals.
+- Run a connector's gateway process: reconcile provider connections against the daemon's listener state — on a
+  30-second poll and on the daemon's `/reconcile` poke, so switching an integration on does not leave the bot
+  deaf until the next tick — post liveness status, serve the loopback `/health` (and a connector's own control
+  routes), die cleanly on signals.
 - Publish process-local discovery and watermark files beneath `.intentic/runtime/extensions/<provider>/`; the
   tree is derived state and is never included in a workspace export.
 - Speak the daemon's four listener routes once, typed against the contract's listener protocol — so a payload a
   connector sends is compile-checked against the schema the daemon parses with.
 - Paint a streaming reply into a channel: one growing, rate-limit-aware message (or WhatsApp's deliberate
-  buffer-and-send-once), one painter per matched automation.
+  buffer-and-send-once), one painter per matched automation — and, when a turn is not going to answer at all,
+  say why instead of leaving the chat with typing dots that stopped.
 
 ## Key files
 

@@ -96,10 +96,11 @@ const runGuard = async (command: string, cwd: string, payload: string | undefine
     }
 };
 
-// An automation never overlaps itself — cron occurrences or webhook events that arrive while its previous run
-// is still going are dropped, not queued. A module singleton (like agent-requests' bridge) so the scheduler's
-// tick and the /automations/{id}/fire route share it.
-const inFlight = new Set<string>();
+// An automation never overlaps itself — but what happens to the fire that arrives while one is running depends
+// on who sent it (see FireOptions.overlap), so the entry is the run in PROGRESS rather than a bare mark: it is
+// what a queued fire waits on. A module singleton (like agent-requests' bridge) so the scheduler's tick, the
+// listener dispatchers and the /automations/{id}/fire route all share one lock per automation.
+const inFlight = new Map<string, Promise<unknown>>();
 
 // A conversation id is a branch name (agent/<id>) and a worktree dir, so it is bounded and charset-checked by
 // the contract's ConversationIdSchema — this builds one that satisfies it from the automation's id. Room for
@@ -154,6 +155,16 @@ export interface FireOptions {
     // The card/tab title for a surfaced wake — the inbound message's first line, which is the only thing that
     // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
     readonly title?: string;
+    /* What to do when this automation is ALREADY running. "drop" (the default) suits a trigger that fires again
+     * on its own: a cron occurrence or a workspace event landing on top of the previous run is not wanted
+     * twice, and the next tick comes round regardless.
+     *
+     * "queue" is for an inbound MESSAGE, and the difference is that there is no next tick. Somebody is waiting
+     * for an answer and the dispatcher holds the only copy of what they said, so a drop loses it outright —
+     * a Discord mention that arrived while an unrelated fire of the same automation happened to be running was
+     * never answered and never retried, and the channel saw nothing at all. A queued fire waits for the run in
+     * progress and then takes its turn, keeping its reply sink open across the wait. */
+    readonly overlap?: "drop" | "queue";
 }
 
 // What a fire leaves behind for a caller that has to run ANOTHER one on the same conversation: the provider
@@ -163,9 +174,44 @@ export interface FireOutcome {
     readonly sessionId?: string;
 }
 
-// Fire one automation now: guard (payload visible) → wake the agent (payload appended to the prompt) → record
-// the run. Callers run it detached from their tick/request lifecycles; tests await it directly.
-export const fireAutomation = async (
+/* Fire one automation now, one turn at a time. This half owns only the overlap policy — whether a fire that
+ * meets a running one is refused or made to wait — and `runFire` below is the fire itself.
+ *
+ * Callers run it detached from their tick/request lifecycles; tests await it directly. */
+export const fireAutomation = async (services: Services, automation: AutomationRecord, wake: WakeFn, options: FireOptions = {}): Promise<FireOutcome> => {
+    const running = inFlight.get(automation.id);
+    if (running !== undefined && options.overlap !== "queue") {
+        // Dropped as overlapping — which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink, and
+        // runFire's finally is never reached from here, so this exit closes the sink itself or nothing does.
+        // A QUEUED fire keeps its sink open instead: it is still going to answer, just not yet.
+        options.stream?.failed("this automation is already running, so the message was not picked up");
+        options.stream?.end();
+        return {};
+    }
+    // The chain IS the lock: each fire runs after the one before it, and a fire that fails still lets the next
+    // one start (`.then(job, job)` — the same queue the web-chat route runs its visitor turns through).
+    const turn = (running ?? Promise.resolve()).then(
+        () => runFire(services, automation, wake, options),
+        () => runFire(services, automation, wake, options),
+    );
+    const settled = turn.then(
+        () => undefined,
+        () => undefined,
+    );
+    inFlight.set(automation.id, settled);
+    void settled.then(() => {
+        // Only the LAST fire in the chain clears the slot. An earlier one finishing must not unlock an
+        // automation whose next turn is already queued behind it — that is the overlap this exists to prevent.
+        if (inFlight.get(automation.id) === settled) {
+            inFlight.delete(automation.id);
+        }
+    });
+    return turn;
+};
+
+// Guard (payload visible) → wake the agent (payload appended to the prompt) → record the run. Reached only
+// through fireAutomation, which guarantees no two runs of one automation are ever inside this at once.
+const runFire = async (
     services: Services,
     automation: AutomationRecord,
     wake: WakeFn,
@@ -179,17 +225,8 @@ export const fireAutomation = async (
         stream,
         origin,
         title,
-    }: FireOptions = {},
+    }: FireOptions,
 ): Promise<FireOutcome> => {
-    if (inFlight.has(automation.id)) {
-        // Dropped as overlapping — which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink. The
-        // finally below is not reached from here (it belongs to the try we have not entered), so this exit
-        // closes the sink itself or nothing ever does.
-        stream?.failed("this automation is already running, so the message was not picked up");
-        stream?.end();
-        return {};
-    }
-    inFlight.add(automation.id);
     try {
         const capped = payload?.slice(0, PAYLOAD_MAX);
         /* ADMISSION — the session.start guard, consulted on EVERY fire including approved replays. A deny
@@ -423,7 +460,6 @@ export const fireAutomation = async (
         await services.turnJournal
             .clearFire(automation.id)
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not cleared"));
-        inFlight.delete(automation.id);
     }
 };
 

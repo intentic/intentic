@@ -112,6 +112,11 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
+            if (automation.trigger.kind === "listener") {
+                throw new ORPCError("BAD_REQUEST", {
+                    message: `A ${automation.trigger.provider} automation can only be fired by a real message — send one to test it.`,
+                });
+            }
             void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "by-hand automation run failed"),
             );

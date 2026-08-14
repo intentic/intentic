@@ -78,10 +78,34 @@ export const startAllExtensionProcesses = async (services: Services): Promise<vo
     }
 };
 
+// How long the poke below waits. The gateway is on loopback and its reconcile is a state fetch plus a connect,
+// so anything slower is a wedged process — and its own poll is the fallback either way.
+const GATEWAY_POKE_TIMEOUT_MS = 10_000;
+
+/* Tell a RUNNING gateway to re-read the listener state now rather than on its own poll.
+ *
+ * Starting the process was never the whole job: a gateway that is already up (any other automation for that
+ * provider, or one just switched off and on) subscribes on a 30-second cycle, so switching an integration on
+ * left the bot deaf for up to half a minute. A message sent in that window was not queued or dropped — it was
+ * never seen, which is indistinguishable from a broken integration to whoever sent it.
+ *
+ * Best-effort by construction: a gateway that just started reconciles at boot anyway, and a poke that fails
+ * leaves the poll to do what it always did. */
+const pokeListenerGateway = async (services: Services, key: string): Promise<void> => {
+    const port = services.processes.portOf(key);
+    if (port === undefined) {
+        return;
+    }
+    await fetch(`http://127.0.0.1:${port}/reconcile`, { method: "POST", signal: AbortSignal.timeout(GATEWAY_POKE_TIMEOUT_MS) }).catch(
+        (error: unknown) => services.logger.debug({ err: error, key }, "listener gateway poke failed — its own poll will converge"),
+    );
+};
+
 // Converge listener-extension processes after an automations or capabilities mutation: bring a now-wanted
-// gateway up, stop a no-longer-wanted one (start is a no-op when already running). Best-effort and detached —
-// a reconcile failure logs, it never fails the mutation that triggered it. Stops only what the manager tracks
-// (`running`): an untracked key has no session left to kill.
+// gateway up, stop a no-longer-wanted one (start is a no-op when already running), and poke whatever is left
+// running so it picks the change up at once. Best-effort and detached — a reconcile failure logs, it never
+// fails the mutation that triggered it. Stops only what the manager tracks (`running`): an untracked key has
+// no session left to kill.
 export const reconcileListenerProcesses = async (services: Services): Promise<void> => {
     try {
         for (const extension of await enabledExtensions(services)) {
@@ -94,13 +118,12 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
                 if (process.autoStart !== true) {
                     continue;
                 }
+                const key = extensionProcessKey(extension.id, process.name);
                 if (desired) {
                     await startExtensionProcess(services, extension, process);
-                } else {
-                    const key = extensionProcessKey(extension.id, process.name);
-                    if (services.processes.running(key)) {
-                        services.processes.stop(key);
-                    }
+                    await pokeListenerGateway(services, key);
+                } else if (services.processes.running(key)) {
+                    services.processes.stop(key);
                 }
             }
         }

@@ -144,6 +144,16 @@ export const createBufferedPainter = (send: (text: string) => Promise<void>, onE
     };
 };
 
+/* What a chat is told when a turn is not going to answer it. The daemon has always known this — a run already
+ * going, a guard that said no, a wake that died on a revoked credential — and hands the reason to the sink; the
+ * gateways used to drop it on the floor, so the channel got typing dots that stopped and nothing else, which
+ * reads as the bot ignoring you rather than as anything having gone wrong.
+ *
+ * The reason goes out as the daemon wrote it: a gateway delivers into the owner's own space, so the real
+ * sentence beats something neutral (the Doorbell, which faces strangers, redacts at its own sink instead).
+ * Marked so it reads as the system speaking rather than as the agent, and clamped to the provider's ceiling. */
+export const failureNotice = (reason: string, maxChars: number): string => `⚠️ ${reason}`.slice(0, maxChars);
+
 /* The fan-out every mention-holding listener runs on a streaming dispatch: one painter per matched automation,
  * keyed by automationId, so two automations answering one mention don't scribble over each other's message.
  * Was copied verbatim into four listeners. `failed` frames carry the provider's own refusal sentence; they end

@@ -255,11 +255,17 @@ const doorbell = computed(() => {
                 <Icon name="pencil" class="text-xs" />
             </button>
 
-            <!-- Fire it now. The reason this exists at all: a 3 a.m. cron, a webhook you would have to forge, a
-                 Discord mention you would have to provoke — none of them testable by waiting. Hover-revealed
-                 beside Delete, because it is an occasional act, not part of reading the column of states. It
-                 works on a disabled row too: trying the prompt before switching it on is the point. -->
+            <!-- Fire it now. The reason this exists at all: a 3 a.m. cron or a webhook you would have to forge —
+                 neither testable by waiting. Hover-revealed beside Delete, because it is an occasional act, not
+                 part of reading the column of states. It works on a disabled row too: trying the prompt before
+                 switching it on is the point.
+
+                 A chat listener has no button, because a by-hand fire carries no message — it could only ever
+                 wake an agent that asks where the events went, and it would hold the automation's turn against
+                 the real mention arriving behind it. Testing one means sending the bot a message, which is the
+                 whole path anyway. -->
             <button
+                v-if="trigger.kind !== `listener`"
                 type="button"
                 class="shrink-0 cursor-pointer text-muted transition-colors hover:text-content md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
                 :disabled="busy"

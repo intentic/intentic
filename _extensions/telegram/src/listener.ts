@@ -1,4 +1,11 @@
-import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage, type StreamPoster } from "@intentic/connector-runtime";
+import {
+    createStreamingPainter,
+    failureNotice,
+    framePainter,
+    type GatewayCtx,
+    type ListenerMessage,
+    type StreamPoster,
+} from "@intentic/connector-runtime";
 import { type TelegramConnection, TelegramApiError, type TelegramMessage, type TelegramUpdate } from "./client.js";
 
 /* The inbound half of the gateway: every update a connected bot long-polls becomes a normalized listener
@@ -266,7 +273,12 @@ export const createTelegramListener = (ctx: GatewayCtx, connections: () => Reado
         try {
             await ctx.daemon.dispatchStreaming(
                 payload,
-                framePainter(() => createStreamingPainter(poster, onError, { maxChars: TELEGRAM_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+                framePainter(
+                    () => createStreamingPainter(poster, onError, { maxChars: TELEGRAM_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
+                    // Its own message rather than through the painter: the painter owns the reply text, and a
+                    // turn that failed usually has none to flush.
+                    (reason) => void poster.post(failureNotice(reason, TELEGRAM_MAX)).catch(onError),
+                ),
             );
         } finally {
             // The turn(s) ended (or the stream broke) — the reply is there, so retire the indicator.

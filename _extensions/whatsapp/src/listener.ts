@@ -1,4 +1,4 @@
-import { createBufferedPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
+import { createBufferedPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { WhatsAppConnection } from "./client.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
 
@@ -262,7 +262,12 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         try {
             await ctx.daemon.dispatchStreaming(
                 payload,
-                framePainter(() => createBufferedPainter(send, onError, WHATSAPP_MAX)),
+                framePainter(
+                    () => createBufferedPainter(send, onError, WHATSAPP_MAX),
+                    // Its own message rather than through the painter: the painter owns the reply text, and a
+                    // turn that failed usually has none to send.
+                    (reason) => void send(failureNotice(reason, WHATSAPP_MAX)).catch(onError),
+                ),
             );
         } finally {
             stopTyping(connection, chat);

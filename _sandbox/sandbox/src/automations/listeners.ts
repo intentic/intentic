@@ -48,10 +48,10 @@ export interface MessageBatcher {
     readonly push: (line: string, context: MessageContext) => void;
 }
 
-// Batches payload lines into one wake. fireAutomation's inFlight set DROPS concurrent fires, so naive
-// per-message fires would silently lose messages arriving while the agent runs — this serializes instead:
-// a burst debounces into one fire, and lines arriving mid-run accumulate and fire once more when it finishes
-// (no debounce on the follow-up; they waited long enough).
+// Batches payload lines into one wake: a burst debounces into one fire, and lines arriving mid-run accumulate
+// and fire once more when it finishes (no debounce on the follow-up; they waited long enough). Fires this
+// batcher did not start are handled a level down — the fire itself asks to QUEUE rather than be dropped, so a
+// message never loses a race with an approved wake or a restart's re-fire.
 export const createMessageBatcher = (
     fire: (payload: string, context: MessageContext) => Promise<void>,
     onError: (error: unknown) => void,
@@ -185,6 +185,11 @@ export const dispatchListenerMessage = async (
                     );
                     const settled = await fireAutomation(services, fresh, wake, {
                         payload,
+                        // Somebody is waiting in a channel and this batch is the only copy of what they said, so
+                        // a fire that meets a run already going WAITS rather than being thrown away. The
+                        // batcher's own serialization only covers fires it started; the run in the way can just
+                        // as easily be an approved wake or one re-fired by a restart.
+                        overlap: "queue",
                         conversationId: session.conversationId,
                         // Resume the provider session the last message in this channel ran on, so a follow-up
                         // continues the thread rather than meeting the same people again.

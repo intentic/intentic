@@ -268,6 +268,21 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await expect(client.automations.run({ id: "e2e-run-now" })).rejects.toThrow();
     }, 60_000);
 
+    it("run now: a chat listener refuses, because a by-hand fire carries none of the messages it exists to handle", async () => {
+        await client.automations.upsert({
+            id: "e2e-run-now-listener",
+            trigger: { kind: "listener", provider: "discord" },
+            prompt: "noop",
+            enabled: true,
+        });
+        // Refused rather than run: firing this by hand could only wake an agent told to handle events and given
+        // none — and that pointless turn would hold the automation against a real mention arriving behind it.
+        await expect(client.automations.run({ id: "e2e-run-now-listener" })).rejects.toThrow(/real message/);
+        const { automations } = await client.automations.list();
+        expect(automations.find((automation) => automation.id === "e2e-run-now-listener")?.runs).toEqual([]);
+        await client.automations.remove({ id: "e2e-run-now-listener" });
+    }, 60_000);
+
     it("capability → composed overlay → a real `docker build` of it against the published base image", async () => {
         // The vpn capability carries a Dockerfile fragment + runtime directives AND supports remove (docker's
         // deliberately doesn't). The stock container carries no VPN client, so the apply reports the rebuild

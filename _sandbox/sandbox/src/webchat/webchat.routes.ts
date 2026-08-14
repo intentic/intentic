@@ -45,9 +45,10 @@ const rateLimited = (key: string, now: number): boolean => {
 const daily = dailyBudget();
 
 /* A web-chat automation runs ONE turn at a time: concurrent visitor messages QUEUE instead of overlapping, so
- * no request is dropped — fireAutomation's own inFlight guard DROPS overlaps, which is wrong for support where
- * every message must be answered. Keyed by automation id; a job that throws still lets the next one run
- * (.then(job, job)).
+ * no request is dropped — every message must be answered in support. This queue covers the whole job (the fire
+ * AND the thread-session settle that must follow it); the fire additionally asks the scheduler to queue, which
+ * is what keeps a visitor's turn from losing a race with a fire this route never started. Keyed by automation
+ * id; a job that throws still lets the next one run (.then(job, job)).
  * ponytail: serial per automation — fine for one sandbox's support load. Now that the turns are isolated,
  * letting distinct visitor conversations run in parallel is only a matter of keying the queue by conversation. */
 const queues = new Map<string, Promise<unknown>>();
@@ -246,6 +247,9 @@ export const createWebchatRoutes = (
                 await enqueue(automation.id, async () => {
                     const settled = await fireAutomation(services, automation, wake, {
                         payload,
+                        // The queue above serializes THIS route's turns; this serializes against everyone else's
+                        // (an approved wake, a restart's re-fire), so a visitor's message is never the one dropped.
+                        overlap: "queue",
                         stream: stream.turn,
                         // A visitor's message opens a conversation on the fleet exactly like a Discord mention does —
                         // the owner watches the support turn live and can take the thread over from the same tab. The

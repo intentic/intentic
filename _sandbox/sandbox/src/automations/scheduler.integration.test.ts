@@ -516,3 +516,93 @@ test("the webchat floor keys off its own source — a listener rule does not rea
     expect(heldPrompts).toEqual([]);
     expect((await heldServices.approvals.list())[0]?.automationId).toBe("door");
 });
+
+/* A wake that blocks until the test lets it go, so a second fire can be made to arrive mid-run. The gate
+ * resolves when the wake has actually started, which is what a test must wait for before firing again — the
+ * fire is only "in flight" once the turn is running. */
+const gatedWake = (prompts: string[]): { wake: WakeFn; started: Promise<void>; release: () => void } => {
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+    return {
+        started: started.promise,
+        release: held.resolve,
+        wake: async function* (_services, input) {
+            prompts.push(input.prompt);
+            started.resolve();
+            await held.promise;
+            yield { kind: "done" };
+        },
+    };
+};
+
+test("a fire meeting a running one is dropped by default, and the sink is told why rather than left silent", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("busy"));
+    const prompts: string[] = [];
+    const { wake, started, release } = gatedWake(prompts);
+    const record = (await services.automations.get("busy")) as AutomationRecord;
+    const first = fireAutomation(services, record, wake, { payload: "one" });
+    await started;
+
+    const failures: string[] = [];
+    const ends: number[] = [];
+    const stream = { delta: () => {}, failed: (reason: string) => void failures.push(reason), end: () => void ends.push(1) };
+    expect(await fireAutomation(services, record, wake, { payload: "two", stream })).toEqual({});
+    // Refused, and SAID so — a dropped fire that closed its sink in silence read as the agent having nothing
+    // to say, which is the opposite of what happened.
+    expect(failures).toEqual(["this automation is already running, so the message was not picked up"]);
+    expect(ends).toHaveLength(1);
+    release();
+    await first;
+    expect(prompts).toHaveLength(1);
+});
+
+test(`overlap: "queue" makes an inbound message wait its turn instead of being lost`, async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("busy"));
+    const prompts: string[] = [];
+    const { wake, started, release } = gatedWake(prompts);
+    const record = (await services.automations.get("busy")) as AutomationRecord;
+    const first = fireAutomation(services, record, wake, { payload: "one" });
+    await started;
+
+    const failures: string[] = [];
+    // The second fire is a message somebody is waiting on: it queues, so its sink stays open and unfailed.
+    const queued = fireAutomation(services, record, fakeWake(prompts), {
+        payload: "two",
+        overlap: "queue",
+        stream: { delta: () => {}, failed: (reason: string) => void failures.push(reason), end: () => {} },
+    });
+    // Still only the first turn — the queued one has not jumped the running one.
+    expect(prompts).toHaveLength(1);
+    release();
+    await first;
+    await queued;
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("two");
+    expect(failures).toEqual([]);
+    // Both fires reached a turn, so both are on the row's history.
+    expect((await services.automations.get("busy"))?.runs).toHaveLength(2);
+});
+
+test("the queue survives a run that fails — the next fire still gets its turn", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("busy"));
+    const prompts: string[] = [];
+    const record = (await services.automations.get("busy")) as AutomationRecord;
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+    const throwingWake: WakeFn = async function* (_services, input) {
+        prompts.push(input.prompt);
+        started.resolve();
+        await held.promise;
+        throw new Error("wake exploded");
+    };
+    const first = fireAutomation(services, record, throwingWake, { payload: "one" });
+    await started.promise;
+    const queued = fireAutomation(services, record, fakeWake(prompts), { payload: "two", overlap: "queue" });
+    held.resolve();
+    await first;
+    await queued;
+    expect(prompts).toHaveLength(2);
+});

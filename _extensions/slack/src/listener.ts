@@ -1,4 +1,4 @@
-import { createStreamingPainter, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
+import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
 import type { SlackConnection } from "./client.js";
 
 /* The inbound half of the gateway: every Socket Mode envelope a connected app receives becomes a normalized
@@ -236,7 +236,12 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         try {
             await ctx.daemon.dispatchStreaming(
                 payload,
-                framePainter(() => createStreamingPainter(poster, onError, { maxChars: SLACK_MAX, editIntervalMs: EDIT_INTERVAL_MS })),
+                framePainter(
+                    () => createStreamingPainter(poster, onError, { maxChars: SLACK_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
+                    // Its own message in the same thread rather than through the painter: the painter owns the
+                    // reply text, and a turn that failed usually has none to flush.
+                    (reason) => void poster.post(failureNotice(reason, SLACK_MAX)).catch(onError),
+                ),
             );
         } finally {
             // The turn(s) ended (or the stream broke) — the reply is there, so retire the acknowledgement.

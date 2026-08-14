@@ -36,6 +36,13 @@ export const automationsContract = {
      * main reason to press this, and unlike the /automations/{id}/fire webhook there is no outside sender here to
      * fail closed against.
      *
+     * NOT FOR A LISTENER, which is the one trigger whose fire is nothing without the thing that fired it. A
+     * listener's prompt is a brief about handling the events riding with it, and by hand there are none — so the
+     * button could only ever produce an agent told to handle events, handed none, asking where they went. Worse,
+     * that pointless run took the automation's turn: a real mention arriving while it ran had to wait behind it.
+     * Refused here rather than hidden in the UI alone, because the honest answer to "how do I test this" is to
+     * send the bot a message, which costs nothing and tests the whole path.
+     *
      * Acks immediately with the turn detached, like /fire and `approve`: the guard alone may take a minute, and
      * the run history (with the session that makes it openable) is where the outcome lands. */
     run: oc.route({ method: "POST", path: "/automations/{id}/run" }).input(AutomationIdParamSchema).output(OkSchema),

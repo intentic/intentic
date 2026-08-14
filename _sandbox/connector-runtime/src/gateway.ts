@@ -208,6 +208,20 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         }
     };
 
+    /* Reconciles never overlap and never reject. The loop below and the daemon's poke share one tail, so a poke
+     * landing mid-tick waits for that tick instead of racing it into a second connection for one slot. */
+    let reconciling: Promise<void> = Promise.resolve();
+    const reconcileNow = (): Promise<void> => {
+        reconciling = reconciling.then(async () => {
+            try {
+                await reconcile();
+            } catch (error) {
+                log.error({ err: error }, "reconcile failed");
+            }
+        });
+        return reconciling;
+    };
+
     const postStatus = async (): Promise<void> => {
         const connections = connectors.map((connector) => {
             const slotId = (hooks.slotIdOf ?? ((entry: ConnectorEntry<TConfig>): string => entry.id))(connector);
@@ -240,6 +254,15 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
             try {
                 const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
                 if (req.method === "GET" && path === "/health") {
+                    return send("ok");
+                }
+                /* "Re-read /state now" — the daemon pokes this the moment a listener automation or a connector
+                 * capability changes. Without it, switching an integration ON left the bot deaf until the poll
+                 * below came round: a message sent in that window was never seen at all, which reads as the
+                 * integration being broken rather than as it not being up yet. Awaited, so the daemon's call
+                 * returns only once the connections match. */
+                if (req.method === "POST" && path === "/reconcile") {
+                    await reconcileNow();
                     return send("ok");
                 }
                 const handled = await hooks.routes?.(req, () => readBody(req));
@@ -281,8 +304,8 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     // A managed stop is `tmux kill-session`, which delivers SIGHUP (the pty vanishing), not SIGTERM.
     process.on("SIGHUP", shutdown);
 
-    await reconcile();
-    setInterval(() => void reconcile(), RECONCILE_MS);
+    await reconcileNow();
+    setInterval(() => void reconcileNow(), RECONCILE_MS);
     await postStatus();
     setInterval(() => void postStatus(), spec.statusMs ?? STATUS_MS);
 };
