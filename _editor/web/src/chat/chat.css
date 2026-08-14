@@ -285,9 +285,11 @@
 }
 /* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands.
 
-   Narrow, it sits on the end of its own line, and that line is as tall as the mark: the transcript has no room
+   Narrow, it sits at the head of its own line, and that line is as tall as the mark: the transcript has no room
    beside it, and hanging the mark outside the column would either clip it or drag a horizontal scrollbar across
    the whole panel (the same reason ChatForkCut's mark lives in the column's inset rather than past it).
+
+   The LEFT margin, opposite the fork mark's — ChatToolRun says why.
 
    Given room, the mark moves OUT into the margin and the line stops carrying it. Two things follow, which is
    the point of the move: the line is then a hairline rather than a row tall enough to hold a badge, and it can
@@ -311,7 +313,7 @@
        is silently not drawn. Positioned out in the margin, the mark laid out correctly and was never painted —
        leaving the bare line the mark was the whole point of.
        So the row that carries a run grows outward by the mark's reach and gives the width straight back as
-       padding. The content box does not move — the reading measure, the bubbles and the line are all exactly
+       padding — leftward, which is where the mark now hangs. The content box does not move — the reading measure, the bubbles and the line are all exactly
        where they were — but the clip edge now sits past the mark. A quarter-rem more than the mark asks for, so
        the two are never flush at fractional zoom. Only rows that HAVE a mark pay it; nothing else in a turn is
        drawn outside its row, so nothing else needs the room.
@@ -323,8 +325,8 @@
        the height it did and the turns keep their spacing — and it is quoted deliberately over what the mark
        asks for, so tightening the bar again does not silently start slicing lids. */
     .chat-pane .chat-message:has(.chat-run-bar) {
-        margin-right: -3.75rem;
-        padding-right: 3.75rem;
+        margin-left: -3.75rem;
+        padding-left: 3.75rem;
         margin-block: -0.5rem;
         padding-block: 0.5rem;
     }
@@ -334,7 +336,7 @@
     .chat-pane .chat-run-mark {
         position: absolute;
         top: 50%;
-        right: -3.5rem;
+        left: -3.5rem;
         translate: 0 -50%;
     }
     .chat-pane .chat-run-bar-open {
@@ -357,8 +359,8 @@
        The same width, cancelled the same way, so the prompt's content box and its bubble do not move a pixel —
        only the surface that hides what passes under it gets as wide as the rows passing under it. */
     .chat-pane .chat-prompt {
-        margin-right: -3.75rem;
-        padding-right: 3.75rem;
+        margin-left: -3.75rem;
+        padding-left: 3.75rem;
     }
     /* ...but the edge the pin names ends at the column, where the reading does — the strip past it is cover,
        not surface. */

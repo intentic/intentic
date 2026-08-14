@@ -4,13 +4,18 @@ import type { ChatTool } from "../composables/chat/transcript";
 import ChatToolRows from "./ChatToolRows.vue";
 import { summarizeRun } from "./toolRun";
 
-/* WHAT A TURN'S TOOL CALLS LOOK LIKE WHEN THEY ARE HIDDEN: a soft rule running out to the right of the
- * transcript, ending in a mark that says how many calls there were and what the most notable of them was.
+/* WHAT A TURN'S TOOL CALLS LOOK LIKE WHEN THEY ARE HIDDEN: a mark out in the transcript's left margin saying
+ * how many calls there were and what the most notable of them was, with a soft rule trailing off to the right.
  *
  * It is a JOIN, not a row. A turn's narration is the thing being read; the calls behind it are an aside, and an
  * aside drawn at the weight of a row competes with the sentences on either side of it — which is the whole
- * reason they are hidden. So: no fill, no box, a hairline that fades in from the left and leads the eye out to
- * the one mark that carries information. Everything about it is quiet except the fact that it is there.
+ * reason they are hidden. So: no fill, no box, a hairline that leaves the mark and fades out across the column.
+ * Everything about it is quiet except the fact that it is there.
+ *
+ * ON THE LEFT, where every row of the transcript already begins — the eye meets the count on its way into the
+ * line rather than having to run the width of the pane to find it, and the right margin stays the fork mark's
+ * (ChatForkCut) instead of two different asides sharing one gutter. It reads the same either way round, which
+ * is why the pair mirrors cleanly: the line still leads to the mark, from the other side.
  *
  * Opened, it shows the very same rows the shown mode draws (ChatToolRows) — for this run only, and only until
  * it is clicked shut. There is no third rendering of a tool call anywhere in the app. */
@@ -49,12 +54,6 @@ const hint = computed(() => {
             :aria-label="hint"
             @click="toggle"
         >
-            <!-- Fades in from the left and arrives at the mark: the gradient is what makes this read as a line
-                 LEADING somewhere rather than as a divider cutting the transcript in half. -->
-            <span
-                class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
-                :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
-            ></span>
             <!-- The ring is PAINTED, not a border: `border-width` never renders below one CSS pixel — Chromium
                  clamps a 0.5px border back up to 1px — whereas a box-shadow spread is rasterized, so half a
                  pixel is half a pixel wherever the display can resolve one (measured: one device pixel against
@@ -82,6 +81,14 @@ const hint = computed(() => {
                 <Icon v-else :name="run.icon" class="text-2xs" />
                 {{ run.count }}
             </span>
+            <!-- Leaves the mark and fades out to the right: the gradient is what makes this read as a line
+                 LEADING somewhere rather than as a divider cutting the transcript in half — and it reads that
+                 way from whichever end the mark is on, so mirroring the pair mirrors the gradient with it.
+                 Vivid where it meets the mark, gone by the far edge. -->
+            <span
+                class="chat-run-line h-px flex-1 bg-gradient-to-l from-transparent transition-colors"
+                :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
+            ></span>
         </button>
         <!-- The calls arrive by growing into place rather than appearing whole: opening a run moves everything
              below it down by however tall the run happens to be, and a jump that size, under the sentence you

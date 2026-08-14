@@ -2097,16 +2097,16 @@
           "what": "design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors."
         }
       ],
-      "behind": 13,
+      "behind": 15,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 118,
       "hasTests": false,
-      "loc": 12250,
+      "loc": 12267,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
       "readmeRev": "b6f5b5bc612e1f1e1c00f1268c690dd56c1883b3",
-      "reason": "13 commits have touched this package since its README was written",
+      "reason": "15 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786648510000
     },
@@ -2168,17 +2168,18 @@
           "what": "the full route table."
         }
       ],
-      "behind": 0,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 865,
+      "files": 866,
       "hasTests": true,
-      "loc": 140777,
+      "loc": 141290,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
-      "readmeRev": "b44bc81377bb23892796ece38c0eac01ebf8ce0d",
-      "stale": false,
-      "updatedAt": 1786745334000
+      "readmeRev": "2e02ba1198f9b45168793ff66b2135e66172ee3d",
+      "reason": "3 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1786746201000
     },
     {
       "anchors": [
@@ -3571,7 +3572,7 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
       "files": 796,
@@ -3580,7 +3581,7 @@
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "fe1ee265a9ab2b112888bd62c095dd9655ea4337",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786738534000
     },
@@ -4538,7 +4539,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1786746009327,
+  "generatedAt": 1786747801454,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

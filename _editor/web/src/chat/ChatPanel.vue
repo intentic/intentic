@@ -6,6 +6,7 @@ import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { transcriptView } from "../composables/chat/transcriptClock";
 import { openRunSessions } from "../composables/chat/openRun";
+import { DEFAULT_RAIL_WIDTH } from "../composables/chat/chatRail";
 import { chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -48,8 +49,10 @@ const resizing = ref(false);
  * been asked to be here.
  */
 const MIN_PANE_PX = 352;
-// The rail beside them (ChatTabs' `w-40` plus its padding) — the part of the window the panes never get.
-const RAIL_PX = 176;
+// The chat list's rail beside them — the part of the window the panes never get. Its own default (chatRail.ts)
+// rather than a number copied here: a reader who has dragged it wider is asking the panes to scroll a little
+// sooner, which is their trade to make, but the width a fresh window opens at must not be guessed at twice.
+const RAIL_PX = DEFAULT_RAIL_WIDTH;
 
 /* WHICH CHATS ARE ON SCREEN. The store holds the pane set, and what a window can DRAW of it is a question about
  * room: every pane keeps its floor, so a set only stands side by side where the columns fit at that width.

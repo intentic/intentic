@@ -151,19 +151,33 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
 });
 
+/* WHEN THE RAIL HOLDS A SEAT FOR THE CHAT — the tile is where the chat IS, so it stands only while the chat is
+ * actually behind it. That means the rail is its home (docked to the side, the panel is already on every screen
+ * and a tile would be a second door to it) AND it has not left for a window of its own: a tile leading to an
+ * area that would only say "your chat is elsewhere" is a seat held for something that isn't coming.
+ *
+ * WITH ONE EXCEPTION, and it is the case where the plain rule reads worst: popping out FROM the chat area. The
+ * user is standing on /chat, so retiring its tile in that same frame would leave the rail with nothing lit
+ * while the view it belongs to is still on screen — the shell disowning where you are, as the reward for a
+ * press that was only about a window. So the seat is kept for as long as that view is, and goes with it: the
+ * next tile pressed is both the view change and the tile's exit. (`restoring` counts as away — a window from
+ * before a reload is on its way back, and the panel is not in this window either.)
+ *
+ * The way back never depended on the tile anyway: F9, the floating window's own menu row, or its ×, each of
+ * which lands the chat in its home and (toggleChatPopout) walks to the area where the seat lights up again. */
+const chatAway = computed(() => poppedOut.value || chatRestoring.value);
+const chatTileSeated = computed(() => chatOnRail.value && (!chatAway.value || route.name === `chat`));
+
 // The thin shell: three always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
 // workspace content (repo facts from /panels) and contribute their own sidebar elements (Infrastructure, Live
 // status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
 // status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
-    // THE CHAT'S SEAT, present exactly while the rail IS the chat's home (chatSurface.ts): opening it fills
-    // everything right of the rail with the panel in its wide (pop-out) form, and every other tile leaves the
-    // chat waiting behind this one — never in a side column, which is the whole meaning of the choice. Docked
-    // to the side instead, the tile would be a second door to a panel already on every screen, so it is
-    // absent. First in the Work band because talking to the agent is the product's primary surface; unbadged,
-    // because the Agents tile below carries the debt.
-    ...(chatOnRail.value
+    // THE CHAT'S SEAT — see chatTileSeated for exactly when the rail holds one. First in the Work band because
+    // talking to the agent is the product's primary surface; unbadged, because the Agents tile below carries
+    // the debt.
+    ...(chatTileSeated.value
         ? [
               {
                   id: `chat`,

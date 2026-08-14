@@ -12,6 +12,7 @@ import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
+import { clampRailWidth, DEFAULT_RAIL_WIDTH, RAIL_WIDTH_KEY } from "../composables/chat/chatRail";
 import { chatOnRail, chatWide, toggleChatHome, toggleChatPopout } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
@@ -178,12 +179,8 @@ watch(
 
 // --- Rail width ---------------------------------------------------------------------------------
 // The rail resizes off its LEFT edge (pointer capture, double-click resets) — it stands at the right of every
-// wide surface — and persists like the panel widths in useLayout, but locally, because it exists only in the
-// wide forms. In app pixels for the same reason as those: the rail holds chat cards, so the width that fits
-// their titles moves with the text size.
-const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
-const DEFAULT_RAIL_WIDTH = 240;
-const clampRailWidth = (px: number): number => Math.round(Math.max(176, Math.min(px, 480)));
+// wide surface — and persists locally, because it exists only in those forms. The bounds themselves are
+// chatRail.ts's: the panel needs them too, to know what the panes get.
 const readRailWidth = (): number => {
     try {
         const parsed = Number.parseInt(localStorage.getItem(RAIL_WIDTH_KEY) ?? ``, 10);
