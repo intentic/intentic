@@ -329,6 +329,17 @@
     .chat-pane .chat-run-bar-open .chat-run-mark {
         top: 0.55rem;
     }
+    /* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. The band's
+       opaque rectangle stops at the column's own edge, while the rows carrying a mark now run 3.75rem wider —
+       so a turn scrolling beneath its pinned prompt slid its LINES out of sight on schedule and left every one
+       of their marks stacked up in the strip beside the prompt, a column of pills attached to nothing. It reads
+       as the turn's calls having come loose, which is exactly what it looks like and nothing like what happened.
+       The same width, cancelled the same way, so the prompt's content box and its bubble do not move a pixel —
+       only the surface that hides what passes under it gets as wide as the rows passing under it. */
+    .chat-pane .chat-prompt {
+        margin-right: -3.75rem;
+        padding-right: 3.75rem;
+    }
 }
 /* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). A single grid row taken from no height to its
    content's — the only way to animate to a height that is only known once the rows are mounted, and the reason

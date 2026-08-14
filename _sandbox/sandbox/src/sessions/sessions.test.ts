@@ -173,14 +173,38 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
     // The tool_result-only user message is plumbing, not something the user said — four stored messages, three bubbles.
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
     expect(messages[0]).toEqual({ role: "user", text: "fix the config" });
-    expect(messages[1]?.thinking).toBe("check it first");
-    expect(messages[1]?.tools?.map((tool) => [tool.name, tool.category, tool.status])).toEqual([
+    // The prose block closed its bubble, so the calls it introduced sit in the one below — the live arrangement
+    // (turnReducer's text_end split), where the sentence stands above the cards it announced.
+    expect(messages[1]).toEqual({ role: "assistant", text: "Reading the config.", thinking: "check it first" });
+    expect(messages[2]?.text).toBe("Done.");
+    expect(messages[2]?.tools?.map((tool) => [tool.name, tool.category, tool.status])).toEqual([
         ["Read", "read", "completed"],
         ["Bash", "execute", "failed"],
     ]);
-    expect(messages[1]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
-    // Each stored assistant message is its own bubble, so the closing prose does not merge into the first.
-    expect(messages[2]).toEqual({ role: "assistant", text: "Done." });
+    expect(messages[2]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
+});
+
+/* THE SHAPE THE STORE ACTUALLY WRITES, and the regression this is here for: the SDK files a fresh assistant
+ * message around every CONTENT block, so a turn that made three calls between two sentences is stored as three
+ * lone tool_use messages with a tool_result message between each pair. Folded per stored message that reopened
+ * as three separate one-call runs — a ladder of hairlines where the tab had shown a single run of three. */
+test("calls stored one per assistant message restore as one run, not one bubble each", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "plan the work" } },
+        { type: "assistant", message: { content: [{ type: "thinking", thinking: "look around first" }] } },
+        ...["t1", "t2", "t3"].flatMap((id) => [
+            { type: "assistant", message: { content: [{ type: "tool_use", id, name: "Bash", input: { command: `echo ${id}` } }] } },
+            { type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: id }] } },
+        ]),
+        { type: "assistant", message: { content: [{ type: "text", text: "Found it." }] } },
+    ]);
+
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[1]?.tools?.map((tool) => tool.status)).toEqual(["completed", "completed", "completed"]);
+    expect(messages[1]?.text).toBe("Found it.");
+    expect(messages[1]?.thinking).toBe("look around first");
 });
 
 /* The provider's own store keeps the prompt the daemon SENT, note and all — so a conversation the daemon

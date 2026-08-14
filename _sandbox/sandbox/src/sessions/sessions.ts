@@ -110,9 +110,7 @@ const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
 // card is indistinguishable from the one it replaces). `dir` is the turn's working dir — tool locations and
 // diff paths are relative to it, exactly as they were when streamed.
 //
-// One bubble per stored assistant message, which is what reproduces the live interleaving: the SDK emits a
-// fresh assistant message around each prose block, so its tool_use blocks land under the prose that
-// introduced them instead of all hanging off the end of the turn.
+// The bubble boundary is the PROSE BLOCK, not the stored message — see restoredSessionMessages.
 export const readWorkspaceSession = async (dir: string, id: string): Promise<RestoredMessage[]> => {
     // The dir-scoped read covers the workspace root and its LIVE worktrees — the SDK resolves worktree
     // project dirs through `git worktree list`. An ARCHIVED agent's transcript is keyed by its retired
@@ -127,14 +125,45 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
 /* The stored-message → transcript reduction itself, over whatever set of SDK session messages it is handed.
  * Exported because a SUBAGENT's transcript is the same file format read from a different file
  * (getSubagentMessages — see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its
- * parent's are assembled by identical rules and cannot come to disagree about what a stored turn looks like. */
+ * parent's are assembled by identical rules and cannot come to disagree about what a stored turn looks like.
+ *
+ * THE BUBBLE BOUNDARY IS THE PROSE BLOCK, exactly as it is live (`text_end` — see turn-transcript.ts's fold and
+ * the client's turnReducer): everything an assistant writes accumulates into one bubble, and a text block ending
+ * closes it, so the calls a paragraph introduced sit under that paragraph and the next paragraph opens a fresh
+ * bubble below them.
+ *
+ * It used to be one bubble per stored MESSAGE, on the assumption that the store files a fresh assistant message
+ * around each prose block. It files one around each CONTENT block — so a turn that made fourteen calls between
+ * two sentences restored as fourteen one-call bubbles, and a reopened chat showed a ladder of fourteen separate
+ * runs where it had shown a single run of fourteen while it streamed. Reading a conversation back must not
+ * rearrange it. */
 export const restoredSessionMessages = (
     messages: readonly { readonly type?: string; readonly message?: unknown }[],
     dir: string,
 ): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
+    // The bubble being written into, opened by the first thing that lands in it and closed by a prose block (or
+    // by the next thing the user says). Kept OPEN across the tool_result messages between two calls: those are
+    // the SDK's plumbing, and closing on one is what split a turn's run into a card apiece.
+    let bubble: { text: string; thinking: string; tools: RestoredToolCall[] } | undefined;
+    const open = (): { text: string; thinking: string; tools: RestoredToolCall[] } => (bubble ??= { text: "", thinking: "", tools: [] });
+    // Mirrors the daemon's own `flush`: a bubble that produced nothing at all is not a row.
+    const flush = (): void => {
+        const current = bubble;
+        bubble = undefined;
+        if (current === undefined || (current.text.length === 0 && current.thinking.length === 0 && current.tools.length === 0)) {
+            return;
+        }
+        out.push({
+            role: "assistant",
+            text: current.text,
+            ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
+            ...(current.tools.length > 0 ? { tools: current.tools } : {}),
+        });
+    };
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
-    // card is already in `out`; it is mutated in place, so ordering needs no second pass.
+    // card is in the open bubble or already in `out`; either way it is mutated in place, so a result that lands
+    // after its bubble closed needs no second pass.
     const awaiting = new Map<string, RestoredToolCall>();
     // Which cards carry a call-time diff: a successful Edit/Write result is the redundant "file updated"
     // snippet, so the diff stays the card's content. Errors DO replace it (the text is the reason) — the same
@@ -175,6 +204,9 @@ export const restoredSessionMessages = (
             // them against the main root even for worktree turns, so `dir` — always the root here — is the
             // right base). An attachment-only message strips to empty text but still redraws its chips.
             if (text.length > 0) {
+                // Words of their own, so whatever the agent was still writing into is finished and closed above
+                // them. (A tool_result-only message never reaches here, which is the point.)
+                flush();
                 const unwrapped = unwrapStoredPrompt(text);
                 /* A turn the daemon re-ran after an interruption stores the original prompt behind a note saying
                  * why (RESUME_NOTES) — read exactly as the daemon's own record reads it (turn-transcript.ts): a
@@ -206,14 +238,18 @@ export const restoredSessionMessages = (
             continue;
         }
 
-        let text = "";
-        let thinking = "";
-        const tools: RestoredToolCall[] = [];
         for (const block of blocks) {
             if (block.type === "text" && typeof block.text === "string") {
-                text += block.text;
+                const current = open();
+                current.text += block.text;
+                // The block ended here, and a block that WROTE something closes its bubble — the live
+                // `text_end` rule, down to the empty-block exemption (a model can open a text block and go
+                // straight to a tool; retiring on that would strand the bubble empty).
+                if (current.text.length > 0) {
+                    flush();
+                }
             } else if (block.type === "thinking" && typeof block.thinking === "string") {
-                thinking += block.thinking;
+                open().thinking += block.thinking;
             } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
                 const target = toolTarget(block.input);
                 const locations = toolLocations(block.input, dir);
@@ -234,18 +270,13 @@ export const restoredSessionMessages = (
                     ...(locations !== undefined ? { locations } : {}),
                     ...(diff !== undefined ? { content: [diff] } : {}),
                 };
-                tools.push(tool);
+                open().tools.push(tool);
                 awaiting.set(block.id, tool);
             }
         }
-        if (text.length > 0 || thinking.length > 0 || tools.length > 0) {
-            out.push({
-                role: "assistant",
-                text,
-                ...(thinking.length > 0 ? { thinking } : {}),
-                ...(tools.length > 0 ? { tools } : {}),
-            });
-        }
     }
+    // The last bubble of the session closes at the end of it — a turn that finished on a tool call (or was
+    // interrupted mid-call) never wrote the prose that would have closed it.
+    flush();
     return out;
 };
