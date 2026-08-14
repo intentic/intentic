@@ -2385,6 +2385,9 @@ importers:
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.0.12(hono@4.12.34)
+      '@huggingface/hub':
+        specifier: 'catalog:'
+        version: 2.14.4
       '@intentic-app/capability-catalog':
         specifier: workspace:*
         version: link:../../_platform/capability-catalog
@@ -2509,9 +2512,6 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
-      '@huggingface/hub':
-        specifier: 'catalog:'
-        version: 2.14.4
       '@intentic-app/localhost-https':
         specifier: workspace:*
         version: link:../../_tools/localhost-https

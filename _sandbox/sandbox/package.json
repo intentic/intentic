@@ -25,6 +25,7 @@
         "@agentclientprotocol/sdk": "catalog:",
         "@anthropic-ai/claude-agent-sdk": "catalog:",
         "@hono/node-server": "catalog:",
+        "@huggingface/hub": "catalog:",
         "@intentic-app/capability-catalog": "workspace:*",
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
@@ -68,7 +69,6 @@
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@huggingface/hub": "catalog:",
         "@intentic-app/localhost-https": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
