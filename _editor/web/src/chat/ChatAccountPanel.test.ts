@@ -24,11 +24,30 @@ vi.hoisted(() => {
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
-const poppedOut = ref(false);
+// The panel's three homes collapse to one question here: is the chat on a WIDE surface (its own pop-out window
+// or the /chat area filling this one), where there is no board beside it to be making the offer already?
+const chatWide = ref(false);
+const nativeConnectFlow = ref<undefined>(undefined);
+const translatorConnectFlow = ref<undefined>(undefined);
 
 // The pane's view, which the real panel injects from its ChatPane — mounted bare here, so it is handed over.
+// The connect surface underneath it reads the live handshake off the same store, so the flows come along.
 vi.mock(`../composables/chat/useChat`, () => ({
-    useChat: () => ({ accountsLoaded }),
+    useChat: () => ({
+        accountsLoaded,
+        nativeConnectFlow,
+        translatorConnectFlow,
+        startConnect: () => {},
+        connectTranslator: () => {},
+        setManagedProvider: () => {},
+        cancelConnect: () => {},
+        cancelTranslatorConnect: () => {},
+        accountBusy: ref(undefined),
+        translatorKey: (target: string) => `translator:${target}`,
+        connectLabel: ref(``),
+        completeConnect: () => {},
+        completeTranslator: () => {},
+    }),
     usePaneView: () => ({
         connected,
         provider: ref<AgentProvider>(`claude`),
@@ -36,7 +55,7 @@ vi.mock(`../composables/chat/useChat`, () => ({
         selectProvider: () => {},
     }),
 }));
-vi.mock(`../composables/chat/useChatPopout`, () => ({ useChatPopout: () => ({ poppedOut }) }));
+vi.mock(`../composables/chat/chatSurface`, () => ({ chatWide }));
 vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const { offerOnBoard } = await import("../composables/chat/connectOffer");
@@ -62,7 +81,7 @@ const mount = (): HTMLElement => {
 beforeEach(() => {
     connected.value = false;
     accountsLoaded.value = true;
-    poppedOut.value = false;
+    chatWide.value = false;
     offerOnBoard.value = false;
 });
 
@@ -91,15 +110,21 @@ it(`says nothing about connections until the daemon has answered`, async () => {
     expect(element.textContent).toContain(`Try free with Google`);
 });
 
-it(`stands down while the empty board is making the same offer`, async () => {
+it(`stands down while the empty board is making the same offer, without going silent`, async () => {
     offerOnBoard.value = true;
     const element = mount();
 
-    // The board owns the whole empty screen this gate would sit against, so it takes the argument — and the
-    // wait in front of it, or the two columns would spin at each other.
-    expect(element.textContent).toBe(``);
+    // The board owns the whole empty screen this gate would sit against, so it takes the ARGUMENT — the pitch,
+    // the button, and the wait in front of them, or the two columns would spin at each other.
+    expect(element.textContent).not.toContain(`Try free with Google`);
+    // But standing down is not the same as saying nothing, and it used to be: the composer below this is behind
+    // the same `connected`, so an empty line here left the bottom half of a brand-new sandbox's chat as blank
+    // space with no word anywhere in the column about what it was waiting for.
+    expect(element.textContent).toContain(`Waiting on an AI account`);
+
     accountsLoaded.value = false;
     await nextTick();
+    // "Nothing is connected" is a claim, and an unanswered one is not this column's to make either way.
     expect(element.textContent).toBe(``);
 
     offerOnBoard.value = false;
@@ -108,16 +133,19 @@ it(`stands down while the empty board is making the same offer`, async () => {
     expect(element.textContent).toContain(`Try free with Google`);
 });
 
-it(`keeps its own offer in a popped-out window, where there is no board beside it`, async () => {
+it(`keeps its own offer on a wide surface, where there is no board beside it`, async () => {
     offerOnBoard.value = true;
-    poppedOut.value = true;
+    // Either of the panel's two wide homes: its own pop-out window, or the /chat area filling this one. Both
+    // leave the board with nothing on screen to be duplicating, so the gate has to carry the offer itself.
+    chatWide.value = true;
     const element = mount();
 
     expect(element.textContent).toContain(`Try free with Google`);
     // Docked again, and the board it is now beside is the one making the offer.
-    poppedOut.value = false;
+    chatWide.value = false;
     await nextTick();
-    expect(element.textContent).toBe(``);
+    expect(element.textContent).not.toContain(`Try free with Google`);
+    expect(element.textContent).toContain(`Waiting on an AI account`);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {

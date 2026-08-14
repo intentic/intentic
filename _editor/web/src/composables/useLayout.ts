@@ -17,9 +17,25 @@ const WIDTH_KEY = `ui-chat-width`;
 // fitting. uiScale.ts owns the conversion and names the two edges where it happens (the pointer, and the
 // pop-out window); nothing in between converts, and nothing here needs to know the current size.
 //
-// Chat panel width bounds. Default matches the original fixed 22rem column. The max is effectively
-// unlimited — capped only just shy of the viewport so a sliver of workspace always remains.
-const DEFAULT_CHAT_WIDTH = 352;
+/* Chat panel width bounds. The max is effectively unlimited — capped only just shy of the viewport so a sliver
+ * of workspace always remains.
+ *
+ * THE DEFAULT IS NOT THE FLOOR, and it used to be: the column shipped at 352, which is also the narrowest a
+ * chat may ever be squeezed to (ChatPanel's MIN_PANE_PX). A default sitting on its own minimum has no slack for
+ * anything the composer optionally wears — a persona, a run-through badge, the microphone — so the controls
+ * under the message box ran out of room on the FIRST screen a new sandbox lands on, which is the one screen
+ * where nobody has dragged anything yet.
+ *
+ * What that overflow COST is fixed in ChatPane, where the control row wraps instead of running out past the
+ * column's edge; this buys the room back, so the default spends it on one line rather than two. 432 is measured
+ * rather than chosen: the row with every optional pill on it — persona, run-through, the agent's voice, the
+ * microphone — stops wrapping at 424 of these, once the labels stop appearing before they fit (ChatPane again),
+ * and the rest is slack. In app pixels like everything here, so at the default text size it draws ~475 of the
+ * screen's; measuring it in the browser and storing THAT is how a column ends up scaled twice.
+ *
+ * The floor stays where it was: someone who deliberately drags the column narrow is asking for the two-line
+ * composer, and should get it rather than a scrollbar. */
+const DEFAULT_CHAT_WIDTH = 432;
 const MIN_CHAT_WIDTH = 288;
 const MAX_CHAT_WIDTH = 4000;
 

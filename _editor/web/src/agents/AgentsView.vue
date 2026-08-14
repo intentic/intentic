@@ -1124,11 +1124,16 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                      nothing else on this screen can happen. The chat drops its copy while this stands — the
                      wait in front of it included, which is why the spinner is inside this branch and not
                      beside it. -->
-                <div v-if="offering" class="w-full max-w-sm rounded-xl border border-line bg-card px-4 py-5">
+                <!-- `prominent`, and wider than the card it used to be: on this screen the offer is not one
+                     thing among several, it is the only thing that can happen, and it was drawn as the
+                     smallest — a `small` button on a 24rem card, outweighed by the two starter chips beneath
+                     it. The sign-in also runs inside this card now rather than pushing the router at the
+                     settings tab, so it has a flow's worth of room to grow into. -->
+                <div v-if="offering" class="w-full max-w-md rounded-xl border border-line bg-card px-5 py-6">
                     <p v-if="!accountsLoaded" class="flex items-center justify-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin />Checking your AI accounts…
                     </p>
-                    <ConnectOffer v-else :view="chat" />
+                    <ConnectOffer v-else :view="chat" prominent />
                 </div>
                 <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill
                      the chat's composer rather than dispatching, so the user sends their own first turn — and

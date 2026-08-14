@@ -6,6 +6,10 @@
 // second half is a row of subscription chips. So "the chip claims I'm connected and pressing it changes
 // nothing", "the same glyph is drawn twice" and "it takes two presses to connect" are the failures worth a
 // test, and all three are DOM and text rather than anything a composable would answer for.
+//
+// AND WHERE A PRESS LEAVES YOU, which is the newest of them. Connecting used to push the router at the Agent
+// settings tab and abandon the user there; it now unfolds in this card, so "pressing connect navigated away"
+// is a regression with a test rather than a thing somebody notices on their first ever screen.
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -25,6 +29,39 @@ vi.hoisted(() => {
 const push = vi.fn();
 vi.mock(`vue-router`, () => ({ useRouter: () => ({ push }) }));
 
+/* The account store, mocked down to the handshake — because the handshake is now half of what this card DOES.
+ * The flows are refs the tests write to, so "a sign-in is running" is a state the card can be put into without
+ * a network anywhere near it, and the two starts are spies because which one a provider uses is the daemon's
+ * own split (translator subscription vs the provider's own account) and the card mirroring it wrongly is
+ * exactly the bug worth catching. */
+const nativeConnectFlow = ref<{ provider: AgentProvider; url: string; code: string } | undefined>(undefined);
+const translatorConnectFlow = ref<{ provider: AgentProvider; url: string; code: string; state: string; flow: `device` | `redirect` } | undefined>(
+    undefined,
+);
+const startConnect = vi.fn();
+const connectTranslator = vi.fn();
+const setManagedProvider = vi.fn();
+const cancelConnect = vi.fn(() => (nativeConnectFlow.value = undefined));
+const cancelTranslatorConnect = vi.fn(() => (translatorConnectFlow.value = undefined));
+const accountBusy = ref<string | undefined>(undefined);
+
+vi.mock(`../composables/chat/useChat`, () => ({
+    useChat: () => ({
+        nativeConnectFlow,
+        translatorConnectFlow,
+        startConnect,
+        connectTranslator,
+        setManagedProvider,
+        cancelConnect,
+        cancelTranslatorConnect,
+        accountBusy,
+        translatorKey: (target: string, name?: string) => `translator:${target}${name === undefined ? `` : `:${name}`}`,
+        connectLabel: ref(``),
+        completeConnect: vi.fn(),
+        completeTranslator: vi.fn(),
+    }),
+}));
+
 const { providerAccounts, translatorAccounts } = await import("../composables/chat/providerAccounts");
 const { default: ConnectOffer } = await import("./ConnectOffer.vue");
 
@@ -41,10 +78,10 @@ const view = {
 };
 
 let app: App | undefined;
-const mount = (): HTMLElement => {
+const mount = (prominent = false): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ConnectOffer, { view }) });
+    app = createApp({ render: () => h(ConnectOffer, { view, prominent }) });
     // Registered app-wide by installUi in the real app. Icon prints the name it was handed, because WHICH glyph
     // is drawn — and how many times — is one of the things under test.
     app.component(
@@ -60,11 +97,13 @@ const mount = (): HTMLElement => {
 };
 
 const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll(`button`)];
-const glyphs = (element: HTMLElement, name: string): Element[] => [...element.querySelectorAll(`[data-icon="${name}"]`)];
 const chip = (element: HTMLElement, label: string): HTMLButtonElement =>
     buttons(element).find((button) => (button.textContent ?? ``).trim() === label)!;
 // The chip's only child element is its connected dot — the label beside it is a bare text node.
 const dotted = (element: HTMLElement, label: string): boolean => chip(element, label).querySelector(`span`) !== null;
+// The free channel's call to action, whatever it is currently labelled.
+const cta = (element: HTMLElement): HTMLButtonElement | undefined =>
+    buttons(element).find((button) => (button.textContent ?? ``).includes(`Continue with`));
 
 beforeEach(() => {
     provider.value = `claude`;
@@ -72,7 +111,13 @@ beforeEach(() => {
     // Nothing connected anywhere, so the free channel is still on offer and the card leads with it.
     providerAccounts.value = { ...providerAccounts.value, claude: [], grok: [] };
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    nativeConnectFlow.value = undefined;
+    translatorConnectFlow.value = undefined;
+    accountBusy.value = undefined;
     push.mockClear();
+    startConnect.mockClear();
+    connectTranslator.mockClear();
+    setManagedProvider.mockClear();
 });
 
 afterEach(() => {
@@ -92,21 +137,28 @@ it(`marks the subscriptions you already hold, and spends a press on them re-poin
 
     chip(element, `Claude`).click();
     await nextTick();
-    // The fastest path there is: the chat is re-pointed and the gate goes on its own, so nothing navigates.
+    // The fastest path there is: the chat is re-pointed and the gate goes on its own, so nothing is started.
     expect(provider.value).toBe(`claude`);
-    expect(push).not.toHaveBeenCalled();
+    expect(startConnect).not.toHaveBeenCalled();
+    expect(connectTranslator).not.toHaveBeenCalled();
 });
 
-it(`takes one press to connect a subscription you don't hold`, async () => {
+it(`takes one press to connect a subscription you don't hold, and goes nowhere to do it`, async () => {
     const element = mount();
 
     expect(dotted(element, `ChatGPT`)).toBe(false);
     chip(element, `ChatGPT`).click();
     await nextTick();
 
-    expect(push).toHaveBeenCalledWith({ path: `/sandbox/agent`, query: { connect: `codex` } });
-    // Pointed at what was just connected, so coming back lands on it rather than on what the card opened with.
+    // ChatGPT authenticates through the bundled translator, so that is the half of the daemon's split it takes.
+    expect(connectTranslator).toHaveBeenCalledWith(`codex`);
+    expect(startConnect).not.toHaveBeenCalled();
+    // THE WHOLE POINT: the handshake happens in this card. A router push here is the settings-tab detour the
+    // user used to be thrown into, and then stranded on.
+    expect(push).not.toHaveBeenCalled();
+    // Pointed at what is being connected — both the chat, and the account card where the row will appear.
     expect(provider.value).toBe(`codex`);
+    expect(setManagedProvider).toHaveBeenCalledWith(`codex`);
 });
 
 it(`asks what THIS chat can send on, which for Grok is not the same as what you own`, async () => {
@@ -117,16 +169,17 @@ it(`asks what THIS chat can send on, which for Grok is not the same as what you 
     expect(dotted(element, `Grok`)).toBe(true);
     chip(element, `Grok`).click();
     await nextTick();
-    expect(push).not.toHaveBeenCalled();
+    expect(startConnect).not.toHaveBeenCalled();
 
     harness.value = `native`;
     await nextTick();
-    // Same subscription, same chip — and now pressing it has somewhere to go, because selecting it would leave
-    // this gate exactly where it is.
+    // Same subscription, same chip — and now pressing it has something to do, because selecting it would leave
+    // this gate exactly where it is. Native Grok takes its own xAI account, not the translator's subscription.
     expect(dotted(element, `Grok`)).toBe(false);
     chip(element, `Grok`).click();
     await nextTick();
-    expect(push).toHaveBeenCalledWith({ path: `/sandbox/agent`, query: { connect: `grok` } });
+    expect(startConnect).toHaveBeenCalled();
+    expect(connectTranslator).not.toHaveBeenCalled();
 });
 
 it(`says what a press will do without printing it into the row`, () => {
@@ -139,16 +192,18 @@ it(`says what a press will do without printing it into the row`, () => {
     expect(chip(element, `Grok`).getAttribute(`aria-label`)).toBe(`Grok — Connect SuperGrok subscription`);
 });
 
-it(`draws the free channel's mark once, and no second button repeating the row`, () => {
+it(`puts the free channel's own mark on the button that leaves for it`, () => {
     const element = mount();
 
-    // It used to float above the headline AND sit inside the button two lines below it: the same glyph twice,
-    // where the second one is the only one doing work.
-    expect(glyphs(element, `sparkles`)).toHaveLength(1);
-    // The free channel's CTA, and the four chips. Nothing else — the "Connect <the chip you just pressed>"
-    // button that used to sit under the row is what the chips now do themselves.
-    expect(buttons(element)).toHaveLength(5);
-    expect(buttons(element).find((button) => (button.textContent ?? ``).includes(`Continue with Google`))).toBeDefined();
+    // It used to be a sparkle — decoration, on the one button in the app whose whole job is to say WHOSE
+    // sign-in you are about to follow. The provider's mark answers that; a sparkle answers nothing, and there
+    // used to be a second one floating above the headline saying it twice.
+    expect(cta(element)?.querySelector(`svg`)).not.toBeNull();
+    expect(element.querySelectorAll(`[data-icon="sparkles"]`)).toHaveLength(0);
+    // The free channel's CTA, the four chips, and the quiet door to the full account page. Nothing else — the
+    // "Connect <the chip you just pressed>" button that used to sit under the row is what the chips now do.
+    expect(buttons(element)).toHaveLength(6);
+    expect(cta(element)?.textContent).toContain(`Continue with Google`);
 });
 
 it(`keeps the row working once the free channel is spent`, async () => {
@@ -158,12 +213,39 @@ it(`keeps the row working once the free channel is spent`, async () => {
     const element = mount();
 
     expect(element.textContent).not.toContain(`Continue with`);
-    expect(glyphs(element, `sparkles`)).toHaveLength(0);
-    // Google joins the row it was promoted out of, connected, and it is the fifth chip.
-    expect(buttons(element)).toHaveLength(5);
+    // Google joins the row it was promoted out of, connected, and it is the fifth chip — those five plus the
+    // quiet door to the full account page, with the headline's CTA gone.
+    expect(buttons(element)).toHaveLength(6);
     expect(dotted(element, `Google`)).toBe(true);
 
     chip(element, `Kimi Code`).click();
     await nextTick();
-    expect(push).toHaveBeenCalledWith({ path: `/sandbox/agent`, query: { connect: `kimi` } });
+    expect(connectTranslator).toHaveBeenCalledWith(`kimi`);
+    expect(push).not.toHaveBeenCalled();
+});
+
+it(`becomes the sign-in once one is running, and stops arguing for it`, async () => {
+    const element = mount(true);
+    expect(cta(element)).toBeDefined();
+
+    // What pressing the button leads to: the daemon answers with the authorize URL and the card turns into the
+    // panel that finishes the handshake.
+    translatorConnectFlow.value = { provider: `gemini`, url: `https://accounts.google.com/o/oauth2/auth`, code: ``, state: `s1`, flow: `redirect` };
+    await nextTick();
+
+    // A card still pitching "try free with Google" over a live Google handshake argues with its own state.
+    expect(element.textContent).not.toContain(`Continue with Google`);
+    expect(element.textContent).toContain(`Connecting Google`);
+    expect(element.textContent).toContain(`Open Google`);
+    // THE STEP PEOPLE ABANDON ON, said before they meet it rather than after.
+    expect(element.textContent).toContain(`won't load`);
+    expect(element.textContent).toContain(`This site can't be reached`);
+
+    // And it can be put back — the one control the sign-in state needs of its own.
+    buttons(element)
+        .find((button) => (button.textContent ?? ``).trim() === `Cancel`)!
+        .click();
+    await nextTick();
+    expect(cancelTranslatorConnect).toHaveBeenCalled();
+    expect(cta(element)).toBeDefined();
 });

@@ -1609,8 +1609,18 @@ watch(
              scroller's PADDING edge, so padding out there would leave a band above the pinned prompt (and
              below the composer) for the transcript to slide through. It also lets the composer be wider
              than the column of text, which a padding shared by both could not. -->
-        <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
-        <div ref="scroller" class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto" :class="{ 'chat-realize': realizing }">
+        <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned.
+             VERTICAL ONLY. This scroller holds the transcript AND the composer, so anything in either that
+             happens to be wider than the column used to drag a sideways scrollbar across the entire panel —
+             a chat that scrolls left and right is always a bug, and it announced itself as one at the size the
+             docked column ships at. Nothing legitimately needs the axis: the composer's controls wrap now, and
+             the two kinds of content that genuinely cannot be narrowed — code blocks and tables — carry their
+             own scroller in prose.css, which is where that scroll belongs. -->
+        <div
+            ref="scroller"
+            class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-x-hidden overflow-y-auto"
+            :class="{ 'chat-realize': realizing }"
+        >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <div class="chat-turns flex flex-1 flex-col pt-4">
                     <!-- Where a forked chat says so — above the turns it inherited, which without it read as
@@ -1918,7 +1928,22 @@ watch(
                                     @paste="onPaste"
                                 ></textarea>
 
-                                <div class="flex items-center gap-1 px-2.5 pb-2.5">
+                                <!-- THE CONTROL ROW, IN TWO GROUPS THAT WRAP AS UNITS — and the wrapping is the
+                                     point, not a nicety. Every pill in here is `shrink-0` (they are glyphs and
+                                     short words; there is nothing in them to squeeze), so a single row of them
+                                     had exactly one way to answer a column too narrow to hold it: run out past
+                                     the edge. It did, at the width the docked column USED to ship at — the send
+                                     button fell off the right side and the pane grew a sideways scrollbar under
+                                     the whole transcript, on the first screen of a fresh sandbox.
+
+                                     So the row is allowed to become two rows. The groups are the ones the pills
+                                     already read as — which brain (model · effort), then how the turn is shaped
+                                     and the press that sends it — and each stays whole, because a group broken
+                                     mid-way is worse than a second line. `ml-auto` rather than
+                                     `justify-between`: an auto margin holds the second group against the right
+                                     edge whether it is sharing the first line or sitting on its own, where
+                                     space-between would slam it left the moment it wrapped. -->
+                                <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
                                     <!-- MODEL, EFFORT, MODE, PERSONA GO INERT UNDER A WORKFLOW BADGE, and that is not
                                          a caveat about the feature — it is what the badge means. Every one of them
                                          describes a turn on THIS conversation, and a workflow send makes none: the
@@ -1935,47 +1960,68 @@ watch(
                                          line under the box says whose they are instead, and the badge is one press
                                          from handing them back — a control that vanished would take that offer with
                                          it. -->
-                                    <ComposerModelPill
-                                        ref="modelPill"
-                                        :conversation="conversation"
-                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        :expanded="modelOpen"
-                                        :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
-                                        label-class="@max-xs:hidden"
-                                        @click="modelOpen = !modelOpen"
-                                    />
+                                    <!-- WHICH BRAIN. `min-w-0` is what lets the model name give way first: it is
+                                         the one thing in the row with a shrinkable middle, so a column a little
+                                         too tight truncates a name rather than spending a whole second line.
 
-                                    <ComposerEffort
-                                        :conversation="conversation"
-                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        label-class="@max-sm:hidden"
-                                    />
+                                         THE LABELS COME BACK AT THE WIDTH THEY FIT AT, WHICH IS NOT THE WIDTH
+                                         THEY USED TO. Measured, at the sizes this row actually draws: the model
+                                         name alone needs ~426px of pane to leave the row on one line, the
+                                         effort word ~476, the mode word ~504. They were switching back on at
+                                         320, 384 and 448 — every one of them 60-100px early — so widening the
+                                         column from ~390 to ~540 turned labels on that immediately pushed the
+                                         row onto two lines, and it took another 150px of dragging to earn the
+                                         single line back. A reader who widens a column and watches it get
+                                         TALLER is not looking at a responsive layout, they are looking at a
+                                         bug. One breakpoint for the three of them (`@max-lg`, 512px) clears the
+                                         widest of the three requirements and puts them back together, which is
+                                         also how they read: they are one row of words, not three. -->
+                                    <div class="flex min-w-0 items-center gap-1">
+                                        <ComposerModelPill
+                                            ref="modelPill"
+                                            :conversation="conversation"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            :expanded="modelOpen"
+                                            :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
+                                            label-class="@max-xs:hidden"
+                                            @click="modelOpen = !modelOpen"
+                                        />
 
-                                    <!-- MODE leads the right-hand group, and the group reads left to right as a
+                                        <ComposerEffort
+                                            :conversation="conversation"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            label-class="@max-lg:hidden"
+                                        />
+                                    </div>
+
+                                    <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT — the group that
+                                         keeps the right edge (see the note on the row above). -->
+                                    <div class="flex items-center gap-1 ml-auto">
+                                        <!-- MODE leads the right-hand group, and the group reads left to right as a
                                          gradient away from the model: which brain (model · effort), then how it
                                          works (mode), then who it is (persona), then what the message is run
                                          through (loop or workflow). Mode sits closest to effort because the two
                                          are one thought — how hard it thinks, and how much rope it has — and
                                          because it is the only pill here that is always worded, so it anchors
                                          the row's baseline where a bare glyph could not. -->
-                                    <button
-                                        ref="modePill"
-                                        type="button"
-                                        class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-steered': pickedWorkflow !== undefined }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        @click="modeOpen = !modeOpen"
-                                        :aria-expanded="modeOpen"
-                                        aria-label="Agent mode"
-                                    >
-                                        <Icon :name="modeIcon" class="text-2xs text-link" />
-                                        <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                        <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                    </button>
+                                        <button
+                                            ref="modePill"
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            @click="modeOpen = !modeOpen"
+                                            :aria-expanded="modeOpen"
+                                            aria-label="Agent mode"
+                                        >
+                                            <Icon :name="modeIcon" class="text-2xs text-link" />
+                                            <span class="@max-lg:hidden">{{ modeLabel }}</span>
+                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                        </button>
 
-                                    <!-- PERSONA — who the chat IS when it reaches outside: which of your accounts
+                                        <!-- PERSONA — who the chat IS when it reaches outside: which of your accounts
                                          this turn may speak through, and how much of the toolbox it holds.
 
                                          A BADGE like the workflow pill beside it, for the same reason: unpicked
@@ -1986,32 +2032,32 @@ watch(
                                          mode rather than leading the group: a bare glyph at the group's edge is
                                          the easiest thing in the row to read as decoration, and the one pill
                                          whose unset state most needs to be noticed cannot afford that. -->
-                                    <button
-                                        ref="personaPill"
-                                        type="button"
-                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{
-                                            'composer-active': conversation.actsAs.value !== undefined && pickedWorkflow === undefined,
-                                            'composer-steered': pickedWorkflow !== undefined,
-                                        }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        @click="personaOpen = !personaOpen"
-                                        v-tooltip.top="
-                                            conversation.actsAs.value !== undefined
-                                                ? `This chat acts as ${personaName} — only its accounts are in reach`
-                                                : `Act as one of your personas — only that person's accounts`
-                                        "
-                                        :aria-expanded="personaOpen"
-                                        :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
-                                    >
-                                        <Icon name="users" class="text-2xs" :class="conversation.actsAs.value !== undefined ? 'text-link' : ''" />
-                                        <span v-if="conversation.actsAs.value !== undefined" class="max-w-32 truncate @max-md:hidden">
-                                            {{ personaName }}
-                                        </span>
-                                        <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
-                                    </button>
+                                        <button
+                                            ref="personaPill"
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{
+                                                'composer-active': conversation.actsAs.value !== undefined && pickedWorkflow === undefined,
+                                                'composer-steered': pickedWorkflow !== undefined,
+                                            }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            @click="personaOpen = !personaOpen"
+                                            v-tooltip.top="
+                                                conversation.actsAs.value !== undefined
+                                                    ? `This chat acts as ${personaName} — only its accounts are in reach`
+                                                    : `Act as one of your personas — only that person's accounts`
+                                            "
+                                            :aria-expanded="personaOpen"
+                                            :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
+                                        >
+                                            <Icon name="users" class="text-2xs" :class="conversation.actsAs.value !== undefined ? 'text-link' : ''" />
+                                            <span v-if="conversation.actsAs.value !== undefined" class="max-w-32 truncate @max-lg:hidden">
+                                                {{ personaName }}
+                                            </span>
+                                            <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
+                                        </button>
 
-                                    <!-- RUN THROUGH — the row's last shaping control, and ONE where there were
+                                        <!-- RUN THROUGH — the row's last shaping control, and ONE where there were
                                          two. A loop and a workflow answer the same question about the next
                                          message (what is it run THROUGH) with answers the composer can only
                                          take one of, so they are one badge: picking is picking, and a pick
@@ -2030,33 +2076,33 @@ watch(
                                          stopping something already going is not a thing the next message
                                          decides, and a badge that buried the stop in a menu would leave the
                                          loop no way out but the fleet board. -->
-                                    <button
-                                        ref="runThroughPill"
-                                        type="button"
-                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{ 'composer-active': looping || pickedLoop !== undefined || pickedWorkflow !== undefined }"
-                                        @click="looping ? endLoop() : (runThroughOpen = !runThroughOpen)"
-                                        v-tooltip.top="runThroughHint"
-                                        :aria-pressed="looping"
-                                        :aria-expanded="looping ? undefined : runThroughOpen"
-                                        :aria-label="runThroughLabel"
-                                    >
-                                        <Icon
-                                            :name="runThroughIcon"
-                                            class="text-2xs"
-                                            :class="looping || runThroughName !== undefined ? 'text-link' : ''"
-                                            :spin="looping"
-                                        />
-                                        <span v-if="activeLoop && looping" class="@max-md:hidden"
-                                            >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
+                                        <button
+                                            ref="runThroughPill"
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{ 'composer-active': looping || pickedLoop !== undefined || pickedWorkflow !== undefined }"
+                                            @click="looping ? endLoop() : (runThroughOpen = !runThroughOpen)"
+                                            v-tooltip.top="runThroughHint"
+                                            :aria-pressed="looping"
+                                            :aria-expanded="looping ? undefined : runThroughOpen"
+                                            :aria-label="runThroughLabel"
                                         >
-                                        <template v-else-if="runThroughName !== undefined">
-                                            <span class="max-w-32 truncate @max-md:hidden">{{ runThroughName }}</span>
-                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                        </template>
-                                    </button>
+                                            <Icon
+                                                :name="runThroughIcon"
+                                                class="text-2xs"
+                                                :class="looping || runThroughName !== undefined ? 'text-link' : ''"
+                                                :spin="looping"
+                                            />
+                                            <span v-if="activeLoop && looping" class="@max-lg:hidden"
+                                                >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
+                                            >
+                                            <template v-else-if="runThroughName !== undefined">
+                                                <span class="max-w-32 truncate @max-lg:hidden">{{ runThroughName }}</span>
+                                                <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                            </template>
+                                        </button>
 
-                                    <!-- VOICE — whose words the box is writing: yours (the default, a bare glyph),
+                                        <!-- VOICE — whose words the box is writing: yours (the default, a bare glyph),
                                          or the AGENT's. Armed, it names itself in the active tint and the next
                                          Send PLACES the draft into the transcript as the agent's own words — no
                                          turn, no reply — then disarms. Last of the shaping pills and nearest to
@@ -2065,78 +2111,83 @@ watch(
                                          Appears with the conversation's first turn (a draft chat has no
                                          transcript to place into), and a workflow badge greys it like the rest —
                                          a run's request is nobody's transcript. -->
-                                    <button
-                                        v-if="placeable"
-                                        type="button"
-                                        class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                        :class="{
-                                            'composer-active': voiceAgent && pickedWorkflow === undefined,
-                                            'composer-steered': pickedWorkflow !== undefined,
-                                        }"
-                                        :disabled="pickedWorkflow !== undefined"
-                                        @click="voiceAgent = !voiceAgent"
-                                        v-tooltip.top="
-                                            voiceAgent
-                                                ? `Writing as the agent — Send places the words into the transcript, no reply`
-                                                : `Write as the agent — place words into the transcript in its voice`
-                                        "
-                                        :aria-pressed="voiceAgent"
-                                        aria-label="Write as the agent"
-                                    >
-                                        <Icon name="robot" class="text-2xs" :class="voiceAgent ? 'text-link' : ''" />
-                                        <span v-if="voiceAgent" class="@max-md:hidden">As agent</span>
-                                    </button>
+                                        <button
+                                            v-if="placeable"
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{
+                                                'composer-active': voiceAgent && pickedWorkflow === undefined,
+                                                'composer-steered': pickedWorkflow !== undefined,
+                                            }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            @click="voiceAgent = !voiceAgent"
+                                            v-tooltip.top="
+                                                voiceAgent
+                                                    ? `Writing as the agent — Send places the words into the transcript, no reply`
+                                                    : `Write as the agent — place words into the transcript in its voice`
+                                            "
+                                            :aria-pressed="voiceAgent"
+                                            aria-label="Write as the agent"
+                                        >
+                                            <Icon name="robot" class="text-2xs" :class="voiceAgent ? 'text-link' : ''" />
+                                            <span v-if="voiceAgent" class="@max-lg:hidden">As agent</span>
+                                        </button>
 
-                                    <!-- HANDS-FREE VOICE — one tap arms it, and from there the pause is the send
+                                        <!-- HANDS-FREE VOICE — one tap arms it, and from there the pause is the send
                                      (see the voice section in the script). Every browser gets this button now:
                                      the transcription is the sandbox's own, so there is no per-browser support
                                      to gate on — only the viewer role, which cannot send at all. While
                                      listening the icon breathes with the microphone level, which is the whole
                                      "it can hear you" indicator; a state label rides the hint slot below. -->
-                                    <button
-                                        v-if="canDrive"
-                                        type="button"
-                                        class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
-                                        :class="{ 'composer-active': voiceOn }"
-                                        @click="toggleVoice"
-                                        v-tooltip.top="voiceHint"
-                                        :aria-pressed="voiceOn"
-                                        aria-label="Talk hands-free"
-                                    >
-                                        <Icon
-                                            name="microphone"
-                                            class="text-xs transition-transform max-md:text-base"
-                                            :style="voiceState === 'listening' ? { transform: `scale(${1 + Math.min(0.5, voiceLevel * 3)})` } : undefined"
-                                        />
-                                    </button>
+                                        <button
+                                            v-if="canDrive"
+                                            type="button"
+                                            class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                            :class="{ 'composer-active': voiceOn }"
+                                            @click="toggleVoice"
+                                            v-tooltip.top="voiceHint"
+                                            :aria-pressed="voiceOn"
+                                            aria-label="Talk hands-free"
+                                        >
+                                            <Icon
+                                                name="microphone"
+                                                class="text-xs transition-transform max-md:text-base"
+                                                :style="
+                                                    voiceState === 'listening'
+                                                        ? { transform: `scale(${1 + Math.min(0.5, voiceLevel * 3)})` }
+                                                        : undefined
+                                                "
+                                            />
+                                        </button>
 
-                                    <!-- Stop is present for the whole live turn — generating OR parked on a plan /
+                                        <!-- Stop is present for the whole live turn — generating OR parked on a plan /
                                      question / permission card. A parked turn still holds the conversation's run
                                      lock, so without this the user's only exits were answering a card they didn't
                                      want to answer or closing the tab. -->
-                                    <button
-                                        v-if="streaming"
-                                        type="button"
-                                        class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
-                                        @click="stop"
-                                        v-tooltip.top="stopHint"
-                                        :aria-label="stopLabel"
-                                    >
-                                        <Icon name="stop" class="text-sm" />
-                                    </button>
-                                    <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
+                                        <button
+                                            v-if="streaming"
+                                            type="button"
+                                            class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
+                                            @click="stop"
+                                            v-tooltip.top="stopHint"
+                                            :aria-label="stopLabel"
+                                        >
+                                            <Icon name="stop" class="text-sm" />
+                                        </button>
+                                        <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
                                      running turn where the harness takes it, and queues behind the turn where it
                                      doesn't. There is no state in which the composer has nowhere to put a message,
                                      so there is no state in which this button is missing. -->
-                                    <button
-                                        type="submit"
-                                        class="composer-send shrink-0 max-md:h-11 max-md:w-11"
-                                        :disabled="!canSend"
-                                        v-tooltip.top="sendHint"
-                                        aria-label="Send"
-                                    >
-                                        <Icon name="send" class="text-sm" />
-                                    </button>
+                                        <button
+                                            type="submit"
+                                            class="composer-send shrink-0 max-md:h-11 max-md:w-11"
+                                            :disabled="!canSend"
+                                            v-tooltip.top="sendHint"
+                                            aria-label="Send"
+                                        >
+                                            <Icon name="send" class="text-sm" />
+                                        </button>
+                                    </div>
                                 </div>
                             </form>
 

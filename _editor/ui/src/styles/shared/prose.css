@@ -247,10 +247,23 @@
     text-decoration: underline solid var(--color-link);
 }
 
-/* Tables. Full width of the block, never the measure — a comparison table is read column-wise, so squeezing
-   it into a reading column is the one place narrow hurts. */
+/* Tables. The full width of the block, never the measure — a comparison table is read column-wise, so squeezing
+   it into a reading column is the one place narrow hurts.
+
+   AND IT CARRIES ITS OWN SCROLL, because a table is the one block with a floor it will not go below: every
+   column needs at least its widest unbreakable word, and enough columns put that floor past any surface you
+   care to name. It used to push straight through the one holding it and drag a sideways scrollbar across the
+   whole thing — which in the chat panel meant a table in one answer scrolling the entire transcript left and
+   right. `display: block` is what gives the table an overflow of its own to spend instead.
+
+   The cost is that a table NARROWER than the block no longer stretches to fill it, and that is the right way
+   round: a two-column table reading at its natural width is fine, and a table whose last column cannot be
+   reached is not. */
 .md-prose table {
-    width: 100%;
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
     margin: var(--prose-gap) 0;
     border-collapse: collapse;
     font-size: var(--prose-size);

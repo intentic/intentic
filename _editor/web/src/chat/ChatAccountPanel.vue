@@ -18,13 +18,25 @@ import ConnectOffer from "./ConnectOffer.vue";
 const view = usePaneView();
 const { connected } = view;
 // Whether the daemon has answered about connections AT ALL is the sandbox's fact, not this conversation's.
-const { accountsLoaded } = useChat();
+const { accountsLoaded, nativeConnectFlow, translatorConnectFlow } = useChat();
 const { mobile } = useDevice();
 
 const deferred = computed(() => offerOnBoard.value && !chatWide.value && !mobile.value);
+// Whether the offer the board is showing has been taken and is mid-handshake — the one thing this panel can
+// say about a card it deliberately isn't repeating.
+const signingIn = computed(() => nativeConnectFlow.value !== undefined || translatorConnectFlow.value !== undefined);
 </script>
 
 <template>
+    <!-- STANDING DOWN IS NOT THE SAME AS SAYING NOTHING, and it used to be. With the board carrying the offer,
+         this panel rendered empty — and the composer below it is behind `connected` too, so the whole bottom
+         half of a brand-new sandbox's chat was blank space under an empty transcript, with no word anywhere in
+         the column about why there was nothing to type into. One quiet line, no pitch and no button: the offer
+         is one column over and stays there, this only says what the column is waiting for. -->
+    <p v-if="deferred && accountsLoaded && !connected" class="flex items-center justify-center gap-2 px-4 py-3 text-center text-2xs text-subtle">
+        <Icon :name="signingIn ? `spinner` : `sparkles`" :spin="signingIn" class="shrink-0" />
+        {{ signingIn ? `Finishing your sign-in — this chat comes alive as soon as it lands.` : `Waiting on an AI account — connect one to start.` }}
+    </p>
     <template v-if="!deferred">
         <!-- "Nothing is connected" is a claim, and until the daemon has answered it is one we can't make: this gate
              used to go up on every page load, in front of a user with a perfectly good subscription, for as long as
