@@ -651,10 +651,18 @@ const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 // Per-account token/cost totals (from the daemon's /system/usage aggregation of the activity log), keyed by
 // account id. Loaded when the manage card opens; empty until then.
 const accountUsage = ref<Record<string, UsageAccount>>({});
-const loadUsage = (): Promise<void> =>
-    readOrKeep<{ accounts: UsageAccount[] }>(`/system/usage`, (body) => {
+/* Whether the usage read has come back at all. It is a SEPARATE read from the connections one and lands after
+ * it, so a row knows its account's name a round trip before it knows its turns — and a line that appears under
+ * a name already on screen shoves every row below it down. Surfaces hold a placeholder in that line's place
+ * until this flips, which is the difference between a list settling and a list twitching. Set even when the
+ * read fails: an outline that never resolves is worse than a row with no usage line. */
+const usageLoaded = ref(false);
+const loadUsage = async (): Promise<void> => {
+    await readOrKeep<{ accounts: UsageAccount[] }>(`/system/usage`, (body) => {
         accountUsage.value = Object.fromEntries(body.accounts.map((usage) => [usage.account, usage]));
     });
+    usageLoaded.value = true;
+};
 
 /* Point the account card at a provider. That is ALL it does, and the emptiness is the point.
  *
@@ -1147,6 +1155,9 @@ export const resetChat = (): void => {
     translatorConnectFlow.value = undefined;
     accountBusy.value = undefined;
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    // The outgoing sandbox's totals are not an answer about the incoming one, so its rows wait again.
+    accountUsage.value = {};
+    usageLoaded.value = false;
     providerRefusals.value = {};
     error.value = null;
 };
@@ -2106,6 +2117,7 @@ export function useChat() {
         accounts,
         managedAccounts,
         accountUsage,
+        usageLoaded,
         model,
         selectModel,
         effort,

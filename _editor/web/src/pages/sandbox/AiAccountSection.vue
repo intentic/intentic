@@ -49,6 +49,7 @@ const {
     setManagedProvider,
     managedAccounts,
     accountUsage,
+    usageLoaded,
     accountsLoaded,
     accountBusy,
     error: chatError,
@@ -155,11 +156,16 @@ const identityNote = (account: OauthAccount): string | undefined => {
     return ambiguousLabels.value.has(account.label) ? `connected ${relativeTime(account.connectedAt)}` : undefined;
 };
 
-// A short usage summary line per account (from /system/usage).
-const usageLine = (id: string): string | undefined => {
+/* A short usage summary line per account (from /system/usage).
+ *
+ * ALWAYS A LINE, once the read has landed — an account with no turns yet says so rather than dropping the line.
+ * That read is a round trip behind the connections one, so a row that only grows a second line when it has
+ * something to put there changes height a moment after it is painted, and the whole list under it jumps. With
+ * the placeholder above it and this below, the row is one height from first paint to settled. */
+const usageLine = (id: string): string => {
     const usage = accountUsage.value[id];
     if (usage === undefined || usage.turns === 0) {
-        return undefined;
+        return `No turns on this account yet.`;
     }
     const cost = usage.costUsd > 0 ? ` · $${usage.costUsd.toFixed(2)}` : ``;
     // Cache read = prompt tokens served from the provider's cache; the rate is the share of prompt input that
@@ -424,14 +430,25 @@ onUnmounted(() => clearTimeout(ringTimer));
             description="Your sandbox is offline — its accounts can't be read or changed from here."
         />
         <template v-else-if="!accountsLoaded">
-            <Row v-for="placeholder in 2" :key="`loading-${placeholder}`">
+            <!-- Two lines, because a connected row has two: the name and the usage line under it. An outline
+                 that promises only the name is an outline the list outgrows the moment it lands. -->
+            <Row v-for="placeholder in 2" :key="`loading-${placeholder}`" aria-hidden="true">
                 <template #title>
-                    <span class="flex min-w-0 animate-pulse items-center gap-2.5">
-                        <span class="flex w-[1.125rem] shrink-0 justify-center"><span class="h-1.5 w-1.5 rounded-full bg-content/25" /></span>
-                        <span class="h-3 rounded bg-content/10" :class="placeholder === 1 ? 'w-40' : 'w-28'" />
+                    <span class="flex min-w-0 items-center gap-2.5">
+                        <span class="flex w-[1.125rem] shrink-0 justify-center">
+                            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-content/25" />
+                        </span>
+                        <span class="flex min-h-[1lh] items-center">
+                            <span class="skeleton block h-3" :class="placeholder === 1 ? 'w-40' : 'w-28'" />
+                        </span>
                     </span>
                 </template>
-                <template #control><span class="block h-7 w-24 animate-pulse rounded-md bg-content/10" /></template>
+                <template #description>
+                    <span class="flex min-h-[1lh] items-center pl-7">
+                        <span class="skeleton block h-2.5" :class="placeholder === 1 ? 'w-56' : 'w-44'" />
+                    </span>
+                </template>
+                <template #control><span class="skeleton block h-7 w-24 rounded-md" /></template>
             </Row>
         </template>
 
@@ -452,6 +469,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :tone="account.needsReauth ? `warning` : `default`"
                     :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
+                    :description-pending="!account.needsReauth && !usageLoaded"
                     :renamable="renamable"
                     :headroom="headroom"
                     :exhausted="exhausted"

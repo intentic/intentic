@@ -40,6 +40,10 @@ const {
     noteBusy?: boolean;
     // The half-sentence under the title: what this connection costs / what it runs / why it needs reconnecting.
     description?: string;
+    // The description is coming from a read that hasn't landed. Holds the line's height with a bar rather than
+    // letting it appear afterwards: the name arrives with the connections and the usage a request later, and a
+    // second line materialising under a row already on screen pushes every row below it down.
+    descriptionPending?: boolean;
     tone?: `default` | `warning`;
     // The paragraph of mechanics, parked behind an (i) — printing one per row is what made this card a wall.
     about?: string;
@@ -150,9 +154,14 @@ const DOT_TONE: Record<string, string> = {
                 </InfoHint>
             </span>
         </template>
-        <!-- Indented to the title's x, not the glyph's — the description belongs to the name above it. -->
-        <template v-if="description" #description>
-            <span class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description }}</span>
+        <!-- Indented to the title's x, not the glyph's — the description belongs to the name above it. A bar of
+             the same line's height stands in while the read behind it is still out, so the row is its final
+             height from the first frame. -->
+        <template v-if="description || descriptionPending" #description>
+            <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
+                <span class="skeleton block h-2.5 w-56" />
+            </span>
+            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description }}</span>
         </template>
         <template v-if="$slots[`control`]" #control><slot name="control" /></template>
         <template v-if="$slots[`below`]" #below><slot name="below" /></template>

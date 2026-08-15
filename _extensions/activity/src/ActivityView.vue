@@ -94,7 +94,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
              its instrument, in the order a question is asked of a log: who, when, and what did it say. The source
              picker was a column beside the feed until this view became a hub section; the hub's own index column
              is where a second one would have gone (see SourceFilter). -->
-        <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length">
+        <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length" :busy="isLoading">
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>

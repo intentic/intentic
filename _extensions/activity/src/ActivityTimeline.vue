@@ -19,6 +19,10 @@ const { episodes, source, window, truncated, isLoading } = defineProps<{
 }>();
 
 const days = computed(() => byDay(episodes, Date.now()));
+
+// Walked in order for the loading outline: real headlines are uneven, and six bars of one width read as a
+// pattern rather than as a list.
+const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
 </script>
 
 <template>
@@ -28,8 +32,11 @@ const days = computed(() => byDay(episodes, Date.now()));
         <template #title
             ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
         >
+        <!-- A count of nothing is a claim, not a wait: while the first page is still out this reads as "the
+             window was empty" and then corrects itself. A bar of the same width says the tally is coming. -->
         <template #actions>
-            <span class="text-2xs text-subtle">
+            <span v-if="isLoading" class="skeleton block h-2.5 w-28" aria-hidden="true" />
+            <span v-else class="text-2xs text-subtle">
                 {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
             </span>
         </template>
@@ -44,6 +51,30 @@ const days = computed(() => byDay(episodes, Date.now()));
         </template>
 
         <div class="px-4 py-2">
+            <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: a day
+                 divider and a run of rows, at the row's real spacing, so the panel is the height it is going to
+                 be. Only on the FIRST load — a poll or a widened window refetches with rows already on screen,
+                 and replacing them with an outline would be the flicker this exists to remove. -->
+            <div v-if="isLoading && episodes.length === 0" role="status" aria-busy="true" aria-label="Loading activity">
+                <div class="flex items-center gap-2 py-1">
+                    <span class="skeleton block h-2 w-16" />
+                    <span class="h-px flex-1 bg-line"></span>
+                </div>
+                <div class="flex flex-col divide-y divide-line/60">
+                    <div v-for="row in 6" :key="row" class="flex items-start gap-2 py-1.5" aria-hidden="true">
+                        <span class="skeleton mt-0.5 block h-3 w-3 shrink-0" />
+                        <span class="skeleton mt-0.5 block h-3 w-3 shrink-0" />
+                        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                            <span class="flex min-h-lh items-center">
+                                <span class="skeleton block h-3" :class="ROW_WIDTHS[(row - 1) % ROW_WIDTHS.length]" />
+                            </span>
+                            <span class="skeleton block h-2 w-32" />
+                        </div>
+                        <span class="skeleton mt-0.5 block h-2.5 w-10 shrink-0" />
+                    </div>
+                </div>
+            </div>
+
             <div v-for="day in days" :key="day.label" class="mb-1">
                 <div class="sticky top-0 z-1 flex items-center gap-2 bg-card py-1">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
