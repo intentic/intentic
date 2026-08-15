@@ -22,9 +22,21 @@
 # package that is missing it fails the exchange rather than falling back to anything.
 #
 # PROVENANCE NEEDS A PUBLIC REPOSITORY. The attestation is published to a public transparency log, so npm
-# refuses `--provenance` from a private repo. While this repository is private the publish will fail at that
-# step — which is the correct failure: an unattested tarball is not what this pipeline promises. Hold the first
-# tag until after the repository is public, or use _tools/scripts/publish-catchup.sh from a maintainer machine.
+# refuses `--provenance` from a private repo — this repository is public, which is what makes the attestation
+# publishable at all. Were it ever private again the publish would fail at that step, and that is the correct
+# failure: an unattested tarball is not what this pipeline promises.
+#
+# PROVENANCE ALSO NEEDS A GITHUB-HOSTED RUNNER, WHICH IS WHY THIS ONE JOB IS OFF THE FLEET. npm builds the
+# attestation's builder id out of the runner's own environment — `https://github.com/actions/runner/
+# $RUNNER_ENVIRONMENT`, libnpmpublish/lib/provenance.js — and the registry reads it back and accepts only
+# "github-hosted". On `[self-hosted, intentic]` every package packs, signs, uploads and then 422s on the PUT:
+# `Unsupported GitHub Actions runner environment: "self-hosted"`. That is what v1.208.0 died of, on the first
+# of the 29, after a full install and build. Nothing about it is fixable job-side — the only choices
+# are a hosted runner or an unattested tarball, so: ubuntu-24.04, cold caches and all (publish-npm.sh asserts
+# the same fact before it packs anything, and prepass.mjs's invariant 9 keeps the pairing from drifting back).
+#
+# A release that half-published this way is repaired with _tools/scripts/publish-catchup.sh from an
+# authenticated maintainer machine, or by re-running this workflow: publish-npm.sh skips versions already up.
 name: npm publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ npm publish ▸ Run workflow, with the
@@ -35,7 +47,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  packages: read
 
 concurrency:
   group: npm-publish
@@ -43,28 +54,33 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: [self-hosted, intentic]
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    # GitHub-hosted, for the reason the header spells out: the registry refuses an attestation built anywhere
+    # else. Free for a public repository, and one install plus 29 package builds fits the timeout several times
+    # over even from cold. No container either — ci-base exists to make the fleet's jobs reproducible, and a
+    # hosted runner already ships node, and gets pnpm from the two actions below.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # OFF THE FLEET, SO OFF THE FLEET'S CACHE. /ci-cache is a host directory the self-hosted runners mount and
+    # a GitHub-hosted one has never heard of — and turbo CREATES the directory it is pointed at, so it would
+    # die on the permission error at the filesystem root rather than run cold (ci.yml's images-arm64 says the
+    # same). PNPM_STORE is gone with the pnpm-setup composite that was its only reader; pnpm's store rides
+    # setup-node's cache instead.
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
+      TURBO_CACHE_DIR: ${{ github.workspace }}/.turbo-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          clean: false
+          node-version-file: package.json
+          cache: pnpm
 
-      # OIDC trusted publishing landed in npm 11.5.1; Node 24 ships an older 11.x.
+      # OIDC trusted publishing landed in npm 11.5.1; Node 24 ships an older 11.x. After setup-node, which
+      # brings its own npm along with the node it installs.
       - run: npm install -g npm@latest
 
-      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm install --frozen-lockfile
 
       # Stamp the release version onto the tree, BEFORE the build: the packed tarballs carry it, the version
       # assertion in publish-npm.sh demands it, and a build that embeds a version must embed this one. Same
@@ -75,7 +91,7 @@ jobs:
       # Only the published closure, in the same shape release-prepare.sh builds it — the desktop app and the
       # extensions are in this tree but are not npm artifacts, and building them here buys nothing.
       - name: Build the published packages
-        # `shell: bash` because the job's default is `sh`, where `source` and the arrays below are syntax errors.
+        # `shell: bash` said out loud, because `source` and the arrays below are syntax errors in anything else.
         shell: bash
         run: |
           source _tools/scripts/packages.sh

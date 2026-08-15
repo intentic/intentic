@@ -201,8 +201,12 @@ the pipeline.
 
 | `runs-on` | Jobs |
 | --- | --- |
-| `[self-hosted, intentic]` | changes, preflight, ci-base, ci-desktop, e2e-hermetic, images, images-platform, verify ×3, nightly e2e, npm publish |
+| `[self-hosted, intentic]` | changes, preflight, ci-base, ci-desktop, e2e-hermetic, images, images-platform, verify ×3, nightly e2e |
 | `[self-hosted, intentic, desktop]` | desktop-check, desktop-verify, release, nightly desktop-setup |
+
+The npm publish is the one job that may **not** run here: npm's registry builds the provenance attestation's
+builder id out of the runner's environment and accepts only `github-hosted`, so `npm-publish.yml` runs on
+`ubuntu-24.04` and pays cold caches for it. The file says the rest; prepass invariant 9 keeps it there.
 
 Only `intentic` and `desktop` go in `--labels`. **`self-hosted`, `Linux` and `X64` are applied by the runner
 itself** — naming them again just adds lowercase duplicates that nothing matches on.

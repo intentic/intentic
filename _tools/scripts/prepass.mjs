@@ -2,10 +2,10 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Eight invariants live here, and all of them exist because the checks that catch drift used to run in
- * exactly one place — CI, on main, after the merge. (5 through 8 — the release-heading contract, the
- * undeclared-shrink gate on the wire contract, the armed-hooks check, and the reusable-workflow permission
- * ceiling — are documented at their own blocks below.)
+ * --only`. Nine invariants live here, and all of them exist because the checks that catch drift used to run in
+ * exactly one place — CI, on main, after the merge. (5 through 9 — the release-heading contract, the
+ * undeclared-shrink gate on the wire contract, the armed-hooks check, the reusable-workflow permission
+ * ceiling, and the runner npm will attest a publish from — are documented at their own blocks below.)
  *
  * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
@@ -719,6 +719,62 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
     }
 }
 
+/* Invariant 9. A JOB THAT PUBLISHES WITH PROVENANCE RUNS ON A GITHUB-HOSTED RUNNER. npm builds the
+ * attestation's builder id out of the runner's own environment — `https://github.com/actions/runner/
+ * $RUNNER_ENVIRONMENT` (libnpmpublish/lib/provenance.js) — and npm's registry reads it back and accepts only
+ * "github-hosted". The fleet is `self-hosted`, so from it every publish packs the tarball, signs the bundle,
+ * writes it to the public transparency log, and THEN 422s on the PUT. v1.208.0 died exactly there, one package
+ * into 29, after a full install and build: nothing before the last call of the last step said a word.
+ *
+ * The two halves of that mistake sit in different files and neither is wrong alone — `--provenance` lives in
+ * the publish script, `runs-on` in the workflow — which is the shape a check here is for. The flag is found by
+ * following the job's steps into the repository scripts they run, so the pairing is read rather than listed;
+ * publish-npm.sh now also asserts it at runtime, but that assertion fires in the release, and this one fires
+ * in the commit that would break it. */
+const PROVENANCE = /npm publish[^\n]*--provenance/;
+
+// The step block of each job of one workflow, keyed by job — the same line scanner as invariants 4 and 8, and
+// everything below a job's header until the next one is that job's.
+const stepsOf = (text) => {
+    const lines = text.split("\n");
+    const blocks = new Map();
+    let job = null;
+    for (let i = lines.findIndex((line) => /^jobs:\s*$/.test(line)) + 1; i < lines.length; i++) {
+        const header = lines[i].match(/^ {2}([A-Za-z_][\w-]*):\s*$/);
+        if (header) {
+            blocks.set((job = header[1]), []);
+        } else if (job !== null) {
+            blocks.get(job).push(lines[i]);
+        }
+    }
+    return new Map([...blocks].map(([name, block]) => [name, block.join("\n")]));
+};
+
+const unattestable = [];
+for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml"))) {
+    const text = readFileSync(join(WORKFLOWS, file), "utf8");
+    const steps = stepsOf(text);
+    for (const job of jobsOf(text).values()) {
+        if (!/self-hosted/.test(job.runsOn)) {
+            continue;
+        }
+        const block = steps.get(job.name) ?? "";
+        // A step rarely spells the publish itself — it names a script, and the script spells the flag. One hop
+        // into the shell scripts is enough for every publish path in this repository, and a hop that lands
+        // nowhere reads as no flag. Shell only: every publish here is a `.sh`, and following the `.mjs` a job
+        // runs would make this file — which has to write the pattern down to look for it — match itself.
+        const scripts = [...block.matchAll(/_tools\/scripts\/[\w.-]+\.sh/g)].map(([path]) => path);
+        const spelled = [block, ...scripts.filter((path) => existsSync(join(root, path))).map((path) => readFileSync(join(root, path), "utf8"))];
+        if (spelled.some((where) => PROVENANCE.test(where))) {
+            unattestable.push(
+                `.github/workflows/${file}: job \`${job.name}\` publishes with provenance on the self-hosted fleet — npm's ` +
+                    `registry rejects an attestation whose builder id is not "github-hosted", with a 422 the release only ` +
+                    `reaches after the tarball is packed and signed; run this job on \`ubuntu-24.04\``,
+            );
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
@@ -728,6 +784,7 @@ const reports = [
     ["The wire contract shrank without a declared breaking change", undeclaredBreaks],
     ["Git hooks are disarmed on this checkout, so pushes skip these gates entirely", disarmed],
     ["A called workflow asks for more than its caller grants — Actions fails this before any job starts", overreach],
+    ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -744,6 +801,7 @@ console.log(
 );
 console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
 console.log(`workflow permissions: every reusable-workflow call grants what the workflow it calls asks for`);
+console.log(`npm provenance: no job publishes an attested tarball from the self-hosted fleet`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */

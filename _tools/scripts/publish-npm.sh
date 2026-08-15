@@ -16,6 +16,21 @@
 #   bash _tools/scripts/publish-npm.sh 1.15.1
 set -euo pipefail
 VERSION="${1:?usage: publish-npm.sh <version>}"
+
+# PROVENANCE ONLY PUBLISHES FROM A GITHUB-HOSTED RUNNER, and the registry is the one that says so — LAST. npm
+# builds the attestation's builder id out of this environment (`https://github.com/actions/runner/
+# $RUNNER_ENVIRONMENT`, libnpmpublish/lib/provenance.js), the tarball packs, the bundle is signed and written
+# to the public transparency log, and only the PUT comes back 422: `Unsupported GitHub Actions runner
+# environment: "self-hosted"`. v1.208.0 spent an install, a build and a signature to learn that, one package
+# into 29 — and a rule that only bites per package is a rule that half-publishes a release. So it is read
+# here, once, before the first pack. npm-publish.yml runs on ubuntu-24.04 to satisfy it.
+[ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ] || {
+  echo "publishing with provenance needs a GitHub-hosted runner; this environment is \"${RUNNER_ENVIRONMENT:-unset}\"." >&2
+  echo "npm's registry rejects an attestation built anywhere else, so nothing here would land." >&2
+  echo "from a maintainer machine, publish with: bash _tools/scripts/publish-catchup.sh $VERSION" >&2
+  exit 1
+}
+
 . "$(dirname "$0")/repo-root.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
