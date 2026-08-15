@@ -105,7 +105,7 @@ export type QuickModelProgress = (attempts: readonly QuickModelAttempt[]) => voi
 // Object]" in the panel's readout.
 const refusalText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/* WHAT A RUNG THAT JUST REFUSED COSTS THE NEXT CALLER — nothing, for a few minutes.
+/* WHAT A RUNG THAT JUST REFUSED COSTS THE NEXT CALLER — nothing, for hours.
  *
  * A refusal is not a property of one call. An allowance that is spent is spent for hours, an outage lasts
  * minutes, a revoked token lasts until somebody reconnects it — and the walk below re-discovered every one of
@@ -114,10 +114,19 @@ const refusalText = (error: unknown): string => (error instanceof Error ? error.
  * per landing, all afternoon. The daemon knew that after the first landing and spent it again on every one
  * after — which is most of what "the commit message takes a minute" was.
  *
- * So a refusal is REMEMBERED, briefly, and the next walk starts below it. Briefly because this is a memo and
- * not a verdict: nothing tells this process when an allowance resets or a provider recovers, so the window
- * simply ends and the next call spends one re-test to find out. Long enough that a burst of landings costs one
- * discovery between them; short enough that a model which came back is back in minutes.
+ * So a refusal is REMEMBERED and the next walk starts below it. This is the FALLBACK memory, not the primary
+ * one: what a provider still has left, and when it renews, is a fact we hold for every account that publishes
+ * it (translator turnLimit, accountWithHeadroom), and a rung skipped on a reading is skipped for a reason with
+ * an expiry the provider itself stated. The memo covers what no reading can — a provider that publishes no
+ * quota, a snapshot that failed to refresh, and the refusals that are not about allowance at all (a revoked
+ * token, an outage, a request the vendor objects to and answers with a quota-shaped error anyway).
+ *
+ * HOURS, not the five minutes this began as. Five was chosen so a model that recovered was back quickly, and
+ * that reasoning had the frequency backwards: landings are usually further apart than five minutes, so the
+ * window almost always expired between them and the same refusal was bought again on nearly every commit —
+ * measured at 58 failed attempts out of 116, about 4.7s each. A memo that expires faster than the work it is
+ * remembering for is not a memo. Hours is still a memo and not a verdict: it ends by itself, one re-test
+ * re-opens the rung, and an answer clears it outright.
  *
  * KEPT WITH ITS REASON, so a rung skipped without being asked reports the same sentence it gave when it did
  * refuse — `skipped` stays the honest account of what happened to the chain, rather than going quiet about the
@@ -125,7 +134,7 @@ const refusalText = (error: unknown): string => (error instanceof Error ? error.
  *
  * IN MEMORY, never persisted: a daemon that restarted did not inherit the outage it was in, and a memo restored
  * from disk would skip a working account on the strength of something that happened before the reboot. */
-const REFUSED_FOR_MS = 5 * 60 * 1000;
+export const REFUSED_FOR_MS = 2 * 60 * 60 * 1000;
 
 const refusals = new Map<string, { readonly until: number; readonly reason: string }>();
 

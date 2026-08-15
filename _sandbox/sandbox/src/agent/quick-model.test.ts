@@ -13,7 +13,7 @@ vi.mock("./harness-credentials.js", () => ({
 const oneShot = vi.fn<(params: { model: string }) => Promise<string>>();
 vi.mock("./one-shot.js", () => ({ runOneShot: (params: { model: string }) => oneShot(params) }));
 
-const { askQuickModel } = await import("./quick-model.js");
+const { askQuickModel, REFUSED_FOR_MS } = await import("./quick-model.js");
 
 /* WALKING THE CHAIN — the daemon half of the ordered quick model. The contract decides the ORDER (its own
  * suite pins that); what is testable here is the part only the daemon can do, which is notice that a model
@@ -52,15 +52,20 @@ type Billed = { op: string; ms: number; fields: PerfFields; failed?: boolean | u
 const timed: Billed[] = [];
 
 /* The refusal memo is module state that outlives a call ON PURPOSE — that is the whole feature — so the clock
- * is what separates the tests rather than a reset hatch the daemon would never have. Each one starts an hour
- * after the last, by which time anything the previous test left has long expired. Only `Date` is faked: this
- * path has no timers of its own, and faking those would only get in the way of the promises it does have. */
-const HOUR_MS = 60 * 60 * 1000;
+ * is what separates the tests rather than a reset hatch the daemon would never have. Each one starts a full
+ * memo-length past the last, by which time anything the previous test left has expired. Measured off the memo
+ * itself rather than a number written twice: the window is a tuning knob, and a suite that pinned its own idea
+ * of it silently stops isolating its tests the day it is raised — which is exactly what happened when it went
+ * from minutes to hours. Only `Date` is faked: this path has no timers of its own, and faking those would only
+ * get in the way of the promises it does have. */
+const BETWEEN_TESTS_MS = REFUSED_FOR_MS + 60 * 60 * 1000;
+// Comfortably past the memo, for the tests that are about it running out.
+const PAST_THE_MEMO_MS = REFUSED_FOR_MS + 60 * 1000;
 let clock = 1_700_000_000_000;
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: [`Date`] });
-    clock += HOUR_MS;
+    clock += BETWEEN_TESTS_MS;
     vi.setSystemTime(clock);
     vi.clearAllMocks();
     timed.length = 0;
@@ -167,7 +172,7 @@ test("asks it again once the memo has run out — an allowance resets and nothin
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
     await askQuickModel(fakeServices(pinned), `draft`, signal());
 
-    vi.setSystemTime(clock + 6 * 60 * 1000);
+    vi.setSystemTime(clock + PAST_THE_MEMO_MS);
     oneShot.mockClear();
     const answer = await askQuickModel(fakeServices(pinned), `draft`, signal());
 
@@ -181,7 +186,7 @@ test("an answer clears the memo, so a recovered model keeps its place at the top
     await askQuickModel(fakeServices(pinned), `draft`, signal());
 
     // The window ends, it answers, and the walk must not go back to skipping it a moment later.
-    vi.setSystemTime(clock + 6 * 60 * 1000);
+    vi.setSystemTime(clock + PAST_THE_MEMO_MS);
     await askQuickModel(fakeServices(pinned), `draft`, signal());
     oneShot.mockClear();
     const answer = await askQuickModel(fakeServices(pinned), `draft`, signal());
