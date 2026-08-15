@@ -83,28 +83,38 @@ const sizeLabel = (bytes: number): string => {
                  FULL-BLEED, because the whole row is the click target and the hover tint has to show that. A
                  `flush` row keeps no padding of its own, so the tint was painted on the text's own box: a
                  rectangle starting at the divider and stopping dead against the lock on one side and the toggle
-                 on the other, with no air anywhere. The negative margin plus padding here is the CARD'S padding
-                 restated (both `5`, like `--ui-card-padding`), so the words stay lined up with everything else
-                 on the card while the tint runs edge to edge and reads as a band. -->
-            <Row
-                flush
-                as="label"
-                :icon="withSecrets ? `unlock` : `lock`"
-                :tone="withSecrets ? `warning` : `default`"
-                title="Include secrets"
-                description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else — the restore then lists what to re-enter."
-                class="-mx-5 border-t border-line px-5 py-2.5"
-                :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
-            >
-                <template #control>
-                    <ToggleSwitch v-model="withSecrets" :disabled="packing !== undefined" />
-                </template>
-                <template #below>
-                    <p v-if="withSecrets" class="text-2xs text-warning">
-                        The exported file will contain credentials in the clear. Store it like a password.
-                    </p>
-                </template>
-            </Row>
+                 on the other, with no air anywhere.
+
+                 THE BLEED IS THE WRAPPER'S, NOT THE ROW'S, and it has to be — a <Row> carries `w-full`, and a
+                 negative side margin on a box whose width is pinned to 100% SLIDES it instead of widening it:
+                 the band hung a card-padding over the left edge and finished a card-padding short of the right,
+                 which is the "still not full-width" of the second report. An undecorated wrapper has no width of
+                 its own, so `-mx-5` widens it by the card's padding on both sides (`5`, like
+                 `--ui-card-padding`), and the row inside is 100% of THAT. The row keeps the padding, so the
+                 words stay lined up with everything else on the card while the tint runs edge to edge. -->
+            <div class="-mx-5 border-t border-line">
+                <Row
+                    flush
+                    as="label"
+                    :icon="withSecrets ? `unlock` : `lock`"
+                    :tone="withSecrets ? `warning` : `default`"
+                    title="Include secrets"
+                    description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else — the restore then lists what to re-enter."
+                    class="px-5 py-2.5"
+                    :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
+                >
+                    <template #control>
+                        <ToggleSwitch v-model="withSecrets" :disabled="packing !== undefined" />
+                    </template>
+                    <!-- `v-if` ON THE SLOT, not on a <p> inside it. A slot that is always PASSED is always
+                         rendered, so the row drew its `#below` wrapper — margin and all — around nothing
+                         whenever the warning was off, which is where the band's uneven top and bottom came
+                         from: eleven pixels of padding above the title and twenty-four below the sentence. -->
+                    <template v-if="withSecrets" #below>
+                        <p class="text-2xs text-warning">The exported file will contain credentials in the clear. Store it like a password.</p>
+                    </template>
+                </Row>
+            </div>
 
             <div class="flex flex-wrap items-center gap-2">
                 <!-- Disabled while one is packing rather than queueing a second: two concurrent packs would
