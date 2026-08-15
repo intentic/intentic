@@ -200,7 +200,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                  next thing they look at has to be the answer to "did that do anything". It names the tool's
                  subject, counts, and says out loud that the numbers underneath are the OLD ones — a panel that
                  leaves stale figures under a spinner is inviting them to be read as the new result. -->
-            <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/8 px-3 py-2">
+            <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/10 px-3 py-2">
                 <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
                 <!-- Two lines, always: the caveat is a sentence in its own right, and hanging it off the end of
                      the live one on a wide pane meant it wrapped to a line beginning with a separator dot on
@@ -218,7 +218,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                  who pressed re-measure and then went to read something else comes back to the sentence, which is
                  the case an auto-dismissing toast serves worst. "Unchanged" is stated as loudly as a change,
                  because it is a finding — it is the whole answer to "is this row still telling the truth". -->
-            <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/8 px-3 py-2">
+            <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/10 px-3 py-2">
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
                 <!-- The claim on one line, what it found on the next — the same two-line shape as the strip
                      above, so a row that has just finished measuring reads as the sentence that replaced the
