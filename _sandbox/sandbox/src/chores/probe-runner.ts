@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { PROBES, type ProbeSpec } from "@intentic/sandbox-contract/chores";
-import type { ProbeId, ProbeResult } from "@intentic/sandbox-contract";
+import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import { type ChoresStore, isStale, probeOf } from "./chores-store.js";
@@ -118,15 +118,30 @@ const expired = async (deps: ProbeRunnerDeps, nowMs: number): Promise<{ repo: st
 export interface ProbeRunner {
     readonly start: () => void;
     readonly stop: () => void;
-    // Refresh one repo's probe now, ignoring its TTL — what POST /chores/probe drives. Resolves when the probe has
-    // been recorded; the route does not await it, because a jscpd sweep outlives any sane request.
+    /* Refresh one repo's probe now, ignoring its TTL — what POST /chores/probe drives. Resolves when the probe has
+     * been recorded; the route does not await it, because a jscpd sweep outlives any sane request.
+     *
+     * IT QUEUES, IT DOES NOT DECLINE. This used to return immediately when the lane was busy, which is the worst
+     * shape a button can have: the route still answered `{ ok: true }`, the panel still said the measurement was
+     * asked for, and nothing ever ran. A sweep the owner cannot see is exactly the thing their click collides
+     * with, so "busy" was not a rare case — it was the case where the button most needed to work. */
     readonly refresh: (repo: string, id: ProbeId) => Promise<void>;
+    // What is being measured and what is waiting behind it — the only honest source for a surface that wants to
+    // say "measuring" while the probe cache still describes the measurement being replaced.
+    readonly running: () => readonly RunningProbe[];
 }
 
+const laneKey = (entry: { repo: string; id: ProbeId }): string => `${entry.repo}|${entry.id}`;
+
 export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
-    // Module-level rather than per-tick: the on-demand refresh and the background sweep share one lane, so a
-    // panel's refresh button cannot land a second jscpd next to the one already running.
-    let busy = false;
+    /* THE LANE. One at a time across the whole sandbox (see the block at the top), and now visible: index 0 is
+     * what is running, the rest are waiting their turn. A list rather than a boolean because both of the things
+     * this had to fix need to name the WORK — a request that arrives mid-sweep has to survive it, and a panel
+     * that wants to say "measuring dead code, 40s" cannot be told only that something, somewhere, is busy.
+     *
+     * Replaced rather than mutated on every transition, so `running()` can hand its entries straight out: a
+     * reader holding the answer while a probe starts sees the report it asked for, not a half-updated one. */
+    let lane: readonly RunningProbe[] = [];
 
     const record = async (repo: string, spec: ProbeSpec): Promise<void> => {
         const result = await runProbe(spec, join(deps.workspace.root, repo), Date.now());
@@ -134,28 +149,64 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
         deps.logger.info({ repo, probe: spec.id, state: result.state, tookMs: result.tookMs }, "chores: probe finished");
     };
 
-    const drain = async (): Promise<void> => {
-        if (busy) {
-            return;
-        }
-        // The owner's own work comes first, always. A live turn means the machine is already spoken for.
-        if (deps.agents.liveSessionIds().length > 0) {
-            return;
-        }
-        busy = true;
+    const leave = (key: string): void => {
+        lane = lane.filter((waiting) => laneKey(waiting) !== key);
+    };
+
+    // Run the head of the lane to completion, stamped as started. `finally` rather than a happy path, because an
+    // entry left in the lane after a throw would tell the panel a probe is running forever.
+    const claim = async (entry: RunningProbe, spec: ProbeSpec): Promise<void> => {
+        const key = laneKey(entry);
+        lane = lane.map((waiting) => (laneKey(waiting) === key ? { ...waiting, startedAt: Date.now() } : waiting));
         try {
-            const due = await expired(deps, Date.now());
-            await deps.chores.pruneProbes(["", ...(await discoverRepos(deps.workspace.root))]);
-            for (const { repo, spec } of due) {
-                // Re-checked between probes rather than only at the top: a sweep of six repos' jscpd takes long
-                // enough that the owner may well have started working halfway through it.
-                if (deps.agents.liveSessionIds().length > 0) {
-                    return;
-                }
-                await record(repo, spec);
-            }
+            await record(entry.repo, spec);
         } finally {
-            busy = false;
+            leave(key);
+        }
+    };
+
+    // Everything waiting, oldest first, until the lane is empty. Re-read each pass rather than snapshotted: a
+    // request that arrives while a jscpd runs joins the queue it is already draining.
+    let draining: Promise<void> | undefined;
+    const drainLane = async (): Promise<void> => {
+        for (let next = lane[0]; next !== undefined; next = lane[0]) {
+            const spec = PROBES.find((probe) => probe.id === next.id);
+            if (spec === undefined) {
+                leave(laneKey(next));
+                continue;
+            }
+            await claim(next, spec);
+        }
+    };
+    const pump = (): Promise<void> => {
+        draining ??= drainLane().finally(() => (draining = undefined));
+        return draining;
+    };
+
+    // Join the lane, or join the request already in it: two clicks on one row are one measurement, and a sweep
+    // that already queued this probe is the same work under a different name.
+    const enqueue = (repo: string, id: ProbeId): Promise<void> => {
+        if (!lane.some((entry) => laneKey(entry) === laneKey({ repo, id }))) {
+            lane = [...lane, { repo, id, askedAt: Date.now() }];
+        }
+        return pump();
+    };
+
+    const sweep = async (): Promise<void> => {
+        // The owner's own work comes first, always. A live turn means the machine is already spoken for — and
+        // this is the BACKGROUND sweep only: a probe somebody pressed a button for is their work, not ours.
+        if (draining !== undefined || deps.agents.liveSessionIds().length > 0) {
+            return;
+        }
+        const due = await expired(deps, Date.now());
+        await deps.chores.pruneProbes(["", ...(await discoverRepos(deps.workspace.root))]);
+        for (const { repo, spec } of due) {
+            // Re-checked between probes rather than only at the top: a sweep of six repos' jscpd takes long
+            // enough that the owner may well have started working halfway through it.
+            if (deps.agents.liveSessionIds().length > 0) {
+                return;
+            }
+            await enqueue(repo, spec.id);
         }
     };
 
@@ -163,8 +214,8 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
     return {
         start: () => {
             timer ??= setTimeout(() => {
-                void drain();
-                timer = setInterval(() => void drain(), TICK_MS);
+                void sweep();
+                timer = setInterval(() => void sweep(), TICK_MS);
                 timer.unref();
             }, WARMUP_MS);
             timer.unref();
@@ -177,16 +228,12 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
             }
         },
         refresh: async (repo, id) => {
-            const spec = PROBES.find((probe) => probe.id === id);
-            if (spec === undefined || busy) {
+            if (!PROBES.some((probe) => probe.id === id)) {
                 return;
             }
-            busy = true;
-            try {
-                await record(repo, spec);
-            } finally {
-                busy = false;
-            }
+            await enqueue(repo, id);
         },
+        // The lane itself: its entries are replaced rather than edited, so handing them out shares no state.
+        running: () => lane,
     };
 };

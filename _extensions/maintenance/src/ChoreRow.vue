@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type ChoreVerdict, repoName } from "@intentic/sandbox-contract/chores";
+import { type ChoreVerdict, probeSpec, repoName } from "@intentic/sandbox-contract/chores";
 import {
     AgentRunButton,
     type AgentRunChoice,
@@ -10,9 +10,11 @@ import {
     type StatusVariant,
     timeAgo,
     useAgentRunPick,
+    useNow,
 } from "@intentic/extension-ui";
 import { host } from "./host";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import type { MeasuringProbe } from "./useChores";
 import type { ChoreRun } from "./useRuns";
 
 /* ONE CHORE, IN ONE REPOSITORY. The row has to answer three questions in one line — what is this, is it due, and
@@ -28,7 +30,17 @@ import type { ChoreRun } from "./useRuns";
  * cannot know is whether the list around it spans more than one. On a list scoped to a single repository the mark
  * is the same word on every row, which is noise; across repositories it is the only thing telling two otherwise
  * identical rows apart. */
-const { verdict, run } = defineProps<{ verdict: ChoreVerdict; run: ChoreRun | undefined; expanded: boolean; showRepo: boolean; busy: boolean }>();
+// `measuring` is the WHOLE sandbox's list rather than this row's slice: the row already knows its repository and
+// which probes its chore rests on, and filtering it here is one line against a parent that would otherwise
+// compute a slice per row on every poll.
+const { verdict, run, measuring } = defineProps<{
+    verdict: ChoreVerdict;
+    run: ChoreRun | undefined;
+    measuring: readonly MeasuringProbe[];
+    expanded: boolean;
+    showRepo: boolean;
+    busy: boolean;
+}>();
 const emit = defineEmits<{
     toggle: [];
     start: [pick: AgentRunChoice | undefined];
@@ -48,11 +60,61 @@ const startRun = (): void => {
     runModel.clear();
 };
 
+/* WHAT IS BEING MEASURED FOR THIS ROW, right now. A chore rests on one or more probes (`needs`), and it is
+ * measuring while any of them is — the evidence on screen is only replaced once they have all landed, so saying
+ * "done" after the first would be the same premature claim in a smaller costume. */
+const inFlight = computed(() => measuring.filter((entry) => entry.repo === verdict.repo && verdict.chore.needs.includes(entry.id)));
+const busyHere = computed(() => inFlight.value.length > 0);
+
+// The wall clock, armed only while this row has something running. A board of thirteen chores with one
+// measurement between them ticks once, not thirteen times.
+const now = useNow(busyHere);
+
+/* HOW LONG IT HAS BEEN GOING, and — the part a bare spinner cannot say — whether it has started at all. The
+ * runner has one lane across the whole sandbox, so a probe pressed while a jscpd sweep is mid-flight genuinely
+ * waits, and a row counting up from a start that has not happened would be inventing progress. */
+const elapsed = computed<string>(() => {
+    const started = inFlight.value.map((entry) => entry.startedAt).filter((at) => at !== undefined);
+    if (started.length === 0) {
+        return `waiting for the machine`;
+    }
+    const seconds = Math.max(0, Math.round((now.value - Math.min(...started)) / 1000));
+    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+});
+
+// What is actually being run, by the name the strip above uses for it — "measuring" is a spinner, "measuring
+// dead code" is a fact, and the difference is whether the reader can tell a stuck row from a slow one.
+const measuringWhat = computed(() => inFlight.value.map((entry) => probeSpec(entry.id).measures).join(` and `));
+
+/* THE LANDING. A measurement that finishes silently is only half of the fix: the numbers change while the reader
+ * is looking somewhere else on the page, and they are left comparing a row against their memory of it. So the
+ * row keeps the headline it was carrying when the measurement started, and says what happened to it afterwards
+ * — including, and especially, "nothing", which is the answer a re-measure most often has and the one a silent
+ * update is least able to give. Cleared on collapse; it is an acknowledgment, not a record. */
+const before = ref<string>();
+const landed = ref<{ from: string; to: string }>();
+watch(busyHere, (running, was) => {
+    if (running) {
+        before.value = verdict.headline;
+        landed.value = undefined;
+        return;
+    }
+    if (was === true && before.value !== undefined) {
+        landed.value = { from: before.value, to: verdict.headline };
+        before.value = undefined;
+    }
+});
+
 // The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
 // not measured it, and painting that amber would make every repo without knip look broken. `stale` is quiet for
 // the same reason and one more: it is the state a row lands in BECAUSE the work got done, and a colour that reads
 // as a problem would make finishing a chore look like breaking something.
 const status = computed<{ variant: StatusVariant; label: string } | undefined>(() => {
+    // Measuring outranks every settled state, because it is the only one that is about to stop being true — and
+    // a row that reads "stale" while it is being re-measured is the exact complaint this all started as.
+    if (busyHere.value) {
+        return { variant: `info`, label: `measuring` };
+    }
     if (verdict.state === `due`) {
         return verdict.severity === `warning` ? { variant: `warning`, label: `carrying` } : { variant: `info`, label: `due` };
     }
@@ -126,11 +188,52 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     <span v-if="measured" class="shrink-0 text-2xs text-subtle/70">{{ measured }}</span>
                 </span>
             </span>
-            <Icon v-if="liveAgent" name="spinner" spin class="shrink-0 text-subtle" />
+            <!-- One spinner, whichever kind of work is in flight. A row can be both re-measuring and running a
+                 turn, and two spinners side by side say nothing the badge beside them does not. -->
+            <Icon v-if="liveAgent || busyHere" name="spinner" spin class="shrink-0 text-subtle" />
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
         </button>
 
         <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 @lg:px-6">
+            <!-- THE MEASUREMENT, WHILE IT IS HAPPENING — at the TOP of the opened row, above the evidence it is
+                 replacing, because that is the reading order the reader is in: they pressed the button, and the
+                 next thing they look at has to be the answer to "did that do anything". It names the tool's
+                 subject, counts, and says out loud that the numbers underneath are the OLD ones — a panel that
+                 leaves stale figures under a spinner is inviting them to be read as the new result. -->
+            <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/8 px-3 py-2">
+                <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
+                <!-- Two lines, always: the caveat is a sentence in its own right, and hanging it off the end of
+                     the live one on a wide pane meant it wrapped to a line beginning with a separator dot on
+                     every narrower one. A pane the reader can drag to a third of the window has no wide case. -->
+                <span class="flex min-w-0 flex-col gap-0.5">
+                    <span class="flex flex-wrap items-baseline gap-x-2">
+                        <span class="text-xs text-content">Measuring {{ measuringWhat }}…</span>
+                        <span class="text-2xs text-subtle">{{ elapsed }}</span>
+                    </span>
+                    <span class="text-2xs text-subtle/70">The figures below are the ones being replaced.</span>
+                </span>
+            </div>
+
+            <!-- AND WHEN IT LANDS. Held until the row is collapsed rather than faded out on a timer: the reader
+                 who pressed re-measure and then went to read something else comes back to the sentence, which is
+                 the case an auto-dismissing toast serves worst. "Unchanged" is stated as loudly as a change,
+                 because it is a finding — it is the whole answer to "is this row still telling the truth". -->
+            <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/8 px-3 py-2">
+                <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
+                <!-- The claim on one line, what it found on the next — the same two-line shape as the strip
+                     above, so a row that has just finished measuring reads as the sentence that replaced the
+                     one before it rather than as a different kind of thing. The before/after is one wrapping
+                     unit: split across lines, an arrow ends up alone at the end of a line pointing at nothing. -->
+                <span class="flex min-w-0 flex-col gap-0.5">
+                    <span class="text-xs text-content">Re-measured just now.{{ landed.from === landed.to ? ` Nothing changed.` : `` }}</span>
+                    <span v-if="landed.from === landed.to" class="text-2xs text-subtle">{{ landed.to }}</span>
+                    <span v-else class="flex flex-wrap items-baseline gap-x-1.5 text-2xs">
+                        <span class="text-subtle line-through">{{ landed.from }}</span>
+                        <span class="whitespace-nowrap text-content"><Icon name="arrow-right" class="text-2xs text-subtle" /> {{ landed.to }}</span>
+                    </span>
+                </span>
+            </div>
+
             <p class="max-w-read text-xs text-subtle">{{ verdict.chore.description }}</p>
 
             <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
@@ -168,24 +271,31 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     icon="play"
                     :model-label="runModel.model.value.label"
                     :overridden="runModel.overridden.value"
-                    :disabled="busy || liveAgent !== undefined"
+                    :disabled="busy || busyHere || liveAgent !== undefined"
                     @run="startRun"
                     @pick="runModel.choose"
                 />
                 <!-- The one move a stale row has, and the reason it has no "Fix it" beside it: nobody can decide
-                     whether there is work here until something has looked at the tree since the last turn. -->
+                     whether there is work here until something has looked at the tree since the last turn.
+                     It stays on the row WHILE it runs, wearing the state, rather than vanishing: a control that
+                     disappears when pressed leaves nowhere to look for what pressing it did, and the button is
+                     where the reader's eye already is. -->
                 <Button
-                    v-if="verdict.state === `stale`"
+                    v-if="verdict.state === `stale` || busyHere"
                     size="small"
                     severity="secondary"
-                    label="Re-measure"
-                    title="Measure this again now — a deep check can take a few minutes"
-                    :disabled="busy"
+                    :label="busyHere ? `Measuring…` : `Re-measure`"
+                    :title="
+                        busyHere
+                            ? `Measuring ${measuringWhat} — a deep check can take a few minutes`
+                            : `Measure this again now — a deep check can take a few minutes`
+                    "
+                    :disabled="busy || busyHere"
                     @click="emit(`remeasure`)"
                 >
                     <!-- The kit's icon set, through the slot: the underlying Button's own `icon` prop takes a
                          PrimeIcons class name, so passing a name from our set renders an empty box. -->
-                    <template #icon><Icon name="refresh" /></template>
+                    <template #icon><Icon :name="busyHere ? `spinner` : `refresh`" :spin="busyHere" /></template>
                 </Button>
                 <Button v-if="liveAgent" size="small" severity="secondary" text label="Watch it" @click="emit(`open`, liveAgent)" />
                 <Button

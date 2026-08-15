@@ -33,7 +33,15 @@ import { computed, ref } from "vue";
  * Repo-scoped, so it only renders when the rail has a repository selected. There is no honest way to say "we
  * measured this 3 hours ago" about four repositories at once. */
 
-const { probes, inapplicable } = defineProps<{ probes: readonly ProbeResult[]; inapplicable: readonly ChoreVerdict[]; busy: boolean }>();
+// `measuring` arrives as the keyed set rather than the list the rows take: this strip asks one yes/no question
+// per probe and has no use for when it started.
+const { probes, inapplicable, measuring, repo } = defineProps<{
+    probes: readonly ProbeResult[];
+    inapplicable: readonly ChoreVerdict[];
+    measuring: ReadonlySet<string>;
+    repo: string;
+    busy: boolean;
+}>();
 const emit = defineEmits<{ refresh: [id: string] }>();
 
 const open = ref(false);
@@ -43,15 +51,20 @@ const measured = computed(() =>
         .filter((probe) => probe.state !== `unavailable`)
         .map((probe) => {
             const spec = probeSpec(probe.id);
+            const running = measuring.has(`${repo}|${probe.id}`);
             return {
                 probe,
+                running,
                 title: spec.title,
                 measures: spec.measures,
                 /* What this probe has to say for itself: an age when it measured something, and otherwise how it
                  * broke. Truncated in the strip and given in full on hover — a failure carries the tool's own
                  * words, which are as long as the tool felt like being, and one of them wrapping across four
-                 * lines would push every other measurement off the strip. */
-                note: probe.state === `ok` ? timeAgo(probe.ranAt) : (probe.reason ?? `failed`),
+                 * lines would push every other measurement off the strip.
+                 *
+                 * While it is running the age is REPLACED rather than annotated: "16h ago" beside a spinner is
+                 * the panel describing the measurement it is in the middle of throwing away. */
+                note: running ? `measuring…` : probe.state === `ok` ? timeAgo(probe.ranAt) : (probe.reason ?? `failed`),
                 // A tier-2 probe can run for minutes, so the reader gets told what they are asking for before they
                 // press the button rather than after the sandbox goes quiet.
                 cost: spec.tier === 2 ? ` · takes a few minutes` : ``,
@@ -105,21 +118,27 @@ const summary = computed(() => {
         <div v-if="measured.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             <span class="text-2xs text-subtle">measured</span>
             <div v-for="entry in measured" :key="entry.probe.id" class="flex items-center gap-1.5">
+                <Icon v-if="entry.running" name="spinner" spin class="shrink-0 text-2xs text-info" />
                 <Icon
+                    v-else
                     :name="entry.probe.state === `ok` ? `check-circle` : `exclamation-circle`"
                     class="shrink-0 text-2xs"
                     :class="entry.probe.state === `failed` ? `text-warning` : `text-subtle`"
                 />
                 <span class="shrink-0 text-2xs text-content">{{ entry.title }}</span>
-                <span class="max-w-read-xs truncate text-2xs text-subtle" :title="entry.note">{{ entry.note }}</span>
+                <span class="max-w-read-xs truncate text-2xs" :class="entry.running ? `text-info` : `text-subtle`" :title="entry.note">
+                    {{ entry.note }}
+                </span>
+                <!-- The button holds its place while the probe runs rather than disappearing, so the strip does
+                     not reflow under the pointer that just pressed it — and so there is somewhere to look. -->
                 <button
                     type="button"
                     class="shrink-0 cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"
-                    :disabled="busy"
-                    :title="`Measure ${entry.measures} again now${entry.cost}`"
+                    :disabled="busy || entry.running"
+                    :title="entry.running ? `Measuring ${entry.measures} now` : `Measure ${entry.measures} again now${entry.cost}`"
                     @click="emit(`refresh`, entry.probe.id)"
                 >
-                    <Icon name="refresh" class="text-2xs" />
+                    <Icon :name="entry.running ? `spinner` : `refresh`" :spin="entry.running" class="text-2xs" />
                 </button>
             </div>
         </div>

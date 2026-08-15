@@ -51,7 +51,7 @@ import { useRuns } from "./useRuns";
 const { repo: pinned } = defineProps<{ repo?: string }>();
 
 const api = host();
-const { byRepo, error, isPending, refresh, refreshProbe, snooze } = useChores();
+const { byRepo, error, isPending, measuring, measuringKeys, refresh, refreshProbe, snooze } = useChores();
 const { latestByChore, start, promote } = useRuns();
 
 type Filter = "attention" | "all";
@@ -194,13 +194,18 @@ const onRefreshProbe = (id: string): void => {
     if (at === undefined) {
         return;
     }
-    void attempt(`refresh that measurement`, () => refreshProbe(at, id));
+    void attempt(`ask for that measurement`, () => refreshProbe(at, id));
 };
 
-// Re-measure everything ONE chore rests on, from its own row — the move a stale row offers instead of a turn.
-// The row carries its repository, so this works under "All repositories" where the scope strip's buttons cannot.
+/* Re-measure everything ONE chore rests on, from its own row — the move a stale row offers instead of a turn.
+ * The row carries its repository, so this works under "All repositories" where the scope strip's buttons cannot.
+ *
+ * `attempt` here covers the ASK, not the measurement: the request is milliseconds and the sweep is minutes, and
+ * conflating them is what made this button feel broken — the page's busy flag went up and straight back down
+ * while the actual work had not started. What the reader watches instead is `measuring`, which lives as long as
+ * the probe does. */
 const onRemeasure = (verdict: ChoreVerdict): void => {
-    void attempt(`refresh that measurement`, async () => {
+    void attempt(`ask for that measurement`, async () => {
         await Promise.all(verdict.chore.needs.map((id) => refreshProbe(verdict.repo, id)));
     });
 };
@@ -255,6 +260,8 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                 v-if="only"
                 :probes="only.probes"
                 :inapplicable="only.verdicts.filter((verdict) => verdict.state === `not-applicable`)"
+                :measuring="measuringKeys"
+                :repo="only.repo"
                 :busy="busy"
                 @refresh="onRefreshProbe"
             />
@@ -297,6 +304,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                             :key="rowKey(verdict)"
                             :verdict="verdict"
                             :run="latestByChore.get(rowKey(verdict))"
+                            :measuring="measuring"
                             :expanded="expanded === rowKey(verdict)"
                             :show-repo="showRepo"
                             :busy="busy"

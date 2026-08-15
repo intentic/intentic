@@ -56,6 +56,9 @@ const auditProbe = (names: readonly string[]): ProbeResult =>
 const report = (over: Partial<ChoresReport> = {}): ChoresReport => ({
     repos: [{ repo: `app`, probes: [], signals: signals() }],
     ledger: [],
+    // Verdicts are about EVIDENCE, never about work in flight — a probe running does not make a chore more or
+    // less due, it only makes the panel say so. Empty here because no assertion in this file should depend on it.
+    running: [],
     node: `v24.18.0`,
     ...over,
 });

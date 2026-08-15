@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { probeSpec } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ProbeResult } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test } from "vitest";
+import { createLogger } from "../logger.js";
 import { choreShape, packageSignals } from "./chore-signals.js";
 import { fileChoresStore, isStale } from "./chores-store.js";
-import { runProbe } from "./probe-runner.js";
+import { createProbeRunner, runProbe } from "./probe-runner.js";
 
 const dirs: string[] = [];
 const scaffold = async (files: Record<string, string>): Promise<string> => {
@@ -94,6 +95,70 @@ describe(`runProbe`, () => {
         const result = await runProbe(fakeSpec({ available: `true`, command: `sleep 5`, timeoutMs: 200 }), dir, 1000);
         expect(result.state).toBe(`failed`);
         expect(result.reason).toContain(`timed out`);
+    });
+});
+
+/* THE LANE — one measurement at a time, and every request eventually served.
+ *
+ * The bug these cover is the one a reader meets rather than reads: `refresh` used to return immediately when the
+ * runner was busy, while the route above it still answered `{ ok: true }`. So pressing Re-measure during a
+ * background sweep — which is the likeliest moment to press it, since a sweep is what makes the numbers look
+ * stale — acknowledged the request and then dropped it on the floor, forever.
+ *
+ * The probes here resolve as `unavailable` in milliseconds: the temp repo has no package.json and no lockfile, so
+ * each spec's `available` gate fails at once. That is a REAL run through the real code path, which is what makes
+ * these worth having — the alternative is asserting against a fake and learning nothing about the queue. */
+describe(`the runner's lane`, () => {
+    const runner = async () => {
+        const dir = await scaffold({});
+        const chores = fileChoresStore(join(dir, `probes.json`), join(dir, `ledger.json`));
+        return {
+            chores,
+            runner: createProbeRunner({
+                workspace: { root: dir },
+                chores,
+                // Nothing live: a background sweep defers to the owner's turns, but a probe somebody pressed a
+                // button for is the owner's work and runs regardless. That distinction is asserted below.
+                agents: { liveSessionIds: () => [] },
+                logger: createLogger({ logLevel: `silent`, logPretty: false, historyRoot: `` }),
+            }),
+        };
+    };
+
+    // THE REGRESSION. Both calls are made before either resolves, which is exactly the collision that used to
+    // lose one — and losing it silently, with the panel told the measurement had been asked for.
+    test(`a second request made while one is running is queued, not dropped`, async () => {
+        const { chores, runner: probes } = await runner();
+        await Promise.all([probes.refresh(``, `outdated`), probes.refresh(``, `audit`)]);
+        expect((await chores.probesFor(``)).map((probe) => probe.id).toSorted()).toEqual([`audit`, `outdated`]);
+    });
+
+    // What the panel draws its spinner on. Read synchronously after the call, because the entry has to be visible
+    // from the moment it is asked for — a lane that only admits work once it starts cannot explain a queue.
+    test(`what is waiting is visible before it runs, and gone once it has`, async () => {
+        const { runner: probes } = await runner();
+        const running = probes.refresh(``, `outdated`);
+        expect(probes.running().map((entry) => entry.id)).toEqual([`outdated`]);
+        await running;
+        expect(probes.running()).toEqual([]);
+    });
+
+    // Pressing twice is one measurement. The row's button disables itself, but a second panel — or a sweep that
+    // already queued this probe — is the same work under a different name.
+    test(`the same probe asked for twice joins the request already in the lane`, async () => {
+        const { runner: probes } = await runner();
+        const first = probes.refresh(``, `outdated`);
+        expect(probes.running()).toHaveLength(1);
+        await Promise.all([first, probes.refresh(``, `outdated`)]);
+        expect(probes.running()).toEqual([]);
+    });
+
+    // An id this build has never heard of is not a lane entry that never clears: the panel would show it
+    // measuring forever, which is the same failure as the dropped request wearing the opposite costume.
+    test(`an unknown probe id does not park in the lane`, async () => {
+        const { runner: probes } = await runner();
+        await probes.refresh(``, `nonsense` as ProbeResult["id"]);
+        expect(probes.running()).toEqual([]);
     });
 });
 

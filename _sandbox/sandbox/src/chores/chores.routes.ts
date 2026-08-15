@@ -24,6 +24,7 @@ import { choreSignals } from "./chore-signals.js";
 // and the empty string is what the iq scope and the filesystem join call it. One translation, at the boundary.
 const REPO_ROOT = "root";
 const repoDir = (repo: string): string => (repo === REPO_ROOT ? "" : repo);
+const repoId = (dir: string): string => (dir === "" ? REPO_ROOT : dir);
 
 const knownRepo = async (services: Services, repo: string): Promise<boolean> =>
     repo === REPO_ROOT || (isValidRepoId(repo) && (await discoverRepos(services.workspace.root)).includes(repo));
@@ -43,6 +44,10 @@ export const createChoresRoutes = (services: Services) => {
             return {
                 repos,
                 ledger: await services.chores.ledger(),
+                // Read here rather than served from its own route: "what does this repo say" and "what is being
+                // measured about it" are two halves of one answer, and a panel that had to ask twice would show
+                // them disagreeing — a probe finishing between the two reads reads as both done and running.
+                running: services.probeRunner.running().map(({ repo, id, askedAt, startedAt }) => ({ repo: repoId(repo), id, askedAt, startedAt })),
                 // What is RUNNING, not what a manifest wishes for — an `engines` range is a wish, and the chore
                 // that asks whether this sandbox is on a supported runtime has to read the answer off the process.
                 node: process.version,
@@ -56,7 +61,8 @@ export const createChoresRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `no probe named "${input.id}"` });
             }
             // Deliberately not awaited: a jscpd sweep runs for minutes and the caller is a button, not a batch
-            // job. The result arrives on the next `list`, which the panel is already polling.
+            // job. The runner queues it, so this ack means "it will run", not "it might have" — and the next
+            // `list` carries it as running, which is what the panel draws its progress on.
             void services.probeRunner.refresh(repoDir(input.repo), input.id).catch((error: unknown) => {
                 services.logger.warn({ err: error, repo: input.repo, probe: input.id }, "chores: on-demand probe failed");
             });

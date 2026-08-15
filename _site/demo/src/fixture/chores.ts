@@ -286,7 +286,7 @@ const evidence = (now: number): ChoresReport["repos"] => [webRepo(now), apiRepo(
  * whose whole point is that the digest MATCHES — the settled `clean` verdict and the snooze. Deriving them with
  * the same function the panel uses is the only way that cannot rot when a number above changes. */
 const seedLedger = (now: number): ChoreLedgerEntry[] => {
-    const verdicts = assessReport({ repos: evidence(now), ledger: [], node: NODE }, now);
+    const verdicts = assessReport({ repos: evidence(now), ledger: [], running: [], node: NODE }, now);
     const digestFor = (repo: string, chore: string): string =>
         verdicts.find((verdict) => verdict.repo === repo && verdict.chore.id === chore)?.digest ?? ``;
     const entry = (
@@ -324,7 +324,14 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
 // later read reflects it — a fixture that answered read-only would have controls that spring back on next poll.
 let ledger: ChoreLedgerEntry[] | undefined;
 
-export const choresReport = (now: number): ChoresReport => ({ repos: evidence(now), ledger: (ledger ??= seedLedger(now)), node: NODE });
+// Nothing measuring: the demo has no runner behind it, and a spinner that never resolves is a worse tour of the
+// surface than a board of settled evidence.
+export const choresReport = (now: number): ChoresReport => ({
+    repos: evidence(now),
+    ledger: (ledger ??= seedLedger(now)),
+    running: [],
+    node: NODE,
+});
 
 /** POST /chores/ledger — record a run, or snooze. One row per repo + chore, newest write wins. */
 export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {

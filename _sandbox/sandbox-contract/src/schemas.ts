@@ -6656,12 +6656,34 @@ export const ChoreLedgerEntrySchema = z.object({
 });
 export type ChoreLedgerEntry = z.infer<typeof ChoreLedgerEntrySchema>;
 
+/* A measurement that is HAPPENING, as opposed to one that has happened. The probe cache can only ever describe
+ * finished work — `ranAt` is the completion stamp — so a surface reading it alone has no way to say "we are
+ * measuring this right now", and the panel's re-measure button spent its whole life looking like it did nothing:
+ * the request is an ack, the sweep takes minutes, and every visible fact on the row went on describing the
+ * measurement it was replacing.
+ *
+ * `startedAt` is when the probe actually began, absent while it is still waiting behind another one — the runner
+ * has ONE lane across the whole sandbox, so "queued" is a real and common state, and a reader told "measuring"
+ * about a probe that has not started is being lied to about how long it has left. */
+export const RunningProbeSchema = z.object({
+    repo: z.string(),
+    id: ProbeIdSchema,
+    // When this was asked for. Always present, so a waiting probe can still say how long it has been waiting.
+    askedAt: z.number(),
+    startedAt: z.number().optional(),
+});
+export type RunningProbe = z.infer<typeof RunningProbeSchema>;
+
 // GET /chores — every discovered repo's standing evidence, plus the ledger, in one read. One route rather than
 // one per repo because the rail badge scans ALL of them on a timer, and N requests a minute to answer "is
 // anything due" is the kind of poll that shows up in a battery graph.
 export const ChoresReportSchema = z.object({
     repos: z.array(z.object({ repo: z.string(), probes: z.array(ProbeResultSchema), signals: ChoreSignalsSchema })),
     ledger: z.array(ChoreLedgerEntrySchema),
+    // What the runner is measuring and what is waiting behind it, right now. Part of the standing read rather
+    // than a route of its own: it is the same question ("what does this repo currently say") asked about work in
+    // flight, and a panel that had to ask twice would show the two halves disagreeing.
+    running: z.array(RunningProbeSchema),
     // The daemon's own runtime, for the chore that asks whether this sandbox is running something end-of-life.
     // Read off the process rather than a manifest: what is INSTALLED is the fact that matters, and an `engines`
     // range is a wish.
