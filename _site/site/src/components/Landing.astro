@@ -4,6 +4,8 @@ import { faqGroups } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
 import { APP_URL, DEMO_PATH, discordUrl, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
+// The providers' own marks, the same five the app draws beside every session.
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
 import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -348,7 +350,20 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                             {
                                 content.economics.accounts.map((account) => (
                                     <li class="flex items-center gap-3 px-5 py-4">
-                                        <span class="h-2 w-2 shrink-0 rounded-full bg-success" />
+                                        {/* The provider's own mark, in place of the status dot that used to sit
+                                            here: the dot said "connected" about accounts the reader has not
+                                            connected yet, while the logo says which account the row means at a
+                                            glance. Drawn in currentColor at text size, exactly as the app draws it. */}
+                                        <svg
+                                            viewBox="0 0 24 24"
+                                            width="18"
+                                            height="18"
+                                            fill="currentColor"
+                                            class="shrink-0 text-content"
+                                            aria-hidden="true"
+                                        >
+                                            <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                        </svg>
                                         <div class="flex flex-1 flex-wrap items-baseline justify-between gap-x-3">
                                             <h3 class="text-sm font-medium text-content">{account.name}</h3>
                                             <span class="text-2xs text-subtle">{account.detail}</span>

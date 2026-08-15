@@ -65,10 +65,13 @@ running on slogans, so every section was rewritten to the simplest wording that 
 standing rule, which the copy rules above now enforce section by section rather than only in the hero:
 **no sentence may lean on a word the reader has not been given.** `#verbs` led with "Run a fleet. Stay
 in control." over "Run them, wire them to your systems" — two abstractions and a pronoun, a second
-screenful with nothing in it to hold; it now says "Run agents. Give them what they need. Read every
-change." Card lines lost their floating pronouns ("It plans first" became "The agent writes a plan").
-`Host` said "hand off the day-to-day" and now says what that is: move it to a server, invite your team.
-`#economics` reads "Ten agents, on the AI plans you already pay for." `#connect` is "Three steps to your
+screenful with nothing in it to hold; it now says "Run agents. Connect your tools. Read every change."
+over "Each agent works in its own worktree, so many can run at once and they won't conflict." Card lines
+lost their floating pronouns ("It plans first" became "The agent writes a plan"). `Host` said "hand off
+the day-to-day" and now says what that is: move it to a server, invite your team.
+`#economics` reads "intentic is free. Agents use AI plans you already pay for.", and its account list
+carries each provider's own brand mark, drawn from `@intentic/constants` so the site and the app's
+session labels cannot show different logos. `#connect` is "Three steps to your
 first agent", and step ② is where **sandbox** is defined rather than assumed, because that is where a
 reader meets the word first. The hero chip "Bring your own agent" became "Works with Claude, Codex and
 Grok": the old one assumed the reader knew what an agent was and had one, which was the assumption the

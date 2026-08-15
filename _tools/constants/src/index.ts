@@ -1,6 +1,9 @@
 // Cross-product constants with exactly one source of truth. Shared by the proprietary platform and the
 // public intentic.dev site so hand-synced values can't drift.
 
+// The providers' brand marks: drawn by the app beside every session and by the site's cost band.
+export * from "./provider-logos.js";
+
 /* THE FOUR FIXED DIRECTORY LAYOUTS, for the same reason the ports below are here: a location spelled in two
  * files is a location that will eventually be two different locations. These are the ones that cross a package
  * boundary — the container's own dirs, the state folder inside a workspace, and the state root on a

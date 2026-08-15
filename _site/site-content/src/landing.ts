@@ -1,3 +1,5 @@
+import type { ProviderBrand } from "@intentic/constants";
+
 import { productHref } from "./product";
 
 export interface LandingFact {
@@ -80,7 +82,7 @@ export interface LandingContent {
      * bento, which between them said the same powers three times over. */
     verbs: LandingSectionIntro & { items: VerbTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison };
-    economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
+    economics: LandingSectionIntro & { accounts: { name: string; logo: ProviderBrand; detail: string }[]; points: string[] };
     /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
      * conversion order is claim → proof → objection → action: its first card answers the architectural
      * half of "can I trust this" (it is the only place on the page that does, now that the ownership
@@ -164,8 +166,8 @@ export const landingContent: LandingContent = {
         // two abstractions and a pronoun, so a reader who had not already decoded the hero got a
         // second screenful with nothing in it to hold. The sub now spends its line on the one
         // mechanical fact that makes "ten at once" believable instead of restating the heading.
-        heading: "Run agents. Give them what they need. Read every change.",
-        sub: "Each agent works on its own branch, so ten can run at once without touching each other's work.",
+        heading: "Run agents. Connect your tools. Read every change.",
+        sub: "Each agent works in its own worktree, so many can run at once and they won't conflict.",
         items: [
             {
                 verb: "Run",
@@ -251,14 +253,18 @@ export const landingContent: LandingContent = {
     },
     economics: {
         eyebrow: "What it costs",
-        heading: "Ten agents, on the AI plans you already pay for.",
-        sub: "intentic itself is free. You sign in with the AI accounts you already have, and nothing is charged on top.",
+        // "intentic" stays lowercase at the start of a sentence: that is the standing rule in
+        // messaging.md, and the app, the docs and every other band already do it.
+        heading: "intentic is free. Agents use AI plans you already pay for.",
+        sub: "You bring the AI plans, your machine does the work, and there is nothing to pay us.",
+        // `logo` is the provider's own brand mark, the same five the app draws beside every session. The
+        // paths live in @intentic/constants so the two surfaces cannot drift apart.
         accounts: [
-            { name: "Claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
-            { name: "Codex", detail: "on your ChatGPT plan" },
-            { name: "Grok", detail: "on your SuperGrok plan" },
-            { name: "Kimi Code", detail: "on your Kimi Membership" },
-            { name: "Google", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
+            { name: "Claude", logo: "claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
+            { name: "Codex", logo: "codex", detail: "on your ChatGPT plan" },
+            { name: "Grok", logo: "grok", detail: "on your SuperGrok plan" },
+            { name: "Kimi Code", logo: "kimi", detail: "on your Kimi Membership" },
+            { name: "Google", logo: "gemini", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
         ],
         points: [
             "We never meter your tokens or add a markup.",
