@@ -66,11 +66,20 @@ const logout = async (): Promise<void> => {
 <template>
     <!-- The dot sits OUTSIDE the avatar's clipping circle, so the wrapper carries the position and the button
          keeps its overflow-hidden (an avatar image has to be clipped round; a marker must not be). -->
+    <!-- THE "YOU ARE HERE" MARK IS A LIT PLATE BEHIND THE AVATAR — the same plate every navigation tile above
+         wears while you stand on its view, in the same accent, at the same corner radius. Anything drawn ON the
+         avatar fails twice over: a photo fills the circle edge to edge, so a border under it is invisible, and
+         a ring around it puts a coloured collar on somebody's face — a decoration of the person, not a
+         statement about the app's frame. Behind it, the rail is doing the talking, which is whose job it is.
+
+         The plate is a sibling, absolutely positioned, so the avatar keeps its own round clip and its size: the
+         control does not grow, shift the column, or move by a pixel between the two states. -->
     <div class="account-control relative mt-auto shrink-0">
+        <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
             type="button"
-            class="flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
-            :class="{ 'border-link bg-primary-600/15 text-link': onSettings }"
+            class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
+            :class="onSettings ? `border-line text-link` : `border-line text-muted`"
             :aria-label="accountHint"
             :aria-current="onSettings ? 'page' : undefined"
             v-tooltip.right="accountHint"
