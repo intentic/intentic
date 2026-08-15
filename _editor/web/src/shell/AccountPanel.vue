@@ -2,7 +2,7 @@
 import { Avatar } from "@intentic/ui";
 import Popover from "primevue/popover";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { useAuth } from "../composables/useAuth";
@@ -19,6 +19,14 @@ import AccountCredits from "./AccountCredits.vue";
 
 const { user, signOut } = useAuth();
 const router = useRouter();
+const route = useRoute();
+
+/* THE SETTINGS PAGES HAVE NO TILE, SO THE CONTROL THAT OPENS THEM IS THE TILE. /settings and its tabs are
+ * reached from this avatar's menu and from nowhere else in the rail, which left the whole area as the one place
+ * in the app where the frame said nothing about where you were standing. Lit on the same terms as a navigation
+ * tile (route AND any sub-path, so a tab keeps it), in the same accent — the avatar is round and bordered
+ * rather than a plate, so the accent lands on its ring and its glyph. */
+const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
 /* THE BALANCE, WITHOUT OPENING ANYTHING. Two escalating steps, and deliberately no third:
  *
@@ -62,7 +70,9 @@ const logout = async (): Promise<void> => {
         <button
             type="button"
             class="flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
+            :class="{ 'border-link bg-primary-600/15 text-link': onSettings }"
             :aria-label="accountHint"
+            :aria-current="onSettings ? 'page' : undefined"
             v-tooltip.right="accountHint"
             @click="panel?.toggle($event)"
         >

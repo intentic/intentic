@@ -626,12 +626,16 @@ useKeybindings();
             </button>
 
             <!-- Add a capability (a repo / internal tool / external tool) — the /capabilities page; every "add"
-                 is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage. -->
+                 is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage.
+
+                 Standing on that page lights this tile in the rail's ONE accent, exactly like every navigation
+                 tile above: the dashed "+" keeps its own resting shape, but "you are here" is a single claim
+                 and the rail may not say it in two colours — a grey plate here read as a hover, not a place. -->
             <RouterLink
                 to="/capabilities"
                 :class="[
                     cmp.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
-                    { 'pointer-events-none opacity-40': !reachable, 'border-line-strong bg-overlay text-content': isNavActive('/capabilities') },
+                    { 'pointer-events-none opacity-40': !reachable, 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
