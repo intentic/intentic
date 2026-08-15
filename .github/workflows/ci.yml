@@ -450,6 +450,10 @@ jobs:
       # because this job OWNS the desktop packages — the verify matrix subtracts them, so their build happens
       # HERE or nowhere. No separate typecheck: desktop-app's build IS `vue-tsc --noEmit && vite build`.
       - run: pnpm turbo run build test --filter=@intentic/desktop-app... --filter=@intentic/desktop-smoke... --continue=dependencies-successful
+      # The launcher scripts, staged out of the commit (stage-desktop-scripts.sh). tauri-build resolves the
+      # resource glob while CARGO builds, so the three bare cargo steps below need it as much as a bundle does
+      # — and the desktop-app `build` above, which stages on its own, is a turbo task that a cache hit skips.
+      - run: bash _tools/scripts/stage-desktop-scripts.sh
       - run: cargo fmt --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all --check
       - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml

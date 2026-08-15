@@ -170,6 +170,11 @@ mkdir -p "$OUT"
 cd "$APP"
 
 if [ "$ASSEMBLE" -eq 0 ]; then
+    # The scripts the installers carry, taken from the COMMIT (stage-desktop-scripts.sh says why). Called here
+    # rather than left to the app's own `build` script, because the line below switches beforeBuildCommand off
+    # for both bundle passes — and a release that stages nothing would bundle a directory that is empty or a
+    # release older than this build.
+    bash "$ROOT/_tools/scripts/stage-desktop-scripts.sh"
     # The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
     # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
     # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and

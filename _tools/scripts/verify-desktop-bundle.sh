@@ -6,11 +6,12 @@
 # Two regression classes, both invisible to `tauri build` (which succeeds happily either way) and both of which
 # reach a user as "the app installed and then could not do the thing":
 #
-#   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles `_site/site/public/scripts/*` by GLOB, which is what makes
-#      "a script added to the site is bundled by construction" true — and also what makes it silently untrue the
-#      day the glob is narrowed, a build runs against a stale checkout, or a bundler drops a file it cannot
-#      stat. The app spawns these by basename at run time, so a missing one is a launcher button that fails only
-#      once a user presses it. Every script the COMMIT carries must be present AND byte-identical.
+#   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles by GLOB, over the directory stage-desktop-scripts.sh
+#      fills from the commit before each build, which is what makes "a script added to the site is bundled by
+#      construction" true — and also what makes it silently untrue the day the glob is narrowed, a build path
+#      reaches the bundler without staging, or a bundler drops a file it cannot stat. The app spawns these by
+#      basename at run time, so a missing one is a launcher button that fails only once a user presses it.
+#      Every script the COMMIT carries must be present AND byte-identical.
 #
 #   2. THE DEEP LINK IS NOT REGISTERED. `intentic://` is the entire channel from the SPA into the app — setup,
 #      recreate, sign-in, and the credential coming back. On the installed paths that registration is a
@@ -61,7 +62,8 @@ need() {
 # runs: in job 92707727494 the .deb was packed with a cleanup.sh that the .rpm, bundled two seconds later, no
 # longer saw — three correct installers, a tree that moved under them, and a red build. A release ships what the
 # commit says, so that is the thing worth asserting; a dirty working tree is the developer's business, not this
-# script's.
+# script's. The bundlers now read the commit too (stage-desktop-scripts.sh), which is what turned the two sides
+# of this comparison into one source — this reads it back out of the artifact rather than trusting that.
 git -C "$ROOT" archive HEAD "$SOURCE_REL" | tar -x -C "$WORK"
 SOURCE_SCRIPTS="$WORK/$SOURCE_REL"
 
@@ -97,8 +99,8 @@ compare_scripts() {
             problems=$((problems + 1))
         fi
     done
-    # A file in the bundle that the commit does not carry means the build read a stale tree — the app would spawn
-    # a script nobody can review at its source path any more.
+    # A file in the bundle that the commit does not carry means the bundler read something other than the
+    # staged copy — the app would spawn a script nobody can review at its source path.
     while IFS= read -r name; do
         if ! printf '%s\n' "${EXPECTED[@]}" | grep -qxF "$name"; then
             fail "$label: stale $name is bundled but is not committed at $SOURCE_REL"

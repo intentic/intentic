@@ -117,8 +117,12 @@ needs, and say what it is doing to a window instead of a terminal
 | Start · Stop · Logs | `docker` directly — there is no script that lists or tails |
 | The desktop-sync panel | `intentic-sync status --json` (its own install under `~/.intentic/sync/bin` first, then PATH) |
 
-The scripts are **bundled as resources** from `_site/site/public/scripts/` (`tauri.conf.json` globs the whole
-directory, so a script added to the site is bundled by construction). A release of the app is cut from one
+The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:
+[`_tools/scripts/stage-desktop-scripts.sh`](../../_tools/scripts/stage-desktop-scripts.sh) empties
+`src-tauri/staged-scripts/` and refills it from `git archive HEAD` before every build, and `tauri.conf.json`
+globs *that* — so a script added to the site is bundled by construction, and a file the commit does not carry
+cannot be, however long the runner has kept its checkout. The trade is that an **uncommitted** edit to a
+script does not reach a local installer or `tauri dev`; commit it. A release of the app is cut from one
 commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`; the shims fetch the newest released `ic` at run time,
 which is how flow fixes reach app users between app updates.
 
@@ -243,6 +247,9 @@ report anything.
   `setup_link.rs`.
 - `scripts/stage-local-downloads.sh` — build installers from this checkout into `_site/site/public/desktop/`
   (gitignored), so the local site serves them and the web app's dev download links get your own build.
+- `src-tauri/staged-scripts/` — the launcher scripts as the commit carries them (gitignored, rebuilt by
+  `pnpm stage:scripts`; every `dev`, `build`, `lint:rust` and `test:rust` runs it first, because
+  `tauri-build` resolves the resource glob while cargo builds).
 
 ## Release & update
 

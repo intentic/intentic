@@ -24,7 +24,7 @@
         "longDescription": "Run your intentic sandbox on this computer without a terminal — this app installs Docker if you need it, starts the sandbox and its tunnel, keeps it updated, and opens your workspace.",
         "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
         "resources": {
-            "../../../_site/site/public/scripts/*": "scripts/"
+            "staged-scripts/*": "scripts/"
         },
         "linux": {
             "deb": {

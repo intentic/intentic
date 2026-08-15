@@ -14,10 +14,12 @@
 **/npm-debug.log*
 **/pnpm-debug.log*
 
-# desktop (Tauri): the Rust build tree, tauri-build's codegen, and installers staged into the site for a
+# desktop (Tauri): the Rust build tree, tauri-build's codegen, the launcher scripts staged out of the commit
+# for the bundlers (_tools/scripts/stage-desktop-scripts.sh), and installers staged into the site for a
 # local download test (_editor/desktop-app/scripts/stage-local-downloads.sh).
 _editor/desktop-app/src-tauri/target
 _editor/desktop-app/src-tauri/gen
+_editor/desktop-app/src-tauri/staged-scripts
 _site/site/public/desktop
 # ic (the host-side CLI): its Rust build tree.
 _sandbox/ic/target
