@@ -444,6 +444,46 @@
                 "skill": "skills/komodo/SKILL.md"
             },
             {
+                "id": "cloudflare",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Cloudflare",
+                    "logo": "cloudflare",
+                    "description": "DNS, domains, Workers and Pages on Cloudflare.",
+                    "category": "deploy",
+                    "hint": "The agent calls the Cloudflare API with curl. Use a scoped API token, not the legacy Global API Key: pick just the permissions and zones the agent needs, and what you don't grant it can't touch. DNS edits and cache purges hit live traffic — a read-only token is the safe default.",
+                    "guide": {
+                        "url": "https://dash.cloudflare.com/profile/api-tokens",
+                        "linkLabel": "Create an API token",
+                        "scopes": "your pick per task — e.g. `Zone: Read` + `DNS: Edit`, or the read-only template",
+                        "steps": [
+                            "Open the dashboard → `My Profile` → `API Tokens` → `Create Token`.",
+                            "Start from a template — `Edit zone DNS` for DNS work, `Read all resources` for a read-only agent — or build a custom token with exactly the permissions the task needs.",
+                            "Under `Zone Resources` / `Account Resources`, include specific zones or accounts rather than all of them where you can.",
+                            "Copy the token — it is shown once — and paste it here.",
+                            "The `Account ID` is on any zone's `Overview` page, right-hand column. Optional: the agent can list your accounts itself."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "token",
+                        "label": "API token",
+                        "secret": true
+                    },
+                    {
+                        "key": "accountId",
+                        "label": "Account ID",
+                        "optional": true
+                    }
+                ],
+                "env": {
+                    "CLOUDFLARE_API_TOKEN": "${token}",
+                    "CLOUDFLARE_ACCOUNT_ID": "${accountId}"
+                },
+                "skill": "skills/cloudflare/SKILL.md"
+            },
+            {
                 "id": "postgres",
                 "kind": "cli",
                 "catalog": {
