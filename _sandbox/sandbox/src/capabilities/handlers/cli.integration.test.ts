@@ -77,20 +77,53 @@ test("apply writes the connector's SKILL.md; discord voice pends only when the g
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "pending", detail: "voice needs a rebuild (whisper)" });
 });
 
-test("whatsapp pends with the pairing code while the gateway is waiting for the phone, and clears when it stops", async () => {
-    const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };
+/* WHATSAPP IS ACTIVE ONLY WHEN A PHONE ACTUALLY LINKED, and every other moment of the ceremony pends. The old
+ * rule was the inverse — pend only while a code is in hand, active otherwise — and the four states below were
+ * all "active" under it: a green card, an add flow that considered itself finished, and a reader navigated off
+ * the only screen that was ever going to show them the code. */
+const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };
+const ready = { capabilityId: "whatsapp", provider: "whatsapp", gateway: "ready" as const };
+
+test("whatsapp pends until a phone links: silence, waiting, the live code, a refusal — then active", async () => {
     const { ctx } = tempCtx();
     await drain(cliHandler.apply(ctx, "whatsapp", whatsapp.config));
-    // The gateway publishes each waiting capability's code via /listeners/whatsapp/status; the card shows it.
-    setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: "ABCD-EFGH" } }, Date.now());
+    // Nothing posted yet — the seconds right after the add, and a gateway that has stopped. Not a paired phone.
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
-        detail: "enter ABCD-EFGH on the phone: WhatsApp → Linked devices → Link with phone number",
+        detail: "starting the WhatsApp connection…",
     });
-    // Paired: the gateway stops publishing the code and the card goes active. The code is keyed by capability
-    // id, so ANOTHER whatsapp capability's pairing must not pend this one.
-    setListenerStatus("whatsapp", { connections: [], pairing: { other: "ZZZZ-YYYY" } }, Date.now());
+    // The socket is up, the code hasn't arrived (or died with the socket that minted it).
+    setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "waiting" } } }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
+        state: "pending",
+        detail: "waiting for WhatsApp to issue a pairing code…",
+    });
+    // A live code: carried in its own field so the card can set it big and copyable, not buried in the sentence.
+    setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "code", code: "ABCDEFGH" } } }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
+        state: "pending",
+        detail: "Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.",
+        code: "ABCDEFGH",
+    });
+    // WhatsApp's own complaint reaches the owner verbatim — the retry behind it is silent.
+    setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "failed", detail: "Not a WhatsApp account" } } }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
+        state: "pending",
+        detail: "WhatsApp refused that number: Not a WhatsApp account",
+    });
+    // Paired: no ceremony left for this id, and the gateway reports the session ready.
+    setListenerStatus("whatsapp", { connections: [ready], pairing: { other: { state: "waiting" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({ state: "active" });
+});
+
+test("whatsapp pends while a paired session is reconnecting — a dropped socket is not a connected one", async () => {
+    const { ctx } = tempCtx();
+    await drain(cliHandler.apply(ctx, "whatsapp", whatsapp.config));
+    setListenerStatus("whatsapp", { connections: [{ ...ready, gateway: "connecting" }], pairing: {} }, Date.now());
+    expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
+        state: "pending",
+        detail: "reconnecting to WhatsApp…",
+    });
 });
 
 test("a provider without image needs (github) goes straight to active", async () => {

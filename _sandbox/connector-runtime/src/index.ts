@@ -21,4 +21,4 @@ export {
 } from "./painter.js";
 // The wire types both ends of the listener routes speak, re-exported so a connector types its payloads without
 // depending on the whole contract package itself.
-export type { ListenerDispatchFrame, ListenerGatewayPhase, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
+export type { ListenerDispatchFrame, ListenerGatewayPhase, ListenerMessage, ListenerPairing, ListenerStatus } from "@intentic/sandbox-contract";

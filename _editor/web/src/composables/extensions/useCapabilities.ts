@@ -60,10 +60,28 @@ export function useCapabilitySecret() {
     });
 }
 
+/* HOW OFTEN AN UNFINISHED SETUP IS RE-READ, and why this list polls at all when nothing else here does.
+ *
+ * Every other fact on this screen changes only when the reader changes it, so an invalidate on each mutation is
+ * the whole story. A capability that is PENDING is the exception: it is waiting on something happening outside
+ * the browser — a phone linking, a machine checking in, a login window finishing — and the moment it lands is
+ * not a moment this app is told about. Read once and never again, the card sat on a status captured before the
+ * work had begun; WhatsApp's pairing code arrives a few seconds after the add and simply never appeared.
+ *
+ * Three seconds because the thing being watched is a CODE THE READER IS COPYING OFF THE SCREEN: WhatsApp mints
+ * a fresh one whenever it drops an unlinked socket, and a card a minute behind that is showing a dead code with
+ * every appearance of a live one. Only while something is pending — a fully connected sandbox goes quiet. */
+const PENDING_POLL_MS = 3_000;
+
 export function useCapabilities() {
     const queryClient = useQueryClient();
 
-    const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchCapabilities });
+    const { query, error } = useSandboxQuery({
+        queryKey: QUERY_KEY,
+        queryFn: fetchCapabilities,
+        refetchInterval: ({ state }) =>
+            (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending`) ? PENDING_POLL_MS : false,
+    });
     // Adding/removing a capability can recompose the environment overlay (image fragments) — refresh the
     // Environment card alongside the list so "Pending rebuild" shows up immediately. A platform capability
     // (devops/monorepo) also scaffolds repos that appear as rail panels, so refresh the panels list too.

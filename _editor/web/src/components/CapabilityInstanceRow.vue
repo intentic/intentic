@@ -23,7 +23,7 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import type { HostSummary } from "@intentic/sandbox-contract";
-import { ContextMenu, type IconName, Row, StatusBadge } from "@intentic/ui";
+import { ContextMenu, CopyButton, type IconName, Row, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
@@ -62,6 +62,19 @@ const removable = computed(() => props.entry.kind !== `devops`);
 
 // The one step this row cannot offer itself — a rebuild, which happens on the Sandbox screen.
 const needsRebuild = computed(() => rebuildStep(props.entry.kind, props.instance));
+
+/* THE STEP THAT HAPPENS ON A DEVICE THIS APP CANNOT REACH: a code the daemon is holding out, to be typed into
+ * a phone standing next to the reader (WhatsApp's link-a-device ceremony). It gets a block of its own under the
+ * row rather than a line inside it, and that is the point — a code is read off the screen and typed by hand
+ * somewhere else, so it has to survive being looked away from and back at, at arm's length, and it has to be
+ * copyable in one press. Squeezed into the row's description it was six characters of body text next to a
+ * hostname; on a card that never refreshed, it wasn't there at all.
+ *
+ * The waiting sentence gets the same block for the same reason: what the reader needs to know in the seconds
+ * before a code exists is that one is COMING and this screen will show it — the exact belief that being sent
+ * back to the catalog with a green badge destroyed. */
+const pendingStep = computed(() => (props.instance.status.state === `pending` && !needsRebuild.value ? props.instance.status.detail : undefined));
+const pairingCode = computed(() => props.instance.status.code);
 
 /* THE ONE ACTION THAT EARNS THE ROW'S ONLY BUTTON. Ordered by urgency rather than by kind: a connection that
  * cannot be used until somebody does something shows THAT, and one that works shows the way back into it.
@@ -116,41 +129,62 @@ const items = computed<MenuItem[]>(() => {
 </script>
 
 <template>
-    <Row density="compact">
-        <template #title>
-            <span class="flex flex-wrap items-center gap-2">
-                <!-- Mono because it is an identifier, not a label: it is what the agent's skill, its tools and
-                     its env vars are named after, and it is compared character by character against them. -->
-                <span class="truncate font-mono">{{ instance.id }}</span>
-                <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" />
-            </span>
-        </template>
-        <!-- WHAT TELLS THIS CONNECTION APART, on its own line and with the whole width to do it in. It used to
-             sit in the row's trailing #meta cluster, capped at 10rem and pressed against the name — which for
-             the things that actually live here (an email address, a host:port, a database) is exactly the wrong
-             half of the string to keep. The unfinished step rides the same line, in the daemon's words, beside
-             the badge that named the state in the reader's — the division <CapabilityConnections> also draws. -->
-        <template v-if="facts || needsRebuild" #description>
-            <!-- `block`, because an inline span cannot be ellipsised: a tunnel that lists every network it
-                 carries, or a mailbox at somebody's very long company domain, would otherwise run under the
-                 row's button. The whole value is one hover away. -->
-            <span v-if="facts" class="block truncate font-mono" :title="facts">{{ facts }}</span>
-            <!-- Wraps where the address truncates: the tail of this one is the way out of the state it
-                 describes, and an ellipsis would be hiding exactly the words that lead somewhere. -->
-            <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
-                {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
-            </RouterLink>
-        </template>
-        <template #control>
-            <div class="flex shrink-0 items-center gap-1">
-                <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
-                    <template #icon><Icon :name="primary.icon" /></template>
-                </Button>
-                <Button size="small" severity="secondary" :text="true" :rounded="true" aria-label="More actions" @click="menu?.show($event)">
-                    <template #icon><Icon name="ellipsis" /></template>
-                </Button>
-                <ContextMenu ref="menu" :model="items" :min-width="11" />
+    <!-- One divided cell of the group: the row, and — while something is outstanding on another device — the
+         step it is waiting on, directly under it. -->
+    <div>
+        <Row density="compact">
+            <template #title>
+                <span class="flex flex-wrap items-center gap-2">
+                    <!-- Mono because it is an identifier, not a label: it is what the agent's skill, its tools
+                         and its env vars are named after, and it is compared character by character against
+                         them. -->
+                    <span class="truncate font-mono">{{ instance.id }}</span>
+                    <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" />
+                </span>
+            </template>
+            <!-- WHAT TELLS THIS CONNECTION APART, on its own line and with the whole width to do it in. It used
+                 to sit in the row's trailing #meta cluster, capped at 10rem and pressed against the name —
+                 which for the things that actually live here (an email address, a host:port, a database) is
+                 exactly the wrong half of the string to keep. -->
+            <template v-if="facts || needsRebuild" #description>
+                <!-- `block`, because an inline span cannot be ellipsised: a tunnel that lists every network it
+                     carries, or a mailbox at somebody's very long company domain, would otherwise run under the
+                     row's button. The whole value is one hover away. -->
+                <span v-if="facts" class="block truncate font-mono" :title="facts">{{ facts }}</span>
+                <!-- Wraps where the address truncates: the tail of this one is the way out of the state it
+                     describes, and an ellipsis would be hiding exactly the words that lead somewhere. -->
+                <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
+                    {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                </RouterLink>
+            </template>
+            <template #control>
+                <div class="flex shrink-0 items-center gap-1">
+                    <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
+                        <template #icon><Icon :name="primary.icon" /></template>
+                    </Button>
+                    <Button size="small" severity="secondary" :text="true" :rounded="true" aria-label="More actions" @click="menu?.show($event)">
+                        <template #icon><Icon name="ellipsis" /></template>
+                    </Button>
+                    <ContextMenu ref="menu" :model="items" :min-width="11" />
+                </div>
+            </template>
+        </Row>
+
+        <!-- THE CODE, AT THE SIZE IT IS ACTUALLY USED AT. Wide tracking and `select-all` because it is
+             transcribed character by character into a handset — the two failure modes are misreading it and
+             losing your place in it, and both are geometry. `tabular-nums` keeps it from jumping as it is
+             replaced in place: WhatsApp mints a new code whenever it drops the unlinked socket, and the card
+             swaps it under the reader rather than making them go and find it again. -->
+        <!-- Recessed against the group's own surface (the bg-canvas-inside-bg-card pattern), so the block reads
+             as a step attached to this row rather than as a second row under it. -->
+        <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line bg-canvas px-3 py-2.5">
+            <div v-if="pairingCode" class="flex flex-wrap items-center gap-3">
+                <span class="select-all font-mono text-xl font-semibold tracking-[0.3em] text-content tabular-nums">{{ pairingCode }}</span>
+                <CopyButton :text="pairingCode" label="Copy" />
             </div>
-        </template>
-    </Row>
+            <!-- The sentence stays whatever the daemon said: the phone's own menu path when a code is up, what
+                 WhatsApp refused when it refused, and "waiting…" in between. -->
+            <span class="text-xs text-warning">{{ pendingStep }}</span>
+        </div>
+    </div>
 </template>

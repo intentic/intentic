@@ -44,6 +44,10 @@ export interface CapabilityConnection {
     readonly tone: StatusVariant;
     /** What is still missing, when something is — the daemon's own sentence, already written for a reader. */
     readonly note?: string;
+    /** A code the owner has to type on another device to finish this one (WhatsApp's link-a-device code). It
+     *  rides the row because the sentence beside it says "type this code", and a row that says that without
+     *  showing one is a riddle; the card it leads to is where it is set big enough to transcribe from. */
+    readonly code?: string;
 }
 
 export interface CapabilityConnectionGroup {
@@ -80,7 +84,11 @@ const emit = defineEmits<{ open: [cardId: string] }>();
                     <span v-if="row.detail" class="font-mono text-subtle"><span v-if="row.card"> · </span>{{ row.detail }}</span>
                     <!-- Beside the facts rather than in place of them: what is missing does not stop the hostname
                          being the thing that identifies the row. -->
-                    <span v-if="row.note" class="text-warning"><span v-if="row.card || row.detail"> · </span>{{ row.note }}</span>
+                    <span v-if="row.note" class="text-warning">
+                        <span v-if="row.card || row.detail"> · </span>
+                        <span v-if="row.code" class="font-mono font-semibold tracking-widest">{{ row.code }}</span>
+                        <span v-if="row.code"> — </span>{{ row.note }}
+                    </span>
                 </template>
                 <template #meta>
                     <StatusBadge :variant="row.tone" size="xs" dot :label="row.state" />

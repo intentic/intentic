@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
+import type { ListenerPairing } from "@intentic/sandbox-contract";
 import type { Logger } from "@intentic/connector-runtime";
 import type { WaRawMessage } from "./types.js";
 
@@ -14,11 +15,18 @@ import type { WaRawMessage } from "./types.js";
  * blast radius of a baileys major bump inside one file.
  *
  * The credential here is not a token — it is the SESSION the pairing ceremony mints, persisted as baileys'
- * multi-file auth state under the session dir. That is why open() has two personalities: with a stored session
- * it resumes silently; without one it requests a PAIRING CODE for the configured phone number and surfaces it
- * (the gateway posts it in status, the capability card shows it), then sits in "pairing" until the phone
- * enters it. WhatsApp closes an unpaired socket after a while, so the recreate loop mints a fresh code when
- * that happens — the card always shows the current one. */
+ * multi-file auth state under the session dir. That is why open() has two personalities: with a REGISTERED
+ * session it resumes silently; otherwise it requests a PAIRING CODE for the configured phone number and
+ * surfaces it (the gateway posts it in status, the capability card shows it), then sits in "pairing" until the
+ * phone enters it. WhatsApp closes an unpaired socket after a while, so the recreate loop mints a fresh code
+ * when that happens — the card always shows the current one, stamped with when it was minted.
+ *
+ * EVERY MOMENT OF THAT CEREMONY IS REPORTED, not just the ones holding a code. `pairing()` answers `waiting`
+ * before the first code and again the instant a socket dies with one, `code` while one is live, and `failed`
+ * with WhatsApp's own complaint when the number is refused. Publishing only codes is what let a phone that had
+ * never linked read as connected: the daemon saw an absent code during the two seconds before the first one
+ * arrived, decided nothing was outstanding, and the card went green — so the owner was navigated away from the
+ * only screen that was ever going to show them the code. */
 
 // Reconnect backoff for ordinary closes (network blips, server restarts). Pairing-phase closes reuse it too —
 // each recreate mints a fresh code, and hammering the pairing endpoint reads as abuse.
@@ -43,7 +51,8 @@ export interface WhatsAppConnection {
     readonly selfJid: () => string | undefined;
     readonly selfLid: () => string | undefined;
     readonly phase: () => ConnectionPhase;
-    readonly pairingCode: () => string | undefined;
+    // Where the link-a-device ceremony stands, or undefined once this session is paired.
+    readonly pairing: () => ListenerPairing | undefined;
     readonly sendText: (chat: string, text: string, quotedId?: string) => Promise<void>;
     readonly sendFile: (chat: string, path: string) => Promise<void>;
     readonly presence: (chat: string, state: "composing" | "paused") => Promise<void>;
@@ -97,16 +106,37 @@ const extensionOf = (mimetype: string | undefined): string => {
 // a document with its filename intact.
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 
+// Whether a session dir holds a session worth resuming. Anything else there is the WRECKAGE OF AN UNFINISHED
+// CEREMONY — half-written noise keys and an ephemeral pairing key belonging to a code that died with the socket
+// that minted it — and resuming that instead of starting clean is how a re-add inherits a stranger's dead
+// handshake. A missing or unreadable file reads as "nothing to resume", which is exactly the safe answer.
+const sessionRegistered = async (sessionDir: string): Promise<boolean> => {
+    const raw = await readFile(join(sessionDir, "creds.json"), "utf8").catch(() => undefined);
+    if (raw === undefined) {
+        return false;
+    }
+    try {
+        return (JSON.parse(raw) as { registered?: unknown }).registered === true;
+    } catch {
+        return false;
+    }
+};
+
 export const openWhatsAppConnection = async (options: OpenOptions): Promise<WhatsAppConnection> => {
     const { capabilityId, sessionDir, log } = options;
     const phone = digitsOf(options.phoneNumber);
+    // Start every ceremony from nothing: a stored session is kept only once the phone actually completed it.
+    if (!(await sessionRegistered(sessionDir))) {
+        await rm(sessionDir, { recursive: true, force: true });
+    }
     await mkdir(sessionDir, { recursive: true });
     const auth = await useMultiFileAuthState(sessionDir);
 
     // The live socket the closures below act through — replaced by every recreate, so nothing may capture it.
     let sock: ReturnType<typeof makeWASocket> | undefined;
     let phase: ConnectionPhase = "connecting";
-    let pairingCode: string | undefined;
+    // Undefined only once the phone has linked; every other moment of the ceremony is one of the three states.
+    let pairing: ListenerPairing | undefined = auth.state.creds.registered ? undefined : { state: "waiting" };
     let selfJid: string | undefined;
     let selfLid: string | undefined;
     let closed = false;
@@ -153,6 +183,11 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
         });
         sock = socket;
         phase = auth.state.creds.registered ? "connecting" : "pairing";
+        // A fresh socket means a fresh code is coming — unless the last attempt was REFUSED, whose sentence is
+        // the one thing on the card worth acting on and must not be flickered away by every retry behind it.
+        if (phase === "pairing" && pairing?.state !== "failed") {
+            pairing = { state: "waiting" };
+        }
         let pairingRequested = false;
 
         socket.ev.on("creds.update", () => void auth.saveCreds());
@@ -164,14 +199,19 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                 void socket
                     .requestPairingCode(phone)
                     .then((code) => {
-                        pairingCode = code;
+                        pairing = { state: "code", code, since: Date.now() };
                         log.info({ capabilityId }, "pairing code issued");
                     })
-                    .catch((error: unknown) => log.warn({ err: error, capabilityId }, "pairing code request failed"));
+                    .catch((error: unknown) => {
+                        // WhatsApp refusing the number (not a WhatsApp account, malformed, asked too often) is
+                        // the owner's problem to fix, and a warning in a log nobody opens is not telling them.
+                        pairing = { state: "failed", detail: error instanceof Error ? error.message : String(error) };
+                        log.warn({ err: error, capabilityId }, "pairing code request failed");
+                    });
             }
             if (update.connection === "open") {
                 phase = "ready";
-                pairingCode = undefined;
+                pairing = undefined;
                 backoff = RETRY_MIN_MS;
                 const me = socket.user;
                 selfJid = me?.id === undefined ? undefined : jidNormalizedUser(me.id);
@@ -200,6 +240,12 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
                 const wait = reason === (DisconnectReason.restartRequired as number) ? 0 : backoff;
                 backoff = Math.min(backoff * 2, RETRY_MAX_MS);
                 phase = auth.state.creds.registered ? "connecting" : "pairing";
+                // A CODE DIES WITH THE SOCKET THAT MINTED IT, and the next one is up to a minute of backoff
+                // away. Left on the card it is worse than nothing: it reads as the live code, and the owner
+                // spends their attempt — and the walk through the phone's menus — typing something already dead.
+                if (phase === "pairing" && pairing?.state === "code") {
+                    pairing = { state: "waiting" };
+                }
                 setTimeout(start, wait);
             }
         });
@@ -230,7 +276,7 @@ export const openWhatsAppConnection = async (options: OpenOptions): Promise<What
         selfJid: () => selfJid,
         selfLid: () => selfLid,
         phase: () => phase,
-        pairingCode: () => pairingCode,
+        pairing: () => pairing,
         sendText: async (chat, text, quotedId) => {
             const quoted = quotedId === undefined ? undefined : rawCache.get(quotedId);
             await live().sendMessage(chat, { text }, quoted === undefined ? undefined : { quoted: quoted as never });

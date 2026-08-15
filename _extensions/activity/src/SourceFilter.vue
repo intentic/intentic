@@ -44,6 +44,9 @@ const iconOf = (key: string): IconName => SOURCE_ICONS[key] ?? `comments`;
 const GATEWAY_WORDS: Readonly<Record<NonNullable<Source["gateway"]>, string | undefined>> = {
     ready: undefined,
     connecting: `connecting…`,
+    // Not a synonym for "connecting": nothing here resolves by waiting — a person has to type a code into a
+    // phone, and the word has to send them looking for the card that holds it.
+    pairing: `waiting to be linked`,
     disconnected: `not connected`,
     idle: `idle`,
 };

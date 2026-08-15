@@ -26,6 +26,42 @@ import { npmAuthWired } from "../cli/npm-access.js";
 // injected into the agent's env each turn (cliEnvOf), never written to a file; the image fragment (psql/whisper)
 // rides fragment-sources.
 
+// The three lines the phone's own menu uses, so the card and the handset read as one instruction.
+const PHONE_STEPS = "on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead";
+
+/* WHETHER A PHONE EVER LINKED — the whole of WhatsApp's card status, read from the gateway's snapshot.
+ *
+ * THE DEFAULT IS "NOT YET", and that inversion is the fix: this used to answer `active` for everything that
+ * wasn't holding a code THIS SECOND, which is a set containing the two seconds before the first code, every
+ * gap between a dead code and its replacement, a gateway that was restarting, and a number WhatsApp had
+ * refused outright. All four rendered as a green "ready" connection, so the add flow considered the setup
+ * finished and navigated away from the card — the owner never saw a code because nothing ever showed one.
+ *
+ * A silent gateway is therefore pending too. It is the state of a fresh add (nothing has posted yet, and the
+ * card must stay put and wait), and of a gateway that has stopped — neither of which is a paired phone. */
+const whatsappStatus = (id: string): { state: "active" | "pending"; detail?: string; code?: string } => {
+    const status = listenerStatus("whatsapp", Date.now());
+    if (status === undefined) {
+        return { state: "pending", detail: "starting the WhatsApp connection…" };
+    }
+    const pairing = status.pairing?.[id];
+    if (pairing === undefined) {
+        // Paired: the gateway reports a ceremony for every capability that still has one.
+        return status.connections.some((connection) => connection.capabilityId === id && connection.gateway === "ready")
+            ? { state: "active" }
+            : { state: "pending", detail: "reconnecting to WhatsApp…" };
+    }
+    if (pairing.state === "failed") {
+        // WhatsApp's own complaint, verbatim — "that number is not registered on WhatsApp" is worth ten of any
+        // sentence written here, and the retry behind it is quiet enough that this is all the owner ever sees.
+        return { state: "pending", detail: `WhatsApp refused that number: ${pairing.detail ?? "unknown error"}` };
+    }
+    if (pairing.state === "code" && pairing.code !== undefined) {
+        return { state: "pending", detail: `Type this code ${PHONE_STEPS}.`, code: pairing.code };
+    }
+    return { state: "pending", detail: "waiting for WhatsApp to issue a pairing code…" };
+};
+
 export const cliHandler: CapabilityHandler = {
     secret: (config, connectors) => {
         const spec = connectors.get(contributionKey("cli", (config as CliConfig).provider))?.spec;
@@ -142,11 +178,11 @@ export const cliHandler: CapabilityHandler = {
         if (cliConfig.provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
             return { state: "pending", detail: "voice needs a rebuild (whisper)" };
         }
-        // WhatsApp's credential is a pairing ceremony, not a token: while the gateway is waiting for the phone
-        // to link, it publishes the code via /listeners/whatsapp/status and THIS is where the owner reads it.
-        const pairingCode = cliConfig.provider === "whatsapp" ? listenerStatus("whatsapp", Date.now())?.pairing?.[id] : undefined;
-        if (pairingCode !== undefined) {
-            return { state: "pending", detail: `enter ${pairingCode} on the phone: WhatsApp → Linked devices → Link with phone number` };
+        // WhatsApp's credential is a pairing ceremony, not a token, and it is the ONE provider here whose
+        // "active" cannot be inferred from a stored config: the config is a phone number anybody can type, and
+        // whether a phone ever linked is a fact only the gateway holds.
+        if (cliConfig.provider === "whatsapp") {
+            return whatsappStatus(id);
         }
         return { state: "active" };
     },

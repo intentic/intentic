@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { extensionRuntimeDir } from "@intentic/sandbox-contract";
+import { extensionRuntimeDir, type ListenerPairing } from "@intentic/sandbox-contract";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import {
     closeWhatsAppConnection,
@@ -13,9 +13,9 @@ import { createWhatsAppListener, WHATSAPP_MAX } from "./listener.js";
 
 /* The WhatsApp gateway process: a baked extension's autoStart process (contributes.processes). It reconciles
  * one paired multi-device session per configured capability against the daemon's /listeners/whatsapp/state,
- * dispatches every inbound message (sending mention replies back into the chat), publishes each capability's
- * PAIRING CODE through the status route, and exposes a loopback control surface for the agent's `whatsapp`
- * CLI. The daemon holds no WhatsApp connection — this does. The reconcile/status/health/shutdown shell is the
+ * dispatches every inbound message (sending mention replies back into the chat), publishes WHERE EACH UNPAIRED
+ * CAPABILITY'S CEREMONY STANDS through the status route, and exposes a loopback control surface for the agent's
+ * `whatsapp` CLI. The daemon holds no WhatsApp connection — this does. The reconcile/status/health/shutdown shell is the
  * shared connector runtime; what's here is only what WhatsApp IS: a paired session per phone number, forgotten
  * (logout + wipe) rather than closed when its capability goes away, with a pairing code to surface while the
  * phone hasn't linked yet.
@@ -102,14 +102,21 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                 if (connection?.phase() === "ready") {
                     return "ready";
                 }
+                // A socket that is up but unlinked is NOT "connecting": nothing here is going to finish on its
+                // own, and saying so is what puts the card in front of the one person who can finish it.
+                if (connection?.phase() === "pairing") {
+                    return "pairing";
+                }
                 return connection !== undefined || view.connecting ? "connecting" : "disconnected";
             },
+            // Every unpaired capability, whether or not it is holding a code this second — see ListenerPairing:
+            // an absent entry has to mean PAIRED, or the seconds before the first code read as connected.
             statusExtras: () => {
-                const pairing: Record<string, string> = {};
+                const pairing: Record<string, ListenerPairing> = {};
                 for (const [id, connection] of whatsappConnections()) {
-                    const code = connection.pairingCode();
-                    if (code !== undefined) {
-                        pairing[id] = code;
+                    const state = connection.pairing();
+                    if (state !== undefined) {
+                        pairing[id] = state;
                     }
                 }
                 return Object.keys(pairing).length > 0 ? { pairing } : {};

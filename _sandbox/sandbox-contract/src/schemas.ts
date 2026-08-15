@@ -3781,7 +3781,15 @@ export const PersonasListSchema = z.object({
     connected: z.array(z.string()),
 });
 
-export const CapabilityStatusSchema = z.object({ state: CapabilityStateSchema, detail: z.string().optional() });
+/* `code` is a credential the owner has to TYPE SOMEWHERE ELSE to finish this connection — WhatsApp's
+ * link-a-device code, typed into the phone. It is not part of `detail` because the card does not merely print
+ * it: it sets it in a size you can read across a desk, next to a copy button, and replaces it in place when the
+ * provider mints a new one. A sentence with a code buried in it cannot be any of those things. */
+export const CapabilityStatusSchema = z.object({
+    state: CapabilityStateSchema,
+    detail: z.string().optional(),
+    code: z.string().optional(),
+});
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 // The list row: manifest entry + live status. Secrets are never returned (an mcp token becomes hasToken).
 export const CapabilitySummarySchema = z.object({
@@ -6130,11 +6138,12 @@ export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema
 
 // Live connection health, probed per provider capability (not stored): gateway state from the client pool
 // (idle = the gateway is up but has no enabled listener automation to connect for — distinct from a
-// connection that should be up but isn't), lastError from the newest system-error event in the recent log.
+// connection that should be up but isn't; pairing = the socket is up but the credential is a ceremony nobody
+// has finished, which no amount of waiting fixes), lastError from the newest system-error event in the log.
 export const ActivityConnectionSchema = z.object({
     capabilityId: z.string(),
     provider: z.string(),
-    gateway: z.enum(["ready", "connecting", "disconnected", "idle"]),
+    gateway: z.enum(["ready", "connecting", "pairing", "disconnected", "idle"]),
     lastError: z.string().optional(),
 });
 export const ActivityStatusSchema = z.object({

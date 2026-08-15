@@ -57,18 +57,40 @@ export interface ListenerDispatchFrame {
     readonly end?: boolean;
 }
 
+/* WHERE ONE CAPABILITY'S LINK-A-DEVICE CEREMONY STANDS (whatsapp), reported every status tick.
+ *
+ * A CODE IS NOT THE ONLY THING WORTH SAYING, and publishing only codes is what made a phone that had never
+ * linked read as connected: the seconds before the first code, a gateway that just restarted, and a number
+ * WhatsApp refused all looked identical from the daemon's side — an absent code — so the card fell through to
+ * "ready" and the owner was sent away from the one screen that could have shown them the step. Each of those is
+ * its own state here, and every one of them means NOT PAIRED YET.
+ *
+ * `since` stamps the CURRENT code. WhatsApp closes an unpaired socket after a minute or so and each reopen mints
+ * a fresh code, so a code is a thing with an age — the card says how old the one on screen is rather than
+ * leaving the owner to type a dead one twice. */
+export const ListenerPairingSchema = z.object({
+    // waiting: a socket is up and the code hasn't arrived (or the last one died with its socket).
+    // code: `code` is live — type it on the phone. failed: `detail` says what WhatsApp refused.
+    state: z.enum(["waiting", "code", "failed"]),
+    code: z.string().optional(),
+    detail: z.string().optional(),
+    since: z.number().optional(),
+});
+export type ListenerPairing = z.infer<typeof ListenerPairingSchema>;
+
 // Push-based listener status: a gateway process POSTs its live connection/voice snapshot to
 // /listeners/<provider>/status, and the activity route reads it from there — the daemon holds no provider
 // connection of its own to probe. The body IS the ActivityStatus the /activity/status probe used to build from
 // in-process discord singletons, plus the per-gateway extras that ride the same channel: whether whisper is
-// present (discord's voice-pending signal) and live pairing codes by capability id (whatsapp's link-a-device
-// ceremony — the capability card renders the code as its pending detail).
+// present (discord's voice-pending signal) and each unpaired capability's ceremony by id (whatsapp's
+// link-a-device flow — the capability card renders it as the step the owner is standing in front of).
 export const ListenerStatusSchema = ActivityStatusSchema.extend({
     whisperReady: z.boolean().optional(),
-    pairing: z.record(z.string(), z.string()).optional(),
+    pairing: z.record(z.string(), ListenerPairingSchema).optional(),
 });
 export type ListenerStatus = z.infer<typeof ListenerStatusSchema>;
 
 // A connection's place in the reconcile lifecycle, as the status snapshot reports it: `idle` = up but holding
-// nothing on purpose (no enabled listener automation to connect for), the other three are the connect loop.
-export type ListenerGatewayPhase = "idle" | "ready" | "connecting" | "disconnected";
+// nothing on purpose (no enabled listener automation to connect for), `pairing` = the socket is up but the
+// credential is a ceremony nobody has completed yet (whatsapp), the rest are the connect loop.
+export type ListenerGatewayPhase = "idle" | "ready" | "pairing" | "connecting" | "disconnected";

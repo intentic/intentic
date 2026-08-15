@@ -540,6 +540,7 @@ const connectionRow = (card: CatalogCard, instance: CapabilitySummary): Connecti
         // Only where something is actually outstanding: the daemon writes these for a reader ("Not connected",
         // "Needs a sandbox rebuild"), and echoing one beside a working connection would turn a status into noise.
         note: state.rank <= 1 ? instance.status.detail : undefined,
+        code: state.rank <= 1 ? instance.status.code : undefined,
         category: card.entry.category,
         rank: state.rank,
         haystack: `${instance.id} ${card.entry.name} ${card.entry.kind} ${facts}`.toLowerCase(),

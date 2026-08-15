@@ -259,11 +259,15 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
     }
     // A provider with several bots reports one connection each; the rail is per PROVIDER, so the worst state wins
     // — a rail row that reads "ready" while one of its two bots is down would be the one lie that matters here.
+    // Worst first: the representative a provider gets is its HEALTHIEST connection, so a second number that is
+    // still being linked never speaks for one that is already carrying messages. `pairing` sits just above
+    // outright disconnected — the socket is up, but nothing it can do will finish the job.
     const RANK: Readonly<Record<ActivityStatus["connections"][number]["gateway"], number>> = {
         disconnected: 0,
-        connecting: 1,
-        idle: 2,
-        ready: 3,
+        pairing: 1,
+        connecting: 2,
+        idle: 3,
+        ready: 4,
     };
     const live = new Map<string, ActivityStatus["connections"][number]>();
     for (const connection of connections) {
