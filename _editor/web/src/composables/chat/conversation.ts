@@ -366,17 +366,17 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
-    // Where this conversation was cut from, until its first turn carries it (see forkFrom). Undefined on every
-    // conversation that is not a fork, and on a fork from its first send onward — the daemon has copied the
-    // rows by then, and from there this conversation's record is its own.
-    private pendingForkOf: { conversationId: string; keep: number; files: "then" | "now" } | undefined;
-
-    /* WHERE THIS CONVERSATION WAS FORKED FROM, for as long as anyone might ask — unlike the field above, this
-     * one outlives the first send. It is what the header's "Forked from …" chip reads, and what the SOURCE's
-     * transcript counts to mark its own cut points, so the two halves of one fork can find each other. Carried
-     * in the tab snapshot, because a relationship that vanished on reload would be worse than none: the user
-     * would be left with two chats that are obviously related and no way to say how. */
-    readonly forkedFrom = ref<{ conversationId: string; title: string | null; index: number } | undefined>(undefined);
+    /* Where this conversation was cut from, until the daemon has ACCEPTED a turn carrying it (see forkFrom).
+     * Undefined on every conversation that is not a fork, and on a fork from its acked first turn onward — the
+     * daemon has copied the rows by then, and from there this conversation's record is its own.
+     *
+     * A REF, AND PUBLIC, BECAUSE IT RIDES THE TAB SNAPSHOT. Until that first send this field is the ONLY record
+     * anywhere that the fork is a fork, and a tab can be rebuilt from its snapshot in the gap between the cut
+     * and the send — a page reload, the popped window hydrating the same strip. A rebuilt tab used to come back
+     * with its draft, its bubbles and every pill intact, minus this one in-memory field: its first send then
+     * opened an ordinary empty conversation daemon-side, and the agent answered a chat that LOOKED continued
+     * while knowing nothing that came before. */
+    readonly pendingForkOf = ref<{ conversationId: string; keep: number; files: "then" | "now" } | undefined>(undefined);
 
     // Aborts the in-flight ATTACH STREAM when the user hits Stop / closes the tab; cleared once the stream
     // settles. The turn itself runs detached on the daemon — only /agent/stop cancels it.
@@ -607,8 +607,7 @@ export class Conversation {
      * source's turn anchors; nothing about the workspace is decided here. */
     forkFrom(source: Conversation, index: number, files: "then" | "now"): void {
         const kept = source.messages.value.slice(0, index);
-        this.pendingForkOf = { conversationId: source.conversationId, keep: recordedRows(kept), files };
-        this.forkedFrom.value = { conversationId: source.conversationId, title: source.title.value, index };
+        this.pendingForkOf.value = { conversationId: source.conversationId, keep: recordedRows(kept), files };
         this.transcript.rebuild(kept);
         this.provider.value = source.provider.value;
         this.harness.value = source.harness.value;
@@ -805,10 +804,10 @@ export class Conversation {
         }
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
-        // A fork names its origin on its first turn only: this send is what makes the daemon copy the rows,
-        // and from here on this conversation's record stands on its own.
-        const forkOf = this.pendingForkOf;
-        this.pendingForkOf = undefined;
+        // A fork names its origin on its first turn: this send is what makes the daemon copy the rows. Consumed
+        // on the daemon's ack below, not here — a send refused at the door produced nothing, and a linkage
+        // dropped with it would make the retry quietly open an unrelated conversation.
+        const forkOf = this.pendingForkOf.value;
         // First message of a fresh conversation names it — free, no model call. An attachment-only send has no
         // prose to read, so it is named after what was dropped in.
         if (this.title.value === null) {
@@ -884,7 +883,9 @@ export class Conversation {
                 return;
             }
             // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
-            // on this window is just one renderer of the run.
+            // on this window is just one renderer of the run — and a fork's rows are copied, so its record
+            // stands on its own and the linkage is spent.
+            this.pendingForkOf.value = undefined;
             const { run } = (await response.json()) as { run: string };
             await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller);
         } catch (err) {

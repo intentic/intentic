@@ -1751,6 +1751,42 @@ describe(`Conversation`, () => {
         expect(source.contextUsage.value).toMatchObject({ tokens: 500, contextWindow: 1000 });
     });
 
+    /* THE LINKAGE MUST OUTLIVE EVERYTHING SHORT OF THE ACK. Until the daemon accepts the fork's first turn,
+     * `pendingForkOf` is the only record anywhere that this conversation IS a fork — which is why it is a
+     * public ref the tab snapshot persists (a fork rebuilt after a reload, or hydrated in the popped window,
+     * must still name its source), and why a send refused at the door must not consume it. Both losses ended
+     * the same way in the field: the first send opened an ordinary empty conversation daemon-side, and a chat
+     * that LOOKED continued answered from nothing. */
+    it(`keeps the fork linkage through a refused first send and spends it on the ack`, async () => {
+        const source = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                { kind: `delta`, text: `one` },
+            ]),
+        );
+        await source.send(`first`, settings);
+
+        const fork = new Conversation(`c2`);
+        fork.forkFrom(source, 2, `now`);
+        // Where the tab snapshot reads it (snapshotTab) and a rebuilt tab puts it back (restoreTab).
+        expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
+
+        // Turned away at the door: nothing ran daemon-side, so the linkage is not spent — the words are held
+        // in the queue and the retry must still name the source.
+        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `nope` }), { status: 400 }));
+        await fork.send(`carry on differently`, settings);
+        expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
+
+        // The user sends again; the held words ride the fresh turn, and the cut rides with them.
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
+        await fork.enqueue(``);
+        const retry = turnBodies().at(-1)!;
+        expect(retry[`forkOf`]).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
+        // The ack is what spends it: from here the fork's record stands on its own.
+        expect(fork.pendingForkOf.value).toBeUndefined();
+    });
+
     it(`a fork taken at the first message starts empty and names itself from its own first message`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

@@ -48,6 +48,13 @@ export interface StoredTab {
     // retires the session then). Restoring both keeps a reload from either forging the match or faking the
     // mismatch.
     readonly session?: { id: string; provider: AgentProvider; account?: string };
+    /* Where this tab was cut from, while it is a fork whose first turn the daemon has not accepted yet — until
+     * that send, this linkage exists nowhere but the client (Conversation.pendingForkOf). Persisted because the
+     * gap between the cut and the send is exactly when a tab can be rebuilt from this snapshot (a reload, the
+     * popped window hydrating the strip): a rebuilt fork that lost it sent an ordinary first turn, the daemon
+     * opened an empty record with nothing to seed the session from, and a chat that looked continued answered
+     * from nothing. Absent on every ordinary tab, and on a fork from its acked first turn onward. */
+    readonly forkOf?: { conversationId: string; keep: number; files: "then" | "now" };
     readonly title?: string;
     readonly draft: string;
     readonly attachments: { name: string; path: string }[];
@@ -80,6 +87,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
         provider: conversation.session.value.provider,
         account: conversation.session.value.account,
     },
+    forkOf: conversation.pendingForkOf.value,
     title: conversation.title.value ?? undefined,
     draft: conversation.draft.value,
     attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
@@ -128,6 +136,20 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         typeof session === `object` && session !== null && typeof session[`id`] === `string` && validProvider(session[`provider`])
             ? { id: session[`id`] as string, provider: session[`provider`], ...readText(`account`, session[`account`]) }
             : undefined;
+    // The fork linkage, read back whole or not at all: a partial one would make the first send name a source
+    // the daemon then copies the wrong prefix of, which is worse than the fresh start losing it means.
+    const fork = raw[`forkOf`] as Record<string, unknown> | null | undefined;
+    const validForkOf =
+        typeof fork === `object` &&
+        fork !== null &&
+        typeof fork[`conversationId`] === `string` &&
+        fork[`conversationId`] !== `` &&
+        typeof fork[`keep`] === `number` &&
+        Number.isInteger(fork[`keep`]) &&
+        (fork[`keep`] as number) >= 0 &&
+        (fork[`files`] === `then` || fork[`files`] === `now`)
+            ? { conversationId: fork[`conversationId`] as string, keep: fork[`keep`] as number, files: fork[`files`] as `then` | `now` }
+            : undefined;
     return {
         conversationId: raw[`conversationId`],
         // A tab that names no tree runs in its own worktree — the default a fresh one gets.
@@ -148,6 +170,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
         ...(validSession !== undefined ? { session: validSession } : {}),
+        ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),
         ...(typeof raw[`title`] === `string` ? { title: raw[`title`] } : {}),
     };
 };

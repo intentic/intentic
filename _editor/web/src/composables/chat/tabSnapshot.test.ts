@@ -125,6 +125,26 @@ describe(`reading a tab snapshot`, () => {
         });
     });
 
+    /* The fork linkage is the one field whose loss is invisible until the first send: a rebuilt fork keeps its
+     * draft and bubbles either way, but without `forkOf` that send opens an ordinary empty conversation
+     * daemon-side and the "continued" chat answers from nothing. Read back whole or not at all — a partial one
+     * would have the daemon copy the wrong prefix of the wrong source, which is worse than the fresh start. */
+    it(`restores a fork's linkage whole, and drops one that reads back partial`, () => {
+        session.set(
+            KEY,
+            blob(`fork`, [
+                { ...tab(`fork`), forkOf: { conversationId: `source`, keep: 2, files: `now` } },
+                { ...tab(`negative`), forkOf: { conversationId: `source`, keep: -1, files: `then` } },
+                { ...tab(`nameless`), forkOf: { conversationId: ``, keep: 2, files: `now` } },
+            ]),
+        );
+
+        const tabs = readTabSnapshot(`sb1`)?.tabs;
+        expect(tabs?.[0]?.forkOf).toEqual({ conversationId: `source`, keep: 2, files: `now` });
+        expect(tabs?.[1]?.forkOf).toBeUndefined();
+        expect(tabs?.[2]?.forkOf).toBeUndefined();
+    });
+
     // Which account a chat runs on is the user's pick, and per TAB: the tab's own and its session's are stored
     // apart because a mid-chat switch is exactly the state where the two legitimately differ.
     it(`restores the tab's account pin and the session's separately`, () => {

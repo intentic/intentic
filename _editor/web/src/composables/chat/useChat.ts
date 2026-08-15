@@ -263,6 +263,12 @@ const restoreTab = (tab: StoredTab): Conversation => {
             harness: conversation.harness.value,
         };
     }
+    if (tab.forkOf !== undefined) {
+        // The fork linkage, back where send() looks for it. Until the fork's first turn is accepted this is the
+        // only record of the cut anywhere, and a tab rebuilt without it sends an ordinary first turn — the
+        // daemon then opens an empty record and the "continued" chat answers from nothing (see StoredTab.forkOf).
+        conversation.pendingForkOf.value = tab.forkOf;
+    }
     return conversation;
 };
 
