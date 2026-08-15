@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeployRepoLink } from "./contract";
-import { Button, cmp, Icon, Notice, noticeOf, Picker, StatusBadge, type PickerOption } from "@intentic/extension-ui";
+import { Button, ui, Icon, Notice, noticeOf, Picker, StatusBadge, type PickerOption } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 
 /* One workspace repo that ships a compose file, and the Komodo stack it belongs to. A hairline row inside the

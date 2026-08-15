@@ -8,7 +8,7 @@ import {
     type TranslatorAccount,
     providerLabel,
 } from "@intentic/sandbox-contract";
-import { cmp, formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { formatTokens, InfoHint, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -417,7 +417,7 @@ onUnmounted(() => clearTimeout(ringTimer));
              is the newest thing known about this provider; once something taken since has answered it, a quiet
              footnote saying so with those words on the hover — a stale alarm over a live meter is worse than no
              alarm at all. -->
-        <p v-if="refusal !== undefined && refusal.current" :class="cmp.alertWarning('m-3')">{{ refusal.line }}</p>
+        <Notice v-if="refusal !== undefined && refusal.current" tone="warning" class="m-3">{{ refusal.line }}</Notice>
         <p v-else-if="refusal !== undefined" class="mx-3 mt-3 text-2xs text-subtle" v-tooltip.top="refusal.detail">{{ refusal.line }}</p>
 
         <!-- Nothing has been read yet. An offline sandbox says so and stops (there is nothing to wait for);

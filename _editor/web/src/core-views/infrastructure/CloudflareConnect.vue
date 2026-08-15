@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
+import { ui, InfoHint, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";

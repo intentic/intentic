@@ -28,7 +28,7 @@
      subject is personas, on a workspace with none, has to explain itself. -->
 <script setup lang="ts">
 import { personaBounds } from "@intentic/sandbox-contract";
-import { cmp, Icon, type IconName, StatusBadge } from "@intentic/ui";
+import { ui, Icon, type IconName, StatusBadge } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
@@ -207,7 +207,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
 <template>
     <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
         <template v-if="empty">
-            <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
+            <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
                 <Icon name="plus" class="text-2xs" />
                 Set up a persona
             </button>
@@ -301,7 +301,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                      still not make another one — the gap the disclosure exists to close as much as switching
                      is. It sits under them because that is the order the question arrives in: none of these,
                      then a new one. -->
-                    <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
+                    <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
                         <Icon name="plus" class="text-2xs" />
                         New chat as {{ row.label }}
                     </button>
@@ -310,7 +310,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
 
             <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is —
                  the picker in the composer puts it in the same place. -->
-            <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
+            <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
                 <Icon name="cog" class="text-2xs" />
                 Manage personas
             </button>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
-import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 
@@ -63,7 +62,7 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Dialog v-model:visible="open" :modal="true" :draggable="false" :dismissable-mask="true" :style="{ width: '30rem' }" header="New extension">
+    <Modal v-model:open="open" size="md" header="New extension">
         <div class="flex flex-col gap-4">
             <p class="text-2xs text-subtle">
                 Writes a working extension into this workspace and switches it on. Nothing is installed and nothing is built — the files are what
@@ -72,15 +71,15 @@ const submit = async (): Promise<void> => {
 
             <div class="flex items-end gap-2">
                 <label class="flex flex-col gap-1" :style="{ width: '9rem' }">
-                    <span :class="cmp.sectionLabel()">Publisher</span>
-                    <input v-model="publisher" :class="cmp.input()" spellcheck="false" />
+                    <span :class="ui.sectionLabel()">Publisher</span>
+                    <input v-model="publisher" :class="ui.input()" spellcheck="false" />
                 </label>
                 <span class="pb-2 text-subtle">.</span>
                 <label class="flex flex-1 flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">Name</span>
+                    <span :class="ui.sectionLabel()">Name</span>
                     <input
                         v-model="name"
-                        :class="cmp.input()"
+                        :class="ui.input()"
                         placeholder="release-notes"
                         spellcheck="false"
                         autofocus
@@ -102,8 +101,8 @@ const submit = async (): Promise<void> => {
                  that must be right: an extension created with this empty is a working stub to edit by hand, and
                  an extension created with it filled is one an agent starts on before the dialog has closed. -->
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">What should it do?</span>
-                <textarea v-model="wish" :class="cmp.input()" rows="3" placeholder="show what shipped this week, read from the git log"></textarea>
+                <span :class="ui.sectionLabel()">What should it do?</span>
+                <textarea v-model="wish" :class="ui.input()" rows="3" placeholder="show what shipped this week, read from the git log"></textarea>
                 <span class="text-2xs text-subtle">
                     Optional. Say it in your own words — an agent starts on it in a chat you can watch and argue with. Leave it empty for a working
                     stub to edit yourself.
@@ -119,5 +118,5 @@ const submit = async (): Promise<void> => {
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
-    </Dialog>
+    </Modal>
 </template>

@@ -1,9 +1,8 @@
-import { cmp } from "../cmp";
 import type { IconName } from "../icons/iconSets.js";
 
 /* WHAT A FAILURE IS, ONCE, FOR THE WHOLE APP — the data behind <Notice> and <NoticeStack>.
  *
- * Every view used to report failure as a `cmp.alertDanger()` div holding an interpolated string, and the string
+ * Every view used to report failure as a `ui.alertDanger()` div holding an interpolated string, and the string
  * was whatever the throw site carried: "fetch failed", a 413, a line of git porcelain. Two things were wrong
  * with that and neither is cosmetic. The user read our internals and got no idea what it meant for their work.
  * And nothing said what to do next, so a failure the app was already retrying and a dead end looked identical.
@@ -42,12 +41,21 @@ export interface NoticeModel {
     readonly key?: string;
 }
 
-// The tints the app already used for inline alerts, kept exactly: a migration that also restyled every error
-// box in the product would be impossible to review.
+/* The tints the app already used for inline alerts, kept exactly: a migration that also restyled every error
+ * box in the product would be impossible to review.
+ *
+ * They live here rather than on `ui` because <Notice> is now the only way to draw one. As a public recipe this
+ * was a second, quieter answer to the same question — same tint, same border, same padding, no icon, no ARIA
+ * role, no dismiss — and thirty-two views had taken it, so which of the two a reader got came down to whether
+ * the sentence happened to contain a `<code>` tag.
+ *
+ * Spelled out per tone rather than built from a `border-${tone}/40` template, which is the mistake the series
+ * palette records in semantic-colors.css: Tailwind emits a utility only where it can SEE the name, so a class
+ * assembled at runtime is a class that ships as nothing at all. */
 export const NOTICE_BOX: Record<NoticeTone, string> = {
-    danger: cmp.alertDanger(`flex items-start gap-2`),
-    warning: cmp.alertWarning(`flex items-start gap-2`),
-    info: cmp.alertInfo(`flex items-start gap-2`),
+    danger: `flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger`,
+    warning: `flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning`,
+    info: `flex items-start gap-2 rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info`,
 };
 
 export const NOTICE_ICON: Record<NoticeTone, IconName> = {

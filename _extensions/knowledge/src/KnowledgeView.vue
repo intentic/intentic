@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
     Button,
-    cmp,
+    ui,
     FilterBar,
     Icon,
     InfoHint,
@@ -224,7 +224,7 @@ const startKnowledge = async (): Promise<void> => {
         <!-- Bounded, so the two panes scroll inside their own frames and the chrome above stays put. Unbounded,
              the hub page would scroll them together and reaching the end of a long note would take the way to
              the next one off screen with it. -->
-        <div v-if="overview?.noteCount === 0 && !filtered" :class="cmp.emptyState(`flex flex-col items-center gap-2 px-6 py-12 text-sm`)">
+        <div v-if="overview?.noteCount === 0 && !filtered" :class="ui.emptyState(`flex flex-col items-center gap-2 px-6 py-12 text-sm`)">
             <Icon name="sitemap" class="text-base text-subtle" />
             <p class="text-content">Nothing here yet.</p>
             <p class="max-w-md text-xs text-muted">
@@ -268,7 +268,7 @@ const startKnowledge = async (): Promise<void> => {
 
             <!-- The same dashed placeholder the empty state above uses, from the same helper — it was spelled
                  out by hand here, two elements away from the call that produces it. -->
-            <section v-else :class="cmp.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
+            <section v-else :class="ui.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
                 <Icon name="sitemap" class="text-base text-subtle" />
                 <p class="text-sm text-muted">Pick a note to read it.</p>
                 <p class="max-w-xs text-xs text-subtle">Follow its links to move through your knowledge the way the agent does.</p>

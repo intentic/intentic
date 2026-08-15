@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Design tokens ported from intentic-app (_editor/ui/src/styles/shared/) so the
+ * Design tokens ported from intentic-app (_editor/ui/src/styles/) so the
  * marketing site and the product read as one brand. OKLch values are copied
  * verbatim from the app; the landing is dark-only, so the app's dark-mode role
  * values are baked in directly.

@@ -5,9 +5,9 @@ import {
     type AgentRunChoice,
     Avatar,
     Button,
-    Dialog,
     formatTimestamp,
     Icon,
+    Modal,
     StatusBadge,
     timeAgo,
     useAgentRunPick,
@@ -283,16 +283,8 @@ const startFix = (): void => {
              worth reading whole, and the band in a list of rows can never be that. Its own component instance,
              so the trace pinned in the small one does not follow you in and the pan you leave behind is still
              there when you close. -->
-        <Dialog
-            v-model:visible="fullscreen"
-            modal
-            :draggable="false"
-            :dismissable-mask="true"
-            :header="`${headline} — job graph`"
-            :style="{ width: `94vw`, height: `88vh` }"
-            :content-style="{ height: `100%`, display: `flex`, flexDirection: `column` }"
-        >
+        <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline} — job graph`">
             <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
-        </Dialog>
+        </Modal>
     </div>
 </template>

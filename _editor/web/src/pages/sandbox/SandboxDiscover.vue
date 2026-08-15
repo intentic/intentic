@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
-import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, Segmented } from "@intentic/ui";
+import { ui, FilterBar, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -258,7 +258,7 @@ const emptyNote = computed<string | undefined>(() => {
                 class="flex-1"
             >
                 <template v-if="verifiedCount > 0" #controls>
-                    <Segmented
+                    <SegmentedControl
                         v-model="mode"
                         :options="[
                             { label: `All`, value: `all`, badge: listings.length },
@@ -268,7 +268,7 @@ const emptyNote = computed<string | undefined>(() => {
                 </template>
             </FilterBar>
             <div v-else class="flex-1"></div>
-            <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="isFetching" v-tooltip.top="`Re-read the registry`" @click="refetch">
+            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="isFetching" v-tooltip.top="`Re-read the registry`" @click="refetch">
                 <Icon name="refresh" :spin="isFetching" />
             </button>
         </div>
@@ -298,10 +298,10 @@ const emptyNote = computed<string | undefined>(() => {
                     v-model="draftUrl"
                     placeholder="https://github.com/owner/registry"
                     spellcheck="false"
-                    :class="cmp.input(`min-w-56 flex-1`)"
+                    :class="ui.input(`min-w-56 flex-1`)"
                     @keyup.enter="applyChange"
                 />
-                <input v-model="draftToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input(`w-32`)" />
+                <input v-model="draftToken" type="password" autocomplete="off" placeholder="Token" :class="ui.input(`w-32`)" />
                 <Button label="Browse" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
                 <Button label="Cancel" size="small" text @click="changing = false" />
             </div>
@@ -333,7 +333,7 @@ const emptyNote = computed<string | undefined>(() => {
              human made; the second heading says what it is NOT, in the same size type, for the same reason. -->
         <div v-for="section in sections" :key="section.id" class="flex flex-col gap-2">
             <div class="flex flex-wrap items-baseline gap-x-2">
-                <span :class="cmp.sectionLabel()">{{ section.label }}</span>
+                <span :class="ui.sectionLabel()">{{ section.label }}</span>
                 <span class="text-2xs tabular-nums text-subtle">{{ section.listings.length }}</span>
                 <span class="text-2xs text-muted">— {{ section.caption }}</span>
             </div>
@@ -346,7 +346,7 @@ const emptyNote = computed<string | undefined>(() => {
             </div>
         </div>
 
-        <div v-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-8`)">
+        <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
             <span>{{ emptyNote }}</span>
             <Button v-if="listings.length > 0" size="small" label="Clear filter" @click="clearFilters" />
         </div>

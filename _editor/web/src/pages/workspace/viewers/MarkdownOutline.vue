@@ -11,7 +11,7 @@
      would be wrong here: the tree is a list you act on, this is chrome beside prose, and a filled block in the
      margin competes with the paragraph it is meant to be helping you read. -->
 <script setup lang="ts">
-import { cmp, SearchBar } from "@intentic/ui";
+import { ui, SearchBar } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { matchHeadings, type OutlineHeading } from "./markdownOutline";
 
@@ -55,7 +55,7 @@ watch(
 <template>
     <nav aria-label="Document outline" class="flex min-h-0 w-full flex-col gap-2">
         <div class="flex shrink-0 items-baseline justify-between gap-2 pl-3">
-            <span :class="cmp.sectionLabel(`text-2xs`)">Outline</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">Outline</span>
             <span class="text-2xs tabular-nums text-subtle">{{ headings.length }}</span>
         </div>
 

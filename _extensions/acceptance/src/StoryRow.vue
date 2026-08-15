@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Checkbox, ui, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 

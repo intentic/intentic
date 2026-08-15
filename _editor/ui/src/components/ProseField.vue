@@ -1,6 +1,6 @@
 <!-- THE WRITING FIELD — what you type a paragraph into, as opposed to what you fill a form in with.
 
-     `cmp.input()` is the form field: a bordered box of a fixed height, right for a name, a number, a shell
+     `ui.input()` is the form field: a bordered box of a fixed height, right for a name, a number, a shell
      command. This is its counterpart for text that is READ IN SENTENCES — a story's narrative, a step's
      instructions, an acceptance criterion. Three stacked bordered boxes on a panel is a form; the same three
      without the boxes is a document, and a document is what someone writing prose is actually looking at. So

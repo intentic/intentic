@@ -11,7 +11,9 @@
      Dialog props, the same Cancel-then-danger footer, the same `autofocus` on the destructive button. What
      they had drifted on was the width — 24rem, 26rem, and one call site that had noticed a bare `26rem` dialog
      overflows a 360px phone and clamped it. That clamp is now the only behaviour, because it was right and the
-     other eight were one narrow screen away from finding out.
+     other eight were one narrow screen away from finding out. It is <Modal>'s clamp now rather than this
+     component's own: the same reasoning had to be repeated for every dialog that is not a confirm, and
+     repeating it once per shape is how thirteen widths happened.
 
      THE LIST IS PART OF THE CONFIRM, not decoration. Three of the sites were about a SET — five files, three
      terminals — and each had written the same "show five, then `…and N more`" truncation. A confirm that says
@@ -23,9 +25,9 @@
      a path set, a plain boolean — and none of them wants this component deciding what "closed" means for it. -->
 <script setup lang="ts" generic="T">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { type IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
+import Modal from "./Modal.vue";
 
 const {
     open,
@@ -35,7 +37,7 @@ const {
     items,
     destructive = true,
     loading = false,
-    width = 26,
+    size = `sm`,
     appendTo,
 } = defineProps<{
     open: boolean;
@@ -48,8 +50,8 @@ const {
     destructive?: boolean;
     /** Keeps the danger button spinning while the teardown runs — removal often hits the network. */
     loading?: boolean;
-    /** rem. Clamped to the viewport regardless, so a phone never gets a dialog wider than its screen. */
-    width?: number;
+    /** <Modal>'s size scale. `sm` fits a question; widen only for a confirm that has to spell out consequences. */
+    size?: `sm` | `md` | `lg` | `xl` | `full`;
     appendTo?: HTMLElement | string;
 }>();
 
@@ -64,15 +66,12 @@ const NAMED = 5;
 </script>
 
 <template>
-    <Dialog
-        :visible="open"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
+    <Modal
+        :open="open"
+        :size="size"
         :append-to="appendTo"
-        :style="{ width: `min(${width}rem, calc(100vw - 2rem))` }"
         :header="header"
-        @update:visible="emit(`cancel`)"
+        @update:open="emit(`cancel`)"
         @hide="emit(`hide`)"
     >
         <ul v-if="items !== undefined && items.length > 0" class="flex flex-col gap-1">
@@ -91,5 +90,5 @@ const NAMED = 5;
                 <template v-if="confirmIcon !== undefined" #icon><Icon :name="confirmIcon" /></template>
             </Button>
         </template>
-    </Dialog>
+    </Modal>
 </template>

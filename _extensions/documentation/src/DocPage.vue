@@ -7,12 +7,12 @@
 
      CONTENT, NOT A SURFACE. It draws no frame, owns no scroller and sets no padding, because whether a document
      wants a box around it is a fact about WHERE IT IS BEING READ, not about the document: in the routed area it
-     is the body beside a contents rail and takes the same <Panel> every other index-and-body screen does; in a
+     is the body beside a contents rail and takes the same <ScrollFrame> every other index-and-body screen does; in a
      Workspace tab it is the tab's whole content, beside a README opened as a file, and a card there boxes a
      document inside a pane that is already a box. Each surface says so in its own template; attributes fall
      through to the root, so "how much room" is the caller's line to write. -->
 <script setup lang="ts">
-import { cmp, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { ui, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { DocAnchor, DocIndexEntry, DocProvenance } from "./docModel.js";
 import { host } from "./host.js";
@@ -75,7 +75,7 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
         <!-- The anchors are places to go, so they are drawn as a list of places: a quiet label and rows that
              light up under the pointer. The bordered card they used to sit in announced a panel of settings. -->
         <section v-if="anchors.length > 0" class="flex flex-col gap-0.5">
-            <h2 :class="cmp.sectionLabel(`mb-1 text-2xs`)">Where to start reading</h2>
+            <h2 :class="ui.sectionLabel(`mb-1 text-2xs`)">Where to start reading</h2>
             <button
                 v-for="anchor in anchors"
                 :key="anchor.path"

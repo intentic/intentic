@@ -73,7 +73,7 @@
 import { computed, ref, watch } from "vue";
 import { artSrc, type Brand, brandUrl, loadBrand } from "./brandMark.js";
 import { isIconName } from "../icons/iconSets.js";
-import { initialsOf } from "../format.js";
+import { initialsOf } from "../lib/format.js";
 import Icon from "./Icon.vue";
 
 const {

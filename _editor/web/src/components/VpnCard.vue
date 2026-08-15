@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { ui, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
@@ -164,7 +164,7 @@ const caption = computed(() =>
                         <div v-if="otpFor === link.id" class="flex items-center gap-2">
                             <input
                                 v-model="otp"
-                                :class="cmp.input('w-32 font-mono')"
+                                :class="ui.input('w-32 font-mono')"
                                 placeholder="123456"
                                 inputmode="numeric"
                                 autocomplete="one-time-code"

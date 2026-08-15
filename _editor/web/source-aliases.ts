@@ -56,11 +56,11 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/ui/dag": fromRoot("_editor/ui/src/components/dagLayout.ts"),
     // Same reason and the same ordering requirement again: splitting a path into name + directory is what every
     // file row in the app does, including the ones in unit-tested pure modules (fileType.ts, explorerPaste.ts).
-    "@intentic/ui/path": fromRoot("_editor/ui/src/path.ts"),
+    "@intentic/ui/path": fromRoot("_editor/ui/src/lib/path.ts"),
     // And again, for the same module: fileType.ts maps every extension the app knows onto a `ShikiLang`, so the
     // grammar table is what that mapping is type-checked against. A plain map of dynamic-import thunks — nothing
     // from shiki/core is loaded by naming it.
-    "@intentic/ui/langs": fromRoot("_editor/ui/src/composables/shikiLangs.ts"),
+    "@intentic/ui/langs": fromRoot("_editor/ui/src/lib/shikiLangs.ts"),
     // And the highlighter itself: the review analyzer runs inside a dedicated worker, where pulling the UI
     // barrel's Vue components and browser-device composables would be both wasteful and invalid.
     "@intentic/ui/highlighter": fromRoot("_editor/ui/src/composables/useHighlighter.ts"),
@@ -73,15 +73,15 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/ui/notice": fromRoot("_editor/ui/src/components/notice.ts"),
     // And once more: the 1h/24h/7d/All vocabulary is arithmetic over a timestamp, called by the feeds' pure
     // projections and pinned by their unit tests — none of which should need a DOM to ask how far back "7d" is.
-    "@intentic/ui/time": fromRoot("_editor/ui/src/timeWindow.ts"),
+    "@intentic/ui/time": fromRoot("_editor/ui/src/lib/timeWindow.ts"),
     // And again, for the app's date/byte/token formatting: the history list's day label, the usage window's
     // reset and an extension's day dividers are all pure functions over a number, reached from composables and
     // pure projections whose unit tests run without a DOM.
-    "@intentic/ui/format": fromRoot("_editor/ui/src/format.ts"),
+    "@intentic/ui/format": fromRoot("_editor/ui/src/lib/format.ts"),
     // And again, for the busy-flag and wall-clock composables (moved into the kit when drafts became an
     // extension): plain state on vue's reactivity, reached from dozens of composables whose node tests must not
     // boot the component graph — the theme reader touches `document` at module scope — to build a notice.
-    "@intentic/ui/async": fromRoot("_editor/ui/src/composables/async.ts"),
+    "@intentic/ui/async": fromRoot("_editor/ui/src/lib/async.ts"),
     // And once more, for the icon VOCABULARY rather than the <Icon> that draws it: every icon name arriving
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.
@@ -89,7 +89,7 @@ export const sourceAliases = (): Record<string, string> => ({
     // And again, for the arithmetic that makes a brand mark legible on our own plate: it is what decides whether
     // 24 official brand hexes clear the separation bar in both schemes, which is a claim only a test can hold —
     // and one that must not need a DOM (nor <BrandMark> itself) to be asked.
-    "@intentic/ui/brand-color": fromRoot("_editor/ui/src/brandColor.ts"),
+    "@intentic/ui/brand-color": fromRoot("_editor/ui/src/lib/brandColor.ts"),
     // And again, for the gate an extension's own artwork passes through on its way to an <img>: it decides what
     // a registry row is allowed to paint, which is a claim worth a test — and one that must not need a DOM, a
     // network, or <BrandMark> itself to be asked.

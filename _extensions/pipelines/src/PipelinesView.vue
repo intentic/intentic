@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import {
-    cmp,
-    CountBar,
+    StatusTally,
     Icon,
     InfoHint,
     Notice,
@@ -12,7 +11,7 @@ import {
     RowGroup,
     SplitView,
     type AgentRunChoice,
-    type CountItem,
+    type TallyItem,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import { markPipelinesSeen } from "./ciAttention";
@@ -108,7 +107,7 @@ const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/a
 // ---- summary counts ----
 // Worst first, and `passed` is the one that renders at zero: a board whose whole tally is silent reads as a
 // broken view rather than as a quiet one.
-const counts = computed<CountItem[]>(() => {
+const counts = computed<TallyItem[]>(() => {
     const c = { running: 0, success: 0, failed: 0, other: 0 };
     for (const run of scopedRuns.value) {
         if (run.status === `running`) c.running++;
@@ -218,7 +217,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 
                 <template v-else>
                     <!-- ---- Summary bar ---- -->
-                    <CountBar v-if="scopedRuns.length > 0" :items="counts" class="mb-5">
+                    <StatusTally v-if="scopedRuns.length > 0" :items="counts" class="mb-5">
                         <span v-if="successRate !== undefined" class="flex items-center gap-2">
                             <ProgressRing
                                 :value="successRate"
@@ -228,7 +227,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                             />
                             <span class="text-xs text-muted">{{ successRate }}% pass rate</span>
                         </span>
-                    </CountBar>
+                    </StatusTally>
 
                     <!-- ---- What keeps breaking ----
                          Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
@@ -270,9 +269,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 </a>
                             </template>
 
-                            <div v-if="standing.repo.hookWarning" :class="cmp.alertWarning(`px-4 py-2.5 text-xs break-words`)">
+                            <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
                                 {{ standing.repo.hookWarning }}
-                            </div>
+                            </Notice>
 
                             <PipelineRunRow
                                 v-for="run in standing.runs"

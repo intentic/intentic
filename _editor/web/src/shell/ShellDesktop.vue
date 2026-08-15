@@ -2,7 +2,7 @@
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon — the same monogram <Avatar> and <BrandMark> fall back to.
-import { cmp, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
+import { ui, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -634,7 +634,7 @@ useKeybindings();
             <RouterLink
                 to="/capabilities"
                 :class="[
-                    cmp.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
+                    ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
                     { 'pointer-events-none opacity-40': !reachable, 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
                 :tabindex="reachable ? undefined : -1"

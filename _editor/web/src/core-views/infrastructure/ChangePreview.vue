@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { Card, ui, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { type PlanStep, statusDot } from "../../composables/extensions/reconcileStatus";

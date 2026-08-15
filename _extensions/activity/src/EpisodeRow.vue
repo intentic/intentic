@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { ui, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
@@ -97,7 +97,7 @@ const cost = computed(() => (episode.costUsd === undefined ? undefined : episode
                     <button
                         v-if="episode.sessionId"
                         type="button"
-                        :class="cmp.linkButton('text-2xs')"
+                        :class="ui.linkButton('text-2xs')"
                         @click="api.chat.openSession(episode.sessionId)"
                     >
                         <Icon name="external-link" /> Open transcript

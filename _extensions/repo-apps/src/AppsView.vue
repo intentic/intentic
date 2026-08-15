@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Notice, noticeOf, Page, PageAction, PageHeader, StatusBadge, type IconName } from "@intentic/extension-ui";
+import { Button, ui, Icon, Notice, noticeOf, Page, PageAction, PageHeader, StatusBadge, type IconName } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
@@ -214,7 +214,7 @@ onUnmounted(() => {
                      own Run-tests when it owns projects; the type icon (globe = frontend, server = backend) is the
                      at-a-glance signal, backed by a kind pill. -->
                 <section v-if="monorepo">
-                    <div v-if="appRows.length === 0 && !isLoading" :class="cmp.emptyState()">
+                    <div v-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
                         No apps yet — use “Add app” to scaffold one and get a live preview.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
@@ -287,7 +287,7 @@ onUnmounted(() => {
                 <!-- Packages: _apps/<x> dirs that carry tests but aren't startable template apps (e.g. cli/sandbox/sync).
                      A secondary group — muted surface + denser rows — so it never competes with the startable apps. -->
                 <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
-                    <h3 :class="cmp.sectionLabel('mb-2')">Packages</h3>
+                    <h3 :class="ui.sectionLabel('mb-2')">Packages</h3>
                     <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
                         <div class="flex flex-col divide-y divide-line/60">
                             <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
@@ -304,7 +304,7 @@ onUnmounted(() => {
                 <!-- Library tests: _libs/* + the repo root (monorepo). Also secondary. -->
                 <section v-if="monorepo && grouped.libraries.length > 0" class="mt-6">
                     <div class="mb-2 flex items-center justify-between">
-                        <h3 :class="cmp.sectionLabel()">Library tests</h3>
+                        <h3 :class="ui.sectionLabel()">Library tests</h3>
                         <Button
                             v-if="grouped.libraries.length > 1"
                             label="Run all"
@@ -330,7 +330,7 @@ onUnmounted(() => {
 
                 <!-- A vitest-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
                 <section v-if="!monorepo">
-                    <div v-if="projects.length === 0 && !testsLoading" :class="cmp.emptyState()">
+                    <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
                         No vitest projects found — nothing here owns a vitest.config.* or *.test.* file.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">

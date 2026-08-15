@@ -2,16 +2,26 @@
      deserves more than OS chrome: token-styled rows with icon · label · quiet description · check, group
      headers, wrap-around keyboard navigation, and a filter box that appears by itself once the list is long.
      The closed trigger is a real button (bordered `input` variant for forms/settings rows, borderless `ghost`
-     for toolbars); the open panel is a Popover on desktop and a BottomSheet on mobile — the app's standard
-     touch swap. The #icon scoped slot lets a site draw brand marks (provider logos) the icon set can't. -->
+     for toolbars); the open panel is <ResponsiveOverlay> — anchored on desktop, a thumb-reachable sheet on a
+     phone. The #icon scoped slot lets a site draw brand marks (provider logos) the icon set can't.
+
+     THAT OVERLAY WAS EXTRACTED FROM HERE AND THIS COMPONENT KEPT THE COPY, which is the whole reason the note
+     is worth writing down. <Picker> had always done the desktop/mobile swap internally, so when five other
+     menus were found hand-writing the same pair they were given <ResponsiveOverlay> and this one was left
+     alone — it already worked, after all. What it worked WITH was PrimeVue's Popover, and PrimeVue's Popover
+     measures the room around a trigger against the module-scope `window`. In a popped-out chat or terminal
+     panel that is the wrong window: the panel opens off the bottom edge with its top over the pill that owns
+     it, and an overlay covering its own trigger cannot be dismissed by clicking that trigger. The app's own
+     <AnchoredOverlay> exists to fix exactly that, and the design system's own picker was the last thing still
+     carrying the bug. It also carried the two-boolean shape (`popoverOpen`, `sheetOpen`) that
+     ResponsiveOverlay's header comment names as the thing to avoid. One flag now, and one window. -->
 <script setup lang="ts" generic="T extends string">
-import Popover from "primevue/popover";
 import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs, useSlots } from "vue";
 import { useDevice } from "../composables/useDevice.js";
 import { normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
-import BottomSheet from "./BottomSheet.vue";
 import PickerPanel from "./PickerPanel.vue";
+import ResponsiveOverlay from "./ResponsiveOverlay.vue";
 
 defineOptions({ inheritAttrs: false });
 
@@ -48,7 +58,7 @@ const selected = computed<PickerOption<T> | undefined>(() =>
 );
 
 // Class fallthrough lands on the trigger (the component's one element), twMerge'd so a caller's `text-xs
-// py-1.5 w-full` beats the variant base the way cmp.* overrides do.
+// py-1.5 w-full` beats the variant base the way ui.* overrides do.
 const attrs = useAttrs();
 const passAttrs = computed(() => {
     const { class: _class, ...rest } = attrs;
@@ -64,38 +74,38 @@ const triggerClass = computed(() =>
     ),
 );
 
-const popover = ref<InstanceType<typeof Popover>>();
 const triggerEl = ref<HTMLButtonElement | null>(null);
-const popoverOpen = ref(false);
-const sheetOpen = ref(false);
+const open = ref(false);
 // The panel never renders narrower than its trigger (a dropdown thinner than its button reads broken), with
-// a floor for tiny ghost triggers whose rows still need room to breathe.
+// a floor for tiny ghost triggers whose rows still need room to breathe. Measured at the moment of opening
+// rather than watched: the trigger cannot resize while a modal panel is over it.
 const panelMinWidth = ref(0);
 
-const toggle = (event: Event): void => {
+const toggle = (): void => {
     if (disabled) {
         return;
     }
-    if (mobile.value) {
-        sheetOpen.value = !sheetOpen.value;
-        return;
+    if (!open.value) {
+        panelMinWidth.value = Math.max(192, triggerEl.value?.offsetWidth ?? 0);
     }
-    panelMinWidth.value = Math.max(192, triggerEl.value?.offsetWidth ?? 0);
-    popover.value?.toggle(event);
+    open.value = !open.value;
 };
 
 // Arrow keys open a closed picker (the native <select> gesture); once open, the panel owns the keyboard.
-const openFromKey = (event: Event): void => {
-    if (!popoverOpen.value && !sheetOpen.value) {
-        toggle(event);
+const openFromKey = (): void => {
+    if (!open.value) {
+        toggle();
     }
+};
+
+const close = (): void => {
+    open.value = false;
+    triggerEl.value?.focus();
 };
 
 const applyPick = (option: PickerOption<T>): void => {
     model.value = option.value;
-    sheetOpen.value = false;
-    popover.value?.hide();
-    triggerEl.value?.focus();
+    close();
 };
 </script>
 
@@ -107,7 +117,7 @@ const applyPick = (option: PickerOption<T>): void => {
         :class="triggerClass"
         :disabled="disabled"
         aria-haspopup="listbox"
-        :aria-expanded="popoverOpen || sheetOpen"
+        :aria-expanded="open"
         :aria-label="ariaLabel"
         @click="toggle"
         @keydown.down.prevent="openFromKey"
@@ -128,35 +138,31 @@ const applyPick = (option: PickerOption<T>): void => {
         >
             {{ selected?.label ?? placeholder }}
         </span>
-        <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-[0.5rem]` : `text-2xs`" aria-hidden="true" />
+        <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-4xs` : `text-2xs`" aria-hidden="true" />
     </button>
 
-    <BottomSheet v-if="mobile" v-model="sheetOpen" :header="header ?? ariaLabel">
-        <PickerPanel
-            :options="options"
-            :selected-value="model"
-            :search-threshold="searchThreshold"
-            :list-label="ariaLabel"
-            @pick="applyPick"
-            @close="sheetOpen = false"
-        >
-            <!-- Forward only a provided slot: an unconditional forward would override the panel's default icon. -->
-            <template v-if="slots[`icon`]" #icon="slotProps"><slot name="icon" v-bind="slotProps" /></template>
-        </PickerPanel>
-    </BottomSheet>
-    <Popover v-else ref="popover" :pt="{ content: { class: `!p-0` } }" @show="popoverOpen = true" @hide="popoverOpen = false">
-        <div class="w-max max-w-96" :style="{ minWidth: `${panelMinWidth}px` }">
+    <ResponsiveOverlay
+        v-model="open"
+        :anchor="triggerEl ?? undefined"
+        :header="header ?? ariaLabel"
+        side="bottom"
+        panel-class="w-max max-w-96"
+    >
+        <!-- The trigger-width floor is the DESKTOP panel's, and only its. A sheet is already as wide as the
+             phone, and a min-width taken from a full-width trigger would push it wider than the screen. -->
+        <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px` }">
             <PickerPanel
                 :options="options"
                 :selected-value="model"
                 :search-threshold="searchThreshold"
                 :list-label="ariaLabel"
-                autofocus
+                :autofocus="!mobile"
                 @pick="applyPick"
-                @close="popover?.hide()"
+                @close="close"
             >
+                <!-- Forward only a provided slot: an unconditional forward would override the panel's default icon. -->
                 <template v-if="slots[`icon`]" #icon="slotProps"><slot name="icon" v-bind="slotProps" /></template>
             </PickerPanel>
         </div>
-    </Popover>
+    </ResponsiveOverlay>
 </template>

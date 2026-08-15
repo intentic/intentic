@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, cmp, CopyButton, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
@@ -98,9 +98,9 @@ const removeKey = async (): Promise<void> => {
  * 0.125em so an icon sits right beside words; in a button whose only child is that icon there are no words, so
  * the nudge is just a drop of a pixel or two — by an amount that moves with whatever font-size the button
  * happens to inherit. The copy button beside these already centred its glyph with flex, so the four actions in
- * one cluster did not agree on where the middle was. `cmp.iconButton` centres with flex in a fixed 24px box,
+ * one cluster did not agree on where the middle was. `ui.iconButton` centres with flex in a fixed 24px box,
  * which is exactly zero offset under every type scale, so they cannot drift apart again. */
-const ACTION = cmp.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-subtle`);
+const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-subtle`);
 </script>
 
 <template>
@@ -193,7 +193,7 @@ const ACTION = cmp.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg
                             <button
                                 v-tooltip.top="`Confirm remove`"
                                 type="button"
-                                :class="cmp.iconButton(`text-danger hover:bg-danger/10 hover:text-danger`)"
+                                :class="ui.iconButton(`text-danger hover:bg-danger/10 hover:text-danger`)"
                                 aria-label="Confirm remove"
                                 @click="removeKey"
                             >

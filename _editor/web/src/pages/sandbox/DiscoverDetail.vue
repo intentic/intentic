@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { githubRepoOf } from "@intentic/registry";
-import { BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { BrandMark, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { formatCredits } from "../../composables/membership/creditMeter";
 import { useMembership } from "../../composables/membership/useMembership";
@@ -82,14 +81,7 @@ const priceLabel = computed(() =>
     <!-- The footer WRAPS, which is not cosmetic: its primary label is a sentence ("Have my agent read the code
          first") because that is the offer this panel exists to make, and on a phone that sentence plus Install
          is wider than the dialog — unwrapped, the one control that matters most is the one that gets clipped. -->
-    <Dialog
-        v-model:visible="open"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '38rem', maxWidth: '95vw' }"
-        :pt="{ content: { class: `max-h-[70dvh] overflow-y-auto` }, footer: { class: `flex flex-wrap justify-end gap-2` } }"
-    >
+    <Modal v-model:open="open" size="md">
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
                 <BrandMark :size="32" :name="listing.entry.name" :art="listing.entry.art" :logo="listing.entry.logo" :icon="listing.entry.icon" />
@@ -127,24 +119,24 @@ const priceLabel = computed(() =>
 
             <!-- Where the state of this row is not "here it is to install", it is said before anything else on
                  the panel: a reader looking at a blocked listing must not have to reach the button to find out. -->
-            <div v-if="listing.state.kind === `blocked`" :class="cmp.alertDanger()">
+            <Notice v-if="listing.state.kind === `blocked`" tone="danger">
                 <b>Blocked.</b> {{ listing.state.reason }} It stays listed rather than disappearing, because anyone who already installed it is the
                 person this most concerns.
-            </div>
-            <div v-else-if="listing.state.kind === `unavailable`" :class="cmp.alertInfo()">{{ listing.state.reason }}</div>
-            <div v-else-if="listing.state.kind === `installed`" :class="cmp.alertInfo()">
+            </Notice>
+            <Notice v-else-if="listing.state.kind === `unavailable`" tone="info">{{ listing.state.reason }}</Notice>
+            <Notice v-else-if="listing.state.kind === `installed`" tone="info">
                 Already installed in this sandbox, at this commit. Manage it on the Extensions tab.
-            </div>
-            <div v-else-if="listing.state.kind === `update`" :class="cmp.alertInfo()">
+            </Notice>
+            <Notice v-else-if="listing.state.kind === `update`" tone="info">
                 You have this installed at <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
                 >. The listing points at <code class="ui-code">{{ shortRef }}</code
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
-            </div>
+            </Notice>
 
             <!-- THE TRUST BLOCK. Three different parties guarantee three different things; a single badge
                  would blur which. Ordered by how much each actually settles. -->
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
-                <div :class="cmp.sectionLabel()">What you'd be trusting</div>
+                <div :class="ui.sectionLabel()">What you'd be trusting</div>
 
                 <template v-if="listing.entry.securityReview">
                     <div class="flex items-start gap-2 text-xs">
@@ -262,5 +254,5 @@ const priceLabel = computed(() =>
                 @click="emit(`install`)"
             />
         </template>
-    </Dialog>
+    </Modal>
 </template>

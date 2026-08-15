@@ -1,0 +1,25 @@
+/* THE DESIGN SYSTEM, IN ONE IMPORT. Order matters: tokens (including the Tailwind reset) must come before the
+ * colour tiers, primitives before the semantic aliases that reference them, and `base.css` last — its element
+ * resets are the floor everything above is allowed to beat.
+ *
+ * ONE ENTRY POINT, WHICH IT DID NOT USED TO BE. These files were split across `shared/` and a `core/` that held
+ * exactly one 45-line stylesheet behind a one-line index, and every consumer imported the two back to back, in
+ * that order, always — three apps and a test, none of which could have told you what the split MEANT. It meant
+ * nothing; it was a level of directory standing between a reader and eleven files. Now the only distinction
+ * left is the one that is real: what this file pulls in, and what a consumer opts into.
+ *
+ * WHAT IS NOT HERE lives in `opt-in/`, and is out because only some consumers pay for it: `prose.css` (rendered
+ * markdown, which a surface without <Markdown> should not ship) and `extension-surface.css` (the class surface
+ * promised to extension bundles, which only the app that LOADS them owes). Being outside this file is what says
+ * so — a sheet whose membership you have to check a comment for is a sheet somebody will import twice. */
+@import "./tokens.css";
+@import "./primitive-colors.css";
+@import "./semantic-colors.css";
+@import "./file-colors.css";
+@import "./primeng.css";
+@import "./tooltip.css";
+@import "./anchored-overlay.css";
+@import "./utilities.css";
+@import "./code.css";
+@import "./file-viewer.css";
+@import "./base.css";

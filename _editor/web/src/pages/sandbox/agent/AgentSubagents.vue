@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Row, RowGroup } from "@intentic/ui";
+import { ui, Row, RowGroup } from "@intentic/ui";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { commitCount } from "./numberInputs";
 import SubagentsInfo from "./SubagentsInfo.vue";
@@ -38,7 +38,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentsAtOnce ?? 20"
                     :disabled="settings === undefined"
                     aria-label="Subagents at once"
-                    :class="cmp.input('w-20 text-right text-xs')"
+                    :class="ui.input('w-20 text-right text-xs')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsAtOnce ?? 20, AT_ONCE, (subagentsAtOnce: number) => patch({ subagentsAtOnce }))
@@ -63,7 +63,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentsPerTurn ?? 200"
                     :disabled="settings === undefined"
                     aria-label="Subagents per conversation"
-                    :class="cmp.input('w-20 text-right text-xs')"
+                    :class="ui.input('w-20 text-right text-xs')"
                     @change="
                         (event: Event) =>
                             commitCount(event, settings?.subagentsPerTurn ?? 200, PER_TURN, (subagentsPerTurn: number) => patch({ subagentsPerTurn }))
@@ -87,7 +87,7 @@ const DEPTH = { min: 1, max: 10 };
                     :value="settings?.subagentDepth ?? 3"
                     :disabled="settings === undefined"
                     aria-label="Nesting depth"
-                    :class="cmp.input('w-20 text-right text-xs')"
+                    :class="ui.input('w-20 text-right text-xs')"
                     @change="
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
                     "

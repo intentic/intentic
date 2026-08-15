@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, cmp, Icon, Picker, ProseField, Segmented } from "@intentic/extension-ui";
+import { Button, Checkbox, ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/extension-ui";
 import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
@@ -281,7 +281,7 @@ const advancedSummary = computed(() => {
                 <button
                     type="button"
                     v-tooltip.top="`Delete this step`"
-                    :class="cmp.iconButton(`mt-1 text-danger`)"
+                    :class="ui.iconButton(`mt-1 text-danger`)"
                     aria-label="Delete step"
                     @click="emit(`remove`)"
                 >
@@ -325,13 +325,13 @@ const advancedSummary = computed(() => {
 
             <div v-if="advanced" class="mt-3 flex flex-col gap-4">
                 <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">What it hands on</span>
-                    <Segmented v-model="outputKind" :options="OUTPUT_OPTIONS" />
+                    <span :class="ui.sectionLabel()">What it hands on</span>
+                    <SegmentedControl v-model="outputKind" :options="OUTPUT_OPTIONS" />
                     <div v-if="step.output.kind === `json`" class="flex flex-col gap-1.5">
                         <div v-for="(field, index) in fields" :key="index" class="flex flex-wrap items-start gap-1.5">
                             <input
                                 :value="field.name"
-                                :class="[cmp.input(), `w-24 font-mono text-2xs`]"
+                                :class="[ui.input(), `w-24 font-mono text-2xs`]"
                                 placeholder="name"
                                 @input="patchField(index, { name: ($event.target as HTMLInputElement).value })"
                             />
@@ -344,7 +344,7 @@ const advancedSummary = computed(() => {
                             />
                             <input
                                 :value="field.description"
-                                :class="[cmp.input(), `min-w-36 flex-1`]"
+                                :class="[ui.input(), `min-w-36 flex-1`]"
                                 placeholder="what belongs here — the model reads this"
                                 @input="patchField(index, { description: ($event.target as HTMLInputElement).value })"
                             />
@@ -354,7 +354,7 @@ const advancedSummary = computed(() => {
                             </label>
                             <button
                                 type="button"
-                                :class="cmp.iconButton(`text-danger`)"
+                                :class="ui.iconButton(`text-danger`)"
                                 aria-label="Remove field"
                                 @click="setFields(fields.filter((_, at) => at !== index))"
                             >
@@ -375,10 +375,10 @@ const advancedSummary = computed(() => {
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">And only done when</span>
+                    <span :class="ui.sectionLabel()">And only done when</span>
                     <!-- A shell command is a VALUE, so it keeps its box; the rubric beside it is a paragraph
                          somebody writes, so it does not. That is the whole rule this panel is typeset on. -->
-                    <input v-model="command" :class="[cmp.input(), `font-mono`]" placeholder="pnpm test" />
+                    <input v-model="command" :class="[ui.input(), `font-mono`]" placeholder="pnpm test" />
                     <!-- Not bled out to the section's edge the way the passages above are: down here it has
                          boxed siblings, and a field hanging 8px to their left reads as a caption on the one
                          above it rather than as a field of its own. -->
@@ -386,12 +386,12 @@ const advancedSummary = computed(() => {
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">Memory between rounds</span>
-                    <Segmented :model-value="step.context" :options="CONTEXT_OPTIONS" @update:model-value="patch({ context: $event })" />
+                    <span :class="ui.sectionLabel()">Memory between rounds</span>
+                    <SegmentedControl :model-value="step.context" :options="CONTEXT_OPTIONS" @update:model-value="patch({ context: $event })" />
                 </div>
 
                 <label class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">Spend ceiling</span>
+                    <span :class="ui.sectionLabel()">Spend ceiling</span>
                     <span class="flex items-center gap-1.5">
                         <span class="text-xs text-subtle">$</span>
                         <input
@@ -399,7 +399,7 @@ const advancedSummary = computed(() => {
                             type="number"
                             min="0.01"
                             step="0.01"
-                            :class="[cmp.input(), `w-28 tabular-nums`]"
+                            :class="[ui.input(), `w-28 tabular-nums`]"
                             placeholder="No ceiling"
                             @input="setMaxSpend(($event.target as HTMLInputElement).value)"
                         />
@@ -408,7 +408,7 @@ const advancedSummary = computed(() => {
                 </label>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">Runs on</span>
+                    <span :class="ui.sectionLabel()">Runs on</span>
                     <!-- A chip rather than a field, and the same chip the acceptance extension's run pill uses:
                          it NAMES a choice and opens the app's own picker, where a boxed input would be claiming
                          this panel holds a catalog. Unpin sits beside it and only exists once there is a pin —
@@ -429,7 +429,7 @@ const advancedSummary = computed(() => {
                             v-if="step.agent !== undefined"
                             type="button"
                             v-tooltip.top="`Unpin — run this step on whatever you normally use`"
-                            :class="cmp.iconButton()"
+                            :class="ui.iconButton()"
                             aria-label="Unpin the model"
                             @click="unpin"
                         >
@@ -438,7 +438,7 @@ const advancedSummary = computed(() => {
                     </div>
                     <!-- The harness (the agentic loop), orthogonal to the provider — same semantics as the
                          chat's own picker, and shown only where there is genuinely a choice. -->
-                    <Segmented
+                    <SegmentedControl
                         v-if="harnessChoosable"
                         :model-value="step.harness ?? `native`"
                         :options="HARNESSES"
@@ -451,7 +451,7 @@ const advancedSummary = computed(() => {
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="cmp.sectionLabel()">Acts as</span>
+                    <span :class="ui.sectionLabel()">Acts as</span>
                     <div class="flex items-center gap-1.5">
                         <Picker
                             v-model="actsAs"
@@ -464,7 +464,7 @@ const advancedSummary = computed(() => {
                             v-if="step.actsAs !== undefined"
                             type="button"
                             v-tooltip.top="`Unpin — this step acts as nobody`"
-                            :class="cmp.iconButton()"
+                            :class="ui.iconButton()"
                             aria-label="Unpin the persona"
                             @click="actsAs = undefined"
                         >

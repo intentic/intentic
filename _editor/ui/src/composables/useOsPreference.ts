@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from "vue";
-import type { ShikiLang } from "./shikiLangs.js";
+import type { ShikiLang } from "../lib/shikiLangs.js";
 
 export type CommandOs = "unix" | "windows";
 
@@ -29,7 +29,7 @@ const read = (): CommandOs => {
 
 const cmdOs: Ref<CommandOs> = ref(read());
 
-// Persist every change, including `Segmented` v-model writes, so no page needs an explicit setter.
+// Persist every change, including `SegmentedControl` v-model writes, so no page needs an explicit setter.
 watch(cmdOs, (value) => {
     try {
         localStorage.setItem(STORAGE_KEY, value);
@@ -49,7 +49,7 @@ export function useOsPreference() {
  * is deliberately not shared: one of the three wraps these in a third "Docker Compose" option with its own
  * component behind it, so a component here would have to grow a slot for a case only one caller has.
  *
- * Mutable, because <Segmented> takes its options array as-is (same reason as RANGE_PRESETS in usageChart). */
+ * Mutable, because <SegmentedControl> takes its options array as-is (same reason as RANGE_PRESETS in usageChart). */
 export const OS_OPTIONS: { label: string; value: CommandOs }[] = [
     { label: `Linux / macOS`, value: `unix` },
     { label: `Windows (PowerShell)`, value: `windows` },

@@ -11,14 +11,14 @@ import {
 import { type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
 import {
     BrandMark,
-    cmp,
+    ui,
     ConfirmDialog,
     FilterBar,
     type IconName,
     Notice,
     type NoticeModel,
     RowGroup,
-    Segmented,
+    SegmentedControl,
     SplitView,
     StatusBadge,
 } from "@intentic/ui";
@@ -984,9 +984,9 @@ const submitLabel = computed(() => {
                         </RouterLink>
 
                         <!-- Precondition gate: a service/integration needs DevOps first. -->
-                        <div v-if="!requiresMet" :class="cmp.alertInfo()">
+                        <Notice v-if="!requiresMet" tone="info">
                             This needs <b>DevOps</b> active first. Go back and activate the DevOps capability, then add this.
-                        </div>
+                        </Notice>
 
                         <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                             <!-- WHAT YOU ALREADY HAVE OF THIS CARD — a list of accounts, and therefore a LIST.
@@ -1099,7 +1099,7 @@ const submitLabel = computed(() => {
                                  `github-2` — as the only clue that this was a second connection rather than an
                                  edit of the first. A card that holds one thing per sandbox is not adding
                                  anything, so it says what it IS doing instead. -->
-                            <div v-if="selectedInstances.length > 0 || selected.singleton" :class="cmp.sectionLabel(`mt-1`)">
+                            <div v-if="selectedInstances.length > 0 || selected.singleton" :class="ui.sectionLabel(`mt-1`)">
                                 {{ selected.singleton ? "Settings" : "Add another" }}
                             </div>
 
@@ -1110,7 +1110,7 @@ const submitLabel = computed(() => {
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
-                                    :class="[cmp.input(), touched.has('name') && nameProblem ? 'ui-field-input-error' : '']"
+                                    :class="[ui.input(), touched.has('name') && nameProblem ? 'ui-field-input-error' : '']"
                                     @input="nameEdited = true"
                                     @blur="markTouched('name')"
                                 />
@@ -1160,7 +1160,7 @@ const submitLabel = computed(() => {
                                         :aria-label="field.label"
                                         @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
                                     />
-                                    <Segmented
+                                    <SegmentedControl
                                         v-else
                                         class="shrink-0"
                                         :model-value="values[field.key] ?? ''"
@@ -1179,7 +1179,7 @@ const submitLabel = computed(() => {
                                             class="ml-1.5 align-middle"
                                         />
                                     </span>
-                                    <Segmented
+                                    <SegmentedControl
                                         v-if="field.options"
                                         wrap
                                         :model-value="values[field.key] ?? ''"
@@ -1193,7 +1193,7 @@ const submitLabel = computed(() => {
                                         rows="6"
                                         spellcheck="false"
                                         :class="[
-                                            cmp.input('font-mono resize-y'),
+                                            ui.input('font-mono resize-y'),
                                             touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '',
                                         ]"
                                         @blur="markTouched(field.key)"
@@ -1204,7 +1204,7 @@ const submitLabel = computed(() => {
                                         :type="field.secret ? 'password' : 'text'"
                                         :autocomplete="field.secret ? 'off' : undefined"
                                         :placeholder="field.placeholder"
-                                        :class="[cmp.input(), touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '']"
+                                        :class="[ui.input(), touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '']"
                                         @blur="markTouched(field.key)"
                                     />
                                     <span v-if="touched.has(field.key) && fieldProblem(field)" class="ui-field-error">
@@ -1218,7 +1218,7 @@ const submitLabel = computed(() => {
                                  it, verbatim. The evidence is what makes this checkable instead of magic, and it
                                  is also what "Not needed" is answering: the suggestion goes quiet for THIS, and
                                  comes back by itself if the workspace changes under it. -->
-                            <div v-if="selectedRecommendation" :class="cmp.alertInfo()">
+                            <Notice v-if="selectedRecommendation" tone="info">
                                 <div class="flex items-start gap-3">
                                     <div class="min-w-0 flex-1">
                                         <div>Recommended — {{ selectedRecommendation.reason }}.</div>
@@ -1233,7 +1233,7 @@ const submitLabel = computed(() => {
                                         @click="dismiss(selected)"
                                     />
                                 </div>
-                            </div>
+                            </Notice>
 
                             <!-- THE SUBMIT STAYS ON SCREEN. A few cards are genuinely long — a VPN carries three
                                  protocols' worth of fields, a computer seven permissions — and no amount of moving
@@ -1253,7 +1253,7 @@ const submitLabel = computed(() => {
                                 <!-- The read is beside the approval because that is when it matters: before the
                                      click, not after. It starts an ordinary chat and the form stays as it is —
                                      the account arrives, and installing remains this same button. -->
-                                <button v-if="auditable" type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAudit">
+                                <button v-if="auditable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAudit">
                                     {{
                                         updateFrom !== undefined
                                             ? `Have an agent read what changed first — the manifest delta leads`
@@ -1343,7 +1343,7 @@ const submitLabel = computed(() => {
                             <!-- The label alone. The category's sentence is the PAGE's description the moment the rail
                              points at it, so printing all ten of them down the full catalog spends a line each on
                              text nobody is reading yet — and the catalog is the view that has no room to spare. -->
-                            <div v-if="!inCategory" :class="cmp.sectionLabel()">{{ group.label }}</div>
+                            <div v-if="!inCategory" :class="ui.sectionLabel()">{{ group.label }}</div>
                             <!-- Container queries, not viewport ones: the grid is what is left of the page after the
                              index column takes its 16rem, so how many tiles fit is a fact about this pane. -->
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
@@ -1430,7 +1430,7 @@ const submitLabel = computed(() => {
                          So it answers the one question a reader has here, which is what they typed — and it
                          answers it about the list they are actually looking at, which under Connected is their
                          own connections and not the catalog. -->
-                    <div v-if="nothingMatches" :class="cmp.emptyState()">
+                    <div v-if="nothingMatches" :class="ui.emptyState()">
                         <p class="text-sm">Nothing in {{ activeScope.label }} matches “{{ search.trim() }}”.</p>
                         <p v-if="showingConnections" class="mt-1 text-xs text-muted">
                             Connections are searched by the name you gave them, by what they connect to, and by kind.

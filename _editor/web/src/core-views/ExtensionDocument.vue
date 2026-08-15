@@ -20,7 +20,7 @@ const componentOf = (provider: RegisteredDocumentProvider): Component => {
 </script>
 
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { documentProvider } from "./documentRegistry";
 import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";
@@ -41,7 +41,7 @@ const view = computed(() => {
     <!-- The provider is gone — switched off from the Extensions tab, uninstalled, or simply not activated yet on
          a cold load. The tab stays put and says so, which is the honest state: closing it for the user would
          throw away a place they were reading, and an empty frame would read as a document that failed. -->
-    <div v-else :class="cmp.emptyState(`m-6`)">
+    <div v-else :class="ui.emptyState(`m-6`)">
         <p class="text-sm">{{ title }} is not available.</p>
         <p class="mt-1 text-xs text-muted">
             The extension that explains <span class="font-mono">{{ path === `` ? `the workspace root` : path }}</span> is not running. Switch it back

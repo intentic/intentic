@@ -4,8 +4,8 @@ import type { App } from "vue";
 import Icon from "./components/Icon.vue";
 import { BUNDLED_ICONS } from "./icons/iconData.generated.js";
 import { Theme } from "./styles/theme.js";
-import { vLongpress } from "./composables/longPress.js";
-import { vTooltip } from "./composables/tooltip.js";
+import { vLongpress } from "./lib/longPress.js";
+import { vTooltip } from "./lib/tooltip.js";
 
 /* Single entry point for the design system: wires the bridged PrimeVue preset, the dark-mode selector
  * (kept in sync by useTheme), and — crucially — the cssLayer order so the cascade is deterministic:
@@ -28,7 +28,7 @@ export function installUi(app: App): void {
         },
     });
     // Register the tooltip directive globally so `v-tooltip` works in any component (the rail, composer, …).
-    // Ours, not PrimeVue's — see composables/tooltip.ts for why a popped-out panel forces the issue.
+    // Ours, not PrimeVue's — see lib/tooltip.ts for why a popped-out panel forces the issue.
     app.directive(`tooltip`, vTooltip);
     // Touch counterpart of the context menu: `v-longpress` opens bottom sheets on coarse-pointer devices.
     app.directive(`longpress`, vLongpress);

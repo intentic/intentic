@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { useShares } from "./useShares";
 
@@ -49,7 +49,7 @@ const when = (at: number): string => {
 <template>
     <section v-if="shares.length > 0 || isLoading">
         <div class="mb-2 flex items-center gap-2">
-            <h3 :class="cmp.sectionLabel()">Shared conversations</h3>
+            <h3 :class="ui.sectionLabel()">Shared conversations</h3>
             <InfoHint label="Shared conversations">
                 <span class="block text-sm font-medium text-content">Chats you've published</span>
                 <span class="mt-1 block text-xs text-muted">

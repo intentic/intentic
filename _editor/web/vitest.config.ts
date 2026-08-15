@@ -21,6 +21,8 @@ export default defineConfig({
     test: {
         include: ["./src/**/*.test.ts"],
         environment: "node",
+        // The browser APIs jsdom omits, stubbed for every suite — see the file for which and why.
+        setupFiles: ["./vitest.setup.ts"],
         /* These budgets bound a HANG; they do not measure latency, and nothing here should be near them.
          *
          * Module loading is on the same clock as the assertions. A full run of this package spends ~170s

@@ -5,11 +5,11 @@ import {
     clipboardOf,
     ContextMenu,
     DiffStat,
-    Dialog,
     Icon,
     type MenuItem,
+    Modal,
     SearchBar,
-    Segmented,
+    SegmentedControl,
     timeAgo,
 } from "@intentic/extension-ui";
 import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
@@ -853,14 +853,11 @@ const runPending = async (): Promise<void> => {
 
         <!-- One dialog for every action: a name input (branch/tag), a mode picker (reset), or a plain confirm.
              Destructive ops carry the auto-checkpoint reassurance; a clean-apply conflict shows inline. -->
-        <Dialog
-            :visible="pending !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
+        <Modal
+            :open="pending !== undefined"
+            size="sm"
             :header="pending ? ACTIONS[pending.kind].header : ''"
-            @update:visible="cancelAction"
+            @update:open="cancelAction"
         >
             <template v-if="pending">
                 <p class="text-xs text-content">
@@ -879,7 +876,7 @@ const runPending = async (): Promise<void> => {
                 />
 
                 <div v-if="pending.kind === 'reset'" class="mt-3 flex flex-col gap-1.5">
-                    <Segmented
+                    <SegmentedControl
                         v-model="resetMode"
                         size="xs"
                         :options="[
@@ -915,6 +912,6 @@ const runPending = async (): Promise<void> => {
                     @click="runPending"
                 />
             </template>
-        </Dialog>
+        </Modal>
     </div>
 </template>

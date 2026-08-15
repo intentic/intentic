@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Rule } from "@intentic-app/api-contract";
-import { cmp, ContextMenu, Icon, Row, RowGroup, SkeletonRows, timeAgo } from "@intentic/ui";
+import { ui, ContextMenu, Icon, Row, RowGroup, SkeletonRows, timeAgo } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -139,7 +139,7 @@ const firedOf = (rule: Rule): string => {
                     <div class="flex items-center gap-1">
                         <button
                             type="button"
-                            :class="cmp.iconButton()"
+                            :class="ui.iconButton()"
                             v-tooltip.bottom="`Rule actions`"
                             aria-label="Rule actions"
                             @click="openMenu($event, rule)"

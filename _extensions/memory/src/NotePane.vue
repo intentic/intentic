@@ -3,14 +3,14 @@ import type { MemoryFileEntry } from "./contract";
 import {
     Button,
     CodeField,
-    cmp,
+    ui,
     CopyButton,
     formatBytes,
     formatTimestamp,
     Icon,
     Markdown,
-    Panel,
-    Segmented,
+    ScrollFrame,
+    SegmentedControl,
     StatusBadge,
     type StatusVariant,
 } from "@intentic/extension-ui";
@@ -124,9 +124,9 @@ const onProseClick = (event: MouseEvent): void => {
 
 <template>
     <!-- The stacking rule this header needed — title on its own row until there is width for the control
-         cluster — is <Panel>'s now: this pane is the narrowest real instance of it, and so the one that found
+         cluster — is <ScrollFrame>'s now: this pane is the narrowest real instance of it, and so the one that found
          the failure. -->
-    <Panel grow :title="title">
+    <ScrollFrame grow :title="title">
         <template #lead>
             <Icon :name="isIndex ? `sparkles` : `file`" class="shrink-0 text-xs text-subtle" />
         </template>
@@ -156,7 +156,7 @@ const onProseClick = (event: MouseEvent): void => {
                 </Button>
             </template>
             <template v-else>
-                <Segmented
+                <SegmentedControl
                     v-model="view"
                     size="xs"
                     :options="[
@@ -165,12 +165,12 @@ const onProseClick = (event: MouseEvent): void => {
                     ]"
                 />
                 <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                <button type="button" :class="cmp.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
+                <button type="button" :class="ui.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
                     <Icon name="pencil" />
                 </button>
                 <button
                     type="button"
-                    :class="cmp.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
+                    :class="ui.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
                     aria-label="Forget this note"
                     v-tooltip.top="'Forget'"
                     @click="confirming = true"
@@ -219,5 +219,5 @@ const onProseClick = (event: MouseEvent): void => {
             @keydown.meta.s.prevent="saveDraft"
             @keydown.esc="cancelEdit"
         />
-    </Panel>
+    </ScrollFrame>
 </template>

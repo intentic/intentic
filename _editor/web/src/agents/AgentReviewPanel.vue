@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { ChangeStatusMark, cmp, explorerColorClass, iconForEntry, Notice, Segmented, useDevice, useExplorerStyle } from "@intentic/ui";
+import { ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -52,7 +52,7 @@ import { basename } from "@intentic/ui/path";
  *   - LANDED WORK IS STILL WORK. The list is the agent's CUMULATIVE output (see useAgentChanges), not the
  *     not-yet-landed remainder. A clean turn auto-lands within milliseconds, so a remainder-scoped list showed
  *     an empty panel for everything the agent had just written. Rows carry `landed`; the toolbar counts what is
- *     left, and the Segmented filters down to it.
+ *     left, and the SegmentedControl filters down to it.
  *   - A REVIEW HAS PROGRESS. Files can be ticked off as you look at them (viewed, GitHub-style), the toolbar
  *     shows the count, and `v` ticks the current file and advances — so a 30-file scan has a place to stop and
  *     resume rather than being a wall of paths. Whole HEADINGS tick too (ReviewGroupCheck, `⇧V`): the mark
@@ -96,7 +96,7 @@ const { openDiff } = useWorkspaceTabs();
 /* THE NARROWING CONTROL. Every option is offered exactly while it would tell the user something they cannot
  * already see, and each is dropped for its own reason — which is why this is a list built per state rather
  * than one `splittable` flag over the whole control. That flag was "is the unlanded set a proper subset", and
- * it hid the Segmented ENTIRELY whenever it wasn't: a refused land is atomic, so it leaves every row unlanded,
+ * it hid the SegmentedControl ENTIRELY whenever it wasn't: a refused land is atomic, so it leaves every row unlanded,
  * so the one state where narrowing matters most was the one state with no control to do it.
  *
  *   Blocked     — what refused. First, because when it exists it is the only reason the user is on this panel.
@@ -519,7 +519,7 @@ const openInWorkspace = (file: AgentReviewFile): void => {
 // --- presentation --------------------------------------------------------------------------------------
 
 // The design system's toolbar icon button, plus this panel's own disabled treatment.
-const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
+const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
 // What a refused land left behind. The report itself — the causes, and the ladder of actions ordered by who
@@ -637,7 +637,7 @@ const endResize = (event: PointerEvent): void => {
                      its pixels — it prints the total AND is the control that acts on it — so the bare count
                      only renders when there is no filter to state it. -->
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
-                    <Segmented v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
+                    <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
                         <span class="font-medium text-content">{{ changes.count.value }}</span> file{{ changes.count.value === 1 ? "" : "s" }}
                     </span>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { cmp, Code, commandLang, Notice, type NoticeModel, Segmented, useOsPreference } from "@intentic/ui";
+import { ui, Code, commandLang, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -128,7 +128,7 @@ const command = computed(() => {
                 <li>Open a terminal on the computer that runs your sandbox.</li>
                 <li>Copy and run the command below. It takes a few minutes; your files (in /work) are kept.</li>
             </ol>
-            <Segmented
+            <SegmentedControl
                 v-model="cmdOs"
                 size="sm"
                 class="self-start"

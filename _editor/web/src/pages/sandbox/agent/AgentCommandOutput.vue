@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, formatTokens, Row, RowGroup } from "@intentic/ui";
+import { ui, formatTokens, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { relativeTime } from "../../../composables/chat/catalog";
@@ -133,7 +133,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                                 min="0"
                                 max="100"
                                 :value="holdoutPercent"
-                                :class="cmp.input('w-16 text-right text-xs')"
+                                :class="ui.input('w-16 text-right text-xs')"
                                 @change="(event: Event) => commitPercent(event, holdoutPercent, (outputHoldout: number) => patch({ outputHoldout }))"
                             />
                             <span class="text-xs text-muted">%</span>

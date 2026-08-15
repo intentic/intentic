@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { clipboardOf, cmp, ConfirmDialog, ContextMenu, Icon, type IconName, useDevice } from "@intentic/ui";
+import { clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
@@ -1027,7 +1026,7 @@ const endResize = (event: PointerEvent): void => {
                 <button
                     v-if="restart !== undefined && activeShell"
                     type="button"
-                    :class="cmp.iconButton()"
+                    :class="ui.iconButton()"
                     @click="restart()"
                     v-tooltip.top="'Restart shell'"
                     aria-label="Restart shell"
@@ -1037,7 +1036,7 @@ const endResize = (event: PointerEvent): void => {
                 <button
                     v-else
                     type="button"
-                    :class="cmp.iconButton()"
+                    :class="ui.iconButton()"
                     @click="void tabs.refresh()"
                     v-tooltip.top="'Refresh sessions'"
                     aria-label="Refresh sessions"
@@ -1048,10 +1047,10 @@ const endResize = (event: PointerEvent): void => {
                      burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
                      close × because both answer "where does this panel live", and it flips with the state so
                      the one control is the whole round trip. -->
-                <button type="button" :class="cmp.iconButton()" @click="popout.toggle()" v-tooltip.top="popoutHint" :aria-label="popoutHint">
+                <button type="button" :class="ui.iconButton()" @click="popout.toggle()" v-tooltip.top="popoutHint" :aria-label="popoutHint">
                     <Icon :name="popout.poppedOut.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
-                <button type="button" :class="cmp.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
+                <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeHint" :aria-label="closeHint">
                     <Icon :name="popout.poppedOut.value ? 'times' : 'chevron-down'" class="text-xs" />
                 </button>
             </div>
@@ -1164,17 +1163,17 @@ const endResize = (event: PointerEvent): void => {
         <!-- The pane's history as selectable text. The live grid can only ever offer the screenful in front of
              you — a tmux client runs on the alternate screen, so its scrollback never reaches the browser — and
              this is where "scroll back and copy that" is answered: real text, native selection, Ctrl+F. -->
-        <Dialog
-            :visible="scrollbackName !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
+        <Modal
+            :open="scrollbackName !== undefined"
+            size="xl"
+            :scroll="false"
             :append-to="popout.overlayTarget.value"
-            :style="{ width: '80rem', maxWidth: '92vw' }"
             :header="scrollbackName === undefined ? '' : `Scrollback — ${segmentLabel(scrollbackName)}`"
-            @update:visible="closeScrollback"
+            @update:open="closeScrollback"
         >
-            <div class="flex min-h-0 flex-col gap-2" style="height: 70vh">
+            <!-- Lays out its own height (hence <Modal :scroll="false">): the <pre> below is the scroller, and a
+                 second one wrapped around it would put the "Copy all" row out of reach on a long scrollback. -->
+            <div class="flex h-panel-lg min-h-0 flex-col gap-2">
                 <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
                     <template v-if="scrollback">
                         <span>{{ scrollback.lines.toLocaleString() }} lines</span>
@@ -1190,7 +1189,7 @@ const endResize = (event: PointerEvent): void => {
                     class="scrollbar-thin min-h-0 flex-1 overflow-auto rounded-md bg-terminal p-3 font-mono text-xs whitespace-pre text-content select-text"
                     >{{ scrollback.text }}</pre>
             </div>
-        </Dialog>
+        </Modal>
 
         <!-- The confirm a bulk kill gets when it would end sessions that are still running — this panel's
              counterpart of the chat's "stop N running agents?" and the workspace's unsaved-edits dialog. -->
@@ -1213,21 +1212,18 @@ const endResize = (event: PointerEvent): void => {
 
         <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
              swatch that clears the override. (Rename is inline in the strip, not here.) -->
-        <Dialog
-            :visible="customize !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
+        <Modal
+            :open="customize !== undefined"
+            size="sm"
             :append-to="popout.overlayTarget.value"
-            :style="{ width: '22rem' }"
             :header="customizeHeader"
-            @update:visible="customize = undefined"
+            @update:open="customize = undefined"
         >
             <template v-if="customize">
                 <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
-                        :class="cmp.addTile(`h-7 w-7 rounded-full text-subtle`)"
+                        :class="ui.addTile(`h-7 w-7 rounded-full text-subtle`)"
                         v-tooltip.top="'Default'"
                         aria-label="Default color"
                         @click="applyColor(undefined)"
@@ -1249,7 +1245,7 @@ const endResize = (event: PointerEvent): void => {
                 <div v-else class="grid grid-cols-8 gap-1.5">
                     <button
                         type="button"
-                        :class="cmp.addTile(`h-8 w-8 text-subtle`)"
+                        :class="ui.addTile(`h-8 w-8 text-subtle`)"
                         v-tooltip.top="'Default'"
                         aria-label="Default icon"
                         @click="applyIcon(undefined)"
@@ -1269,7 +1265,7 @@ const endResize = (event: PointerEvent): void => {
                     </button>
                 </div>
             </template>
-        </Dialog>
+        </Modal>
     </div>
 </template>
 

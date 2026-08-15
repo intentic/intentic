@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Notice } from "@intentic/ui";
+import { ui, Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -87,7 +87,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? `Paste the value for ${secretKey}`"
-                :class="[cmp.input('flex-1 resize-y font-mono text-xs'), show ? '' : 'blur-[3px] focus:blur-none']"
+                :class="[ui.input('flex-1 resize-y font-mono text-xs'), show ? '' : 'blur-[3px] focus:blur-none']"
             ></textarea>
             <input
                 v-else
@@ -97,7 +97,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocapitalize="off"
                 spellcheck="false"
                 :placeholder="placeholder ?? `Paste the value for ${secretKey}`"
-                :class="cmp.input('flex-1')"
+                :class="ui.input('flex-1')"
                 @keydown.enter="onEnter"
             />
             <Button severity="secondary" :text="true" :aria-label="show ? 'Hide value' : 'Show value'" @click="show = !show">

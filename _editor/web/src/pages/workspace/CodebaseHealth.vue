@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Picker, Segmented } from "@intentic/ui";
+import { Picker, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { useCodebaseHealth } from "../../composables/workspace/useCodebaseHealth";
@@ -59,7 +59,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
             <!-- The window narrows CHURN only: complexity is a property of the file as it stands today, so it
                  never moves when this does. -->
             <span class="shrink-0 text-2xs text-subtle">Commits from</span>
-            <Segmented v-model="churnWindow" size="xs" :options="CHURN_WINDOWS" />
+            <SegmentedControl v-model="churnWindow" size="xs" :options="CHURN_WINDOWS" />
             <button
                 type="button"
                 class="flex shrink-0 items-center rounded-md px-1 py-0.5 text-muted transition-colors hover:text-content"

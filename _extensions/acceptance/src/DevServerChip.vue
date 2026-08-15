@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Popover } from "@intentic/extension-ui";
+import { ui, Icon, Popover } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { host } from "./host";
 import { panelSessionOf, type useTargets } from "./useTargets";
@@ -63,18 +63,24 @@ const start = async (): Promise<void> => {
     <span v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">no dev server</span>
 
     <!-- THE ONE FAILURE IN THESE PACKS THAT IS NOT A <Notice>, and deliberately so. Every other hand-rolled
-         `cmp.alertDanger()` strip is now that component; this is a CHIP — it sits inline in a row of addresses,
-         truncates to whatever width is left, and carries its full text in a tooltip. A notice box is a block
-         that owns its line, which is the opposite of what this row needs. It borrows the danger tint, not the
-         shape. -->
-    <span v-else-if="failure" :class="[cmp.alertDanger(`px-2 py-0.5 text-2xs`), `truncate`]" :title="failure">{{ failure }}</span>
+         alert strip is that component now; this is a CHIP — it sits inline in a row of addresses, truncates to
+         whatever width is left, and carries its full text in a tooltip. A notice box is a block that owns its
+         line, which is the opposite of what this row needs. It borrows the danger tint, not the shape — and it
+         spells that tint out rather than sharing a recipe with the box, because a shared recipe is exactly how
+         thirty-two views ended up drawing a notice that was not one. -->
+    <span
+        v-else-if="failure"
+        class="truncate rounded-lg border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger"
+        :title="failure"
+        >{{ failure }}</span
+    >
 
     <!-- READY, SERVING ONE THING, FROM A TERMINAL. The address is the label — the one fact worth checking at a
          glance — and it is that terminal's trigger rather than sitting beside a second button for it. -->
     <button
         v-else-if="targets.terminalOf(repo) !== undefined"
         type="button"
-        :class="cmp.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
         v-tooltip.bottom="`Open the terminal serving this — ${targets.terminalOf(repo)}`"
         @click="host().terminal.open(targets.terminalOf(repo) ?? ``)"
     >
@@ -88,7 +94,7 @@ const start = async (): Promise<void> => {
     <button
         v-else-if="targets.localUrl(repo) !== undefined"
         type="button"
-        :class="cmp.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
         v-tooltip.bottom="`What this repository is serving`"
         @click="popover?.toggle($event)"
     >
@@ -102,7 +108,7 @@ const start = async (): Promise<void> => {
     <button
         v-else-if="targets.stateOf(repo) === `ready`"
         type="button"
-        :class="cmp.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
         v-tooltip.bottom="`What this repository is serving`"
         @click="popover?.toggle($event)"
     >
@@ -116,7 +122,7 @@ const start = async (): Promise<void> => {
     <button
         v-else-if="targets.stateOf(repo) === `starting`"
         type="button"
-        :class="cmp.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs text-muted hover:text-content hover:no-underline`)"
         v-tooltip.bottom="`A first start installs dependencies, which can take a minute — watch it in the terminal`"
         @click="host().terminal.open(panelSessionOf(repo))"
     >
@@ -129,7 +135,7 @@ const start = async (): Promise<void> => {
         v-else
         type="button"
         :disabled="starting"
-        :class="cmp.linkButton(`gap-1.5 text-2xs hover:no-underline`, blocked ? `text-warning hover:text-warning` : `text-muted hover:text-content`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs hover:no-underline`, blocked ? `text-warning hover:text-warning` : `text-muted hover:text-content`)"
         v-tooltip.bottom="`Start this repository's dev server`"
         @click="start"
     >
@@ -154,7 +160,7 @@ const start = async (): Promise<void> => {
                     <button
                         v-if="server.session"
                         type="button"
-                        :class="cmp.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
+                        :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
                         v-tooltip.bottom="`Open ${server.session} — the terminal this is running in`"
                         @click="host().terminal.open(server.session)"
                     >

@@ -1,6 +1,6 @@
 <!-- THE INSTRUMENT ABOVE A LIST: free text on the left, the controls that narrow the same list on the right,
      and any bare action furthest right. Six views had written this row by hand and no two agreed — three
-     different field treatments (a shrunken `cmp.input`, a framed <SearchBar>, and a bare `relative` +
+     different field treatments (a shrunken `ui.input`, a framed <SearchBar>, and a bare `relative` +
      absolutely-positioned icon at three different paddings), two different heights, and two different ideas
      about whether the field grows.
 

@@ -8,7 +8,7 @@ import { defineAsyncComponent } from "vue";
 import type { Figure } from "../markdown/figures.js";
 import BarChart from "./BarChart.vue";
 import MermaidDiagram from "./MermaidDiagram.vue";
-import StatRow from "./StatRow.vue";
+import StatStrip from "./StatStrip.vue";
 
 defineProps<{ figure: Figure }>();
 
@@ -24,6 +24,6 @@ const DagFigure = defineAsyncComponent(() => import("./DagFigure.vue"));
          does not compose, because the author wrote the diagram in a notation with its own renderer. -->
     <MermaidDiagram v-if="figure.kind === `mermaid`" :code="figure.code" />
     <BarChart v-else-if="figure.kind === `bars`" :items="figure.items" :title="figure.title" />
-    <StatRow v-else-if="figure.kind === `stats`" :items="figure.items" />
+    <StatStrip v-else-if="figure.kind === `stats`" :items="figure.items" />
     <DagFigure v-else :figure="figure" />
 </template>

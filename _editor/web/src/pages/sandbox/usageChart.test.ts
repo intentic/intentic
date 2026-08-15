@@ -134,7 +134,7 @@ describe(`series identity`, () => {
      * file and dropped the rest, leaving Kimi and Grok asking for a variable that wasn't there and painting
      * nothing. Read from the stylesheet rather than a rendered page, because that is where the guarantee lives. */
     it(`declares a colour for every slot, in a block Tailwind cannot tree-shake`, () => {
-        const sheet = readFileSync(join(repoRoot(import.meta.url), `_editor/ui/src/styles/shared/semantic-colors.css`), `utf8`);
+        const sheet = readFileSync(join(repoRoot(import.meta.url), `_editor/ui/src/styles/semantic-colors.css`), `utf8`);
         const block = sheet.slice(sheet.indexOf(`@theme static`));
         expect(block).not.toBe(``);
         for (const provider of [...PROVIDER_SERIES, `some-acp-agent`]) {

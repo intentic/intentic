@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const uiRoot = resolve(here, `../../ui/src`);
 const extensionsRoot = resolve(here, `../../../_extensions`);
-const stylesheet = resolve(uiRoot, `styles/shared/utilities.css`);
+const stylesheet = resolve(uiRoot, `styles/utilities.css`);
 
 const sourceFiles = (dir: string): string[] => {
     const out: string[] = [];
@@ -97,7 +97,7 @@ describe(`reduced motion`, () => {
         expect(
             undecided,
             `New animation classes. Decide what each does under prefers-reduced-motion: add a rule to the block in ` +
-                `_editor/ui/src/styles/shared/utilities.css, then record the verdict in DECIDED here.`,
+                `_editor/ui/src/styles/utilities.css, then record the verdict in DECIDED here.`,
         ).toEqual([]);
     });
 

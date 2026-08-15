@@ -2,7 +2,7 @@
 import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract";
 import {
     Button,
-    cmp,
+    ui,
     ConfirmDialog,
     Icon,
     InfoHint,
@@ -13,7 +13,7 @@ import {
     PageHeader,
     RowGroup,
     SearchBar,
-    Segmented,
+    SegmentedControl,
 } from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
@@ -268,7 +268,7 @@ const toggleDetail = (id: string): void => {
             <section v-if="pending.length > 0">
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <Icon name="lock" class="text-2xs text-warning" />
-                    <span :class="cmp.sectionLabel('text-warning')">Waiting for you</span>
+                    <span :class="ui.sectionLabel('text-warning')">Waiting for you</span>
                     <span class="text-2xs font-medium text-subtle">{{ pending.length }}</span>
                     <span class="text-2xs text-subtle">These fired and are held — the agent hasn't run yet.</span>
                 </div>
@@ -328,13 +328,13 @@ const toggleDetail = (id: string): void => {
                     placeholder="Filter by name or prompt…"
                     class="min-w-56 max-w-sm flex-1"
                 />
-                <Segmented v-model="view" :options="viewOptions" class="ml-auto" />
+                <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
             </div>
 
-            <div v-if="automations.length === 0" :class="cmp.emptyState('py-5')">
+            <div v-if="automations.length === 0" :class="ui.emptyState('py-5')">
                 No automations yet — turn on a code chore below, or build your own with New automation.
             </div>
-            <div v-else-if="shown.length === 0" :class="cmp.emptyState('py-5')">
+            <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">
                 Nothing matches this filter.
                 <button
                     type="button"
@@ -387,7 +387,7 @@ const toggleDetail = (id: string): void => {
                  check finds something, while these need a few fields before they do anything at all. -->
             <section v-if="availableSuggestions.length > 0">
                 <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                    <span :class="cmp.sectionLabel()">Reach this agent from elsewhere</span>
+                    <span :class="ui.sectionLabel()">Reach this agent from elsewhere</span>
                     <span class="text-2xs text-subtle">A few details to fill in, then it is a row like any other.</span>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
@@ -395,7 +395,7 @@ const toggleDetail = (id: string): void => {
                         v-for="recipe in availableSuggestions"
                         :key="recipe.id"
                         type="button"
-                        :class="cmp.addTile(`bg-card px-2.5 py-1.5`)"
+                        :class="ui.addTile(`bg-card px-2.5 py-1.5`)"
                         v-tooltip.top="recipe.description"
                         @click="openFromSuggestion(recipe)"
                     >
@@ -411,7 +411,7 @@ const toggleDetail = (id: string): void => {
                  from being a real row above. -->
             <section v-if="availableChores.length > 0">
                 <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                    <span :class="cmp.sectionLabel()">Add a code chore</span>
+                    <span :class="ui.sectionLabel()">Add a code chore</span>
                     <span class="text-2xs text-subtle">Their check runs for free first — a turn is spent only when it finds something.</span>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
@@ -419,7 +419,7 @@ const toggleDetail = (id: string): void => {
                         v-for="recipe in availableChores"
                         :key="recipe.id"
                         type="button"
-                        :class="cmp.addTile(`bg-card px-2.5 py-1.5 disabled:cursor-default disabled:opacity-50`)"
+                        :class="ui.addTile(`bg-card px-2.5 py-1.5 disabled:cursor-default disabled:opacity-50`)"
                         :disabled="enabling !== undefined"
                         v-tooltip.top="recipe.description"
                         @click="enableChore(recipe)"

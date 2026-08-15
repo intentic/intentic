@@ -79,7 +79,7 @@ defineExpose({
                 </span>
                 <kbd
                     v-if="item['shortcut']"
-                    class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
+                    class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-3xs leading-none text-muted"
                     >{{ item["shortcut"] }}</kbd
                 >
             </a>

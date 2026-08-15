@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { Notice } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
 import { isStep, stepLabel, type RunEvent } from "../desktop";
 
@@ -82,7 +82,7 @@ watch(
             </button>
         </div>
 
-        <div v-if="failed && failure !== ``" :class="cmp.alertDanger('whitespace-pre-wrap font-mono text-2xs')">{{ failure }}</div>
+        <Notice v-if="failed && failure !== ``" tone="danger" class="font-mono text-2xs whitespace-pre-wrap">{{ failure }}</Notice>
 
         <!-- Monospace and unstyled: this is the script's output, and re-formatting it would make it something
              the user cannot match against what the same command prints in a terminal. -->

@@ -1,24 +1,22 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
-import Popover from "primevue/popover";
+import { AnchoredOverlay, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { ref } from "vue";
 import { relativeTime } from "../composables/chat/catalog";
 import { KIND_ICONS } from "../composables/terminal/terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "../composables/terminal/useWorkTerminals";
-import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
 /* The terminal panel's door to work IN PROGRESS: the shells the agent's Bash commands are running in and the
  * sessions the daemon is running its jobs in (a capability add, the infra check), listed HERE instead of tabbing
  * themselves into the strip (see useWorkTerminals for why). Mounted in the panel toolbar beside the
- * background-processes popover it is modelled on, and hidden until something is actually running — so a quiet
+ * background-processes panel it is modelled on, and hidden until something is actually running — so a quiet
  * sandbox never grows a button for it.
  *
  * This is the surface that lets the strip stay clean. Work tabs only while someone is watching it, and while it
  * runs it is always one click away here — named after the conversation that owns it, whatever spoke last on top.
  *
  * Finished work is deliberately absent: a dead pane is not a record (the logs on disk and the transcript are),
- * and a list of them is just the row of corpses the strip was rid of, moved into a popover. That is also why
+ * and a list of them is just the row of corpses the strip was rid of, moved into a menu. That is also why
  * there is no broom here — nothing accumulates for one to sweep, and the daemon ages the dead sessions out on
  * its own (terminal-session.ts reapFinishedSessions). Opening a row reveals it as a tab whichever way the toggle
  * sits — a reveal is an explicit request, and the preference only decides the DEFAULT. There is no Stop, either:
@@ -26,12 +24,14 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  * strip's × on a tab the user chose to open. */
 
 const { rows, showWorkTerminals } = useWorkTerminals();
-// The popover must open in the floating window while the panel is popped out there, not the main document.
-const { overlayTarget } = useTerminalPopout();
-const panel = ref<InstanceType<typeof Popover> | null>(null);
+/* Anchored rather than a PrimeVue Popover for the reason its sibling <BackgroundProcesses> is: while the
+ * terminal is popped out, an overlay that measures its room against the opener's window opens off the bottom
+ * edge of the floating one, over the very button that toggles it. The anchor carries the window. */
+const trigger = ref<HTMLButtonElement | null>(null);
+const panelOpen = ref(false);
 
 const open = (row: WorkTerminalRow): void => {
-    panel.value?.hide();
+    panelOpen.value = false;
     openWorkTerminal(row.session);
 };
 
@@ -43,16 +43,18 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
 <template>
     <button
         v-if="rows.length > 0"
+        ref="trigger"
         type="button"
-        :class="cmp.iconButton()"
-        @click="panel?.toggle($event)"
+        :class="ui.iconButton()"
+        :aria-expanded="panelOpen"
+        @click="panelOpen = !panelOpen"
         v-tooltip.top="'Running work'"
         aria-label="Running work"
     >
         <Icon name="wave-pulse" class="text-xs text-link" />
     </button>
 
-    <Popover ref="panel" :append-to="overlayTarget">
+    <AnchoredOverlay v-model="panelOpen" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
             <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">Running work</div>
             <button
@@ -81,5 +83,5 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
                 <ToggleSwitch v-model="showWorkTerminals" />
             </label>
         </div>
-    </Popover>
+    </AnchoredOverlay>
 </template>

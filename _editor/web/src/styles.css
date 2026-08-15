@@ -9,14 +9,13 @@
 @import "tailwindcss";
 
 /* Design system: tokens + colors + PrimeVue tuning + utilities, then base resets. The
- * order is load-bearing — see _editor/ui/src/styles/shared/index.css. */
-@import "../../../_editor/ui/src/styles/shared/index.css";
-@import "../../../_editor/ui/src/styles/core/index.css";
+ * order is load-bearing — see _editor/ui/src/styles/index.css. */
+@import "../../../_editor/ui/src/styles/index.css";
 
 /* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used
  * to be, below. It lives in the design system because that is whose surface it is, and is imported here
  * because only the app that loads extension bundles has to pay for it. */
-@import "../../../_editor/ui/src/styles/extension-surface.css";
+@import "../../../_editor/ui/src/styles/opt-in/extension-surface.css";
 
 /* Rendered markdown, then the conversation column that is its biggest consumer. Both are unlayered on
  * purpose (they must beat the `components` layer), and both load here rather than from a component's
@@ -24,7 +23,7 @@
  * the workspace preview and every extension view rendering <Markdown>, and chat.css holds the chat's type
  * scale plus the class names its components pass between each other. Order matters — chat.css tunes
  * prose.css's tokens, so prose.css loads after the design system's own sheets rather than inside them. */
-@import "../../../_editor/ui/src/styles/shared/prose.css";
+@import "../../../_editor/ui/src/styles/opt-in/prose.css";
 @import "./chat/chat.css";
 
 /* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,

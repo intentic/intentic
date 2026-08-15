@@ -13,9 +13,8 @@
      have been rejected there. What it cannot know is which kinds refuse a rename outright and which names are
      already taken elsewhere in the sandbox — those are the daemon's answers, and they arrive as its sentence. -->
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import { nameError } from "../pages/capabilities/form";
 
@@ -44,13 +43,7 @@ const unchanged = computed(() => name.value.trim() === props.id);
 </script>
 
 <template>
-    <Dialog
-        :visible="visible"
-        modal
-        header="Rename connection"
-        :style="{ width: '28rem', maxWidth: '92vw' }"
-        @update:visible="emit(`update:visible`, $event)"
-    >
+    <Modal :open="visible" size="sm" header="Rename connection" @update:open="emit(`update:visible`, $event)">
         <form class="flex flex-col gap-3" @submit.prevent="!problem && !unchanged && emit(`rename`, name.trim())">
             <Notice v-if="error" :of="error" />
             <label class="ui-field">
@@ -59,7 +52,7 @@ const unchanged = computed(() => name.value.trim() === props.id);
                 <input
                     v-model="name"
                     autofocus
-                    :class="[cmp.input(`font-mono`), touched && problem ? `ui-field-input-error` : ``]"
+                    :class="[ui.input(`font-mono`), touched && problem ? `ui-field-input-error` : ``]"
                     @blur="touched = true"
                 />
                 <span v-if="touched && problem" class="ui-field-error">
@@ -76,5 +69,5 @@ const unchanged = computed(() => name.value.trim() === props.id);
             <Button label="Cancel" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
             <Button label="Rename" size="small" :loading="busy" :disabled="problem !== undefined || unchanged" @click="emit(`rename`, name.trim())" />
         </template>
-    </Dialog>
+    </Modal>
 </template>

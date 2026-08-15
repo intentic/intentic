@@ -1,6 +1,6 @@
 <!-- THE APP'S OWN ANCHORED OVERLAY — a panel pinned to a trigger, in the WINDOW THAT TRIGGER IS IN.
 
-     It is ours for the same reason the tooltip directive is (composables/tooltip.ts): PrimeVue's Popover works
+     It is ours for the same reason the tooltip directive is (lib/tooltip.ts): PrimeVue's Popover works
      against the module-scope `document` and `window`. It appends to a target you have to remember to pass, it
      measures the room around the trigger with the OPENER's viewport, it arms its dismiss listener on the
      OPENER's document, and it re-aligns on the OPENER's resize. A popped-out chat panel (usePopout) renders in
@@ -25,7 +25,7 @@
      (the model picker clears its search query with it) can still stopPropagation. -->
 <script setup lang="ts">
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { type Cross, placeAnchored, type Placement, type Side } from "../composables/anchorPlacement.js";
+import { type Cross, placeAnchored, type Placement, type Side } from "../lib/anchorPlacement.js";
 
 const {
     anchor,

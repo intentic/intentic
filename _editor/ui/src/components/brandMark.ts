@@ -1,4 +1,4 @@
-import { type BrandPalette, brandPalette, officialHex } from "../brandColor.js";
+import { type BrandPalette, brandPalette, officialHex } from "../lib/brandColor.js";
 
 /* FETCHING A BRAND ONCE FOR THE WHOLE APP — the part of <BrandMark> that must not live in its `<script setup>`.
  *

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/api-contract";
-import { cmp, Notice, type NoticeModel, NoticeStack, Segmented, useDevice } from "@intentic/ui";
+import { ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, useDevice } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
@@ -152,7 +152,7 @@ watch(keepTrying, (on) => {
          it, and the steps read as five loose lines rather than one list. Spacing is the only grouping this
          column has — there are deliberately no boxes here — so it has to be the thing that differs. -->
     <div class="flex flex-col gap-4">
-        <Segmented v-model="provider" :options="CLOUD_PROVIDERS.map((entry) => ({ label: entry.label, value: entry.id }))" :stretch="mobile" />
+        <SegmentedControl v-model="provider" :options="CLOUD_PROVIDERS.map((entry) => ({ label: entry.label, value: entry.id }))" :stretch="mobile" />
 
         <!-- The credential, with the "get one" link ON the label's row — the reader who needs it is mid-step,
              and sending them to search the provider's docs is where this flow would lose them. It is a
@@ -179,7 +179,7 @@ watch(keepTrying, (on) => {
                     autocapitalize="off"
                     spellcheck="false"
                     :placeholder="`Paste your ${meta.name} API token`"
-                    :class="cmp.input('w-full font-mono text-base md:text-sm')"
+                    :class="ui.input('w-full font-mono text-base md:text-sm')"
                 />
                 <!-- The one requirement a perfectly-pasted token still fails on. -->
                 <span v-if="meta.credentialHint" class="text-xs text-muted">{{ meta.credentialHint }}</span>
@@ -221,7 +221,7 @@ watch(keepTrying, (on) => {
                     autocapitalize="off"
                     spellcheck="false"
                     placeholder="[DEFAULT]&#10;user=ocid1.user.oc1..…&#10;fingerprint=…&#10;tenancy=ocid1.tenancy.oc1..…&#10;region=…"
-                    :class="cmp.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
+                    :class="ui.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
                 />
             </label>
             <label class="ui-field">
@@ -233,7 +233,7 @@ watch(keepTrying, (on) => {
                     autocapitalize="off"
                     spellcheck="false"
                     placeholder="-----BEGIN PRIVATE KEY-----&#10;…"
-                    :class="cmp.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
+                    :class="ui.input('w-full resize-none font-mono text-base leading-relaxed md:text-sm')"
                 />
             </label>
         </template>

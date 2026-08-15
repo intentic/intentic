@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, FilterBar, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows } from "@intentic/ui";
+import { ui, FilterBar, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -183,7 +183,7 @@ const pushToCi = async (): Promise<void> => {
                     :count="matches.length"
                     class="min-w-0 flex-1"
                 >
-                    <template #controls><Segmented v-model="scope" :options="scopeOptions" /></template>
+                    <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
                 </FilterBar>
                 <Button
                     v-if="ciKnown"
@@ -267,7 +267,7 @@ const pushToCi = async (): Promise<void> => {
                                     placeholder="KEY_NAME"
                                     autocapitalize="off"
                                     spellcheck="false"
-                                    :class="cmp.input('w-44 shrink-0 font-mono')"
+                                    :class="ui.input('w-44 shrink-0 font-mono')"
                                 />
                                 <SecretField class="flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
                             </div>
@@ -301,7 +301,7 @@ const pushToCi = async (): Promise<void> => {
             <details v-if="accountCount > 0" class="group/fold" :open="accountsOpen" @toggle="rememberFold">
                 <summary class="flex cursor-pointer list-none items-center gap-2 py-1 [&::-webkit-details-marker]:hidden">
                     <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open/fold:rotate-90" />
-                    <span :class="cmp.sectionLabel()">Connected accounts</span>
+                    <span :class="ui.sectionLabel()">Connected accounts</span>
                     <span class="text-2xs font-medium text-subtle">{{ accountCount }}</span>
                     <span class="min-w-0 text-2xs text-subtle">held by your connections — set up where they were added</span>
                 </summary>
@@ -335,7 +335,7 @@ const pushToCi = async (): Promise<void> => {
                 </div>
             </details>
 
-            <div v-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
+            <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                 <span>{{ emptyNote }}</span>
                 <Button v-if="rows.length > 0" size="small" label="Clear filter" @click="clearFilters" />
             </div>

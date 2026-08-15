@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, cmp, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -309,7 +309,7 @@ onUnmounted(progress.stopWatching);
         <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
             <!-- Apps — declared i.want.app entries ∪ resolved plan ∪ live deployments (see wanted.ts). -->
             <div class="flex flex-col gap-2">
-                <span :class="cmp.sectionLabel()">Apps</span>
+                <span :class="ui.sectionLabel()">Apps</span>
                 <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <span class="truncate font-medium text-content">{{ app.name }}</span>
@@ -342,7 +342,7 @@ onUnmounted(progress.stopWatching);
 
             <!-- Self-hosted services = i.want.service entries (removable here). -->
             <div class="flex flex-col gap-2">
-                <span :class="cmp.sectionLabel()">Self-hosted services</span>
+                <span :class="ui.sectionLabel()">Self-hosted services</span>
                 <Card v-for="tool in tools" :key="tool.name" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
@@ -424,9 +424,9 @@ onUnmounted(progress.stopWatching);
                     </div>
                 </div>
                 <form v-if="showGithub && !hasGithub" class="flex flex-col gap-2" @submit.prevent="submitGithub">
-                    <div :class="cmp.alertInfo('text-2xs')">
+                    <Notice tone="info" class="text-2xs">
                         GitHub source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
-                    </div>
+                    </Notice>
                     <label class="ui-field">
                         <span class="ui-field-label">GitHub personal access token</span>
                         <SecretField v-model="ghToken" secret-key="GITHUB_TOKEN" collect placeholder="ghp_…" />
@@ -442,9 +442,9 @@ onUnmounted(progress.stopWatching);
                     </div>
                 </form>
                 <form v-if="showGitlab && !hasGitlab" class="flex flex-col gap-2" @submit.prevent="submitGitlab">
-                    <div :class="cmp.alertInfo('text-2xs')">
+                    <Notice tone="info" class="text-2xs">
                         GitLab source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
-                    </div>
+                    </Notice>
                     <label class="ui-field">
                         <span class="ui-field-label">GitLab personal access token</span>
                         <SecretField v-model="glToken" secret-key="GITLAB_TOKEN" collect placeholder="glpat-…" />
@@ -454,7 +454,7 @@ onUnmounted(progress.stopWatching);
                     </label>
                     <label class="ui-field">
                         <span class="ui-field-label">GitLab URL <span class="text-subtle">(optional — self-hosted)</span></span>
-                        <input v-model="glUrl" type="text" autocomplete="off" placeholder="https://gitlab.com" :class="cmp.input()" />
+                        <input v-model="glUrl" type="text" autocomplete="off" placeholder="https://gitlab.com" :class="ui.input()" />
                         <span class="text-2xs text-subtle">Leave blank for gitlab.com.</span>
                     </label>
                     <div class="flex justify-end gap-2">
@@ -613,7 +613,7 @@ onUnmounted(progress.stopWatching);
         :open="removingServer !== undefined"
         header="Remove server"
         confirm-label="Remove server"
-        :width="34"
+        size="md"
         @cancel="removingServer = undefined"
         @confirm="confirmRemoveServer"
     >

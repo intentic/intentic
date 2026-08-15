@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { cmp, RowGroup } from "@intentic/ui";
+import { ui, RowGroup } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
@@ -366,7 +366,7 @@ const roster = computed(() => {
                     v-model="rosterQuery"
                     type="search"
                     placeholder="Filter accounts…"
-                    :class="cmp.input(`ml-auto h-7 w-full text-2xs @xl:w-56`)"
+                    :class="ui.input(`ml-auto h-7 w-full text-2xs @xl:w-56`)"
                 />
             </div>
 
@@ -400,7 +400,7 @@ const roster = computed(() => {
                         </tr>
                     </tbody>
                 </table>
-                <p v-if="roster.length === 0" :class="cmp.emptyState(`py-4`)">No account matches that filter.</p>
+                <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">No account matches that filter.</p>
             </div>
         </div>
 
@@ -439,7 +439,7 @@ const roster = computed(() => {
     </RowGroup>
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
-    <p v-else-if="accountsLoaded" :class="cmp.emptyState()">
+    <p v-else-if="accountsLoaded" :class="ui.emptyState()">
         No AI account is connected yet — connect one on the Agent tab and its plan limits appear here.
     </p>
 </template>

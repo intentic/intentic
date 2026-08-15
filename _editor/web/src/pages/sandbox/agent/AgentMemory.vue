@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, CopyButton, Notice, type NoticeModel, Row } from "@intentic/ui";
+import { Card, ui, CopyButton, Notice, type NoticeModel, Row } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
@@ -54,7 +54,7 @@ const importMemory = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
                 Copy this prompt into a chat with your other AI provider
             </span>
-            <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="cmp.input('w-full font-mono resize-y text-subtle')"></textarea>
+            <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
             <div class="flex justify-end">
                 <CopyButton :text="IMPORT_PROMPT" label="Copy prompt" />
             </div>
@@ -69,7 +69,7 @@ const importMemory = async (): Promise<void> => {
                 v-model="importText"
                 rows="8"
                 placeholder="Paste your memory details here"
-                :class="cmp.input('w-full font-mono resize-y')"
+                :class="ui.input('w-full font-mono resize-y')"
             ></textarea>
             <div class="flex justify-end">
                 <Button label="Add to memory" :loading="importSaving" :disabled="importText.trim().length === 0" @click="importMemory">

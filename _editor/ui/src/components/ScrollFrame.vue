@@ -3,6 +3,21 @@
      the other: every caller of the header wrapped it in the frame, and shipping them separately meant three
      views hand-writing the shell and drifting apart on it.
 
+     IT WAS CALLED `Panel`, AND THAT NAME COULD NEVER HAVE BEEN LEARNED. Thirteen files in this repo end in
+     `Panel` — ChatPanel, TerminalPanel, ReviewPanel, AccountPanel, PickerPanel — and every one means "a region
+     of the screen", which is not a word one component can hold. Vue Flow ships its own <Panel> too, which
+     DagEditor imports two files away. Named for the contract now.
+
+     ITS FOUR CALLERS ARE NOT A SHORTFALL, and the reason is worth writing down because it was mis-read once
+     already. An audit counted 39 files in the web app carrying `min-h-0` and concluded they were 39 hand-rolled
+     copies of this component. They are not: `min-h-0` is the general fix for a flex child that must be allowed
+     to shrink, and it appears in rows, columns and skeletons that have nothing to do with a frame. Searched for
+     what this actually IS — a bordered, rounded box with a header and one scrolling body — the web app contains
+     ZERO hand-rolled copies. What it has instead are DOCKED PANES (the review panel, the history panel, the
+     chat panel), which share this component's structure and deliberately none of its chrome: they fill a region
+     the shell has already framed, so a border and a card background here would be a box inside a box. Reach for
+     this where a panel draws its own edges; leave a docked pane alone.
+
      WHAT IT ACTUALLY OWNS IS THE SCROLL CONTRACT. `min-h-0` + `overflow-hidden` on the shell and `min-h-0
      flex-1 overflow-auto` on the body is the combination that makes a panel scroll ITSELF instead of growing
      until the page scrolls it — the single most re-discovered failure in this app. ActivityView and DocsView

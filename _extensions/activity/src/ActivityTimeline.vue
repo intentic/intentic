@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Notice, noticeOf, Panel, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
+import { ui, Icon, Notice, noticeOf, ScrollFrame, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -28,9 +28,9 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
 <template>
     <!-- NOT `grow`: this panel is sized by its own max-height in a page-scrolling hub section, not by the free
          space of a bounded pane it no longer sits in. `flex-1` in an auto-height parent resolves to nothing. -->
-    <Panel>
+    <ScrollFrame>
         <template #title
-            ><span :class="cmp.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
+            ><span :class="ui.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
         >
         <!-- A count of nothing is a claim, not a wait: while the first page is still out this reads as "the
              window was empty" and then corrects itself. A bar of the same width says the tally is coming. -->
@@ -85,7 +85,7 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
                 </div>
             </div>
 
-            <p v-if="episodes.length === 0 && !isLoading" :class="cmp.emptyState('py-10')">
+            <p v-if="episodes.length === 0 && !isLoading" :class="ui.emptyState('py-10')">
                 Nothing {{ timeWindowWords(window) }}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every
                 turn it runs.
             </p>
@@ -97,5 +97,5 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
                 Showing the most recent entries only — this window holds more than the feed fetches at once.
             </p>
         </div>
-    </Panel>
+    </ScrollFrame>
 </template>

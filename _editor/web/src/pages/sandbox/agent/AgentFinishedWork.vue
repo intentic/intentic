@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, Segmented } from "@intentic/ui";
+import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { NAMED_RULES } from "../../../composables/sandbox/rules";
@@ -38,7 +38,7 @@ const setLand = (on: boolean): void => {
 
 // How long a finished agent stays on the fleet board before the daemon archives it (and reclaims its worktree
 // checkout). Days, because the sweep runs hourly and the whole point is "after you've stopped thinking about
-// it"; 0 turns the sweep off entirely. Segmented speaks strings, the setting is a number of days — so the
+// it"; 0 turns the sweep off entirely. SegmentedControl speaks strings, the setting is a number of days — so the
 // option values are the decimal spellings and this is where they come back.
 const RETENTION_OPTIONS = [
     { label: `1 day`, value: `1` },
@@ -82,7 +82,7 @@ const RETENTION_OPTIONS = [
             description="Take a finished agent off the board after it has been quiet this long, and reclaim its worktree. Its branch, diff and conversation are kept — restore it any time from the board's archive."
         >
             <template #control>
-                <Segmented
+                <SegmentedControl
                     :model-value="String(settings?.agentRetentionDays ?? 3)"
                     :options="RETENTION_OPTIONS"
                     @update:model-value="(days: string) => patch({ agentRetentionDays: Number(days) })"

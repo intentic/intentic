@@ -1,6 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import { shikiLangDeps } from "../../_editor/ui/src/composables/shikiLangs.ts";
+import { shikiLangDeps } from "../../_editor/ui/src/lib/shikiLangs.ts";
 import { sourceAliases } from "./source-aliases.ts";
 
 /* Everything about building THIS SOURCE that holds whichever entry is being served — the app's own

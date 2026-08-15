@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
+import { Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
@@ -138,7 +138,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
             <div class="flex flex-col gap-4">
                 <!-- TOP — desired state: the dependency graph, nodes colored by their last reconcile status. -->
                 <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="cmp.sectionLabel('mb-3 flex items-center gap-2')">
+                    <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
                         Planned
                         <InfoHint label="Graph legend">
                             <span class="block text-xs font-medium text-content">Category</span>
@@ -169,7 +169,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
                 <!-- BOTTOM — actual state: live Komodo deployments + an on-demand live "intentic deploy plan" read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="cmp.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
+                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
 
                     <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
 
@@ -259,7 +259,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                 <!-- Access — the URLs + admin logins for what's provisioned (from the last apply's status.json).
                      A generated password reveals on click through the daemon (owner only); members see its name. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="cmp.sectionLabel('mb-3')">Access</h3>
+                    <h3 :class="ui.sectionLabel('mb-3')">Access</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">
                         <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">

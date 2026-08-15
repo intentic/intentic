@@ -4,9 +4,9 @@
      the text is always readable. -->
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
-import { cmp } from "../cmp.js";
+import { ui } from "../lib/ui.js";
 import { useHighlighter } from "../composables/useHighlighter.js";
-import type { ShikiLang } from "../composables/shikiLangs.js";
+import type { ShikiLang } from "../lib/shikiLangs.js";
 import CopyButton from "./CopyButton.vue";
 
 const {
@@ -121,7 +121,7 @@ watch(
             <button
                 v-if="toggleable"
                 type="button"
-                :class="cmp.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
                 {{ expanded ? `Show less` : `Show all` }}

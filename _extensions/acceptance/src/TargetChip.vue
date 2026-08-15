@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Popover } from "@intentic/extension-ui";
+import { ui, Icon, Popover } from "@intentic/extension-ui";
 import { ref } from "vue";
 import type { useTargets } from "./useTargets";
 
@@ -60,7 +60,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
         v-if="stated()"
         type="button"
         :class="
-            cmp.linkButton(
+            ui.linkButton(
                 `gap-1.5 font-mono text-2xs hover:no-underline`,
                 targets.addressOf(repo, group) === undefined ? `text-warning hover:text-warning` : `text-muted hover:text-content`,
             )
@@ -77,7 +77,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
     <button
         v-else
         type="button"
-        :class="cmp.linkButton(`gap-1.5 text-2xs text-muted opacity-0 group-hover:opacity-100 hover:no-underline focus-visible:opacity-100`)"
+        :class="ui.linkButton(`gap-1.5 text-2xs text-muted opacity-0 group-hover:opacity-100 hover:no-underline focus-visible:opacity-100`)"
         v-tooltip.bottom="`Point this group at a different address`"
         @click="toggle"
     >
@@ -119,7 +119,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
                 :value="targets.addressOf(repo, group) ?? ``"
                 type="text"
                 placeholder="http://localhost:5173"
-                :class="cmp.input(`w-full`)"
+                :class="ui.input(`w-full`)"
                 @input="targets.aimAt(repo, group, ($event.target as HTMLInputElement).value)"
             />
             <p v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">
@@ -139,7 +139,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
                 <button
                     v-if="targets.isElsewhere(repo, group)"
                     type="button"
-                    :class="cmp.linkButton(`text-2xs text-muted hover:text-content`)"
+                    :class="ui.linkButton(`text-2xs text-muted hover:text-content`)"
                     @click="targets.aimAt(repo, group, undefined)"
                 >
                     Use {{ repo }}'s dev server

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { BrandMark, CodeField, Icon, Markdown, Segmented } from "@intentic/ui";
+import { BrandMark, CodeField, Icon, Markdown, SegmentedControl } from "@intentic/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
@@ -148,7 +148,7 @@ watch(
                     <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
                         {{ skill.description === `` ? `No description — the agent rarely picks a skill without one.` : skill.description }}
                     </p>
-                    <Segmented
+                    <SegmentedControl
                         v-model="view"
                         size="xs"
                         class="shrink-0"

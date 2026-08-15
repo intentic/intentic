@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { BrandMark, cmp, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
+import { BrandMark, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useWorkspaceApps } from "../../composables/extensions/useWorkspaceApps";
@@ -147,15 +146,7 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Dialog
-        v-model:visible="visible"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '34rem' }"
-        header="Add"
-        @hide="reset"
-    >
+    <Modal v-model:open="visible" size="md" header="Add" @hide="reset">
         <!-- STEP 2: the picked want's form. -->
         <template v-if="selected">
             <button type="button" class="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-content" @click="selected = undefined">
@@ -192,13 +183,13 @@ const submit = async (): Promise<void> => {
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
                     <span class="ui-field-label">Name</span>
-                    <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="cmp.input()" />
+                    <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
                 </label>
                 <!-- Domain, zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
                 <label v-if="zone !== undefined" class="ui-field">
                     <span class="ui-field-label">Domain</span>
                     <div class="flex items-center gap-2">
-                        <input v-model="subdomain" :placeholder="name" :class="cmp.input('flex-1')" />
+                        <input v-model="subdomain" :placeholder="name" :class="ui.input('flex-1')" />
                         <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ zone }}</span>
                     </div>
                     <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning"
@@ -210,12 +201,12 @@ const submit = async (): Promise<void> => {
                 </label>
                 <label v-else class="ui-field">
                     <span class="ui-field-label">Domain</span>
-                    <input v-model="values['domain']" :placeholder="`${name}.example.com`" :class="cmp.input()" />
+                    <input v-model="values['domain']" :placeholder="`${name}.example.com`" :class="ui.input()" />
                 </label>
                 <template v-for="field in serviceFields" :key="field.key">
                     <label v-if="field.key !== `domain`" class="ui-field">
                         <span class="ui-field-label">{{ field.label }}</span>
-                        <input v-model="values[field.key]" :class="cmp.input()" />
+                        <input v-model="values[field.key]" :class="ui.input()" />
                     </label>
                 </template>
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
@@ -248,7 +239,7 @@ const submit = async (): Promise<void> => {
             </p>
 
             <template v-if="workspaceApps.length > 0 || appsError">
-                <span :class="cmp.sectionLabel('mb-2 block')">Your apps</span>
+                <span :class="ui.sectionLabel('mb-2 block')">Your apps</span>
                 <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
                 <div class="mb-4 grid grid-cols-2 gap-3">
                     <button
@@ -271,7 +262,7 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-                <span :class="cmp.sectionLabel('mb-2 block')">Self-hosted services</span>
+                <span :class="ui.sectionLabel('mb-2 block')">Self-hosted services</span>
             </template>
 
             <div class="grid grid-cols-2 gap-3">
@@ -290,5 +281,5 @@ const submit = async (): Promise<void> => {
                 </button>
             </div>
         </template>
-    </Dialog>
+    </Modal>
 </template>

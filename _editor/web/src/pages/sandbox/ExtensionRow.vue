@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
-import { BrandMark, cmp, StatusBadge } from "@intentic/ui";
+import { BrandMark, ui, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
@@ -282,12 +282,12 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
             <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
             <div v-if="settings.length > 0">
-                <p :class="cmp.sectionLabel(`mb-2 text-2xs`)">Settings</p>
+                <p :class="ui.sectionLabel(`mb-2 text-2xs`)">Settings</p>
                 <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
             </div>
 
             <div v-if="entry.extension.enabled && consequences.length > 0">
-                <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Switching it off</p>
+                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Switching it off</p>
                 <ul class="flex flex-col gap-1">
                     <li v-for="consequence in consequences" :key="consequence" class="text-2xs text-muted">— {{ consequence }}.</li>
                 </ul>
@@ -297,7 +297,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                  also whether it was ever needed. A never-called route is drawn hollow rather than in a warning
                  colour: it is a question for whoever maintains the extension, not a fault of the install. -->
             <div v-if="manifest.permissions !== undefined">
-                <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
+                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
                 <div class="flex flex-wrap gap-1">
                     <code
                         v-for="route in routes"
@@ -323,7 +323,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <!-- The one case where "raise it with the maintainer" means "you are the maintainer": this
                          manifest is a file in this workspace. The turn it starts reads the code and decides route
                          by route rather than deleting what is dashed — see tightenBrief. -->
-                    <button v-if="tightenable" type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
+                    <button v-if="tightenable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
                         Have an agent go through them
                     </button>
                 </p>
@@ -334,7 +334,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                  that only works because of how it is being loaded here looks perfect until it is a commit in
                  somebody else's sandbox. -->
             <div v-if="entry.extension.source === `workspace`">
-                <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
+                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
                 <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
                 <ul v-else-if="readiness" class="flex flex-col gap-1">
                     <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
@@ -352,7 +352,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                      the door, but a failing check names something every installer would hit. The turn itself is
                      an ordinary chat (see publishBrief): publishing is watched, not fired and forgotten. -->
                 <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
-                    <button type="button" :class="cmp.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
+                    <button type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
                         Publish it — an agent pushes these files and reports the commit
                     </button>
                 </p>

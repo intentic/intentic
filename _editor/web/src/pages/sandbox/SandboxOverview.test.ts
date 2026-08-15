@@ -205,7 +205,14 @@ it(`takes a logo back off with an explicit null`, async () => {
     // Behind the press, not sitting in the DOM waiting — otherwise the assertion below would hold with the menu
     // never opening at all.
     expect(removeRow()).toBeUndefined();
-    logoTile(el).click();
+    /* THE TILE HAS TO HAVE A BOX. The menu is an <AnchoredOverlay>, which closes itself on an anchor measuring
+     * 0×0 — an element that is display:none or has been unmounted mid-open has nothing left to point at. jsdom
+     * lays nothing out, so EVERY element measures 0×0 there and the panel would open and shut in one tick.
+     * Same stub, same reason, as composables/anchoredOverlay.test.ts. */
+    const tile = logoTile(el);
+    tile.getBoundingClientRect = () =>
+        ({ top: 120, left: 40, width: 48, height: 48, right: 88, bottom: 168, x: 40, y: 120, toJSON: () => ({}) }) as DOMRect;
+    tile.click();
     const remove = await vi.waitFor(() => {
         const button = removeRow();
         expect(button).toBeDefined();

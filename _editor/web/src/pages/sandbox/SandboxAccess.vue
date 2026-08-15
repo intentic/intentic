@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { Avatar, cmp, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows } from "@intentic/ui";
+import { Avatar, ui, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Select from "primevue/select";
@@ -276,7 +276,7 @@ const revoke = async (target: string): Promise<void> => {
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
                         <!-- The tier goes with the address: an invite IS a role decision, and the sentence
                              under the picker is where the model is taught. Collaborator preselected. -->
-                        <Segmented v-model="inviteRole" :options="[...ROLE_OPTIONS]" />
+                        <SegmentedControl v-model="inviteRole" :options="[...ROLE_OPTIONS]" />
                         <span class="text-xs text-muted">{{ ROLE_BLURB[inviteRole] }}</span>
                         <div class="flex items-center gap-2">
                             <input
@@ -285,7 +285,7 @@ const revoke = async (target: string): Promise<void> => {
                                 autocomplete="off"
                                 placeholder="teammate@example.com"
                                 :class="[
-                                    cmp.input('w-full'),
+                                    ui.input('w-full'),
                                     emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase()) ? 'ui-field-input-error' : '',
                                 ]"
                                 @blur="emailTouched = true"

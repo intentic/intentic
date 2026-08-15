@@ -1,7 +1,7 @@
 import { sinceOf, withinWindow } from "@intentic/ui/time";
 import { expect, test } from "vitest";
 
-/* The app's one "how far back" vocabulary (_editor/ui/src/timeWindow.ts) — Activity and Logs both narrow their
+/* The app's one "how far back" vocabulary (_editor/ui/src/lib/timeWindow.ts) — Activity and Logs both narrow their
  * feed by it, so a wrong cutoff here silently hides rows on two surfaces at once. The suite sits in the web app
  * for the same reason figures.test.ts and dagLayout.test.ts do: _editor/ui has no test runner of its own, and
  * this is the package that runs the kit's code. It reaches the module by its own subpath rather than the

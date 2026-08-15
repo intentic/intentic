@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource } from "./contract";
-import { AgentRunButton, Button, cmp, Code, Icon, Notice, noticeOf, StatusBadge, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, Button, ui, Code, Icon, Notice, noticeOf, StatusBadge, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
 import { host } from "./host";
 import { computed, ref } from "vue";
 import { imageLabel, STATE_TONE } from "./stateVisual";
@@ -137,10 +137,10 @@ const logText = computed(() => {
                     :disabled="busy"
                     @click="emit(`act`, resource, secondary.action)"
                 />
-                <a :href="resource.url" target="_blank" rel="noopener" :class="cmp.iconButton()" v-tooltip.top="`Open in Komodo`">
+                <a :href="resource.url" target="_blank" rel="noopener" :class="ui.iconButton()" v-tooltip.top="`Open in Komodo`">
                     <Icon name="arrow-up-right" class="text-xs" />
                 </a>
-                <button type="button" :class="cmp.iconButton()" :title="expanded ? `Hide details` : `Show details`" @click="toggle">
+                <button type="button" :class="ui.iconButton()" :title="expanded ? `Hide details` : `Show details`" @click="toggle">
                     <Icon name="chevron-down" class="text-2xs transition-transform" :class="expanded ? `rotate-180` : ``" />
                 </button>
             </div>
@@ -154,7 +154,7 @@ const logText = computed(() => {
                  text rather than a wrap of bordered chips: the names are what the reader is scanning for, and
                  forty characters of shared registry prefix in front of each one is what buried them. -->
             <div v-if="resource.services.length > 0" class="@container mb-3">
-                <div :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">Services</div>
+                <div :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Services</div>
                 <!-- Two columns against THIS block, not the window: the panel it sits in is as wide as the reader
                      left the workspace pane, and a viewport query put two 160px columns in it. -->
                 <div class="grid gap-x-6 gap-y-1 @lg:grid-cols-2">

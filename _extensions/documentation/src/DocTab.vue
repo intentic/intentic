@@ -7,7 +7,7 @@
      route belongs to the Workspace, and two document tabs open at once would fight over one key. A tab's subject
      is the tab's own state, so this takes it as a prop and touches no query at all. -->
 <script setup lang="ts">
-import { Button, cmp, Icon, Segmented } from "@intentic/extension-ui";
+import { Button, ui, Icon, SegmentedControl } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import DocPage from "./DocPage.vue";
 import { packageFigures } from "./figures.js";
@@ -70,7 +70,7 @@ const openArea = (): void =>
             <Icon name="question-circle" class="shrink-0 text-2xs text-subtle" />
             <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ label }}</span>
             <div class="ml-auto flex shrink-0 items-center gap-2">
-                <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" size="xs" />
+                <SegmentedControl v-if="hasStaged" v-model="source" :options="SOURCES" size="xs" />
                 <Button size="small" severity="secondary" text label="All documentation" @click="openArea" />
             </div>
         </div>
@@ -84,7 +84,7 @@ const openArea = (): void =>
             v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value === undefined"
             class="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin"
         >
-            <div :class="cmp.emptyState()">
+            <div :class="ui.emptyState()">
                 <p class="text-sm">{{ label }} has no documentation yet.</p>
                 <p class="mt-1 text-xs text-muted">An agent can read this directory and write a plain-language page about it, for you to review.</p>
                 <Button size="small" label="Open Documentation" class="mt-3" @click="openArea" />

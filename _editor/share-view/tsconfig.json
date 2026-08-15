@@ -14,13 +14,13 @@
             "@intentic-app/web/*": ["../../_editor/web/src/*"],
             "@intentic/ui/src/*": ["../../_editor/ui/src/*"],
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
-            "@intentic/ui/format": ["../../_editor/ui/src/format.ts"],
+            "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
-            "@intentic/ui/path": ["../../_editor/ui/src/path.ts"],
+            "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
             "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
-            "@intentic/ui/time": ["../../_editor/ui/src/timeWindow.ts"],
+            "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
             "@intentic/sandbox-contract": ["../../_sandbox/sandbox-contract/src/index.ts"],
             "@intentic/sandbox-contract/share-paths": ["../../_sandbox/sandbox-contract/src/share-paths.ts"]
         }

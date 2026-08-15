@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import {
-    cmp,
+    ui,
     FilterBar,
     Icon,
     InfoHint,
     Notice,
     noticeOf,
-    Segmented,
+    SegmentedControl,
     sinceOf,
     StatusBadge,
     TIME_WINDOWS,
@@ -98,7 +98,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>
-                <Segmented v-model="window" size="xs" :options="TIME_WINDOWS" />
+                <SegmentedControl v-model="window" size="xs" :options="TIME_WINDOWS" />
             </template>
             <template #actions>
                 <InfoHint label="Activity">

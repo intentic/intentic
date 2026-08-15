@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
-import { cmp, Icon, Notice, Row, Segmented } from "@intentic/ui";
+import { Icon, Notice, Row, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
@@ -188,7 +188,7 @@ watch(
                         <template v-else>A built-in prompt, for this persona only.</template>
                     </span>
                 </span>
-                <Segmented :model-value="picked" :options="MODES" @update:model-value="setMode" />
+                <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
             </label>
 
             <template v-if="picked === `custom`">
@@ -198,7 +198,7 @@ watch(
                     :maxlength="PROMPT_MAX"
                     :disabled="isLoading"
                     placeholder="Write what this persona is — who it is, what it does, how it answers."
-                    :class="cmp.input('w-full resize-y font-mono text-xs')"
+                    :class="ui.input('w-full resize-y font-mono text-xs')"
                     aria-label="This persona's system prompt"
                     @change="commitPrompt"
                 ></textarea>
@@ -289,6 +289,6 @@ watch(
             v-if="kitError !== undefined"
             :of="{ tone: `danger`, title: `Couldn't read this persona's own prompt and skills.`, detail: kitError }"
         />
-        <p v-if="error !== undefined" :class="cmp.alertWarning('text-2xs')">{{ error }}</p>
+        <Notice v-if="error !== undefined" tone="warning" class="text-2xs">{{ error }}</Notice>
     </div>
 </template>

@@ -19,32 +19,32 @@
             "default": "./src/components/dagLayout.ts"
         },
         "./brand-color": {
-            "types": "./src/brandColor.ts",
-            "default": "./src/brandColor.ts"
+            "types": "./src/lib/brandColor.ts",
+            "default": "./src/lib/brandColor.ts"
         },
         "./brand-mark": {
             "types": "./src/components/brandMark.ts",
             "default": "./src/components/brandMark.ts"
         },
         "./format": {
-            "types": "./src/format.ts",
-            "default": "./src/format.ts"
+            "types": "./src/lib/format.ts",
+            "default": "./src/lib/format.ts"
         },
         "./icons": {
             "types": "./src/icons/iconSets.ts",
             "default": "./src/icons/iconSets.ts"
         },
         "./path": {
-            "types": "./src/path.ts",
-            "default": "./src/path.ts"
+            "types": "./src/lib/path.ts",
+            "default": "./src/lib/path.ts"
         },
         "./time": {
-            "types": "./src/timeWindow.ts",
-            "default": "./src/timeWindow.ts"
+            "types": "./src/lib/timeWindow.ts",
+            "default": "./src/lib/timeWindow.ts"
         },
         "./langs": {
-            "types": "./src/composables/shikiLangs.ts",
-            "default": "./src/composables/shikiLangs.ts"
+            "types": "./src/lib/shikiLangs.ts",
+            "default": "./src/lib/shikiLangs.ts"
         },
         "./highlighter": {
             "types": "./src/composables/useHighlighter.ts",
@@ -64,8 +64,8 @@
         },
         "./styles/*": "./src/styles/*",
         "./async": {
-            "types": "./src/composables/async.ts",
-            "default": "./src/composables/async.ts"
+            "types": "./src/lib/async.ts",
+            "default": "./src/lib/async.ts"
         }
     },
     "scripts": {

@@ -193,7 +193,7 @@
    The column is dense on purpose: a turn is mostly chrome around an answer, and a chat panel is read
    beside the code it is about, not instead of it. A pass that lifted every tier ~8-18% (and split
    prose off at 0.875rem) is what made the panel feel bloated; it was reverted. If a tier ever needs
-   retuning, it is the app's token in _editor/ui/src/styles/shared/tokens.css that moves, so the chat
+   retuning, it is the app's token in _editor/ui/src/styles/tokens.css that moves, so the chat
    and the rest of the shell stay on one scale — do NOT reintroduce a chat-local scale that quietly
    redefines what `text-xs` means inside this subtree, and do NOT put absolute font sizes in the chat
    templates.

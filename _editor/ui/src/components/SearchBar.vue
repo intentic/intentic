@@ -65,7 +65,7 @@ const query = defineModel<string>({ required: true });
 const matchCase = defineModel<boolean | undefined>(`matchCase`, { default: undefined });
 
 // Class fallthrough lands on the root (the chrome), twMerge'd so a caller's `border-b-0` or `w-72` beats the
-// variant base the way cmp.* overrides do — rather than depending on which utility Tailwind happened to emit last.
+// variant base the way ui.* overrides do — rather than depending on which utility Tailwind happened to emit last.
 const attrs = useAttrs();
 const passAttrs = computed(() => {
     const { class: _class, ...rest } = attrs;
@@ -143,7 +143,7 @@ const clear = (): void => {
             <button
                 v-if="matchCase !== undefined"
                 type="button"
-                class="flex h-4 w-4 items-center justify-center rounded font-mono text-[0.6rem] leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
+                class="flex h-4 w-4 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'bg-primary-600/20 text-link': matchCase }"
                 :aria-pressed="matchCase"
                 v-tooltip.bottom="'Match case'"

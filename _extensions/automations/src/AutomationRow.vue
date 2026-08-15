@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";

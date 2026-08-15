@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Avatar } from "@intentic/ui";
-import Popover from "primevue/popover";
+import { AnchoredOverlay, Avatar } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
@@ -41,7 +40,10 @@ const { meter } = useMembership();
 
 const accountHint = computed(() => (meter.value === undefined ? `Account` : creditSummary(meter.value)));
 
-const panel = ref<InstanceType<typeof Popover> | null>(null);
+/* Anchored rather than PrimeVue's Popover: this rail sits beside panels that can be popped out, and the app
+ * has one overlay that measures its room against the window its ANCHOR is in. Using two was the divergence. */
+const trigger = ref<HTMLButtonElement | null>(null);
+const open = ref(false);
 const avatarFailed = ref(false);
 
 const avatarImage = computed<string | null>(() => (avatarFailed.value ? null : (user.value?.image ?? null)));
@@ -51,7 +53,7 @@ const avatarLoadFailed = (): void => {
 };
 
 const openSettings = (): void => {
-    panel.value?.hide();
+    open.value = false;
     void router.push(`/settings`);
 };
 
@@ -77,13 +79,15 @@ const logout = async (): Promise<void> => {
     <div class="account-control relative mt-auto shrink-0">
         <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
+            ref="trigger"
             type="button"
             class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
             :class="onSettings ? `border-line text-link` : `border-line text-muted`"
             :aria-label="accountHint"
             :aria-current="onSettings ? 'page' : undefined"
             v-tooltip.right="accountHint"
-            @click="panel?.toggle($event)"
+            :aria-expanded="open"
+            @click="open = !open"
         >
             <img
                 v-if="avatarImage"
@@ -106,7 +110,7 @@ const logout = async (): Promise<void> => {
 
     <!-- Same inset as the sandbox switcher above it in the rail: the theme's popover padding is a content
          card's, and these are menu rows that carry their own. -->
-    <Popover ref="panel" append-to="body" :pt="{ content: { class: `!p-0` } }">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end">
         <div class="flex w-60 flex-col p-1">
             <!-- Central account: email + name. -->
             <div class="flex items-center gap-2 px-2 py-1.5">
@@ -122,7 +126,7 @@ const logout = async (): Promise<void> => {
             <!-- The day's allowance, between who you are and what you can do — it is a fact about the account,
                  and it is the reason somebody opens this menu without wanting either Settings or Sign out.
                  Dismisses the menu on its way to the membership page like every other row here. -->
-            <AccountCredits @click="panel?.hide()" />
+            <AccountCredits @click="open = false" />
 
             <div v-if="meter" class="my-1 border-t border-line"></div>
 
@@ -143,7 +147,7 @@ const logout = async (): Promise<void> => {
                 Sign out
             </button>
         </div>
-    </Popover>
+    </AnchoredOverlay>
 </template>
 
 <style scoped>

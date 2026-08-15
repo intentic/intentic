@@ -1,6 +1,7 @@
 <!-- Mobile action sheet: PrimeVue Drawer docked to the bottom edge with a rounded top, grab handle, and
      safe-area padding. The touch replacement for every Popover/ContextMenu on mobile code paths — pass the
-     same content, get a thumb-reachable sheet. Height follows content up to 85dvh. -->
+     same content, get a thumb-reachable sheet. Height follows content up to `--height-panel-xl`, the step it
+     shares with the fullscreen-canvas modal — both are "as much screen as this may take". -->
 <script setup lang="ts">
 import Drawer from "primevue/drawer";
 
@@ -14,7 +15,7 @@ const visible = defineModel<boolean>({ required: true });
         position="bottom"
         :show-close-icon="false"
         :block-scroll="true"
-        class="!h-auto !max-h-[85dvh] !rounded-t-2xl !border-x-0 !border-b-0 !border-t !border-line !bg-card"
+        class="!h-auto !max-h-panel-xl !rounded-t-2xl !border-x-0 !border-b-0 !border-t !border-line !bg-card"
         :pt="{ header: { class: `!hidden` }, content: { class: `!p-0` } }"
     >
         <div class="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden="true" />

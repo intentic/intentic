@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-contract";
-import { cmp, CopyButton, Notice, Row, RowGroup, Segmented } from "@intentic/ui";
+import { ui, CopyButton, Modal, Notice, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../../composables/sandbox/sandboxClient";
@@ -153,7 +152,7 @@ const reach = promptReach();
                                 min="0"
                                 max="100"
                                 :value="terseHoldoutPercent"
-                                :class="cmp.input('w-16 text-right text-xs')"
+                                :class="ui.input('w-16 text-right text-xs')"
                                 @change="
                                     (event: Event) => commitPercent(event, terseHoldoutPercent, (terseHoldout: number) => patch({ terseHoldout }))
                                 "
@@ -190,7 +189,7 @@ const reach = promptReach();
                 <template v-else>Intentic's own prompt, tuned for this app.</template>
             </template>
             <template #control>
-                <Segmented :model-value="promptMode" :options="PROMPT_MODES" @update:model-value="setPromptMode" />
+                <SegmentedControl :model-value="promptMode" :options="PROMPT_MODES" @update:model-value="setPromptMode" />
             </template>
             <template #below>
                 <!-- WHO IT REACHES, on the control. Two sentences because the two answers are genuinely
@@ -235,21 +234,21 @@ const reach = promptReach();
                         :maxlength="PROMPT_MAX"
                         :disabled="settings === undefined"
                         placeholder="Write the assistant's system prompt, or start from one of the built-in prompts below."
-                        :class="cmp.input('w-full resize-y font-mono text-xs')"
+                        :class="ui.input('w-full resize-y font-mono text-xs')"
                         aria-label="System prompt"
                         @change="savePrompt"
                     ></textarea>
 
                     <!-- What Custom actually costs, shown while they are in it rather than discovered later
                          when the chat's cards quietly stop appearing. -->
-                    <p :class="cmp.alertWarning('mt-1.5 text-2xs')">
+                    <Notice tone="warning" class="mt-1.5 text-2xs">
                         Your text becomes the whole system prompt on {{ spokenList(reach.replaces) }}. Both built-in prompts are gone, and so is what
                         this app tells the assistant about itself — the question and plan cards, the checklist panel, and the browser tools it would
                         otherwise know to reach for. Terse responses stops applying too. Describe whatever you still want.
                         <template v-if="reach.adds.length > 0">
                             On {{ spokenList(reach.adds) }} there is no way to replace their prompt, so your text is added to it instead.
                         </template>
-                    </p>
+                    </Notice>
 
                     <div class="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
                         <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -294,14 +293,11 @@ const reach = promptReach();
     <!-- Either built-in prompt, in full. Monospace and selectable because the point is to be READ and forked,
          not admired; Claude's version is on show because a fork taken today is a snapshot, and knowing which
          build it came from is the only way to tell how old one is. -->
-    <Dialog
-        :visible="viewingBase !== undefined"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
+    <Modal
+        :open="viewingBase !== undefined"
+        size="lg"
         :header="viewingBase === `claude` ? `Claude Code's system prompt` : `Intentic's system prompt`"
-        :style="{ width: '48rem', maxWidth: '95vw' }"
-        @update:visible="viewingBase = undefined"
+        @update:open="viewingBase = undefined"
     >
         <div v-if="builtinBusy" class="flex items-center gap-2 py-6 text-xs text-muted">
             <Icon name="spinner" class="animate-spin" />
@@ -330,5 +326,5 @@ const reach = promptReach();
                 <Button label="Edit a copy" size="small" @click="forkBuiltin(viewingBase)" />
             </div>
         </template>
-    </Dialog>
+    </Modal>
 </template>

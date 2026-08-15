@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Code, commandLang, InfoHint, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
+import { ui, Code, commandLang, InfoHint, OS_OPTIONS, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -125,7 +125,7 @@ onUnmounted(() => clearInterval(timer));
                         type="password"
                         autocomplete="off"
                         placeholder="Paste your Cloudflare API token"
-                        :class="[cmp.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-input-error' : '']"
+                        :class="[ui.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-input-error' : '']"
                         @blur="cfTokenTouched = true"
                     />
                     <span v-if="cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid" class="ui-field-error">
@@ -141,7 +141,7 @@ onUnmounted(() => clearInterval(timer));
                     <input
                         v-model="hostName"
                         placeholder="defaults to the machine's hostname"
-                        :class="[cmp.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-input-error' : '']"
+                        :class="[ui.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-input-error' : '']"
                         @blur="hostNameTouched = true"
                     />
                     <span v-if="hostNameTouched && rawHostName !== '' && canonicalHostName === ''" class="ui-field-error">
@@ -161,7 +161,7 @@ onUnmounted(() => clearInterval(timer));
             </div>
             <template v-else>
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <Segmented v-model="cmdOs" :options="OS_OPTIONS" />
+                    <SegmentedControl v-model="cmdOs" :options="OS_OPTIONS" />
                     <!-- The strongest case for the switch in the app: this command is run on a SERVER, which
                          never has the developer's checkout, so a dev build's repo-path form cannot work there. -->
                     <ScriptSourceSwitch />

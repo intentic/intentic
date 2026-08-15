@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, Segmented, useOsPreference } from "@intentic/ui";
+import { AnchoredOverlay, Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { cloudProviderMeta } from "../pages/setupCloud";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import Popover from "primevue/popover";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -46,7 +45,11 @@ const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
     warning: `text-warning`,
 };
 
-const panel = ref<InstanceType<typeof Popover> | null>(null);
+/* Anchored rather than PrimeVue's Popover, so the app has ONE overlay that decides where a panel goes — the
+ * one that measures against the window its anchor is in. This chip lives on the rail beside panels that pop
+ * out, and two answers to "is there room below?" is how a menu ends up over its own trigger. */
+const trigger = ref<HTMLButtonElement | null>(null);
+const open = ref(false);
 
 /* Switching to a sandbox that has never reported in is not switching to anything: it has no daemon, so the
  * shell can only paint a connecting gate that cannot resolve. What that row actually is, is an unfinished
@@ -54,7 +57,7 @@ const panel = ref<InstanceType<typeof Popover> | null>(null);
  * workspace. (The router's requireSetup keeps the same row out of the shell on a cold load; this is the same
  * rule from inside, for an account that has one working sandbox and one it never started.) */
 const pick = (option: SandboxSummary): void => {
-    panel.value?.hide();
+    open.value = false;
     if (option.lastSeenAt === null) {
         void router.push({ path: `/setup`, query: { sandbox: option.id } });
         return;
@@ -113,12 +116,12 @@ onUnmounted(() => {
 // The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface), and
 // it is where every attention row lands too: each names a tab of the same hub.
 const openTab = (to: string): void => {
-    panel.value?.hide();
+    open.value = false;
     void router.push(to);
 };
 
 const addSandbox = (): void => {
-    panel.value?.hide();
+    open.value = false;
     void router.push(`/setup`);
 };
 
@@ -155,7 +158,7 @@ const cleanupCommand = computed(() => {
 });
 
 const askRemove = (option: SandboxSummary): void => {
-    panel.value?.hide();
+    open.value = false;
     pending.value = option;
 };
 
@@ -182,12 +185,14 @@ const confirmRemove = async (): Promise<void> => {
          pointer-events-none keeps them from stealing the click that opens the switcher. -->
     <span class="relative flex">
         <button
+            ref="trigger"
             type="button"
             class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
             :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
             :aria-label="`Switch sandbox: ${switcherLabel}`"
             v-tooltip.right="switcherLabel"
-            @click="panel?.toggle($event)"
+            :aria-expanded="open"
+            @click="open = !open"
         >
             <img v-if="sandbox.active.value?.image" :src="sandbox.active.value.image" alt="" class="h-full w-full object-cover" />
             <span v-else-if="sandbox.active.value?.name" class="text-base font-semibold uppercase text-content">{{
@@ -216,7 +221,7 @@ const confirmRemove = async (): Promise<void> => {
     <!-- The panel's own inset is the menu's, not the theme's: PrimeVue's popover padding is sized for a content
          card, and around rows that already carry px-2 py-1 it reads as a frame. Zeroed so this box insets like
          every other menu in the app (ContextMenu's rootList) — 4px here, 12px from edge to label. -->
-    <Popover ref="panel" append-to="body" :pt="{ content: { class: `!p-0` } }">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start">
         <div class="flex w-60 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, each routing to the hub tab that resolves it.
                  First in the popover because the badge is what brought the reader here, and each row is the
@@ -334,7 +339,7 @@ const confirmRemove = async (): Promise<void> => {
                 Sandbox settings
             </button>
         </div>
-    </Popover>
+    </AnchoredOverlay>
 
     <ConfirmDialog
         :open="pending !== undefined"
@@ -368,7 +373,7 @@ const confirmRemove = async (): Promise<void> => {
         </p>
         <template v-else-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
             <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
-            <Segmented class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
+            <SegmentedControl class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
             <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />
         </template>
     </ConfirmDialog>

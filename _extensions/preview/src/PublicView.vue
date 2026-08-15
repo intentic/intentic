@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
@@ -62,7 +62,7 @@ const size = (bytes: number): string => {
 
         <section>
             <div class="mb-2 flex items-center gap-2">
-                <h3 :class="cmp.sectionLabel()">Published</h3>
+                <h3 :class="ui.sectionLabel()">Published</h3>
                 <InfoHint label="Public files">
                     <span class="block text-sm font-medium text-content">Your public folder</span>
                     <span class="mt-1 block text-xs text-muted">

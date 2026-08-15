@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { BarChart, Card, cmp, Notice, type NoticeModel, NoticeStack, Segmented } from "@intentic/ui";
+import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
@@ -196,9 +196,9 @@ const hasSpend = computed(() => current.value.length > 0);
         <!-- ONE filter row, above everything, scoping everything below it. Date first: it is the control every
              reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Segmented v-model="preset" :options="RANGE_PRESETS" />
+            <SegmentedControl v-model="preset" :options="RANGE_PRESETS" />
             <span class="h-4 w-px bg-line" />
-            <Segmented v-model="providerFilter" :options="providerOptions" size="xs" />
+            <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
             <button
                 v-if="agentFilter !== undefined"
                 type="button"
@@ -254,7 +254,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
             <!-- `!isLoading`, not just "the outline isn't up": a ledger still being read has not yet earned the
                  right to tell anyone they have never run an agent. -->
-            <p v-else-if="!isLoading && rows.length === 0" :class="cmp.emptyState(`py-8`)">
+            <p v-else-if="!isLoading && rows.length === 0" :class="ui.emptyState(`py-8`)">
                 No turns have been billed on this sandbox yet. Spend is recorded at the end of every turn — run an agent and this fills in.
             </p>
 
@@ -328,19 +328,19 @@ const hasSpend = computed(() => current.value.length > 0);
                         <span class="text-sm tabular-nums text-muted">{{ formatUsd(totals.costUsd) }}</span>
                     </div>
                     <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
-                    <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
+                    <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
                 </Card>
 
                 <div class="grid gap-3 @2xl:grid-cols-2">
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by model</h3>
                         <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />
-                        <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
+                        <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
                     </Card>
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by agent</h3>
                         <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" />
-                        <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
+                        <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
                     </Card>
                 </div>
 
@@ -367,7 +367,7 @@ const hasSpend = computed(() => current.value.length > 0);
                      clear ~330px. Same reasoning as the stat tiles' cqi type, one level up. -->
                 <section v-if="hasSavings" class="@container">
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                        <span :class="cmp.sectionLabel()">Token savings</span>
+                        <span :class="ui.sectionLabel()">Token savings</span>
                         <span class="min-w-0 text-2xs text-subtle">what the token-reduction settings were worth</span>
                     </div>
 
@@ -394,7 +394,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             </template>
 
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
-                            <p v-else :class="cmp.emptyState()">No shell output was cleaned in this range.</p>
+                            <p v-else :class="ui.emptyState()">No shell output was cleaned in this range.</p>
 
                             <!-- The whole-pipeline counterfactual, and the only one on this card that isn't
                                  sequential: the held-out commands were left raw at random, so this compares two

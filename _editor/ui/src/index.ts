@@ -1,10 +1,10 @@
-export { clipboardOf } from "./clipboard.js";
-export { cmp } from "./cmp.js";
+export { clipboardOf } from "./lib/clipboard.js";
+export { ui } from "./lib/ui.js";
 export { default as AgentRunButton } from "./components/AgentRunButton.vue";
 export { type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
 export { default as AnchoredOverlay } from "./components/AnchoredOverlay.vue";
 export { default as Avatar } from "./components/Avatar.vue";
-export { type Cross, placeAnchored, type Placement, type Side } from "./composables/anchorPlacement.js";
+export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anchorPlacement.js";
 export { default as BarChart } from "./components/BarChart.vue";
 export { type BarItem } from "./components/barChart.js";
 export { default as BottomSheet } from "./components/BottomSheet.vue";
@@ -26,7 +26,7 @@ export { default as CodeField } from "./components/CodeField.vue";
 export { default as ConfirmDialog } from "./components/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/ContextMenu.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
-export { type CountItem, default as CountBar } from "./components/CountBar.vue";
+export { type TallyItem, default as StatusTally } from "./components/StatusTally.vue";
 export { default as DagEditor } from "./components/DagEditor.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
@@ -64,6 +64,11 @@ export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // because a view holding a diagram outside prose (a stored architecture note, a generated report) should not
 // have to wrap it in a markdown document to get one.
 export { default as MermaidDiagram } from "./components/MermaidDiagram.vue";
+// THE centred box, and the only thing that should reach for PrimeVue's Dialog. Seventeen dialogs had each
+// typed their own width into a style attribute — thirteen different ones — and exactly one of the seventeen
+// carried the viewport clamp that stops a modal running off the side of a phone. The width is a named size
+// here and the clamp is not the caller's to remember. <ConfirmDialog> and <InfoDialog> are built on it.
+export { default as Modal } from "./components/Modal.vue";
 // The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
 // the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
 export { default as NavRail } from "./components/NavRail.vue";
@@ -82,11 +87,17 @@ export { default as PageHeader } from "./components/PageHeader.vue";
 // A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
 // component because every caller of the header wrapped it in the frame — and the min-h-0/overflow-hidden scroll
 // contract it owns is the failure three views had each rediscovered, one of them incorrectly.
-export { default as Panel } from "./components/Panel.vue";
+//
+// NAMED FOR THE CONTRACT, not for the shape, and renamed from `Panel` to get there. Thirteen files in this repo
+// end in `Panel` — ChatPanel, TerminalPanel, ReviewPanel, AccountPanel — and every one of them means "a region
+// of the screen", which is a word this component cannot own. It also meant the one name a view could not learn:
+// none of those thirteen used it, and thirty-nine files hand-wrote the scroll contract instead. `ScrollFrame`
+// says what it does and collides with nothing (not even Vue Flow's own <Panel>, which DagEditor imports).
+export { default as ScrollFrame } from "./components/ScrollFrame.vue";
 export { default as Picker } from "./components/Picker.vue";
 export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
-// The writing field — `cmp.input()`'s counterpart for text read in sentences. Borderless, and as tall as what
+// The writing field — `ui.input()`'s counterpart for text read in sentences. Borderless, and as tall as what
 // has been typed into it.
 export { default as ProseField } from "./components/ProseField.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
@@ -99,7 +110,7 @@ export { default as ResponsiveOverlay } from "./components/ResponsiveOverlay.vue
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
 export { default as SearchBar } from "./components/SearchBar.vue";
-export { default as Segmented } from "./components/Segmented.vue";
+export { default as SegmentedControl } from "./components/SegmentedControl.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
 // authored accents (a documentation map's components, say) has to paint them the way a figure would.
 export { seriesColor } from "./components/seriesAccent.js";
@@ -112,14 +123,14 @@ export { default as SplitView } from "./components/SplitView.vue";
 // Whether that screen has folded its index above its body — what a rail asks so its own compact form arrives at
 // the same width the shell's does.
 export { useCompact } from "./components/splitView.js";
-export { default as StatRow } from "./components/StatRow.vue";
+export { default as StatStrip } from "./components/StatStrip.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
 // The markdown ENGINE is not re-exported here — it ships as `@intentic/ui/markdown` so plain .ts modules
 // and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
-export { vTw } from "./composables/tw.js";
+export { vTw } from "./lib/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export {
     formatBytes,
@@ -132,10 +143,10 @@ export {
     formatWeekdayTime,
     initialsOf,
     timeAgo,
-} from "./format.js";
+} from "./lib/format.js";
 // The app's one "how far back" vocabulary — the 1h/24h/7d/All pills, the cutoff they mean, and the words a
 // caller says about them. Activity and Logs had each written all three.
-export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./timeWindow.js";
+export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./lib/timeWindow.js";
 // Path splitting is NOT re-exported here — it ships as `@intentic/ui/path`, for the same reason the
 // markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
 // should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Card, cmp, StatusBadge } from "@intentic/ui";
+import { AnchoredOverlay, Card, ui, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import Popover from "primevue/popover";
 import { computed, nextTick, ref } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
@@ -60,7 +59,9 @@ const error = ref<string | undefined>(undefined);
 // The menu opens only over a tile that already HAS a logo, because only then are there two answers (replace,
 // remove) to choose between. An empty tile has exactly one thing to do, and a menu with a single row is a click
 // charged for nothing — so it opens the file dialog directly.
-const logoMenu = ref<InstanceType<typeof Popover> | null>(null);
+// Anchored rather than a PrimeVue Popover, so every menu in the app measures its room the one way.
+const logoTrigger = ref<HTMLButtonElement | null>(null);
+const logoMenuOpen = ref(false);
 const logoBusy = ref(false);
 const logo = computed(() => sandbox.active.value?.image ?? undefined);
 const avatarLetter = computed(() => (editing.value ? name.value : (sandbox.active.value?.name ?? ``)).trim().charAt(0));
@@ -100,13 +101,13 @@ const cancelEdit = (): void => {
 
 // The tile's press: choose between replace and remove when there is something to remove, otherwise go straight
 // to the file dialog. Members never get here — the tile is disabled for them.
-const pressLogo = (event: MouseEvent): void => {
+const pressLogo = (): void => {
     error.value = undefined;
     if (logo.value === undefined) {
         fileInput.value?.click();
         return;
     }
-    logoMenu.value?.toggle(event);
+    logoMenuOpen.value = !logoMenuOpen.value;
 };
 
 // Write a logo straight through; `null` clears it. sandbox.update's cache write is what makes this tile and the
@@ -150,12 +151,12 @@ const pickFile = async (event: Event): Promise<void> => {
 // Both menu rows dismiss it themselves: the file dialog is a separate window and the removal is instant, so a
 // menu still hanging over the tile afterwards would be the only thing left to tidy up by hand.
 const changeLogo = (): void => {
-    logoMenu.value?.hide();
+    logoMenuOpen.value = false;
     fileInput.value?.click();
 };
 
 const removeLogo = async (): Promise<void> => {
-    logoMenu.value?.hide();
+    logoMenuOpen.value = false;
     await writeLogo(null);
 };
 
@@ -190,6 +191,7 @@ const save = async (): Promise<void> => {
                          zero opacity so the tile reads as identity, and appears on hover, on keyboard focus and
                          for the whole save — the same layer, so the tile's size is fixed in all three. -->
                     <button
+                        ref="logoTrigger"
                         type="button"
                         :disabled="!isOwner || logoBusy"
                         :aria-label="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
@@ -212,7 +214,7 @@ const save = async (): Promise<void> => {
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
 
                     <!-- Only ever opened over a tile that HAS a logo, so both rows always do something. -->
-                    <Popover ref="logoMenu" append-to="body">
+                    <AnchoredOverlay v-model="logoMenuOpen" :anchor="logoTrigger ?? undefined" side="bottom" cross="start">
                         <div class="flex w-44 flex-col gap-0.5">
                             <button
                                 type="button"
@@ -229,7 +231,7 @@ const save = async (): Promise<void> => {
                                 <Icon name="trash" class="shrink-0 text-sm" />Remove logo
                             </button>
                         </div>
-                    </Popover>
+                    </AnchoredOverlay>
 
                     <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
@@ -276,7 +278,7 @@ const save = async (): Promise<void> => {
                                         <button
                                             type="button"
                                             :class="
-                                                cmp.iconButton(
+                                                ui.iconButton(
                                                     `h-8 w-8 text-subtle hover:text-success disabled:cursor-not-allowed disabled:opacity-40`,
                                                 )
                                             "
@@ -289,7 +291,7 @@ const save = async (): Promise<void> => {
                                         </button>
                                         <button
                                             type="button"
-                                            :class="cmp.iconButton(`h-8 w-8 text-subtle disabled:cursor-not-allowed disabled:opacity-40`)"
+                                            :class="ui.iconButton(`h-8 w-8 text-subtle disabled:cursor-not-allowed disabled:opacity-40`)"
                                             :disabled="busy"
                                             aria-label="Cancel rename"
                                             v-tooltip.bottom="`Cancel · Esc`"
@@ -301,7 +303,7 @@ const save = async (): Promise<void> => {
                                     <button
                                         v-else
                                         type="button"
-                                        :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                        :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                         aria-label="Rename sandbox"
                                         v-tooltip.bottom="`Rename sandbox`"
                                         @click="startEdit"

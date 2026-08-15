@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, ContextMenu, type IconName, SearchBar, Segmented } from "@intentic/ui";
+import { ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
@@ -710,8 +710,8 @@ const closeTab = (event: Event, id: string): void => {
              filter on the list below — it decides what the list IS, and a control that owns the column reads
              as the column's own header rather than as one more knob in a toolbar. At `xs` the track keeps that
              shape at a pointer's height, so it costs the rail a line rather than a thumb-sized band (see
-             Segmented: the stretched track honours the density prop). -->
-        <Segmented
+             SegmentedControl: the stretched track honours the density prop). -->
+        <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
             size="xs"
@@ -930,7 +930,7 @@ const closeTab = (event: Event, id: string): void => {
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
-                    :class="cmp.addTile(`mt-1.5 gap-1 rounded-lg py-1.5 text-2xs`)"
+                    :class="ui.addTile(`mt-1.5 gap-1 rounded-lg py-1.5 text-2xs`)"
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />

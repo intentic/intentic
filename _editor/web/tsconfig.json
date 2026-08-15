@@ -8,10 +8,10 @@
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
-            "@intentic/ui/path": ["../../_editor/ui/src/path.ts"],
+            "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
             "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
-            "@intentic/ui/time": ["../../_editor/ui/src/timeWindow.ts"],
+            "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
             "@intentic-app/api-contract": ["../../_platform/api-contract/src/index.ts"]
         }
     },

@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { cmp, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { ui, Modal, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import PersonaFace from "../../components/PersonaFace.vue";
@@ -213,15 +212,7 @@ const submit = async (): Promise<void> => {
          which is exactly the folder somebody opens this from the first time. "Who works in …" is what the panel
          is FOR, and it stays true whether the answer gets written here, borrowed from a card that already
          exists, or changed. -->
-    <Dialog
-        v-model:visible="visible"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :header="`Who works in ${folderName}`"
-        :style="{ width: '32rem', maxWidth: '95vw' }"
-        :pt="{ content: { class: `max-h-[70dvh] overflow-y-auto` } }"
-    >
+    <Modal v-model:open="visible" size="md" :header="`Who works in ${folderName}`">
         <div class="flex flex-col gap-4">
             <!-- One sentence, and it is about this folder rather than about personas in general. -->
             <p class="text-xs text-subtle">
@@ -233,7 +224,7 @@ const submit = async (): Promise<void> => {
                  of them. Absent entirely on a folder with none, rather than an empty box saying so: the form
                  below already reads as "there is nothing here yet, name one". -->
             <div v-if="cards.length > 0" class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">Starting here</span>
+                <span :class="ui.sectionLabel()">Starting here</span>
                 <div
                     v-for="persona in cards"
                     :key="persona.id"
@@ -245,7 +236,7 @@ const submit = async (): Promise<void> => {
                     <PersonaFace :persona :size="32" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
-                    <button type="button" :class="cmp.iconButton()" :aria-label="`Edit ${persona.label ?? persona.id}`" @click="startEdit(persona)">
+                    <button type="button" :class="ui.iconButton()" :aria-label="`Edit ${persona.label ?? persona.id}`" @click="startEdit(persona)">
                         <Icon name="pencil" class="text-xs" />
                     </button>
                 </div>
@@ -256,7 +247,7 @@ const submit = async (): Promise<void> => {
                  load. -->
             <div class="flex flex-col gap-3" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
                 <div class="flex items-center gap-2">
-                    <span :class="cmp.sectionLabel()">{{ heading }}</span>
+                    <span :class="ui.sectionLabel()">{{ heading }}</span>
                     <!-- THE OTHER WAY TO ANSWER, always at the same end of the same row — a mode switch a reader
                          has to hunt for is one they use once. Only ever one link: two side by side would make a
                          three-way choice out of a form that is already showing which choice it is on. And it is
@@ -265,7 +256,7 @@ const submit = async (): Promise<void> => {
                     <button
                         v-if="mode !== `new`"
                         type="button"
-                        :class="cmp.linkButton('ml-auto text-xs text-muted hover:text-content')"
+                        :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
                         @click="startAdd"
                     >
                         Add a new one instead
@@ -273,7 +264,7 @@ const submit = async (): Promise<void> => {
                     <button
                         v-else-if="elsewhere.length > 0"
                         type="button"
-                        :class="cmp.linkButton('ml-auto text-xs text-muted hover:text-content')"
+                        :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
                         @click="startExisting"
                     >
                         Use one I already have
@@ -287,7 +278,7 @@ const submit = async (): Promise<void> => {
                     <input
                         v-if="filterable"
                         v-model="filter"
-                        :class="cmp.input('w-full')"
+                        :class="ui.input('w-full')"
                         placeholder="Find a persona…"
                         aria-label="Find a persona"
                     />
@@ -323,7 +314,7 @@ const submit = async (): Promise<void> => {
                     <div class="ui-field">
                         <input
                             v-model="label"
-                            :class="cmp.input('w-full font-medium')"
+                            :class="ui.input('w-full font-medium')"
                             :placeholder="`Name this persona — ${folderName}, Docs bot, Refactor crew…`"
                             aria-label="Name"
                             autofocus
@@ -340,7 +331,7 @@ const submit = async (): Promise<void> => {
                         <div class="flex items-center gap-2">
                             <button
                                 type="button"
-                                :class="cmp.linkButton('gap-1.5 text-xs text-muted hover:text-content')"
+                                :class="ui.linkButton('gap-1.5 text-xs text-muted hover:text-content')"
                                 :aria-expanded="advanced"
                                 @click="advanced = !advanced"
                             >
@@ -360,7 +351,7 @@ const submit = async (): Promise<void> => {
         <template #footer>
             <!-- The rest of a card — the accounts it speaks through, the folders it is fenced to — lives on the
                  page that owns it, and this is the way there rather than a second copy of it. -->
-            <RouterLink to="/sandbox/personas" :class="cmp.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
+            <RouterLink to="/sandbox/personas" :class="ui.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
                 Full editor <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
             <Button label="Cancel" text size="small" @click="dir = undefined" />
@@ -376,5 +367,5 @@ const submit = async (): Promise<void> => {
                 <template #icon><Icon :name="mode === `new` ? `plus` : `check`" /></template>
             </Button>
         </template>
-    </Dialog>
+    </Modal>
 </template>

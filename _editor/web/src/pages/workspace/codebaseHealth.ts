@@ -10,7 +10,7 @@ import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
 // file ever took; the narrower windows answer "what is hot NOW", which is a different question, so it is a
 // deliberate switch rather than a default.
 export type ChurnWindow = "all" | "90d" | "30d" | "7d";
-// Mutable by design — <Segmented> takes its options array as-is.
+// Mutable by design — <SegmentedControl> takes its options array as-is.
 export const CHURN_WINDOWS: { label: string; value: ChurnWindow; title: string }[] = [
     { label: `All`, value: `all`, title: `Every commit in the repository's history` },
     { label: `90d`, value: `90d`, title: `Commits from the last 90 days` },

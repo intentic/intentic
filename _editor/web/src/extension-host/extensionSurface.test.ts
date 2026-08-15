@@ -24,9 +24,8 @@ const require = createRequire(import.meta.url);
 const SURFACE = `
 @layer theme, base, primeng, components, utilities;
 @import "tailwindcss" source(none);
-@import "./_editor/ui/src/styles/shared/index.css";
-@import "./_editor/ui/src/styles/core/index.css";
-@import "./_editor/ui/src/styles/extension-surface.css";
+@import "./_editor/ui/src/styles/index.css";
+@import "./_editor/ui/src/styles/opt-in/extension-surface.css";
 `;
 
 // Tailwind's compiler does not touch the filesystem itself; `@import` is resolved by whatever the caller

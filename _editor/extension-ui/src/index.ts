@@ -50,7 +50,7 @@ export {
      * a hand-rolled copy gets subtly wrong. */
     ChangeStatusMark,
     type ChangeStatus,
-    cmp,
+    ui,
     Code,
     /* <CodeField> ships beside <Code> because shipping the reader WITHOUT the writer is what made the memory
      * extension put a bare grey <textarea> next to a coloured block of the very same file: the kit had no way
@@ -59,8 +59,8 @@ export {
     ConfirmDialog,
     ContextMenu,
     CopyButton,
-    CountBar,
-    type CountItem,
+    StatusTally,
+    type TallyItem,
     DagEditor,
     DagGraph,
     type DagEdge,
@@ -80,6 +80,11 @@ export {
     isRenderableImage,
     Markdown,
     MarkdownFigure,
+    /* <Modal> ships for the reason <ConfirmDialog> and <InfoDialog> already do, and it is the one they were
+     * both missing: an extension whose dialog is neither a confirm nor an explainer had nothing to reach for
+     * but PrimeVue's Dialog and a width typed into a style attribute — which is exactly how the app itself
+     * ended up with thirteen widths and one viewport clamp between seventeen dialogs. */
+    Modal,
     type NavGroup,
     NavRail,
     /* <NoticeStack> and its model ship beside <ConfirmDialog> for the same reason <InfoDialog> does: a view
@@ -88,7 +93,7 @@ export {
      *
      * <Notice> — THE SINGLE ONE — was missing from that shipment, and it is the same mistake <Row>/<RowGroup>
      * and <PageAction>/<PageHeader> each record one release earlier: the container went out without the thing
-     * that goes in it. Notice.vue's own comment says every view that hand-rolled `cmp.alertDanger()` around an
+     * that goes in it. Notice.vue's own comment says every view that hand-rolled `ui.alertDanger()` around an
      * interpolated error string renders it instead, "which is what makes the app's failures sound like one
      * product rather than like sixty throw sites" — and the app took that sweep, 107 call sites of it. The
      * extensions could not: the kit handed out the stack and kept the row, so thirteen of them went on
@@ -104,7 +109,7 @@ export {
      * `#actions` with a raw PrimeVue <Button> and picked a different cell of its variant matrix each time. */
     PageAction,
     PageHeader,
-    Panel,
+    ScrollFrame,
     Picker,
     type PickerGroup,
     type PickerOption,
@@ -123,11 +128,11 @@ export {
     Row,
     RowGroup,
     SearchBar,
-    Segmented,
+    SegmentedControl,
     seriesColor,
     sinceOf,
     SplitView,
-    StatRow,
+    StatStrip,
     StatusBadge,
     type StatusVariant,
     StepSection,
@@ -193,13 +198,14 @@ export type {
 /* The raw primitives, kept deliberately short. Handing out a primitive the KIT already wraps is how an
  * extension screen ends up wearing OS chrome next to the app's own: `Select` and `InputText` used to ship here
  * and four views took them, so a dropdown with a different focus ring sat beside <Picker> and a text field with
- * different padding beside `cmp.input`. Those two are gone — <Picker> and `cmp.input()` are the spellings.
- * <Dialog> stays until the kit has a general dialog shell: <ConfirmDialog> and <InfoDialog> are both narrower
- * than the five views using it need. <Popover> stays for the same reason, but <AnchoredOverlay> above is the
- * one to reach for — it is the only one of the two that opens in the right window when a panel is popped out. */
+ * different padding beside `ui.input`. Those two are gone — <Picker> and `ui.input()` are the spellings.
+ * <Dialog> was the third, and it is gone for the same reason: it stayed "until the kit has a general dialog
+ * shell", six extension views took it, and every one of them typed its own width into a style attribute with
+ * no viewport clamp — the exact spread that <Modal> above now exists to end. The shell is here, so the raw one
+ * is not. <Popover> stays only because <ResponsiveOverlay>/<AnchoredOverlay> do not yet cover every menu shape,
+ * and it is on the same clock: those two are the ones that open in the right window when a panel is popped out. */
 export { default as Button } from "primevue/button";
 export { default as Checkbox } from "primevue/checkbox";
-export { default as Dialog } from "primevue/dialog";
 export type { MenuItem } from "primevue/menuitem";
 export { default as Popover } from "primevue/popover";
 export { default as ToggleSwitch } from "primevue/toggleswitch";

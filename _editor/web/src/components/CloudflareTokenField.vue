@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
+import { ui, Notice, type NoticeModel, Picker, type PickerOption } from "@intentic/ui";
 import { computed } from "vue";
 import { CF_TOKEN_KEY, type useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import SecretField from "./SecretField.vue";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
+import { Button, ui, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -158,7 +158,7 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                         <button
                             v-if="entry.session"
                             type="button"
-                            :class="cmp.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
+                            :class="ui.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
                             v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
                             @click="openTerminal(entry.session)"
                         >
@@ -175,7 +175,7 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                         :href="entry.previewUrl"
                         target="_blank"
                         rel="noopener"
-                        :class="cmp.iconButton(`h-8 w-8`)"
+                        :class="ui.iconButton(`h-8 w-8`)"
                         :aria-label="`Open the port ${entry.port} preview in a new tab`"
                         v-tooltip.bottom="'Open in new tab'"
                     >
@@ -227,7 +227,7 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                 <template v-if="entry.session" #description>
                     <button
                         type="button"
-                        :class="cmp.linkButton(`gap-1 text-2xs text-subtle hover:text-content hover:no-underline`)"
+                        :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content hover:no-underline`)"
                         v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
                         @click="openTerminal(entry.session)"
                     >
@@ -242,7 +242,7 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                         :href="entry.previewUrl"
                         target="_blank"
                         rel="noopener"
-                        :class="cmp.iconButton(`h-7 w-7`)"
+                        :class="ui.iconButton(`h-7 w-7`)"
                         :aria-label="`Open the port ${entry.port} preview in a new tab`"
                         v-tooltip.bottom="'Open in new tab'"
                     >

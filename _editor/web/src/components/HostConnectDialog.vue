@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Code } from "@intentic/ui";
+import { Code, Modal } from "@intentic/ui";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
@@ -52,13 +51,7 @@ onBeforeUnmount(stop);
 </script>
 
 <template>
-    <Dialog
-        :visible="visible"
-        modal
-        :header="`Connect ${id}`"
-        :style="{ width: '44rem', maxWidth: '92vw' }"
-        @update:visible="emit(`update:visible`, $event)"
-    >
+    <Modal :open="visible" size="lg" :header="`Connect ${id}`" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
                 Run this on <b>{{ id }}</b> — in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound
@@ -93,5 +86,5 @@ onBeforeUnmount(stop);
         <template #footer>
             <Button :label="online ? `Done` : `Close`" size="small" @click="emit(`update:visible`, false)" />
         </template>
-    </Dialog>
+    </Modal>
 </template>

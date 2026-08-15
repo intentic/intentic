@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, clipboardOf, ConfirmDialog, type NoticeModel, NoticeStack, PullToRefresh, Segmented } from "@intentic/ui";
+import { BottomSheet, clipboardOf, ConfirmDialog, Modal, type NoticeModel, NoticeStack, PullToRefresh, SegmentedControl } from "@intentic/ui";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useLoadingReveal } from "../../composables/loadingReveal";
@@ -344,7 +343,7 @@ const onPick = (event: Event): void => {
 
         <template v-else>
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
-                <Segmented v-model="segment" size="sm" :options="segmentOptions" />
+                <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
                 <button
                     type="button"
@@ -408,7 +407,7 @@ const onPick = (event: Event): void => {
                             @keydown.esc="clearFilter"
                         />
                     </div>
-                    <Segmented
+                    <SegmentedControl
                         v-model="searchScope"
                         size="xs"
                         :options="[
@@ -664,15 +663,7 @@ const onPick = (event: Event): void => {
             </div>
         </BottomSheet>
 
-        <Dialog
-            :visible="renameTarget !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: 'min(26rem, calc(100vw - 2rem))' }"
-            header="Rename"
-            @update:visible="renameTarget = undefined"
-        >
+        <Modal :open="renameTarget !== undefined" size="sm" header="Rename" @update:open="renameTarget = undefined">
             <input
                 v-model="renameValue"
                 type="text"
@@ -683,7 +674,7 @@ const onPick = (event: Event): void => {
                 <Button label="Cancel" severity="secondary" :text="true" @click="renameTarget = undefined" />
                 <Button label="Rename" autofocus @click="confirmRename" />
             </template>
-        </Dialog>
+        </Modal>
 
         <ConfirmDialog
             :open="deleteTarget !== undefined"

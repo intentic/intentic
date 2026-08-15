@@ -12,7 +12,7 @@
      always a mistake: people drive servers from Termius and Blink, and for them the phone IS the terminal.
      That path is simply folded away until someone says it is theirs. -->
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { ui, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { ref } from "vue";
@@ -81,7 +81,7 @@ const send = async (): Promise<void> => {
             </p>
             <!-- Quiet, because the common reason to press it twice is impatience with a mail that is already on
                  its way. It is here for the real one: a typo'd guess at which inbox is open on the laptop. -->
-            <button type="button" :class="cmp.linkButton(`text-muted underline hover:text-content`)" :disabled="sending" @click="send">
+            <button type="button" :class="ui.linkButton(`text-muted underline hover:text-content`)" :disabled="sending" @click="send">
                 {{ sending ? `Sending…` : `Send it again` }}
             </button>
         </template>

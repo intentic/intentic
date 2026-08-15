@@ -161,6 +161,14 @@ const routes: RouteRecordRaw[] = [
         meta: { title: `Accept invite` },
         component: () => import(`../pages/AcceptInvite.vue`),
     },
+    /* THE KIT, ON ONE PAGE — dev only, and unguarded on purpose: it needs no session, no sandbox and no
+     * repository, so it opens in any state the app can be in. `import.meta.env.DEV` is a compile-time constant,
+     * so the route and its whole component graph vanish from a production build rather than shipping behind a
+     * check. It exists because the drift this app kept growing — thirteen dialog widths, two red boxes, four
+     * captions off the type scale — is invisible in a file and obvious the moment the variants are in a row. */
+    ...(import.meta.env.DEV
+        ? [{ path: `/kit`, name: `kit`, meta: { title: `Design kit` }, component: () => import(`../pages/DesignKit.vue`) } satisfies RouteRecordRaw]
+        : []),
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
 

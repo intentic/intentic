@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Segmented } from "@intentic/ui";
+import { SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
@@ -38,7 +38,7 @@ const selected = computed<string>({
 <template>
     <div v-if="active" class="flex h-full min-h-0 flex-col">
         <div v-if="activations.length > 1" class="flex h-8 shrink-0 items-center border-b border-line px-1.5">
-            <Segmented v-model="selected" size="xs" :options="options" />
+            <SegmentedControl v-model="selected" size="xs" :options="options" />
         </div>
         <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
             <ExtensionView :extension="active.extension" :activation="active.activation" />

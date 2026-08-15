@@ -8,9 +8,8 @@
 
 @import "tailwindcss";
 
-@import "../../ui/src/styles/shared/index.css";
-@import "../../ui/src/styles/core/index.css";
-@import "../../ui/src/styles/shared/prose.css";
+@import "../../ui/src/styles/index.css";
+@import "../../ui/src/styles/opt-in/prose.css";
 @import "../../web/src/chat/chat.css";
 
 /* WHAT TAILWIND SCANS. Named rather than left to auto-detection, which is rooted at the BUILD's root — this

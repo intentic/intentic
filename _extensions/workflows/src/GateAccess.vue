@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code, cmp, CopyButton } from "@intentic/extension-ui";
+import { Code, ui, CopyButton } from "@intentic/extension-ui";
 import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { curlLine, gatePath, githubStep } from "./gateSnippets";
@@ -26,7 +26,7 @@ const url = computed<string | undefined>(() => {
 <template>
     <div v-if="url !== undefined" class="flex flex-col gap-2">
         <div class="flex items-center gap-1.5">
-            <span :class="cmp.sectionLabel('shrink-0')">Webhook</span>
+            <span :class="ui.sectionLabel('shrink-0')">Webhook</span>
             <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ url }}</code>
             <CopyButton :text="url" aria-label="Copy the gate URL" v-tooltip.top="`Copy URL`" />
         </div>

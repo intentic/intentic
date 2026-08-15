@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, CopyButton, Icon, Notice, noticeOf } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, Icon, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
@@ -212,12 +212,12 @@ const finish = (id: string): void => {
                         ref="recipeFilterInput"
                         v-model="recipeFilter"
                         placeholder="Filter templates…"
-                        :class="cmp.input('px-2 py-1 text-xs')"
+                        :class="ui.input('px-2 py-1 text-xs')"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
                     <div class="scrollbar-thin @container flex max-h-panel flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
-                            <span :class="cmp.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
+                            <span :class="ui.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
                             <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">
                                 <button
                                     v-for="recipe in group.items"

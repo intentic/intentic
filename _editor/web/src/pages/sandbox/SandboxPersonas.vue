@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { Avatar, BrandMark, cmp, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
+import { Avatar, BrandMark, ui, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
@@ -299,7 +299,7 @@ const confirmRemove = async (): Promise<void> => {
             <!-- NO PERSONAS AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line
                  of apology in it. It says what is true right now — automations are mute, chats are unrestricted
                  — because that is the consequence someone is here to change, and offers the one action. -->
-            <div v-if="personas.length === 0 && newName === undefined" :class="cmp.emptyState('flex flex-col items-center gap-3 py-8')">
+            <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">No personas yet</span>
@@ -364,7 +364,7 @@ const confirmRemove = async (): Promise<void> => {
                         <input
                             v-if="rename.editing && renamingId === persona.id"
                             v-model="rename.draft"
-                            :class="cmp.input('w-full max-w-xs py-0.5 font-medium')"
+                            :class="ui.input('w-full max-w-xs py-0.5 font-medium')"
                             aria-label="Name"
                             @vue:mounted="rename.focusInput"
                             @click.stop
@@ -437,7 +437,7 @@ const confirmRemove = async (): Promise<void> => {
                         <Icon v-if="isOpen(persona) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
                         <button
                             type="button"
-                            :class="cmp.iconButton('hover:text-danger')"
+                            :class="ui.iconButton('hover:text-danger')"
                             aria-label="Remove this persona"
                             @click.stop="removing = persona"
                         >
@@ -469,14 +469,14 @@ const confirmRemove = async (): Promise<void> => {
                              field expecting a paragraph. Enter commits it, like any single-field form. -->
                         <input
                             v-model="newName"
-                            :class="cmp.input('min-w-0 max-w-xs flex-1 font-medium')"
+                            :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
                             placeholder="Name it — Work, Studio, Reddit Writer…"
                             aria-label="Name this persona"
                             autofocus
                             @keydown.enter="submit"
                         />
                         <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
-                        <button type="button" :class="cmp.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
+                        <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
                     </div>
                     <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                     <span v-else class="text-xs text-subtle">

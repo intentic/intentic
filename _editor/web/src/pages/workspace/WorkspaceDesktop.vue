@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { clipboardOf, cmp, ConfirmDialog, ContextMenu, type IconName, Segmented, useNarrow } from "@intentic/ui";
+import { clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
@@ -762,11 +762,11 @@ const endResize = (event: PointerEvent): void => {
                      One column, one resize handle — review/history never steal width from the diff view in the
                      main area. The controls sit ON the sidebar they switch. -->
                 <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
-                    <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
+                    <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
                     <button
                         type="button"
-                        :class="cmp.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
+                        :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
                         @click="layout.setSidebarPanel('history')"
                         v-tooltip.bottom="'Restore points — automatic file history'"
                         :aria-pressed="layout.sidebarPanel.value === 'history'"
@@ -780,7 +780,7 @@ const endResize = (event: PointerEvent): void => {
                     <template v-if="layout.sidebarPanel.value === 'changes'">
                         <button
                             type="button"
-                            :class="cmp.iconButton()"
+                            :class="ui.iconButton()"
                             @click="changes.refresh()"
                             v-tooltip.bottom="'Refresh'"
                             aria-label="Refresh changes"
@@ -872,7 +872,7 @@ const endResize = (event: PointerEvent): void => {
                         />
                     </div>
                     <div class="flex items-center gap-1">
-                        <Segmented
+                        <SegmentedControl
                             v-model="searchScope"
                             size="xs"
                             :options="[

@@ -12,7 +12,7 @@
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic-app/api-contract";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { BrandMark, cmp, type NoticeModel, RowGroup } from "@intentic/ui";
+import { BrandMark, ui, type NoticeModel, RowGroup } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
@@ -104,8 +104,8 @@ const pick = (entry: RegistryEntry): void => {
     <RowGroup label="From a registry (optional)">
         <div class="flex flex-col gap-2 px-4 py-3">
             <div class="flex gap-2">
-                <input v-model="url" placeholder="https://github.com/owner/registry" :class="cmp.input('min-w-0 flex-1')" />
-                <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
+                <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
+                <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="ui.input('w-28')" />
                 <Button label="Browse" size="small" :disabled="url.trim().length === 0 || browsing" :loading="browsing" @click="browse" />
             </div>
             <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">

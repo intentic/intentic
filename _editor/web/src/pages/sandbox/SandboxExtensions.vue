@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, Segmented, SkeletonRows, StatusBadge, timeAgo } from "@intentic/ui";
+import { ui, FilterBar, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows, StatusBadge, timeAgo } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
@@ -208,7 +208,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <div class="flex flex-wrap items-center justify-end gap-2">
             <FilterBar v-if="filterable" v-model="query" placeholder="Name or contribution…" class="flex-1">
                 <template #controls>
-                    <Segmented
+                    <SegmentedControl
                         v-model="mode"
                         :options="[
                             { label: `All`, value: `all`, badge: entries.length },
@@ -225,7 +225,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             <Button label="New extension" size="small" @click="creating = true">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-            <button type="button" :class="cmp.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
+            <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" @click="reload">
                 <Icon name="refresh" :spin="reloading" />
             </button>
         </div>
@@ -256,7 +256,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                 </div>
             </RowGroup>
         </template>
-        <div v-else-if="emptyNote !== undefined" :class="cmp.emptyState(`flex flex-col items-center gap-2 py-6`)">
+        <div v-else-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
             <span>{{ emptyNote }}</span>
             <!-- An empty tab is the one moment a reader is unambiguously asking where extensions come from, so
                  it answers rather than describing another page: the next row down. -->
@@ -270,7 +270,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
              until the first check has run — a blank claim is worse than none. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
-            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="checking" @click="checkNow">
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" @click="checkNow">
                 {{ checking ? `Checking…` : `Check now` }}
             </button>
         </p>

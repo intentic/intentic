@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Dialog, Segmented } from "@intentic/extension-ui";
+import { Button, ui, Modal, SegmentedControl } from "@intentic/extension-ui";
 import type { LoopCheck, LoopDesign, LoopOutput } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 
@@ -129,18 +129,11 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Dialog
-        v-model:visible="open"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '34rem' }"
-        :header="editing ? `Edit loop` : `New loop`"
-    >
+    <Modal v-model:open="open" size="md" :header="editing ? `Edit loop` : `New loop`">
         <div class="flex flex-col gap-4">
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">Name it</span>
-                <input v-model="name" :class="cmp.input()" placeholder="Until the tests pass" autofocus />
+                <span :class="ui.sectionLabel()">Name it</span>
+                <input v-model="name" :class="ui.input()" placeholder="Until the tests pass" autofocus />
                 <!-- The name is what the composer badge shows at pill width, so it is the one field whose
                      length is worth a word about at the moment of typing it. -->
                 <span v-if="clash" class="text-2xs text-danger">You already have a loop with that name.</span>
@@ -148,27 +141,27 @@ const submit = (): void => {
             </label>
 
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">What it's for</span>
-                <input v-model="description" :class="cmp.input()" placeholder="fixes failures one at a time until the suite is green" />
+                <span :class="ui.sectionLabel()">What it's for</span>
+                <input v-model="description" :class="ui.input()" placeholder="fixes failures one at a time until the suite is green" />
                 <span class="text-2xs text-subtle">Optional. One line under the name in the picker.</span>
             </label>
 
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">What each round does</span>
-                <input v-model="instruction" :class="cmp.input()" placeholder="run the tests, pick the top failure, fix it" />
+                <span :class="ui.sectionLabel()">What each round does</span>
+                <input v-model="instruction" :class="ui.input()" placeholder="run the tests, pick the top failure, fix it" />
                 <span class="text-2xs text-subtle">
                     Optional. Leave it empty and the agent works towards whatever you type in the message box, however it sees fit.
                 </span>
             </label>
 
             <div class="flex flex-col gap-1.5">
-                <span :class="cmp.sectionLabel()">How it ends</span>
-                <Segmented v-model="stopKind" :options="stopOptions" />
-                <input v-if="stopKind === `command`" v-model="command" :class="[cmp.input(), `font-mono`]" placeholder="pnpm test" />
+                <span :class="ui.sectionLabel()">How it ends</span>
+                <SegmentedControl v-model="stopKind" :options="stopOptions" />
+                <input v-if="stopKind === `command`" v-model="command" :class="[ui.input(), `font-mono`]" placeholder="pnpm test" />
                 <textarea
                     v-else-if="stopKind === `judge`"
                     v-model="rubric"
-                    :class="cmp.input()"
+                    :class="ui.input()"
                     rows="2"
                     placeholder="Every public function has a doc comment explaining why it exists."
                 ></textarea>
@@ -176,8 +169,8 @@ const submit = (): void => {
             </div>
 
             <div class="flex flex-col gap-1.5">
-                <span :class="cmp.sectionLabel()">Memory between rounds</span>
-                <Segmented v-model="context" :options="contextOptions" />
+                <span :class="ui.sectionLabel()">Memory between rounds</span>
+                <SegmentedControl v-model="context" :options="contextOptions" />
                 <span class="text-2xs text-subtle">{{ contextNote }}</span>
             </div>
 
@@ -185,18 +178,18 @@ const submit = (): void => {
                  this go before it stops on its own". Every one of them is a way the loop ends without meeting
                  the goal, so a loop saved with none of them touched still cannot start something unbounded. -->
             <div class="flex flex-col gap-1.5">
-                <span :class="cmp.sectionLabel()">Stop it anyway after</span>
+                <span :class="ui.sectionLabel()">Stop it anyway after</span>
                 <div class="grid grid-cols-3 gap-2">
                     <label class="flex flex-col gap-1">
-                        <input v-model.number="maxIterations" type="number" min="1" max="50" :class="cmp.input()" />
+                        <input v-model.number="maxIterations" type="number" min="1" max="50" :class="ui.input()" />
                         <span class="text-2xs text-subtle">rounds</span>
                     </label>
                     <label class="flex flex-col gap-1">
-                        <input v-model.number="maxSpendUsd" type="number" min="0.5" step="0.5" :class="cmp.input()" />
+                        <input v-model.number="maxSpendUsd" type="number" min="0.5" step="0.5" :class="ui.input()" />
                         <span class="text-2xs text-subtle">dollars</span>
                     </label>
                     <label class="flex flex-col gap-1">
-                        <input v-model.number="stallLimit" type="number" min="1" max="10" :class="cmp.input()" />
+                        <input v-model.number="stallLimit" type="number" min="1" max="10" :class="ui.input()" />
                         <span class="text-2xs text-subtle">idle rounds</span>
                     </label>
                 </div>
@@ -209,8 +202,8 @@ const submit = (): void => {
         </div>
 
         <template #footer>
-            <button type="button" :class="cmp.linkButton()" @click="open = false">Cancel</button>
+            <button type="button" :class="ui.linkButton()" @click="open = false">Cancel</button>
             <Button size="small" :label="editing ? `Save` : `Create loop`" :disabled="!ready" @click="submit()" />
         </template>
-    </Dialog>
+    </Modal>
 </template>

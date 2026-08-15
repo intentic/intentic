@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
+import { Button, ui, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
@@ -75,7 +75,7 @@ const openChat = (conversationId: string): void => host().navigate(`/agents/${en
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-            <button type="button" :class="cmp.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
+            <button type="button" :class="ui.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
             <span class="text-sm font-medium text-content">{{ run.workflow.name }}</span>
             <span class="text-2xs font-medium" :class="run.state === `done` ? `text-success` : run.state === `running` ? `text-link` : `text-subtle`">
                 {{ run.state }}

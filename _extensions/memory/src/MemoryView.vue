@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "./contract";
-import { cmp, formatBytes, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions } from "@intentic/extension-ui";
+import { ui, formatBytes, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import { freshness } from "./noteTime";
@@ -157,7 +157,7 @@ const openSibling = (name: string): void => {
         <div class="flex max-h-panel-lg min-h-0 flex-col">
             <p v-if="files.length === 0 && isLoading" class="text-sm text-muted">Loading…</p>
 
-            <div v-else-if="files.length === 0" :class="cmp.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">
+            <div v-else-if="files.length === 0" :class="ui.emptyState('flex flex-col items-center gap-2 px-6 py-12 text-sm')">
                 <Icon name="sparkles" class="text-base text-subtle" />
                 <p class="text-content">Nothing remembered yet.</p>
                 <p class="max-w-sm text-xs text-muted">

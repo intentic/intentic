@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
     Button,
-    cmp,
+    ui,
     CodeField,
     CopyButton,
     formatBytes,
@@ -9,8 +9,8 @@ import {
     Icon,
     InfoTable,
     Markdown,
-    Panel,
-    Segmented,
+    ScrollFrame,
+    SegmentedControl,
     StatusBadge,
     type StatusVariant,
 } from "@intentic/extension-ui";
@@ -111,10 +111,10 @@ const onProseClick = (event: MouseEvent): void => {
 
 <template>
     <!-- The pane is the note; the bar under it is what the note is CONNECTED to. Two elements rather than one,
-         because <Panel>'s body scrolls and the connections must not scroll away — they are the reason this is a
+         because <ScrollFrame>'s body scrolls and the connections must not scroll away — they are the reason this is a
          knowledge base rather than a folder, and on a long note they would otherwise be a page down. -->
     <div class="flex min-h-0 flex-1 flex-col gap-2">
-        <Panel grow :title="note?.summary.title ?? `…`">
+        <ScrollFrame grow :title="note?.summary.title ?? `…`">
             <template #lead>
                 <Icon name="file" class="shrink-0 text-xs text-subtle" />
             </template>
@@ -157,12 +157,12 @@ const onProseClick = (event: MouseEvent): void => {
                 </template>
                 <template v-else>
                     <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                    <button type="button" :class="cmp.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
+                    <button type="button" :class="ui.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
                         <Icon name="pencil" />
                     </button>
                     <button
                         type="button"
-                        :class="cmp.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
+                        :class="ui.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
                         aria-label="Delete this note"
                         v-tooltip.top="'Delete'"
                         @click="confirming = true"
@@ -182,7 +182,7 @@ const onProseClick = (event: MouseEvent): void => {
                  cannot scroll the question away from the answer. -->
             <template #strips>
                 <div v-if="draft === undefined" class="flex items-center gap-2 border-b border-line px-4 py-1.5">
-                    <Segmented
+                    <SegmentedControl
                         v-model="view"
                         size="xs"
                         :options="[
@@ -240,7 +240,7 @@ const onProseClick = (event: MouseEvent): void => {
                     <p v-else class="px-5 py-4 text-xs text-subtle">No text yet — this note is its header.</p>
                 </template>
             </template>
-        </Panel>
+        </ScrollFrame>
 
         <!-- WHAT THIS IS CONNECTED TO, under every view and outside the scroller. Each entry is a step you can
          take, and the relationship's name is what tells you whether taking it will answer your question. -->

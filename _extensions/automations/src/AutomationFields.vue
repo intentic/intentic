@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
-import { cmp, formatDateTime, Icon, Picker, type PickerOption, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
+import { ui, formatDateTime, Icon, Picker, type PickerOption, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
@@ -267,7 +267,7 @@ const setProvider = (provider: string): void => {
                 ref="nameInput"
                 v-model="form.id"
                 placeholder="morning-briefing"
-                :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
+                :class="[ui.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
                 @blur="markTouched('name')"
             />
             <span v-if="touched.has('name') && nameError" class="ui-field-error">
@@ -291,7 +291,7 @@ const setProvider = (provider: string): void => {
         <div class="grid items-stretch gap-x-0 gap-y-5 @3xl:grid-cols-2">
             <div class="flex min-w-0 flex-col gap-3 @3xl:pr-5">
                 <div class="flex items-baseline gap-2">
-                    <span :class="cmp.sectionLabel()">When</span>
+                    <span :class="ui.sectionLabel()">When</span>
                     <span class="text-2xs text-subtle">what wakes the agent</span>
                 </div>
                 <!-- The trigger picker LIVES IN ITS OWN HALF, at the head of the fields it governs, rather than
@@ -361,7 +361,7 @@ const setProvider = (provider: string): void => {
                     </div>
                     <label class="ui-field">
                         <span class="ui-field-label">Only this repo (optional)</span>
-                        <input v-model="form.repo" placeholder="every repo the change touched" class="font-mono" :class="cmp.input()" />
+                        <input v-model="form.repo" placeholder="every repo the change touched" class="font-mono" :class="ui.input()" />
                     </label>
                 </template>
                 <template v-if="form.kind === 'listener'">
@@ -396,7 +396,7 @@ const setProvider = (provider: string): void => {
                                 rows="2"
                                 placeholder="https://example.com&#10;https://www.example.com"
                                 class="font-mono"
-                                :class="[cmp.input(), touched.has('origins') && originsError ? 'ui-field-input-error' : '']"
+                                :class="[ui.input(), touched.has('origins') && originsError ? 'ui-field-input-error' : '']"
                                 @blur="markTouched('origins')"
                             ></textarea>
                             <span v-if="touched.has('origins') && originsError" class="ui-field-error">
@@ -426,7 +426,7 @@ const setProvider = (provider: string): void => {
                                 v-model="form.googleClientId"
                                 placeholder="1234-abc.apps.googleusercontent.com"
                                 class="font-mono"
-                                :class="cmp.input()"
+                                :class="ui.input()"
                             />
                             <p class="text-2xs text-subtle">Your site's own OAuth client. Add each allowed site to it as an authorized origin.</p>
                         </label>
@@ -453,17 +453,17 @@ const setProvider = (provider: string): void => {
                         <template v-if="form.antiBot === 'turnstile'">
                             <label class="ui-field">
                                 <span class="ui-field-label">Turnstile site key</span>
-                                <input v-model="form.turnstileSiteKey" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
+                                <input v-model="form.turnstileSiteKey" placeholder="0x4AAA…" class="font-mono" :class="ui.input()" />
                             </label>
                             <label class="ui-field">
                                 <span class="ui-field-label">Turnstile secret key</span>
-                                <input v-model="form.turnstileSecret" type="password" placeholder="0x4AAA…" class="font-mono" :class="cmp.input()" />
+                                <input v-model="form.turnstileSecret" type="password" placeholder="0x4AAA…" class="font-mono" :class="ui.input()" />
                                 <p class="text-2xs text-subtle">Stays in your sandbox — only the site key is ever sent to a visitor's browser.</p>
                             </label>
                         </template>
                         <label class="ui-field">
                             <span class="ui-field-label">Greeting (optional)</span>
-                            <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="cmp.input()" />
+                            <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="ui.input()" />
                         </label>
                         <label class="ui-field">
                             <span class="ui-field-label">Daily message limit</span>
@@ -472,7 +472,7 @@ const setProvider = (provider: string): void => {
                                 type="number"
                                 min="1"
                                 :placeholder="String(WEBCHAT_DAILY_MAX_DEFAULT)"
-                                :class="cmp.input()"
+                                :class="ui.input()"
                             />
                             <p class="text-2xs text-subtle">
                                 Each message runs an agent turn on your account. Blank means {{ WEBCHAT_DAILY_MAX_DEFAULT }} a day.
@@ -508,13 +508,13 @@ const setProvider = (provider: string): void => {
                     </div>
                     <label v-if="!isDoorbell" class="ui-field">
                         <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
-                        <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="cmp.input()" />
+                        <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="ui.input()" />
                     </label>
                     <!-- The second narrowing axis, for the one source that has one: CI's branch. Without it, "wake me
                  when CI fails" means every agent's branch as well as the one that ships. -->
                     <label v-if="branchField" class="ui-field">
                         <span class="ui-field-label">{{ branchField.label }}</span>
-                        <input v-model="form.branch" :placeholder="branchField.placeholder" class="font-mono" :class="cmp.input()" />
+                        <input v-model="form.branch" :placeholder="branchField.placeholder" class="font-mono" :class="ui.input()" />
                         <p class="text-2xs text-subtle">{{ branchField.hint }}</p>
                     </label>
                 </template>
@@ -546,10 +546,10 @@ const setProvider = (provider: string): void => {
                     </div>
                     <label v-if="schedule.freq === 'minutes'" class="flex items-center gap-2 text-xs text-muted">
                         Every
-                        <input v-model.number="schedule.everyMinutes" type="number" min="1" max="59" class="w-20" :class="cmp.input()" /> minutes
+                        <input v-model.number="schedule.everyMinutes" type="number" min="1" max="59" class="w-20" :class="ui.input()" /> minutes
                     </label>
                     <label v-if="schedule.freq === 'monthly'" class="flex items-center gap-2 text-xs text-muted">
-                        On day <input v-model.number="schedule.dayOfMonth" type="number" min="1" max="31" class="w-20" :class="cmp.input()" />
+                        On day <input v-model.number="schedule.dayOfMonth" type="number" min="1" max="31" class="w-20" :class="ui.input()" />
                     </label>
                     <label
                         v-if="schedule.freq === 'daily' || schedule.freq === 'weekly' || schedule.freq === 'monthly'"
@@ -557,9 +557,9 @@ const setProvider = (provider: string): void => {
                     >
                         <!-- Wide enough for a 12-hour locale: `w-28` fit "09:00" and the picker glyph, so every
                              en-US browser rendered "09:00 A" with the M clipped off. -->
-                        At <input v-model="schedule.time" type="time" class="w-36" :class="cmp.input()" />
+                        At <input v-model="schedule.time" type="time" class="w-36" :class="ui.input()" />
                     </label>
-                    <input v-if="schedule.freq === 'custom'" v-model="schedule.cron" placeholder="0 9 * * 1-5" :class="cmp.input('font-mono')" />
+                    <input v-if="schedule.freq === 'custom'" v-model="schedule.cron" placeholder="0 9 * * 1-5" :class="ui.input('font-mono')" />
                     <p v-if="schedule.freq === 'custom'" class="text-2xs text-subtle">Standard 5-field cron: minute hour day month weekday.</p>
                     <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
                     <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
@@ -591,7 +591,7 @@ const setProvider = (provider: string): void => {
 
             <div class="flex min-w-0 flex-col gap-3 @3xl:border-l @3xl:border-line @3xl:pl-5">
                 <div class="flex items-baseline gap-2">
-                    <span :class="cmp.sectionLabel()">Then</span>
+                    <span :class="ui.sectionLabel()">Then</span>
                     <span class="text-2xs text-subtle">what it wakes with</span>
                 </div>
                 <!-- The one field nothing validates, and the one that has to agree with the trigger beside it: a
@@ -608,7 +608,7 @@ const setProvider = (provider: string): void => {
                     </span>
                     <!-- IT IS A WRITING SURFACE, not a form control. What goes in it is the longest text on
                          this page by an order of magnitude — a briefing with numbered steps, the thing the whole
-                         automation turns on — and it was typeset as a name field: `cmp.input()`'s bordered box
+                         automation turns on — and it was typeset as a name field: `ui.input()`'s bordered box
                          at the form's own leading, its content behind a native scrollbar, and a resize grip that
                          did nothing because `flex-1` overrode every height a drag could set. So it is the same
                          field the story and workflow-step editors write into (<ProseField>): prose leading, no
@@ -735,7 +735,7 @@ const setProvider = (provider: string): void => {
                                 v-if="pinned"
                                 type="button"
                                 v-tooltip.top="`Back to the default model and account`"
-                                :class="cmp.iconButton()"
+                                :class="ui.iconButton()"
                                 aria-label="Back to the default model and account"
                                 @click="useDefaults"
                             >
@@ -766,7 +766,7 @@ const setProvider = (provider: string): void => {
                     <div class="ui-field mt-2">
                         <input
                             v-model="form.allowedTools"
-                            :class="cmp.input()"
+                            :class="ui.input()"
                             placeholder="Read, Grep, Glob"
                             aria-label="Tool names this job may call"
                         />
@@ -788,7 +788,7 @@ const setProvider = (provider: string): void => {
                         min="0"
                         step="10"
                         class="w-20 font-mono"
-                        :class="cmp.input(`disabled:cursor-default disabled:opacity-40`)"
+                        :class="ui.input(`disabled:cursor-default disabled:opacity-40`)"
                         :disabled="form.requireApproval"
                         aria-label="Seconds to hold each run before it starts"
                     />

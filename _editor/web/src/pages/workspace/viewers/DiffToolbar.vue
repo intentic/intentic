@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChangeStatusMark, Segmented, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, SegmentedControl, useDevice } from "@intentic/ui";
 import type { DiffLayout } from "../../../composables/useLayout";
 import { useLayout } from "../../../composables/useLayout";
 import type { ChangeStatus } from "@intentic/extension-api";
@@ -79,7 +79,7 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
         </span>
         <slot name="badges" />
         <ReviewStat :code="code" :counting="counting" :additions="additions" :deletions="deletions" />
-        <Segmented v-if="!mobile" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
+        <SegmentedControl v-if="!mobile" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
         <!-- A default that silently removes lines has to keep saying so, which is why this is a labelled toggle
              and not one more glyph: "Comments" with an eye through it is readable at a glance as a state. -->
         <button

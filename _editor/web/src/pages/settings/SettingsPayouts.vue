@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ClaimChallenge, CreatorState } from "@intentic-app/api-contract";
-import { Card, cmp, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Card, ui, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
@@ -201,7 +201,7 @@ const connect = async (): Promise<void> => {
                         <input
                             v-model="publisher"
                             placeholder="your publisher name"
-                            :class="cmp.input('min-w-0 flex-1')"
+                            :class="ui.input('min-w-0 flex-1')"
                             @keyup.enter="askChallenge"
                         />
                         <Button label="Check" severity="secondary" size="small" :loading="checking" @click="askChallenge" />

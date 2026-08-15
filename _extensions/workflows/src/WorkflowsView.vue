@@ -2,7 +2,7 @@
 import {
     AnchoredOverlay,
     Button,
-    cmp,
+    ui,
     ConfirmDialog,
     Icon,
     InfoHint,
@@ -355,9 +355,9 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
         <!-- A link to a run that has rolled off the ledger. Not an error — nothing failed and nothing is wrong
              with the card that sent you here — so it states the fact and leaves the page usable beneath it. -->
-        <div v-if="lostRunId !== undefined" :class="cmp.alertInfo('mb-4')">
+        <Notice v-if="lostRunId !== undefined" tone="info" class="mb-4">
             Run <span class="font-mono">{{ lostRunId }}</span> is no longer on the record — the ledger keeps the last 50 runs.
-        </div>
+        </Notice>
 
         <div class="flex flex-col gap-6">
             <!-- Runs in flight sit at the top, above the designs: while something is going, that is the page.
@@ -368,7 +368,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <Icon name="spinner" class="animate-spin text-2xs text-link" />
-                    <span :class="cmp.sectionLabel('text-link')">Running now</span>
+                    <span :class="ui.sectionLabel('text-link')">Running now</span>
                 </div>
                 <div class="flex flex-col gap-2">
                     <button
@@ -400,7 +400,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
             <section v-if="workflows.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
-                    <span :class="cmp.sectionLabel()">Your workflows</span>
+                    <span :class="ui.sectionLabel()">Your workflows</span>
                     <span class="text-2xs font-medium text-subtle">{{ workflows.length }}</span>
                 </div>
                 <div class="flex flex-col gap-3">
@@ -442,7 +442,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </Button>
                             <button
                                 type="button"
-                                :class="cmp.iconButton('md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
+                                :class="ui.iconButton('md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
                                 :aria-label="`Edit ${workflow.name}`"
                                 v-tooltip.top="`Edit`"
                                 @click="openSaved(workflow.id)"
@@ -451,7 +451,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </button>
                             <button
                                 type="button"
-                                :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
+                                :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
                                 :aria-label="`Delete ${workflow.name}`"
                                 v-tooltip.top="`Delete`"
                                 @click="confirmRemoveId = workflow.id"
@@ -510,7 +510,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         </Button>
                         <button
                             type="button"
-                            :class="cmp.iconButton('md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
+                            :class="ui.iconButton('md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
                             :aria-label="`Edit ${design.name}`"
                             v-tooltip.top="`Edit`"
                             @click="editLoop(design)"
@@ -519,7 +519,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         </button>
                         <button
                             type="button"
-                            :class="cmp.iconButton('hover:text-danger md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
+                            :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
                             :aria-label="`Delete ${design.name}`"
                             v-tooltip.top="`Delete`"
                             @click="confirmRemoveLoopId = design.id"
@@ -539,7 +539,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                  column of thumbnails. The first is the plain one, and it is the one to click first. -->
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
-                    <span :class="cmp.sectionLabel()">Start from a template</span>
+                    <span :class="ui.sectionLabel()">Start from a template</span>
                     <span class="min-w-0 text-2xs text-subtle">
                         {{
                             workflows.length > 0
@@ -547,7 +547,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 : `Nothing saved yet. Open a ready-made design and edit it — nothing is saved or spent until you say so.`
                         }}
                     </span>
-                    <button type="button" :class="cmp.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
+                    <button type="button" :class="ui.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
                         or start from blank
                     </button>
                 </div>

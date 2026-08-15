@@ -2,7 +2,7 @@
 
      IT REPLACES THE POST WITHOUT MOVING IT. Same measure, same size, same leading, same left edge as
      <DraftPost> beside it, so clicking the pencil does not redraw the row — the words stay exactly where your
-     eye left them and simply become typeable. The first version put a bordered `cmp.input()` textarea here,
+     eye left them and simply become typeable. The first version put a bordered `ui.input()` textarea here,
      which is the FORM field: a boxed control of a fixed height, right for a name or a shell command and wrong
      for the only thing on this page that is read in sentences. <ProseField> is the writing field — no border
      and no fill until the caret is in it, and it grows with the text through a hidden replica rather than a

@@ -1,6 +1,6 @@
 import { ref } from "vue";
-import { clipboardOf } from "../clipboard.js";
-import type { ShikiLang } from "../composables/shikiLangs.js";
+import { clipboardOf } from "../lib/clipboard.js";
+import type { ShikiLang } from "../lib/shikiLangs.js";
 import { JSON_FIGURE_LANGS } from "./figures.js";
 
 /* Fenced code blocks inside rendered markdown: Shiki colouring plus a copy button.

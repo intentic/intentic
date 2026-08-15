@@ -3,7 +3,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { cmp, Segmented, StatusBadge } from "@intentic/ui";
+import { ui, SegmentedControl, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { startAgent } from "../../composables/agents/agentActions";
@@ -203,10 +203,10 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                     :label="confirmLabel"
                     @click="apply"
                 />
-                <button v-if="update.review" type="button" :class="cmp.linkButton(`text-2xs`)" @click="openReview(update.review.conversationId)">
+                <button v-if="update.review" type="button" :class="ui.linkButton(`text-2xs`)" @click="openReview(update.review.conversationId)">
                     Your agent already read this diff — open its review
                 </button>
-                <button v-else type="button" :class="cmp.linkButton(`text-2xs`)" @click="readDiff">Have an agent read the diff first</button>
+                <button v-else type="button" :class="ui.linkButton(`text-2xs`)" @click="readDiff">Have an agent read the diff first</button>
             </div>
         </div>
 
@@ -217,15 +217,15 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
         <!-- The way back, ordinary and visible: "the last update made it worse" needs no failing probe. -->
         <p v-if="extension.previous && extension.health?.state !== `unhealthy`" class="text-2xs text-subtle">
             The previous version is kept{{ extension.previous.version !== undefined ? ` (v${extension.previous.version})` : `` }}.
-            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="busy" @click="revert">
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="busy" @click="revert">
                 Revert to {{ short(extension.previous.ref) }}
             </button>
         </p>
 
         <!-- The standing answer: what happens the next time the registry lists a release of THIS extension. -->
         <div>
-            <p :class="cmp.sectionLabel(`mb-1.5 text-2xs`)">When a new release is listed</p>
-            <Segmented
+            <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">When a new release is listed</p>
+            <SegmentedControl
                 :model-value="policy.updates"
                 :options="[
                     { label: `Notify`, value: `notify` },

@@ -197,7 +197,7 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
 };
 
-/* An open card shows one of its three questions at a time. The pills are <Segmented>, which renders tabs — found
+/* An open card shows one of its three questions at a time. The pills are <SegmentedControl>, which renders tabs — found
  * by role so this cannot be satisfied by a stray button whose label happens to match a heading in the body. */
 const openTab = async (el: HTMLElement, label: string): Promise<void> => {
     [...el.querySelectorAll(`[role="tab"]`)]

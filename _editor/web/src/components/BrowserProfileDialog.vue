@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import BrowserSelectMenu from "./BrowserSelectMenu.vue";
 import { keyIntent, type KeyFrame } from "../composables/browser/keyIntent";
@@ -260,14 +259,12 @@ const finish = (): void => {
 </script>
 
 <template>
-    <Dialog
-        :visible="visible"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="false"
-        :style="{ width: '64rem', maxWidth: '95vw' }"
+    <Modal
+        :open="visible"
+        size="xl"
+        :dismissable="false"
         :header="browsing ? `${label} — your browser` : `Log in to ${label}`"
-        @update:visible="!$event && cancel()"
+        @update:open="!$event && cancel()"
     >
         <p class="mb-3 text-xs text-muted">
             <template v-if="browsing">
@@ -312,7 +309,7 @@ const finish = (): void => {
                 autocomplete="off"
                 aria-label="Address"
                 :disabled="status !== 'ready'"
-                :class="cmp.input('min-w-0 flex-1 font-mono text-xs')"
+                :class="ui.input('min-w-0 flex-1 font-mono text-xs')"
                 @focus="editingAddress = true"
                 @blur="editingAddress = false"
                 @keydown.enter="go"
@@ -363,5 +360,5 @@ const finish = (): void => {
                 </Button>
             </template>
         </template>
-    </Dialog>
+    </Modal>
 </template>

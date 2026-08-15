@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { ChangeStatusMark, cmp, useDevice, type IconName } from "@intentic/ui";
+import { ChangeStatusMark, ui, Modal, useDevice, type IconName } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
-import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import HoverCard from "../../components/HoverCard.vue";
@@ -466,7 +465,7 @@ const viewOf = (repo: string, side: GitDiffSide): SectionView => sectionViews.va
 // primary Commit off the edge entirely. Everything secondary is a 24px icon with a tooltip and an aria-label;
 // only the primary action spends horizontal space on a word.
 // The design system's toolbar icon button, plus this panel's own disabled treatment.
-const ICON_BUTTON = cmp.iconButton(`disabled:opacity-40`);
+const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 
 /* Opens the diff of the ROW, not of the file: a staged row shows index-vs-HEAD, an unstaged row
  * worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
@@ -1746,15 +1745,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              to their last commit (git could return them anyway), untracked files leave the disk (git could
              not). The old prompt asserted the second unconditionally, so the case where it was true looked
              exactly like the many where it wasn't. -->
-        <Dialog
-            :visible="pendingDiscard !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '24rem' }"
-            header="Discard changes"
-            @update:visible="pendingDiscard = undefined"
-        >
+        <Modal :open="pendingDiscard !== undefined" size="sm" header="Discard changes" @update:open="pendingDiscard = undefined">
             <template v-if="pendingDiscard">
                 <p class="break-words text-xs text-content">Discard {{ pendingDiscard.what }}?</p>
                 <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
@@ -1778,7 +1769,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = undefined" />
                 <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
-        </Dialog>
+        </Modal>
 
         <!-- The full session title behind a row's origin chip — the same card the chat tab strip raises, mounted
              at <body> so it clears this sidebar's narrow, scrolling column. -->

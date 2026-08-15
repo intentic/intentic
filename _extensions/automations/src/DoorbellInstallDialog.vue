@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, cmp, CopyButton, Dialog, Icon, Notice, noticeOf } from "@intentic/extension-ui";
+import { Button, CopyButton, Icon, Modal, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";
 import { type DoorbellInstall, embedSnippet, useAutomations, useDoorbellInstalls } from "./useAutomations";
@@ -64,7 +64,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
 </script>
 
 <template>
-    <Dialog v-model:visible="visible" :modal="true" :draggable="false" :dismissable-mask="true" :style="{ width: '34rem' }" header="Install">
+    <Modal v-model:open="visible" size="md" header="Install">
         <div class="flex flex-col gap-4">
             <!-- The deliverable, first and unmissable. Everything below it is about whether it worked. -->
             <div class="ui-field">
@@ -140,5 +140,5 @@ const allowOrigin = async (origin: string): Promise<void> => {
                 <Button label="Done" @click="visible = false" />
             </div>
         </template>
-    </Dialog>
+    </Modal>
 </template>

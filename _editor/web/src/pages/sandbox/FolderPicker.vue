@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
-import { cmp, ResponsiveOverlay } from "@intentic/ui";
+import { ui, ResponsiveOverlay } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { WORKSPACE_TREE } from "../../composables/queryKeys";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -154,7 +154,7 @@ const remove = (path: string): void => {
     <div class="flex min-w-0 flex-1 flex-col gap-1">
         <!-- THE ANSWER IS THE CONTROL. What is chosen sits in the trigger as removable chips, so the common
              journey — see it, drop one — never opens the tree at all. -->
-        <div ref="anchor" :class="cmp.input('flex min-h-[2.25rem] flex-wrap items-center gap-1.5 py-1.5')" role="group" :aria-label="label">
+        <div ref="anchor" :class="ui.input('flex min-h-[2.25rem] flex-wrap items-center gap-1.5 py-1.5')" role="group" :aria-label="label">
             <button
                 v-for="path in picked"
                 :key="path"
@@ -172,7 +172,7 @@ const remove = (path: string): void => {
 
             <button
                 type="button"
-                :class="cmp.linkButton('ml-auto h-auto shrink-0 gap-1 py-0 text-xs text-muted hover:text-content')"
+                :class="ui.linkButton('ml-auto h-auto shrink-0 gap-1 py-0 text-xs text-muted hover:text-content')"
                 :aria-expanded="open"
                 @click="open = !open"
             >
@@ -186,8 +186,8 @@ const remove = (path: string): void => {
              the section heading the field belongs to. It still flips up by itself when the window is too short
              for it, which is the one case above is better. -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" header="Choose a folder" panel-class="w-80 p-1">
-            <div v-if="query.isPending.value" :class="cmp.emptyState('py-4 text-xs')"><Icon name="spinner" spin /> Reading your workspace…</div>
-            <div v-else-if="rows.length === 0" :class="cmp.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
+            <div v-if="query.isPending.value" :class="ui.emptyState('py-4 text-xs')"><Icon name="spinner" spin /> Reading your workspace…</div>
+            <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
             <div v-else class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
                     <!-- Opening a folder and choosing it are different intents, so they are different targets.
@@ -196,7 +196,7 @@ const remove = (path: string): void => {
                     <button
                         v-if="openable(row.entry)"
                         type="button"
-                        :class="cmp.iconButton('h-6 w-5')"
+                        :class="ui.iconButton('h-6 w-5')"
                         :aria-expanded="opened.has(row.entry.path)"
                         :aria-label="`${opened.has(row.entry.path) ? `Collapse` : `Expand`} ${row.entry.path}`"
                         @click="expand(row.entry)"

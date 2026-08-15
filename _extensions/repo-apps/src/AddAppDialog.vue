@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Checkbox, cmp, Dialog, Icon } from "@intentic/extension-ui";
+import { Button, Card, Checkbox, ui, Icon, Modal } from "@intentic/extension-ui";
 import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
@@ -85,15 +85,7 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Dialog
-        v-model:visible="visible"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :style="{ width: '34rem' }"
-        header="Add an app"
-        @hide="reset"
-    >
+    <Modal v-model:open="visible" size="md" header="Add an app" @hide="reset">
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">Pick one or more templates to scaffold into this monorepo. Name each instance to run several of a kind.</p>
             <Card v-for="template in templates" :key="template.key" class="flex flex-col gap-2">
@@ -119,7 +111,7 @@ const submit = (): void => {
                     <input
                         v-model="instanceNames[template.key]"
                         type="text"
-                        :class="cmp.input(`flex-1 px-2 py-1 text-xs`)"
+                        :class="ui.input(`flex-1 px-2 py-1 text-xs`)"
                         placeholder="e.g. shop-api"
                     />
                 </div>
@@ -130,5 +122,5 @@ const submit = (): void => {
                 </Button>
             </div>
         </div>
-    </Dialog>
+    </Modal>
 </template>

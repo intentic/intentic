@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Segmented } from "@intentic/extension-ui";
+import { Icon, SegmentedControl } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div v-if="sheets.length > 1" class="flex shrink-0 items-center overflow-x-auto border-b border-line px-2 py-1.5">
-            <Segmented v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
+            <SegmentedControl v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
         </div>
         <div class="min-h-0 flex-1">
             <div v-if="loading" class="flex h-full items-center justify-center text-muted"><Icon name="spinner" class="text-xl" spin /></div>

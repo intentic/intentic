@@ -16,7 +16,7 @@
      teal and green to gold — so neighbours are neighbours, and the grey that ends the row (an app with a
      colour in it, rather than an app made OF one) reads as the deliberate exception it is. -->
 <script setup lang="ts">
-import { type Accent, accentHex } from "../themeColor.js";
+import { type Accent, accentHex } from "../lib/themeColor.js";
 
 /** The accent, as `#rrggbb` — always one of the swatches below. */
 const model = defineModel<string>({ required: true });

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commands, executeCommand, type RegisteredCommand } from "../composables/commands/useCommands";
@@ -10,7 +9,7 @@ import { sessionIdFrom } from "../composables/agents/sessionRef";
 import { useAgents } from "../composables/agents/useAgents";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
-import { iconForEntry, type IconName } from "@intentic/ui";
+import { iconForEntry, type IconName, Modal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
@@ -146,17 +145,7 @@ const onShow = async (): Promise<void> => {
 </script>
 
 <template>
-    <Dialog
-        v-model:visible="isOpen"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :show-header="false"
-        position="top"
-        :style="{ width: '36rem' }"
-        :pt="{ content: '!p-0 !overflow-hidden !rounded-lg' }"
-        @show="onShow"
-    >
+    <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
         <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Go to file">
             <div class="relative border-b border-line">
                 <Icon
@@ -266,5 +255,5 @@ const onShow = async (): Promise<void> => {
                 <p v-else-if="rows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No files match.</p>
             </div>
         </div>
-    </Dialog>
+    </Modal>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { cmp } from "@intentic/ui";
+import { ui } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
@@ -140,7 +140,7 @@ const pick = (target: AgentProvider, ready: boolean) => (ready ? view.selectProv
             <span class="min-w-0 flex-1 truncate text-left font-medium text-body" :class="prominent ? `text-sm` : `text-xs`">
                 Connecting {{ liveLabel }}
             </span>
-            <button type="button" :class="cmp.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)" @click="abandon">
+            <button type="button" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)" @click="abandon">
                 Cancel
             </button>
         </div>
@@ -200,7 +200,7 @@ const pick = (target: AgentProvider, ready: boolean) => (ready ? view.selectProv
             <!-- The door to everything this card deliberately doesn't carry — a second account, an account to
                  drop, the mechanics behind each row. It is a link rather than a button because it is a place,
                  and quiet because nobody arriving here for the first time needs it. -->
-            <button type="button" :class="cmp.linkButton(`mt-1 text-2xs text-subtle hover:text-content`)" @click="router.push(`/sandbox/agent`)">
+            <button type="button" :class="ui.linkButton(`mt-1 text-2xs text-subtle hover:text-content`)" @click="router.push(`/sandbox/agent`)">
                 All AI accounts
             </button>
         </div>

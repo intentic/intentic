@@ -21,7 +21,7 @@ export const daySpan = (from: string, to: string): number => Math.round((dayToMs
 // ---- the window ------------------------------------------------------------------------------------------
 
 export type RangePreset = "7d" | "30d" | "90d" | "all";
-// Mutable by design — <Segmented> takes its options array as-is.
+// Mutable by design — <SegmentedControl> takes its options array as-is.
 export const RANGE_PRESETS: { label: string; value: RangePreset }[] = [
     { label: `7 days`, value: `7d` },
     { label: `30 days`, value: `30d` },

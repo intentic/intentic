@@ -2,7 +2,7 @@
 import type { PickedModel } from "@intentic/extension-api";
 import {
     Checkbox,
-    cmp,
+    ui,
     Icon,
     InfoHint,
     Notice,
@@ -449,7 +449,7 @@ const run = async (model: PickedModel): Promise<void> =>
 
         <template v-else>
             <section class="mb-8 flex flex-col gap-4">
-                <div v-if="repos.length === 0 && !storiesLoading" :class="cmp.emptyState()">
+                <div v-if="repos.length === 0 && !storiesLoading" :class="ui.emptyState()">
                     No repository here runs an app yet. Give one a panel (an <span class="font-mono">operator/</span> directory it can serve) and its
                     stories become testable.
                 </div>
@@ -550,7 +550,7 @@ const run = async (model: PickedModel): Promise<void> =>
                         <span :class="[skeletonBar, `h-2.5 w-20 shrink-0`]" />
                     </div>
                 </template>
-                <div v-else-if="runs.length === 0" :class="cmp.emptyState('m-3')">
+                <div v-else-if="runs.length === 0" :class="ui.emptyState('m-3')">
                     Nothing has been tested yet. Press Run below — reports land in
                     <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository.
                 </div>

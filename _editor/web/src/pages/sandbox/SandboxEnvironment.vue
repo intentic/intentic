@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -39,7 +39,7 @@ const outline = useSandboxOutline(reading);
         </div>
         <!-- `!reading` and not merely `!outline`: the sentence must be silent for the whole wait, including the
              beat before the outline is allowed to appear. -->
-        <div v-else-if="empty && !reading" :class="cmp.emptyState('py-10')">
+        <div v-else-if="empty && !reading" :class="ui.emptyState('py-10')">
             No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and rebuild.
         </div>
 

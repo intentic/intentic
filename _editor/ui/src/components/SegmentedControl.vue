@@ -1,4 +1,4 @@
-<!-- Segmented control: a row of small toggle pills for switching between a few exclusive views
+<!-- SegmentedControl control: a row of small toggle pills for switching between a few exclusive views
      (Preview/Source, Linux/Windows, Name/Content). Active pill sits on the overlay surface; idle
      pills are muted text. Native buttons keep it keyboard-accessible without ARIA wiring. -->
 <script setup lang="ts" generic="T extends string">

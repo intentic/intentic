@@ -96,15 +96,18 @@
      * these at LOW OPACITY as a tint (cmp.button* and the primeng.css primary-Button override), so
      * the fill tokens no longer carry a solid-fill WCAG contract for buttons — but the values still
      * need to clear WCAG AA when used solid (checkboxes, toggles). Each scheme picks the fill and
-     * the label that sits on it TOGETHER. `fill-content` is the shared label color. */
+     * the label that sits on it TOGETHER. `fill-content` is the shared label color.
+     *
+     * ONLY `primary` CARRIES A HOVER, because primary is the only one ever painted solid on something that
+     * hovers (the primary-Button override in primeng.css). success/warning/danger each had one too, defined in
+     * both schemes and read by nothing — nine declarations that shipped in the stylesheet for a state no
+     * control has. The status fills are TINT SOURCES (`--ui-button-tone`), and a tint deepens by changing its
+     * alpha rather than by swapping the colour underneath it. */
     --color-primary-fill:       var(--role-primary-fill);
     --color-primary-fill-hover: var(--role-primary-fill-hover);
     --color-success-fill:       var(--role-success-fill);
-    --color-success-fill-hover: var(--role-success-fill-hover);
     --color-warning-fill:       var(--role-warning-fill);
-    --color-warning-fill-hover: var(--role-warning-fill-hover);
     --color-danger-fill:        var(--role-danger-fill);
-    --color-danger-fill-hover:  var(--role-danger-fill-hover);
     --color-fill-content:       var(--role-fill-content);
 
 }
@@ -158,11 +161,8 @@
     --role-primary-fill:       var(--color-primary-700);
     --role-primary-fill-hover: var(--color-primary-800);
     --role-success-fill:       var(--color-success-700);
-    --role-success-fill-hover: var(--color-success-800);
     --role-warning-fill:       var(--color-warning-700);
-    --role-warning-fill-hover: var(--color-warning-800);
     --role-danger-fill:        var(--color-danger-700);
-    --role-danger-fill-hover:  var(--color-danger-800);
     --role-fill-content:       var(--color-white);
     --role-series-1:     var(--color-series-1-light);
     --role-series-2:     var(--color-series-2-light);
@@ -196,11 +196,8 @@
     --role-primary-fill:       var(--color-primary-400);
     --role-primary-fill-hover: var(--color-primary-300);
     --role-success-fill:       var(--color-success-400);
-    --role-success-fill-hover: var(--color-success-300);
     --role-warning-fill:       var(--color-warning-400);
-    --role-warning-fill-hover: var(--color-warning-300);
     --role-danger-fill:        var(--color-danger-400);
-    --role-danger-fill-hover:  var(--color-danger-300);
     --role-fill-content:       var(--color-surface-900);
     --role-series-1:     var(--color-series-1-dark);
     --role-series-2:     var(--color-series-2-dark);

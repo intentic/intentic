@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic/ui";
+import { ui } from "@intentic/ui";
 import Button from "primevue/button";
 import SuggestedSessionBox from "../agents/SuggestedSessionBox.vue";
 import { usePushFlow } from "../composables/workspace/usePushFlow";

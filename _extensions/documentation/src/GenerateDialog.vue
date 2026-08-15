@@ -5,7 +5,7 @@
      that changed. So the presets are "what has no document" and "what the tool says is stale", with everything as
      an explicit choice rather than the path of least resistance. -->
 <script setup lang="ts">
-import { AgentRunButton, type AgentRunChoice, Button, Checkbox, Dialog, Icon, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, type AgentRunChoice, Button, Checkbox, Icon, Modal, useAgentRunPick } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { host } from "./host";
 import type { DocIndex } from "./docModel.js";
@@ -54,7 +54,7 @@ const start = (): void => {
 </script>
 
 <template>
-    <Dialog v-model:visible="open" modal :header="`Generate documentation for ${label}`" :style="{ width: `34rem` }">
+    <Modal v-model:open="open" size="md" :header="`Generate documentation for ${label}`">
         <div class="flex flex-col gap-4">
             <p class="text-xs text-muted">
                 One agent writes the repository's map first — the components, the vocabulary, the reading order. The packages you pick below are then
@@ -102,5 +102,5 @@ const start = (): void => {
                 />
             </div>
         </div>
-    </Dialog>
+    </Modal>
 </template>

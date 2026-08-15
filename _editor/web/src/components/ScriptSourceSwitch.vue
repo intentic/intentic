@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Segmented } from "@intentic/ui";
+import { SegmentedControl } from "@intentic/ui";
 import { environment } from "../environments/environment";
 import { type ScriptSource, scriptSource } from "../environments/scriptCommand";
 
@@ -25,6 +25,6 @@ const OPTIONS: { label: string; value: ScriptSource; title: string }[] = [
 <template>
     <div v-if="!environment.production" class="flex items-center gap-2 text-2xs text-warning">
         <span>Local dev: script source</span>
-        <Segmented v-model="scriptSource" :options="OPTIONS" size="xs" />
+        <SegmentedControl v-model="scriptSource" :options="OPTIONS" size="xs" />
     </div>
 </template>

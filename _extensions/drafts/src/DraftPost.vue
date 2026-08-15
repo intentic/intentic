@@ -19,7 +19,7 @@
      as a rendering bug. -->
 <script setup lang="ts">
 import type { DraftSummary } from "@intentic/sandbox-contract";
-import { cmp, Markdown } from "@intentic/extension-ui";
+import { ui, Markdown } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "./attachmentPreviews";
 import { LONG_POST, postsATitle } from "./postText";
@@ -69,7 +69,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
             <button
                 v-if="foldable"
                 type="button"
-                :class="cmp.linkButton(`mt-1 gap-1 text-2xs text-muted hover:text-content`)"
+                :class="ui.linkButton(`mt-1 gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
                 {{ expanded ? `Show less` : `Show the whole post` }}

@@ -8,10 +8,9 @@
      It ends on the link itself. Sharing is a gesture with a result, and a dialog that closed on success would
      leave the user hunting for the thing they just made. -->
 <script setup lang="ts">
-import { cmp, CopyButton, Icon } from "@intentic/ui";
+import { ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 import { ref, watch } from "vue";
 import { jsonBody } from "../composables/sandbox/jsonBody";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
@@ -69,12 +68,11 @@ const share = async (): Promise<void> => {
 </script>
 
 <template>
-    <Dialog
-        :visible="visible"
-        modal
+    <Modal
+        :open="visible"
+        size="md"
         header="Share this conversation"
-        :style="{ width: '30rem', maxWidth: '92vw' }"
-        @update:visible="emit(`update:visible`, $event)"
+        @update:open="emit(`update:visible`, $event)"
     >
         <!-- After: the link, and nothing to decide. -->
         <div v-if="result" class="flex flex-col gap-3">
@@ -99,11 +97,11 @@ const share = async (): Promise<void> => {
 
         <!-- Before: the two decisions. -->
         <form v-else class="flex flex-col gap-4" @submit.prevent="name.trim() && share()">
-            <div v-if="error" :class="cmp.alertDanger('px-3 py-2 text-xs')">{{ error }}</div>
+            <Notice v-if="error" tone="danger">{{ error }}</Notice>
 
             <label class="ui-field">
                 <span class="ui-field-label">Title</span>
-                <input v-model="name" autofocus maxlength="80" :class="cmp.input()" />
+                <input v-model="name" autofocus maxlength="80" :class="ui.input()" />
                 <span class="ui-field-hint">Shown at the top of the page, and used to name the link.</span>
             </label>
 
@@ -147,5 +145,5 @@ const share = async (): Promise<void> => {
             </template>
             <CopyButton v-if="result?.url" :text="result.url" label="Copy link" />
         </template>
-    </Dialog>
+    </Modal>
 </template>

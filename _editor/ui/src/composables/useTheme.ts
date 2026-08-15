@@ -1,5 +1,5 @@
 import { ref, type Ref } from "vue";
-import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../themeColor.js";
+import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../lib/themeColor.js";
 
 export type ColorScheme = "light" | "dark";
 

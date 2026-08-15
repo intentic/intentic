@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SettingValue } from "@intentic/extension-api";
 import type { SettingContribution } from "@intentic/extension-manifest";
-import { cmp, Picker } from "@intentic/ui";
+import { ui, Picker } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { onMounted } from "vue";
 import { extensionSettingsStore } from "../../composables/extensions/useExtensionSettings";
@@ -55,7 +55,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 v-if="setting.secret === true"
                 type="password"
                 autocomplete="off"
-                :class="cmp.input(`w-48 shrink-0 py-1 text-xs`)"
+                :class="ui.input(`w-48 shrink-0 py-1 text-xs`)"
                 :placeholder="secretIsSet(setting) ? `•••••• (set)` : `Enter value`"
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
@@ -80,7 +80,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
             />
             <input
                 v-else
-                :class="cmp.input(`w-48 shrink-0 py-1 text-xs`)"
+                :class="ui.input(`w-48 shrink-0 py-1 text-xs`)"
                 :type="setting.type === `number` ? `number` : `text`"
                 :value="String(valueOf(setting) ?? ``)"
                 :aria-label="setting.title"

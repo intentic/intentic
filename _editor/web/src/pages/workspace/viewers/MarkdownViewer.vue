@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Icon, Markdown, ResponsiveOverlay, Segmented, useNarrow } from "@intentic/ui";
+import { ui, Icon, Markdown, ResponsiveOverlay, SegmentedControl, useNarrow } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
 import { useLayout } from "../../../composables/useLayout";
@@ -105,7 +105,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
 <template>
     <div ref="root" class="flex h-full min-h-0 flex-col">
         <div class="relative flex shrink-0 items-center gap-2 border-b border-line px-2 py-1.5">
-            <Segmented
+            <SegmentedControl
                 v-model="view"
                 :options="[
                     { label: `Preview`, value: `preview` },
@@ -133,7 +133,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             <button
                 v-if="dockable"
                 type="button"
-                :class="cmp.iconButton()"
+                :class="ui.iconButton()"
                 :aria-pressed="docked"
                 v-tooltip.bottom="docked ? `Hide outline` : `Show outline`"
                 :aria-label="docked ? `Hide outline` : `Show outline`"

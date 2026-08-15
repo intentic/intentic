@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { cmp, CopyButton } from "@intentic/ui";
+import { ui, CopyButton } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../composables/chat/useChat";
@@ -272,7 +272,7 @@ watch(flow, (live) => {
                     v-model="pasted"
                     name="connectCode"
                     :placeholder="pastePlaceholder"
-                    :class="cmp.input(`min-w-0 flex-1 py-1.5`)"
+                    :class="ui.input(`min-w-0 flex-1 py-1.5`)"
                     @keydown.enter="finish"
                 />
                 <Button label="Finish" size="small" :disabled="pasted.trim().length === 0" :loading="accountBusy === busyKey" @click="finish" />
@@ -287,7 +287,7 @@ watch(flow, (live) => {
             >
                 Name this account…
             </button>
-            <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="cmp.input(`min-w-0 py-1.5`)" />
+            <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.input(`min-w-0 py-1.5`)" />
         </template>
     </div>
 </template>

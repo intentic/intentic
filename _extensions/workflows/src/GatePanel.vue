@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Picker } from "@intentic/extension-ui";
+import { Button, ui, Icon, Picker } from "@intentic/extension-ui";
 import { GATE_DAILY_MAX_DEFAULT, type Workflow, type WorkflowGate } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import GateAccess from "./GateAccess.vue";
@@ -98,7 +98,7 @@ const setDailyMax = (raw: string): void => {
         <template v-else>
             <div class="grid grid-cols-2 gap-2">
                 <label class="flex min-w-0 flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">Deciding step</span>
+                    <span :class="ui.sectionLabel()">Deciding step</span>
                     <Picker
                         :model-value="gate.step"
                         :options="stepOptions"
@@ -108,7 +108,7 @@ const setDailyMax = (raw: string): void => {
                     />
                 </label>
                 <label class="flex min-w-0 flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">Field</span>
+                    <span :class="ui.sectionLabel()">Field</span>
                     <Picker
                         :model-value="gate.field"
                         :options="fieldOptions"
@@ -119,10 +119,10 @@ const setDailyMax = (raw: string): void => {
                 </label>
             </div>
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">Ships when it says</span>
+                <span :class="ui.sectionLabel()">Ships when it says</span>
                 <input
                     :value="gate.pass.join(`, `)"
-                    :class="cmp.input()"
+                    :class="ui.input()"
                     placeholder="pass"
                     @change="setPass(($event.target as HTMLInputElement).value)"
                 />
@@ -131,12 +131,12 @@ const setDailyMax = (raw: string): void => {
                 </span>
             </label>
             <label class="flex flex-col gap-1">
-                <span :class="cmp.sectionLabel()">Runs per day</span>
+                <span :class="ui.sectionLabel()">Runs per day</span>
                 <input
                     :value="gate.dailyMax ?? ``"
                     type="number"
                     min="1"
-                    :class="[cmp.input(), `w-24`]"
+                    :class="[ui.input(), `w-24`]"
                     :placeholder="`${GATE_DAILY_MAX_DEFAULT}`"
                     @input="setDailyMax(($event.target as HTMLInputElement).value)"
                 />
@@ -148,7 +148,7 @@ const setDailyMax = (raw: string): void => {
             <GateAccess v-if="gate.token !== undefined" :workflow="workflow" />
             <p v-else class="text-2xs text-subtle">Saving mints the webhook URL — it appears here and under the gate badge on the workflow's card.</p>
 
-            <button type="button" :class="cmp.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">
+            <button type="button" :class="ui.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">
                 Remove the gate — its URL stops working, and a future gate gets a new one
             </button>
         </template>

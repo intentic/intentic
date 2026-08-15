@@ -1,7 +1,7 @@
 <!-- The orientation line at the top of an operations board: "3 running · 1 stopped · 2 need attention".
      Answers "is anything wrong right now" before the reader parses a single row.
 
-     NOT <StatRow>, which is the document strip — big proportional numbers for unrelated measures a reader
+     NOT <StatStrip>, which is the document strip — big proportional numbers for unrelated measures a reader
      studies. These are a SINGLE measure split by state, read at a glance during an incident, so they are small,
      inline, and colour-coded by the same StatusVariant vocabulary <StatusBadge> uses. One tally vocabulary
      across the app: Pipelines and Deployments had each written this out by hand, byte-identical down to the
@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import type { StatusVariant } from "./StatusBadge.vue";
 
-export interface CountItem {
+export interface TallyItem {
     readonly label: string;
     readonly value: number;
     readonly variant: StatusVariant;
@@ -45,7 +45,7 @@ const TEXT: Record<StatusVariant, string> = {
     primary: `text-primary-500`,
 };
 
-const { items } = defineProps<{ items: readonly CountItem[] }>();
+const { items } = defineProps<{ items: readonly TallyItem[] }>();
 </script>
 
 <template>

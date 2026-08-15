@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import Button from "primevue/button";
-import { BottomSheet, cmp, Segmented, useDevice } from "@intentic/ui";
-import Dialog from "primevue/dialog";
-import Popover from "primevue/popover";
+import { ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
@@ -193,23 +191,19 @@ const requestLand = async (): Promise<void> => {
     }
 };
 
-// The session's name, in every form anyone pastes it in — beside the chip on desktop, a sheet on a phone.
-const identity = ref<InstanceType<typeof Popover> | null>(null);
-const identitySheet = ref(false);
-const openIdentity = (event: MouseEvent): void => identity.value?.toggle(event);
+/* The session's name and the session's actions, each in the app's standard touch swap — anchored beside their
+ * trigger on desktop, a thumb-reachable sheet on a phone. Both were the hand-written pair <ResponsiveOverlay>
+ * exists to replace: a <BottomSheet> under `v-if="mobile"`, a PrimeVue <Popover> under `v-else`, and TWO open
+ * flags between them (a `*Sheet` boolean plus the popover's own internal state), which is the drift that
+ * component's header comment names. One flag each now, and the desktop half is measured against the window its
+ * anchor is in rather than the module-scope one. */
+const identityAnchor = ref<HTMLElement | null>(null);
+const identityOpen = ref(false);
 
-const menu = ref<InstanceType<typeof Popover> | null>(null);
-const menuSheet = ref(false);
-const openMenu = (event: MouseEvent): void => {
-    if (mobile.value) {
-        menuSheet.value = true;
-        return;
-    }
-    menu.value?.toggle(event);
-};
+const menuAnchor = ref<HTMLButtonElement | null>(null);
+const menuOpen = ref(false);
 const closeMenu = (): void => {
-    menuSheet.value = false;
-    menu.value?.hide();
+    menuOpen.value = false;
 };
 
 // Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
@@ -248,7 +242,7 @@ const confirmDiscard = (): void => {
             />
             <template v-else>
                 <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
-                <button type="button" aria-label="Rename agent" v-tooltip.bottom="'Rename'" :class="cmp.iconButton()" @click="edit.begin()">
+                <button type="button" aria-label="Rename agent" v-tooltip.bottom="'Rename'" :class="ui.iconButton()" @click="edit.begin()">
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
@@ -262,23 +256,24 @@ const confirmDiscard = (): void => {
                  exactly where retyping it is worst. -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
+                ref="identityAnchor"
                 class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px @2xl:inline-flex"
             >
-                <SessionChip :branch="fleetAgent.branch" reveal @reveal="openIdentity" />
+                <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
             <SessionChip
                 v-if="fleetAgent?.branch !== undefined && mobile"
                 :branch="fleetAgent.branch"
                 reveal
                 compact
-                @reveal="identitySheet = true"
+                @reveal="identityOpen = true"
             />
             <!-- No tooltip: the chip prints status.label already, and hovering it to be told the word you are
                  reading is the kind of hint that teaches people not to hover anything. -->
             <span v-if="status !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs" :class="status.class">
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
             </span>
-            <Segmented v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
+            <SegmentedControl v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
                 <!-- The page's one primary action, beside the status chip that says whether it is even needed.
@@ -315,9 +310,11 @@ const confirmDiscard = (): void => {
                     <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />Request land
                 </Button>
                 <button
+                    ref="menuAnchor"
                     type="button"
                     class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="openMenu"
+                    :aria-expanded="menuOpen"
+                    @click="menuOpen = !menuOpen"
                     v-tooltip.bottom="'Session actions'"
                     aria-label="Session actions"
                 >
@@ -340,53 +337,40 @@ const confirmDiscard = (): void => {
             @chat="view = 'chat'"
         />
 
-        <!-- The session menu: anchored popover on desktop, bottom sheet on mobile — same body, the pattern the
-             chat's pickers use. -->
-        <BottomSheet v-if="mobile" v-model="menuSheet" header="Session">
+        <!-- The session menu: anchored beside its button on desktop, a thumb-reachable sheet on a phone — one
+             body either way. `land-in-menu` is the one thing that differs, and it tracks the FORM rather than
+             the surface: landing has its own button in the header on desktop, and no room for one on a phone. -->
+        <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
             <AgentSessionMenu
                 :agent-id="agentId"
                 :changes="changes"
                 :streaming="streaming"
-                :land-in-menu="true"
+                :land-in-menu="mobile"
                 @selected="closeMenu"
                 @discard="pendingDiscard = true"
                 @force-land="pendingForceLand = true"
             />
-        </BottomSheet>
-        <Popover v-else ref="menu" :pt="{ content: { class: '!p-0' } }">
-            <div class="w-72">
-                <AgentSessionMenu
-                    :agent-id="agentId"
-                    :changes="changes"
-                    :streaming="streaming"
-                    :land-in-menu="false"
-                    @selected="closeMenu"
-                    @discard="pendingDiscard = true"
-                    @force-land="pendingForceLand = true"
-                />
-            </div>
-        </Popover>
+        </ResponsiveOverlay>
 
         <!-- The session's identity, in the same two dresses as the menu above it. -->
-        <BottomSheet v-if="mobile" v-model="identitySheet" header="Session name">
+        <ResponsiveOverlay
+            v-model="identityOpen"
+            :anchor="identityAnchor ?? undefined"
+            header="Session name"
+            side="bottom"
+            cross="start"
+            panel-class="w-96"
+        >
             <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
-        </BottomSheet>
-        <Popover v-else ref="identity" :pt="{ content: { class: '!p-0' } }">
-            <div class="w-96">
-                <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
-            </div>
-        </Popover>
+        </ResponsiveOverlay>
 
         <!-- THE MID-WRITE LAND'S WARNING. It states the one real risk and both reasons it is survivable,
              because a warning that only says "are you sure" teaches people to click through it. -->
-        <Dialog
-            :visible="pendingForceLand"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
+        <Modal
+            :open="pendingForceLand"
+            size="sm"
             header="Land while the agent is working?"
-            @update:visible="pendingForceLand = false"
+            @update:open="pendingForceLand = false"
         >
             <p class="text-xs text-content">
                 The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes — one side of a
@@ -400,17 +384,9 @@ const confirmDiscard = (): void => {
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingForceLand = false" />
                 <Button size="small" severity="warn" label="Land anyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
             </template>
-        </Dialog>
+        </Modal>
 
-        <Dialog
-            :visible="pendingDiscard"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '24rem' }"
-            header="Discard this agent's work"
-            @update:visible="pendingDiscard = false"
-        >
+        <Modal :open="pendingDiscard" size="sm" header="Discard this agent's work" @update:open="pendingDiscard = false">
             <p class="text-xs text-content">
                 Delete the agent's branch and worktree? Its {{ changes.count.value }} changed file{{ changes.count.value === 1 ? "" : "s" }} and the
                 conversation's isolated history go with them.
@@ -422,6 +398,6 @@ const confirmDiscard = (): void => {
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = false" />
                 <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
-        </Dialog>
+        </Modal>
     </div>
 </template>

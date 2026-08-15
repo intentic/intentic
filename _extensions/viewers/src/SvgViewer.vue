@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Code, ImageView, Segmented } from "@intentic/extension-ui";
+import { Code, ImageView, SegmentedControl } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 /* SVG viewer: the picture by default, with a Source toggle for the markup. An SVG is the one format that is
@@ -41,7 +41,7 @@ const options = computed(() => [
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center border-b border-line px-2 py-1.5">
-            <Segmented v-model="view" :options="options" />
+            <SegmentedControl v-model="view" :options="options" />
         </div>
         <div class="min-h-0 flex-1">
             <ImageView v-if="view === 'preview' && url" :src="url" />

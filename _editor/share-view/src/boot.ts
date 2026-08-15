@@ -1,7 +1,7 @@
 import { addCollection } from "@iconify/vue";
 import Icon from "@intentic/ui/src/components/Icon.vue";
 import { BUNDLED_ICONS } from "@intentic/ui/src/icons/iconData.generated.js";
-import { vTooltip } from "@intentic/ui/src/composables/tooltip.js";
+import { vTooltip } from "@intentic/ui/src/lib/tooltip.js";
 import type { App } from "vue";
 
 /* THE DESIGN SYSTEM, TO THE EXTENT THIS PAGE USES IT — the icon primitive and the hover label, and nothing

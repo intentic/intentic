@@ -2,7 +2,7 @@ import { twMerge } from "tailwind-merge";
 
 /* Centralized class-string builders — the single source of truth for repeated visual recipes.
  * Each function returns a merged Tailwind class string; callers pass overrides that twMerge
- * resolves (e.g. `cmp.input('text-2xs px-2 py-1')` shrinks the base input). No @apply, no
+ * resolves (e.g. `ui.input('text-2xs px-2 py-1')` shrinks the base input). No @apply, no
  * specificity issues, no !important — the caller always wins. */
 
 /* THE ACTION BUTTON IS `<Button>`, IN FOUR TIERS AND TWO SIZES. Nothing else. The tiers are RANKS, so a screen
@@ -56,7 +56,7 @@ import { twMerge } from "tailwind-merge";
 /* Bare 24px icon button — the toolbar affordance that shows no chrome until the pointer is on it. Nine of
  * these had been spelled out by hand across the terminal panel, the workspace toolbar, the history panel and
  * the two popover triggers; they agreed exactly, which is what made a tenth so easy to get slightly wrong.
- * Callers size and re-tint through twMerge (`cmp.iconButton('h-7 w-7 hover:text-danger')`). */
+ * Callers size and re-tint through twMerge (`ui.iconButton('h-7 w-7 hover:text-danger')`). */
 const iconButton = (...twClasses: string[]) =>
     twMerge(
         `flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`,
@@ -66,7 +66,7 @@ const iconButton = (...twClasses: string[]) =>
 /* Inline text button that reads as a link — a lane switch, an escape hatch, "use my own X instead". Sized
  * so a thumb can hit it (36px) while the negative margin keeps that height from showing up as a gap in the
  * card it sits in, so the same recipe is right on a phone and on a desktop. Callers restyle the text
- * (`cmp.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones).
+ * (`ui.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones).
  *
  * `w-fit` AND NOT `self-start`, which is what it used to be. Both stop the link stretching across the COLUMN
  * it usually sits in — that is the only job either of them had — but `self-start` does it by overriding the
@@ -85,16 +85,12 @@ const input = (...twClasses: string[]) =>
         ...twClasses,
     );
 
-/** Inline danger alert banner. */
-const alertDanger = (...twClasses: string[]) =>
-    twMerge(`rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger`, ...twClasses);
-
-/** Inline warning alert banner. */
-const alertWarning = (...twClasses: string[]) =>
-    twMerge(`rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning`, ...twClasses);
-
-/** Inline informational alert banner — a notice the user does not have to act on. */
-const alertInfo = (...twClasses: string[]) => twMerge(`rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info`, ...twClasses);
+/* THE ALERT RECIPES USED TO LIVE HERE, and that is why the app had two red boxes. <Notice> was built out of
+ * them, so a notice and a hand-rolled `ui.alertDanger()` div were the same tint, the same border and the same
+ * padding — differing only in the warning icon, the ARIA role and the dismiss affordance, none of which the
+ * hand-rolled one had. Thirty-two views kept reaching for the recipe because their message was MARKUP and the
+ * notice model only held strings; <Notice> takes a slot now, so there is nothing left the recipe could say that
+ * the component cannot. They moved into notice.ts, which is the only thing that still needs them. */
 
 /** Dashed-border "nothing here yet" empty state placeholder. */
 const emptyState = (...twClasses: string[]) =>
@@ -108,7 +104,7 @@ const emptyState = (...twClasses: string[]) =>
  * IT CARRIES THE HOVER, which is the part that makes it read as a control rather than as a placeholder: the
  * dash firms up and the text comes forward together. Geometry is the caller's — a rail tile is a square, a
  * lane's tail is a full-width row, a colour swatch is a circle — so only the radius has a default here, and
- * twMerge lets `cmp.addTile('h-7 w-7 rounded-full')` replace it. */
+ * twMerge lets `ui.addTile('h-7 w-7 rounded-full')` replace it. */
 const addTile = (...twClasses: string[]) =>
     twMerge(
         `inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-line`,
@@ -119,13 +115,10 @@ const addTile = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
-export const cmp = {
+export const ui = {
     iconButton,
     linkButton,
     input,
-    alertDanger,
-    alertWarning,
-    alertInfo,
     emptyState,
     addTile,
     sectionLabel,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Row, RowGroup } from "@intentic/ui";
+import { ui, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../../composables/sandbox/useSavings";
@@ -88,7 +88,7 @@ const contextDilution = computed(() => (savings.value?.context === undefined ? `
                                 min="0"
                                 max="100"
                                 :value="iqSearchHoldoutPercent"
-                                :class="cmp.input('w-16 text-right text-xs')"
+                                :class="ui.input('w-16 text-right text-xs')"
                                 @change="
                                     (event: Event) =>
                                         commitPercent(event, iqSearchHoldoutPercent, (iqSearchHoldout: number) => patch({ iqSearchHoldout }))
@@ -144,7 +144,7 @@ const contextDilution = computed(() => (savings.value?.context === undefined ? `
                                 min="0"
                                 max="100"
                                 :value="iqContextHoldoutPercent"
-                                :class="cmp.input('w-16 text-right text-xs')"
+                                :class="ui.input('w-16 text-right text-xs')"
                                 @change="
                                     (event: Event) =>
                                         commitPercent(event, iqContextHoldoutPercent, (iqContextHoldout: number) => patch({ iqContextHoldout }))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AgentRunButton, cmp, Icon, Notice, noticeOf, timeAgo, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, ui, Icon, Notice, noticeOf, timeAgo, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
 import type { DeployResource } from "./contract";
 import { host } from "./host";
 import type { Incident } from "./incidents";

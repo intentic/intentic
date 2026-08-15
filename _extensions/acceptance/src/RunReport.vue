@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, cmp, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Card, ui, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
 import { isShotPath, storyDir, storyStanding } from "./runs";
@@ -323,7 +323,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     />
                     <!-- `?? ``` is for the compiler, not the reader: `failureOf` is a call, so the guard above cannot narrow it. -->
                     <Notice v-else-if="failureOf(story.slug)" :of="noticeOf(failureOf(story.slug) ?? ``)" />
-                    <div v-else :class="cmp.emptyState()">
+                    <div v-else :class="ui.emptyState()">
                         {{
                             verdictBadge(story.slug).variant === `info`
                                 ? `Still testing — the report is written at the end of the walkthrough.`

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, MachineDetail } from "@intentic/ui";
+import { Card, MachineDetail, Notice } from "@intentic/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
@@ -302,7 +302,7 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
                         :events="eventsOf(`setup`)"
                         :running="activeRun === `setup`"
                     />
-                    <div v-if="setupError" :class="cmp.alertDanger('text-2xs')">{{ setupError }}</div>
+                    <Notice v-if="setupError" tone="danger" class="text-2xs">{{ setupError }}</Notice>
                     <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this
                          app can strand someone, and "try again" as the only control is a dead end wearing a
                          button. -->
@@ -328,10 +328,9 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
                 </header>
 
                 <!-- The app updates itself; this is the notice, not a gate. -->
-                <div v-if="updateVersion" :class="cmp.alertInfo('flex items-center gap-2 text-xs')">
-                    <Icon name="arrow-circle-up" />
-                    <span class="flex-1">Intentic {{ updateVersion }} is available — it installs the next time you quit.</span>
-                </div>
+                <Notice v-if="updateVersion" tone="info" class="items-center">
+                    Intentic {{ updateVersion }} is available — it installs the next time you quit.
+                </Notice>
 
                 <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
                     <Icon name="box" class="mt-0.5 shrink-0" />
@@ -363,7 +362,7 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
                         <h2 class="flex-1 text-sm font-semibold">Desktop sync</h2>
                         <span v-if="report?.agents.sync" class="font-mono text-2xs text-subtle">agent v{{ report.agents.sync }}</span>
                     </div>
-                    <div v-if="reportError" :class="cmp.alertDanger('text-2xs')">{{ reportError }}</div>
+                    <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
                     <MachineDetail v-if="report" :pairings="report.pairings" :ports="report.ports" :watcher="report.watcher" />
                 </section>
 

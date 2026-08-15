@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic-app/api-contract";
-import { BrandMark, Code, Notice, Row, RowGroup, SearchBar, SkeletonRows, cmp } from "@intentic/ui";
+import { BrandMark, Code, Notice, Row, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -284,7 +284,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                         <button
                             v-if="rest(item) !== ``"
                             type="button"
-                            :class="cmp.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
+                            :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                             @click="toggleFull(item.id)"
                         >
                             {{ full.has(item.id) ? `Show less` : `Show more` }}
@@ -384,9 +384,9 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
              then, and `loading` still owns which of the four states this is. -->
         <template v-else-if="loading" />
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
-        <div v-else-if="groups.length === 0" :class="cmp.emptyState(`py-8`)">
+        <div v-else-if="groups.length === 0" :class="ui.emptyState(`py-8`)">
             Nothing added on top of the stock image yet — and nothing in it answered, which usually means the sandbox is still starting.
         </div>
-        <div v-else-if="shown.length === 0" :class="cmp.emptyState(`py-8`)">Nothing here matches “{{ query.trim() }}”.</div>
+        <div v-else-if="shown.length === 0" :class="ui.emptyState(`py-8`)">Nothing here matches “{{ query.trim() }}”.</div>
     </div>
 </template>

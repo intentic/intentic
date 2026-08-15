@@ -4,7 +4,7 @@
      on whether the redirect waits for anything. All of that is here now; a hub declares its groups and renders
      its body.
 
-     THE INDEX IS A COLUMN, NOT A STRIP, and that is the whole point of this component. A <Segmented> is a row of
+     THE INDEX IS A COLUMN, NOT A STRIP, and that is the whole point of this component. A <SegmentedControl> is a row of
      toggle pills for a few exclusive views of ONE thing — Preview/Source, Linux/Windows — and the sandbox hub
      had grown twelve destinations in it, nine built-in and one per extension that registers a `sandbox` view.
      Measured, the strip came to ~740px inside a 720px content column, so it scrolled: the pills that were still
@@ -21,7 +21,7 @@
      scrolling row of pills is the idiom every mobile tab bar already uses; the failure above is a desktop
      failure, caused by a 56rem content cap that does not apply once the page is the whole screen. -->
 <script setup lang="ts">
-import { type IconName, type NavGroup, NavRail, Row, Segmented, SplitView } from "@intentic/ui";
+import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
@@ -101,7 +101,7 @@ watch(
              desktop is caused by a content cap that does not apply once the page is the whole screen. -->
         <template #compact>
             <div class="scrollbar-thin overflow-x-auto border-b border-line pb-2">
-                <Segmented :model-value="activeSlug" :options="options" @update:model-value="select" />
+                <SegmentedControl :model-value="activeSlug" :options="options" @update:model-value="select" />
             </div>
         </template>
 

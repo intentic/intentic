@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SystemPromptMode } from "@intentic/sandbox-contract";
-import { BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
+import { BrandMark, ui, Notice, type NoticeModel, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import FolderPicker from "./FolderPicker.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
@@ -14,7 +14,7 @@ import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/san
  * an account picker, nine permission switches in two columns, two folder pickers, a prompt and a skill list.
  * Every one of them was on screen for someone who came to change a single thing, and the effect was a card that
  * read as a settings dump rather than as a person being described. The three answers are exclusive views of one
- * subject, which is what <Segmented> is for — and it is the same control, at the same size, that the Agent tab
+ * subject, which is what <SegmentedControl> is for — and it is the same control, at the same size, that the Agent tab
  * one level up uses for exactly the same reason.
  *
  * WHY THREE PILLS AND NOT FOUR. "Where it works" is the obvious fourth, and it stays inside "What it may do" on
@@ -151,7 +151,7 @@ const folderBound = computed(() => draft.folders.length > 0);
              bordered thing, and a second bordered strip immediately inside it reads as two controls at the same
              level when one of them is the card and the other is a part of it. The same call the Agent tab's own
              strip makes one level up. -->
-        <Segmented v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
+        <SegmentedControl v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
 
         <template v-if="section === `identity`">
             <div class="ui-field">
@@ -187,7 +187,7 @@ const folderBound = computed(() => draft.folders.length > 0);
                              the whole state: nothing picked, and here is where you would pick some. -->
                         <button
                             type="button"
-                            :class="cmp.linkButton('gap-1 text-xs text-muted hover:text-content')"
+                            :class="ui.linkButton('gap-1 text-xs text-muted hover:text-content')"
                             :aria-expanded="open"
                             @click="open = !open"
                         >
@@ -205,7 +205,7 @@ const folderBound = computed(() => draft.folders.length > 0);
                         <input
                             v-if="accounts.length > 6"
                             v-model="filter"
-                            :class="cmp.input('w-full py-1 text-xs')"
+                            :class="ui.input('w-full py-1 text-xs')"
                             placeholder="Filter by name or site"
                             aria-label="Filter accounts"
                         />
@@ -266,7 +266,7 @@ const folderBound = computed(() => draft.folders.length > 0);
                 <template #where="{ rail }">
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-col gap-0.5">
-                            <span :class="cmp.sectionLabel()">Where it works</span>
+                            <span :class="ui.sectionLabel()">Where it works</span>
                             <!-- STATED, NOT ASKED. This used to be a three-way choice between "whatever started
                                  it", "its own copy" and "the shared workspace" — a question whose options a
                                  reader had no way to choose between, on top of a default every surface already

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Card, Code, Notice, type NoticeModel, Row, Segmented, StatusBadge } from "@intentic/ui";
+import { Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
@@ -94,7 +94,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             description="What this sandbox has installed, and the recipe it was built from. The agent proposes changes; you approve them, and a rebuild applies the result."
         >
             <template #control>
-                <Segmented v-if="!unsupported" v-model="view" :options="VIEWS" />
+                <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
                 <StatusBadge v-else variant="warning" label="Awaiting review" dot />

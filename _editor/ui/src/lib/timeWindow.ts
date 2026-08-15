@@ -17,7 +17,7 @@ const WINDOW_MS: Readonly<Record<Exclude<TimeWindow, `all`>, number>> = {
     "7d": 604_800_000,
 };
 
-/** Ready to spread into <Segmented :options>, so the four pills cannot drift apart between two views. */
+/** Ready to spread into <SegmentedControl :options>, so the four pills cannot drift apart between two views. */
 export const TIME_WINDOWS: readonly { label: string; value: TimeWindow }[] = [
     { label: `1h`, value: `1h` },
     { label: `24h`, value: `24h` },

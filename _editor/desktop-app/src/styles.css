@@ -4,8 +4,7 @@
 
 @import "tailwindcss";
 
-@import "../../../_editor/ui/src/styles/shared/index.css";
-@import "../../../_editor/ui/src/styles/core/index.css";
+@import "../../../_editor/ui/src/styles/index.css";
 
 @source "../../../_editor/ui/src/**/*.{ts,html,vue}";
 

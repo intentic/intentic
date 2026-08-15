@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, FilterBar, Row, RowGroup } from "@intentic/ui";
+import { ui, FilterBar, Row, RowGroup } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";
@@ -156,7 +156,7 @@ onUnmounted(stopRecording);
                 <template #control>
                     <button
                         type="button"
-                        :class="cmp.iconButton()"
+                        :class="ui.iconButton()"
                         v-tooltip.top="recording === row.command ? 'Cancel' : 'Record shortcut'"
                         :aria-label="recording === row.command ? 'Cancel recording' : `Record shortcut for ${row.title}`"
                         @click="recording === row.command ? stopRecording() : startRecording(row.command)"
@@ -166,7 +166,7 @@ onUnmounted(stopRecording);
                     <button
                         v-if="row.chord && recording !== row.command"
                         type="button"
-                        :class="cmp.iconButton()"
+                        :class="ui.iconButton()"
                         v-tooltip.top="'Unbind'"
                         :aria-label="`Unbind ${row.title}`"
                         @click="unbindKeybinding(row.command)"
@@ -176,7 +176,7 @@ onUnmounted(stopRecording);
                     <button
                         v-if="row.overridden && recording !== row.command"
                         type="button"
-                        :class="cmp.iconButton()"
+                        :class="ui.iconButton()"
                         v-tooltip.top="'Reset to default'"
                         :aria-label="`Reset ${row.title} to default`"
                         @click="resetKeybinding(row.command)"

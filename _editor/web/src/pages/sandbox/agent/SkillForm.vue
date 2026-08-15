@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft } from "@intentic-app/api-contract";
-import { cmp, CodeField, Markdown, ProseField, Segmented } from "@intentic/ui";
+import { ui, CodeField, Markdown, ProseField, SegmentedControl } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 
@@ -76,7 +76,7 @@ const save = (): void => {
 <template>
     <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">Called</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">Called</span>
             <input
                 :value="name"
                 type="text"
@@ -86,7 +86,7 @@ const save = (): void => {
                 autocorrect="off"
                 aria-label="Skill name"
                 :disabled="disabled || skill !== undefined"
-                :class="cmp.input(`px-2 py-1 font-mono text-xs`)"
+                :class="ui.input(`px-2 py-1 font-mono text-xs`)"
                 @input="onName"
             />
             <!-- Two different reasons this box says what it says, and the reader is owed whichever applies. -->
@@ -100,7 +100,7 @@ const save = (): void => {
              than beside the name, because it is the field most likely to be typed carelessly and the only one
              whose carelessness is invisible afterwards. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">When to use it</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">When to use it</span>
             <div class="rounded-md border border-line bg-canvas px-0.5 py-1 focus-within:border-line-strong" :class="{ 'opacity-50': disabled }">
                 <ProseField
                     v-model="description"
@@ -117,10 +117,10 @@ const save = (): void => {
 
         <div class="flex flex-col gap-1.5">
             <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <span :class="cmp.sectionLabel(`text-2xs`)">What it should do</span>
+                <span :class="ui.sectionLabel(`text-2xs`)">What it should do</span>
                 <!-- Offered only once there is something to render: an empty Preview is a blank panel where the
                      placeholder that says what to write used to be. -->
-                <Segmented
+                <SegmentedControl
                     v-if="body.trim() !== ``"
                     v-model="view"
                     size="xs"

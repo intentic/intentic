@@ -3,7 +3,7 @@ import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport 
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
-    cmp,
+    ui,
     Code,
     commandLang,
     CopyButton,
@@ -11,7 +11,7 @@ import {
     InfoHint,
     Notice,
     type NoticeModel,
-    Segmented,
+    SegmentedControl,
     StepSection,
     useDevice,
     useOsPreference,
@@ -1569,7 +1569,7 @@ watch(commandReady, (ready) => {
                          FOUR SIZES ON THE WHOLE PAGE, and they are the theme's own: this title, a card heading
                          (StepSection's, at the body size), `text-sm` for the things that are VALUES — the two
                          facts, a rung's name, the panel's heading, anything sitting in or beside a field, since
-                         `cmp.input` is that size — and `text-xs` for every word that is prose. `text-2xs` is
+                         `ui.input` is that size — and `text-xs` for every word that is prose. `text-2xs` is
                          gone from this flow entirely: an 11px caption under 12px body is not a tier anybody
                          reads as one, it is the same sentence looking accidentally smaller, and this page had it
                          in nine places. A 24px title over an 11px line was the widest ramp in the app for the
@@ -1619,7 +1619,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="sandbox.example.com"
-                                    :class="cmp.input('w-full text-base md:text-sm')"
+                                    :class="ui.input('w-full text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <!-- `attaching` is in the disabled expression, not left to the loading prop: the
@@ -1653,47 +1653,48 @@ watch(commandReady, (ready) => {
                                 autocomplete="off"
                                 spellcheck="false"
                                 placeholder="e.g. work, staging, my-laptop"
-                                :class="cmp.input('w-full text-base md:text-sm')"
+                                :class="ui.input('w-full text-base md:text-sm')"
                                 @keydown.enter="connectDomain"
                             />
                             <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
-                        <div v-if="attachOutcome?.kind === `unreachable`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                            <span>Nothing answered at that address.</span>
-                            <span class="opacity-80">
+                        <Notice v-if="attachOutcome?.kind === `unreachable`" :of="{ tone: `danger`, title: `Nothing answered at that address.` }">
+                            <span class="mt-0.5 block text-2xs">
                                 Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
                                 <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
                             </span>
-                        </div>
-                        <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                            <span>That address accepted the connection but never answered.</span>
-                            <span class="opacity-80">
-                                Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give
-                                it a moment and try again.
-                            </span>
-                        </div>
+                        </Notice>
+                        <Notice
+                            v-else-if="attachOutcome?.kind === `timeout`"
+                            :of="{
+                                tone: `danger`,
+                                title: `That address accepted the connection but never answered.`,
+                                detail: `Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.`,
+                            }"
+                        />
                         <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
                      resumed sandbox's container is gone, so name that instead of quoting a 530. -->
-                        <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                            <span>That domain is live, but no sandbox is running behind it.</span>
-                            <span class="opacity-80">
+                        <Notice
+                            v-else-if="attachOutcome?.kind === `no-origin`"
+                            :of="{ tone: `danger`, title: `That domain is live, but no sandbox is running behind it.` }"
+                        >
+                            <span class="mt-0.5 block text-2xs">
                                 Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
                                 container<template v-if="created !== null"
                                     >, or get a domain from intentic and run the install command instead</template
                                 >.
                             </span>
-                        </div>
+                        </Notice>
                         <template v-else-if="attachOutcome?.kind === `needs-token`">
-                            <div :class="cmp.alertWarning('flex flex-col gap-1')">
-                                <span>Your sandbox is up, but it wouldn't let us in yet.</span>
-                                <span class="opacity-80"
+                            <Notice :of="{ tone: `warning`, title: `Your sandbox is up, but it wouldn't let us in yet.` }">
+                                <span class="mt-0.5 block text-2xs"
                                     >It's waiting to be claimed with the connection token it was started with. Paste that
                                     <code>CONNECT_TOKEN</code> to claim it as yours.</span
                                 >
-                            </div>
+                            </Notice>
                             <label class="ui-field">
                                 <span class="ui-field-label">Connection token</span>
                                 <input
@@ -1703,7 +1704,7 @@ watch(commandReady, (ready) => {
                                     autocapitalize="off"
                                     spellcheck="false"
                                     placeholder="The CONNECT_TOKEN your sandbox runs with"
-                                    :class="cmp.input('w-full text-base md:text-sm')"
+                                    :class="ui.input('w-full text-base md:text-sm')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <span class="text-xs text-muted">
@@ -1711,10 +1712,10 @@ watch(commandReady, (ready) => {
                                 </span>
                             </label>
                         </template>
-                        <div v-else-if="attachOutcome?.kind === `denied`" :class="cmp.alertDanger('flex flex-col gap-1')">
-                            <span>{{ attachOutcome.message }}</span>
-                            <span class="opacity-80">Ask its owner to invite {{ user?.email }}, then connect it again.</span>
-                        </div>
+                        <Notice
+                            v-else-if="attachOutcome?.kind === `denied`"
+                            :of="{ tone: `danger`, title: attachOutcome.message, detail: `Ask its owner to invite ${user?.email ?? `you`}, then connect it again.` }"
+                        />
                         <Notice
                             v-else-if="attachOutcome?.kind === `rejected`"
                             :of="{ tone: `danger`, title: `That sandbox refused the connection.`, detail: attachOutcome.message }"
@@ -1729,7 +1730,7 @@ watch(commandReady, (ready) => {
                         <button
                             v-if="provisionOffered"
                             type="button"
-                            :class="cmp.linkButton(`text-muted underline hover:text-content`)"
+                            :class="ui.linkButton(`text-muted underline hover:text-content`)"
                             @click="setLane(`provision`)"
                         >
                             {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
@@ -1762,7 +1763,7 @@ watch(commandReady, (ready) => {
                             </template>
                             <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
-                            <button type="button" :class="cmp.linkButton()" @click="setLane(`attach`)">
+                            <button type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
                                 Already running a sandbox somewhere? Connect it by domain →
                             </button>
                         </template>
@@ -1849,7 +1850,7 @@ watch(commandReady, (ready) => {
                                         <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
                                             <button
                                                 type="button"
-                                                :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                                :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                                 aria-label="Rename sandbox"
                                                 v-tooltip.bottom="`Rename sandbox`"
                                                 @click="startRename"
@@ -1860,7 +1861,7 @@ watch(commandReady, (ready) => {
                                         <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
                                             <button
                                                 type="button"
-                                                :class="cmp.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
+                                                :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
                                                 aria-label="Save name"
                                                 v-tooltip.bottom="`Save · Enter`"
                                                 @click="saveName"
@@ -1869,7 +1870,7 @@ watch(commandReady, (ready) => {
                                             </button>
                                             <button
                                                 type="button"
-                                                :class="cmp.iconButton(`h-8 w-8 text-subtle`)"
+                                                :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                                 aria-label="Cancel rename"
                                                 v-tooltip.bottom="`Cancel · Esc`"
                                                 @click="cancelRename"
@@ -1930,7 +1931,7 @@ watch(commandReady, (ready) => {
                                              and attaching an address that already answers BEFORE they could tell
                                              which link was theirs. Now one link opens both, each stating what it
                                              does rather than what it is called. -->
-                                            <button type="button" :class="cmp.linkButton()" @click="reaching = !reaching">
+                                            <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
                                                 {{ reaching ? `Keep this address` : `Use a different address` }}
                                             </button>
                                         </template>
@@ -1965,7 +1966,7 @@ watch(commandReady, (ready) => {
                                  it in — this card has no header to hang it off any more. -->
                             <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                    <button v-if="intenticAvailable" type="button" :class="cmp.linkButton()" @click="mode = `intentic`">
+                                    <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
                                         ← Use intentic's domain
                                     </button>
                                     <InfoHint label="Why the Cloudflare API token is required">
@@ -2007,7 +2008,7 @@ watch(commandReady, (ready) => {
                                             autocapitalize="off"
                                             spellcheck="false"
                                             placeholder="sandbox"
-                                            :class="cmp.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                            :class="ui.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
                                         />
                                         <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>
@@ -2289,7 +2290,7 @@ watch(commandReady, (ready) => {
                                 <button
                                     v-if="desktop || mobile"
                                     type="button"
-                                    :class="cmp.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
+                                    :class="ui.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
                                     @click="showCommand = !showCommand"
                                 >
                                     <Icon name="terminal" class="shrink-0" />
@@ -2325,7 +2326,7 @@ watch(commandReady, (ready) => {
                              it copies, was the loose end on this card. Beside the tabs on a desktop, under the
                              command on a phone; either way it is next to what it acts on. -->
                                     <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
-                                        <Segmented
+                                        <SegmentedControl
                                             v-model="runTab"
                                             :options="runTabOptions"
                                             :stretch="mobile"
@@ -2503,19 +2504,18 @@ watch(commandReady, (ready) => {
                             <!-- The machine said exactly what broke — render it verbatim, problem and fix per check,
                                  and the one instruction that is always true. This is the card the whole report
                                  channel exists for: the answer used to live in a terminal nobody was watching. -->
-                            <div v-if="reportFailures !== null" :class="cmp.alertDanger(`flex flex-col gap-2`)">
-                                <p class="flex items-start gap-2">
-                                    <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
-                                    <span class="min-w-0 font-medium">Setup failed on your machine. Here is what it found:</span>
-                                </p>
-                                <ul class="flex flex-col gap-1.5 pl-6">
-                                    <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0">
+                            <Notice
+                                v-if="reportFailures !== null"
+                                :of="{ tone: `danger`, title: `Setup failed on your machine. Here is what it found:` }"
+                            >
+                                <ul class="mt-1.5 flex flex-col gap-1.5">
+                                    <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0 text-2xs">
                                         <span class="font-medium">{{ failure.check }}:</span> {{ failure.problem }}
-                                        <span v-if="failure.remedy !== ``" class="opacity-90"> Fix: {{ failure.remedy }}</span>
+                                        <span v-if="failure.remedy !== ``"> Fix: {{ failure.remedy }}</span>
                                     </li>
                                 </ul>
-                                <p class="pl-6 opacity-90">Fix the above, then run the same command again. It stays valid.</p>
-                            </div>
+                                <p class="mt-1.5 text-2xs">Fix the above, then run the same command again. It stays valid.</p>
+                            </Notice>
 
                             <!-- The correction, on a timer — and NOT here on a wide screen, where it rides in the
                                  reference column instead (see the aside below). At the foot of this card it was

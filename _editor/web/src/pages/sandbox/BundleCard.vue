@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImportReportSchema, type BundleExport, type ImportReport } from "@intentic-app/api-contract";
-import { Card, cmp, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { Card, ui, formatDateTime, type NoticeModel, NoticeStack, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -143,7 +143,7 @@ const sizeLabel = (bytes: number): string => {
 
              BOTH ACTIONS ARE THE SAME AFFORDANCE, and that is the fix to a row that had two. Download was a
              bordered chip and delete a bare glyph, so the quieter of the two — throwing the file away — was
-             the one drawing a box, and the row read as a button with a stray mark after it. `cmp.iconButton`
+             the one drawing a box, and the row read as a button with a stray mark after it. `ui.iconButton`
              is the app's toolbar action: no chrome until the pointer is on it, the tone arriving with the
              hover. Neither needs a label because the row is one file and these are the only two things anyone
              does to a file; the tooltip carries the word. -->
@@ -166,7 +166,7 @@ const sizeLabel = (bytes: number): string => {
                     <button
                         v-if="entry.status === 'ready'"
                         type="button"
-                        :class="cmp.iconButton()"
+                        :class="ui.iconButton()"
                         aria-label="Download export"
                         v-tooltip.top="'Download'"
                         @click="download(entry)"
@@ -176,7 +176,7 @@ const sizeLabel = (bytes: number): string => {
                     <button
                         v-if="isOwner && entry.status !== 'packing'"
                         type="button"
-                        :class="cmp.iconButton(`hover:text-danger`)"
+                        :class="ui.iconButton(`hover:text-danger`)"
                         aria-label="Delete export"
                         v-tooltip.top="'Delete this export'"
                         @click="remove(entry.name)"

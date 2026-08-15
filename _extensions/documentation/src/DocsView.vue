@@ -5,7 +5,7 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { type AgentRunChoice, Button, cmp, Icon, PageAction, Panel, Picker, type PickerOption, Segmented, SplitView } from "@intentic/extension-ui";
+import { type AgentRunChoice, Button, ui, Icon, PageAction, ScrollFrame, Picker, type PickerOption, SegmentedControl, SplitView } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
@@ -182,7 +182,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 placeholder="Repository"
                 @update:model-value="(next) => next !== undefined && chooseRepo(next)"
             />
-            <Segmented v-if="hasStaged" v-model="source" :options="SOURCES" />
+            <SegmentedControl v-if="hasStaged" v-model="source" :options="SOURCES" />
             <PageAction icon="sparkles" label="Generate" primary @click="generateOpen = true" />
         </template>
 
@@ -255,7 +255,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
             <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting
                  point and this view is where the first set gets made. -->
             <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined" class="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
-                <div :class="cmp.emptyState()">
+                <div :class="ui.emptyState()">
                     <p class="text-sm">{{ label }} has no documentation yet.</p>
                     <p class="mt-1 text-xs text-muted">
                         One agent will map the repository — its components, its vocabulary, what to read first — and then a further agent documents
@@ -274,7 +274,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                  KEYED BY PAGE, so each document mounts fresh. A reused instance keeps the last page's scroll
                  position and you arrive halfway down a page you have never seen. Remounting also gives every
                  figure a clean fit-on-init, which is what a new document wants. -->
-            <Panel v-else :key="page ?? `overview`" grow>
+            <ScrollFrame v-else :key="page ?? `overview`" grow>
                 <DocPage
                     v-if="page === undefined"
                     class="px-6 py-5"
@@ -293,7 +293,7 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                     :repo="repo"
                     :staleness="entries.find((entry) => entry.dir === page)"
                 />
-            </Panel>
+            </ScrollFrame>
         </template>
 
         <GenerateDialog

@@ -4,7 +4,7 @@
      belong together" again instead of boxing every line. Pair with <Row>; stack multiple RowGroups in a
      `flex flex-col gap-6` page wrapper. Mirrors the grouped-list already used on the Secrets page. -->
 <script setup lang="ts">
-import { cmp } from "../cmp.js";
+import { ui } from "../lib/ui.js";
 
 // `caption` names the group's SUBJECT when the label alone leaves it ambiguous ("Plan limits — your whole
 // Claude plan, not this sandbox"). It sits inline with the label rather than under the surface because a reader
@@ -31,7 +31,7 @@ defineProps<{ label?: string; count?: string | number; caption?: string; flat?: 
             class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5"
         >
             <slot name="label"
-                ><span v-if="label !== undefined" :class="cmp.sectionLabel()">{{ label }}</span></slot
+                ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
             >
             <!-- Butted against the label (like PageHeader's own #info) so an <InfoHint>/<InfoDialog> reads as
                  belonging to the group's NAME, not to the first row under it. -->

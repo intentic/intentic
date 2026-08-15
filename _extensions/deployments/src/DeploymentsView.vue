@@ -2,8 +2,8 @@
 import type { DeployAction, DeployResource, DeployServer } from "./contract";
 import {
     Button,
-    cmp,
-    CountBar,
+    ui,
+    StatusTally,
     Icon,
     InfoHint,
     Notice,
@@ -13,7 +13,7 @@ import {
     PageHeader,
     RowGroup,
     type AgentRunChoice,
-    type CountItem,
+    type TallyItem,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
@@ -117,7 +117,7 @@ const emptyReason = computed(() => {
 
 // The orientation line. `running` renders at zero because a tally that is entirely silent reads as a broken
 // view; the other three are news or nothing, so they stay out of the way until there is something to say.
-const counts = computed<CountItem[]>(() => {
+const counts = computed<TallyItem[]>(() => {
     const tally = { running: 0, stopped: 0, unhealthy: 0, updates: 0 };
     for (const resource of resources.value) {
         if (resource.state === `running`) tally.running++;
@@ -298,14 +298,18 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
             <!-- The single most important thing this view can say, and it can only say it by rendering.
                  Deliberately a WARNING and not an error: not being able to see production is not the same as
                  production being broken, and drawing it red would cry wolf on every network blip. -->
-            <div v-else-if="!board.reachable" :class="cmp.alertWarning(`px-4 py-3 text-sm`)">
-                <div class="font-medium">Can't reach Komodo at {{ board.komodoUrl }}</div>
-                <div class="mt-1 text-xs opacity-80">
-                    Nothing below is current — this is not a report that your deployments are down, only that we couldn't ask.
-                </div>
-                <div v-if="board.unreachableReason" class="mt-2 font-mono text-2xs opacity-70">{{ board.unreachableReason }}</div>
+            <Notice
+                v-else-if="!board.reachable"
+                class="px-4 py-3"
+                :of="{
+                    tone: `warning`,
+                    title: `Can't reach Komodo at ${board.komodoUrl}`,
+                    detail: `Nothing below is current — this is not a report that your deployments are down, only that we couldn't ask.`,
+                }"
+            >
+                <div v-if="board.unreachableReason" class="mt-2 font-mono text-2xs">{{ board.unreachableReason }}</div>
                 <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
-            </div>
+            </Notice>
 
             <template v-else>
                 <!-- ---- 1. Needs you ----
@@ -330,10 +334,10 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                 </div>
 
                 <!-- ---- 2. Is anything wrong right now ---- -->
-                <CountBar v-if="resources.length > 0" :items="counts" class="mb-5" />
+                <StatusTally v-if="resources.length > 0" :items="counts" class="mb-5" />
 
                 <div class="flex flex-col gap-6">
-                    <div v-if="emptyReason" :class="cmp.emptyState(`text-left`)">
+                    <div v-if="emptyReason" :class="ui.emptyState(`text-left`)">
                         <div class="font-medium text-content">{{ emptyReason.title }}</div>
                         <div class="mt-1">{{ emptyReason.detail }}</div>
                     </div>

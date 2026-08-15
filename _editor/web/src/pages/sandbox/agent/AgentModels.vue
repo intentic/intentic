@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type AgentProvider, quickModelKey } from "@intentic/sandbox-contract";
-import { Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic/ui";
+import { Picker, type PickerOptions, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { agentRunModelGroups, useAgentRunModel } from "../../../composables/chat/agentRunModel";
 import { clampEffort, effortsFor } from "../../../composables/chat/effortScale";
@@ -267,7 +267,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                              it reads as the setting it is, not as another caption. -->
                         <div v-if="agentRunEffortOptions.length > 0" class="flex items-center justify-between gap-3">
                             <span class="text-xs font-medium text-content">Reasoning effort</span>
-                            <Segmented
+                            <SegmentedControl
                                 :model-value="agentRunEffort"
                                 :options="agentRunEffortOptions"
                                 @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"

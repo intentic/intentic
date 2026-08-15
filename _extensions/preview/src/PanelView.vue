@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Notice, noticeOf, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, ui, Icon, Notice, noticeOf, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";

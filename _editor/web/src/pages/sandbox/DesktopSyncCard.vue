@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, Code, Row } from "@intentic/ui";
+import { Card, ui, Code, Row } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
@@ -186,7 +186,7 @@ onUnmounted(stop);
                 </p>
                 <div v-if="!portsOnly" class="flex flex-col gap-1.5">
                     <label class="text-2xs font-medium text-muted" for="desktop-sync-folder">Local folder</label>
-                    <input id="desktop-sync-folder" v-model="folder" spellcheck="false" :class="cmp.input('w-full font-mono text-xs')" />
+                    <input id="desktop-sync-folder" v-model="folder" spellcheck="false" :class="ui.input('w-full font-mono text-xs')" />
                 </div>
 
                 <template v-if="pairToken === undefined">
@@ -261,7 +261,7 @@ onUnmounted(stop);
         <!-- No SSH way in: a loopback/preview sandbox, or one reached over intentic's own tunnels, which carry
              web traffic only for now. Either way sync has nothing to ride, and saying so beats an Enable button
              whose one-liner would hang on the laptop. -->
-        <div v-else :class="cmp.emptyState()">
+        <div v-else :class="ui.emptyState()">
             Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet — one behind your own domain does.
         </div>
     </Card>

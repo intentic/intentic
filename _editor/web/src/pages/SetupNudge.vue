@@ -12,7 +12,7 @@
      `variant` is decided by the page, because the page holds the state that decides it — what kind of handoff
      was made, and on what device. Everything here is prose about one of those states. -->
 <script setup lang="ts">
-import { cmp, CopyButton } from "@intentic/ui";
+import { CopyButton, Notice } from "@intentic/ui";
 
 /* The reader this is addressed to:
  *   `cloud`    — a machine was created and hasn't claimed; the provider's console holds the boot log
@@ -45,9 +45,9 @@ const emit = defineEmits<{ copied: [] }>();
 </script>
 
 <template>
-    <div :class="cmp.alertWarning(`flex flex-col gap-2`)">
-        <p class="flex items-start gap-2">
-            <Icon name="clock" class="mt-0.5 shrink-0" />
+    <Notice tone="warning" icon="clock">
+        <span class="flex flex-col gap-2">
+            <p>
             <span v-if="variant === `cloud`" class="min-w-0">
                 <span class="font-medium">Still building.</span> Check {{ cloudName }} in your {{ cloudProvider }} console. Its boot log is
                 <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh sandbox here is always safe.
@@ -68,13 +68,14 @@ const emit = defineEmits<{ copied: [] }>();
             <span v-else class="min-w-0">
                 <span class="font-medium">Still nothing.</span> Nothing starts until you press “Set it up now” above.
             </span>
-        </p>
-        <p v-if="stalled && variant === `terminal`" class="pl-6 opacity-90">
-            Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
-        </p>
-        <!-- `cta`, because here copying again IS the way out — the quiet chip that suits a copy-beside-content
-             read as the dimmest thing in the loudest box on the card. `self-start`, or the column flex stretches
-             it edge to edge. -->
-        <CopyButton v-if="copyable" class="ml-6 self-start" :text="command" label="Copy again" :cta="true" @copied="emit(`copied`)" />
-    </div>
+            </p>
+            <p v-if="stalled && variant === `terminal`" class="opacity-90">
+                Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
+            </p>
+            <!-- `cta`, because here copying again IS the way out — the quiet chip that suits a copy-beside-content
+                 read as the dimmest thing in the loudest box on the card. `self-start`, or the column flex stretches
+                 it edge to edge. -->
+            <CopyButton v-if="copyable" class="self-start" :text="command" label="Copy again" :cta="true" @copied="emit(`copied`)" />
+        </span>
+    </Notice>
 </template>

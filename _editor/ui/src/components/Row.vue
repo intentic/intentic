@@ -118,7 +118,7 @@ const picked = as === `button`;
         class="group block w-full text-left"
         :class="[
             flush ? `` : TIERS[density].pad,
-            // The app's one hover tint and one selected tint (styles/shared/utilities.css). This used to carry
+            // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5` — the same 5% by luck rather than by reference.
             interactive || selected || href !== undefined || as !== `div` ? `ui-row-select` : ``,
             selected ? `ui-row-select-on` : ``,

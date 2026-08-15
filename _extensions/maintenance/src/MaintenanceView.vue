@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel } from "@intentic/sandbox-contract/chores";
-import { Button, cmp, Notice, noticeOf, PageAction, RowGroup, Segmented, SplitView, type AgentRunChoice } from "@intentic/extension-ui";
+import { Button, Notice, noticeOf, PageAction, RowGroup, SegmentedControl, SplitView, type AgentRunChoice } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
@@ -228,7 +228,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         :description="`What ${repo === undefined ? `this workspace` : repoLabel(repo)} is owed, what measured it, and what has already been done about it.`"
     >
         <template #actions>
-            <Segmented
+            <SegmentedControl
                 v-model="filter"
                 size="xs"
                 :options="[
@@ -251,7 +251,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         </template>
 
         <template #strips>
-            <div v-if="notice" :class="cmp.alertWarning()">{{ notice }}</div>
+            <Notice v-if="notice" tone="warning">{{ notice }}</Notice>
             <Notice v-if="error" :of="noticeOf(error)" />
 
             <!-- What this repository can be asked and what we actually asked it. Above both panes because it is a

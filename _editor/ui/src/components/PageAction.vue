@@ -45,7 +45,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { computed } from "vue";
-import { cmp } from "../cmp.js";
+import { ui } from "../lib/ui.js";
 import Icon from "./Icon.vue";
 import type { IconName } from "../icons/iconSets.js";
 
@@ -88,7 +88,7 @@ const tooltip = computed(() => {
         :is="href === undefined ? `button` : `a`"
         v-if="iconOnly"
         :type="href === undefined ? `button` : undefined"
-        :class="cmp.iconButton(`h-8 w-8 text-base disabled:pointer-events-none disabled:opacity-40`)"
+        :class="ui.iconButton(`h-8 w-8 text-base disabled:pointer-events-none disabled:opacity-40`)"
         :disabled="disabled"
         :aria-label="label"
         v-tooltip.bottom="tooltip"

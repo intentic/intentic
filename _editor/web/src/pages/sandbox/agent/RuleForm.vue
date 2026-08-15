@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Rule, RuleMoment } from "@intentic-app/api-contract";
-import { cmp, Icon, Picker, ProseField, Segmented } from "@intentic/ui";
+import { ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { ACTIONS, type Choice, globsOf, MOMENTS, momentOf, nameOf, type RuleDraft } from "./ruleWords";
@@ -180,7 +180,7 @@ const save = (): void => {
         <!-- WHEN. Three moments, and the differences between them are not arbitrary — so each option carries
              what it costs, where the choice is actually made, rather than in a caption under the shut box. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">When</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">When</span>
             <Picker
                 :model-value="moment"
                 :options="momentOptions"
@@ -195,10 +195,10 @@ const save = (): void => {
         <!-- ONLY IF. Shut, it states the default in words; open, it is a list of globs you can see. -->
         <div v-if="!narrowing" class="flex flex-wrap items-center gap-x-2 text-2xs text-subtle">
             <span>Applies to every change.</span>
-            <button type="button" :class="cmp.linkButton(`text-2xs`)" :disabled="disabled" @click="narrowing = true">Only when it touches…</button>
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="disabled" @click="narrowing = true">Only when it touches…</button>
         </div>
         <div v-else class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">Only if it touches</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">Only if it touches</span>
             <div class="flex items-start gap-1">
                 <div
                     class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-md border border-line bg-canvas px-2 py-1.5 focus-within:border-line-strong"
@@ -235,7 +235,7 @@ const save = (): void => {
                         @blur="commitDraft"
                     />
                 </div>
-                <button type="button" :class="cmp.iconButton(`mt-1`)" aria-label="Apply to every change" @click="stopNarrowing">
+                <button type="button" :class="ui.iconButton(`mt-1`)" aria-label="Apply to every change" @click="stopNarrowing">
                     <Icon name="times" class="text-xs" />
                 </button>
             </div>
@@ -244,11 +244,11 @@ const save = (): void => {
         <!-- THEN. One control where there is a choice and none where there isn't — a push runs a command and
              only a command, and a picker with one option is a question with no answer to give. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="cmp.sectionLabel(`text-2xs`)">Then</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">Then</span>
             <!-- Compact rather than the full-width `stretch` track: two short options are a choice inside the
                  sentence, and at nine millimetres tall they shouted louder than the moment above them, which is
                  the bigger decision by far. -->
-            <Segmented v-if="actionOptions.length > 1" v-model="action" :options="actionOptions" class="-mt-0.5 mb-0.5" />
+            <SegmentedControl v-if="actionOptions.length > 1" v-model="action" :options="actionOptions" class="-mt-0.5 mb-0.5" />
 
             <div
                 v-if="action === `command`"
@@ -295,14 +295,14 @@ const save = (): void => {
              — it is what the activity feed will call this one when it fires, and it has already been written. -->
         <div class="flex flex-col gap-2 border-t border-line/60 pt-3">
             <label class="flex items-center gap-2">
-                <span :class="cmp.sectionLabel(`shrink-0 text-2xs`)">Called</span>
+                <span :class="ui.sectionLabel(`shrink-0 text-2xs`)">Called</span>
                 <input
                     v-model="label"
                     type="text"
                     :placeholder="autoName"
                     aria-label="Rule name"
                     :disabled="disabled"
-                    :class="cmp.input(`min-w-0 flex-1 px-2 py-1 text-xs`)"
+                    :class="ui.input(`min-w-0 flex-1 px-2 py-1 text-xs`)"
                 />
             </label>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">

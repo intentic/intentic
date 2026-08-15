@@ -94,7 +94,7 @@ const GAP_TEXT: Record<NonNullable<Computer[`gap`]>, string> = {
  * with two exceptions.
  *
  * The smallest of the three, shaped like a heading: it divides ONE computer's entry rather than the page, so it
- * stays under the group's own label (cmp.sectionLabel) — but it has to read as a heading, which the plain
+ * stays under the group's own label (ui.sectionLabel) — but it has to read as a heading, which the plain
  * `text-2xs text-muted` it replaced did not. */
 const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
 

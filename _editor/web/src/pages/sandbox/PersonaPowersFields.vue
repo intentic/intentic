@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Segmented } from "@intentic/ui";
+import { ui, Notice, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
@@ -160,12 +160,12 @@ const shellCaveat = computed(
                  not), so they arrive through the slot rather than being rendered here. -->
             <div class="flex flex-col gap-6">
                 <div class="flex flex-col gap-3">
-                    <span :class="cmp.sectionLabel()">In your workspace</span>
+                    <span :class="ui.sectionLabel()">In your workspace</span>
 
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Icon name="file-tree" :class="RAIL" />
                         <span class="min-w-0 flex-1 text-sm text-content">Files</span>
-                        <Segmented v-model="draft.files" :options="FILE_ACCESS" />
+                        <SegmentedControl v-model="draft.files" :options="FILE_ACCESS" />
                     </div>
 
                     <label v-for="shelf in WORKSPACE_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
@@ -186,7 +186,7 @@ const shellCaveat = computed(
 
             <!-- REACHING OUT — everything whose consequences leave this box. -->
             <div class="flex flex-col gap-3">
-                <span :class="cmp.sectionLabel()">Reaching out</span>
+                <span :class="ui.sectionLabel()">Reaching out</span>
 
                 <label v-for="shelf in OUTWARD_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
                     <span class="flex items-center gap-2">
@@ -200,13 +200,10 @@ const shellCaveat = computed(
                 <!-- The one caveat this form owes the reader, and only when it is actually load-bearing: a card
                      that has bounded something WHILE leaving the shell on. Silent otherwise, because a full-powers
                      card has nothing to be misled about. -->
-                <p v-if="shellCaveat" :class="cmp.alertWarning('flex items-start gap-2 text-xs')">
-                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
-                    <span>
-                        With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall — a session with
-                        a shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.
-                    </span>
-                </p>
+                <Notice v-if="shellCaveat" tone="warning">
+                    With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall — a session with a
+                    shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.
+                </Notice>
 
                 <!-- The per-id grants. Collapsed to one line while a group is set to everything, which is the
                      default and the answer most cards keep: a wall of checkboxes for a question nobody asked would

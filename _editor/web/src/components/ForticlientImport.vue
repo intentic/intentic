@@ -10,7 +10,7 @@
      are still waiting. -->
 <script setup lang="ts">
 import { type ForticlientConnection } from "@intentic/sandbox-contract";
-import { cmp, type NoticeModel, RowGroup } from "@intentic/ui";
+import { ui, type NoticeModel, RowGroup } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
 import { importForticlient } from "../composables/sandbox/useVpn";
@@ -108,7 +108,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
             <button
                 type="button"
                 :class="
-                    cmp.emptyState(
+                    ui.emptyState(
                         `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
                         dragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
                     )

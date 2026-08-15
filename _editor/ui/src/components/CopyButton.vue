@@ -12,8 +12,8 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import { clipboardOf } from "../clipboard.js";
-import { cmp } from "../cmp.js";
+import { clipboardOf } from "../lib/clipboard.js";
+import { ui } from "../lib/ui.js";
 
 const {
     text,
@@ -30,7 +30,7 @@ const {
      * step and the user needs to see that at a glance (setup's "nothing has reached us" banner). Inline: it
      * changes the button's weight, not its place in the row. */
     cta?: boolean;
-    /* Same meaning as Segmented's `stretch`: the button owns its row — full width and touch-sized — for the
+    /* Same meaning as SegmentedControl's `stretch`: the button owns its row — full width and touch-sized — for the
      * screen where copying is the whole task (setup's install command on a phone: the command cannot be run
      * where it is read, so getting it onto the clipboard is all there is to do). Implies `cta`; the default
      * chip is a mouse target at ~20px tall. */
@@ -83,7 +83,7 @@ const copy = async (): Promise<void> => {
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
     </button>
-    <button v-else ref="root" type="button" aria-label="Copy" :class="cmp.iconButton(`text-subtle`)" @click="copy">
+    <button v-else ref="root" type="button" aria-label="Copy" :class="ui.iconButton(`text-subtle`)" @click="copy">
         <Icon class="text-2xs" :name="copied ? 'check' : 'copy'" :class="copied ? 'text-success' : ''" />
     </button>
 </template>

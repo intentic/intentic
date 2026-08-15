@@ -23,7 +23,7 @@
      initials track it (3/8 of the box, floored so the 16px chip stays legible), so one number sets both. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { initialsOf } from "../format.js";
+import { initialsOf } from "../lib/format.js";
 import Icon from "./Icon.vue";
 
 const {

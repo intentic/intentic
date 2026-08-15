@@ -2,9 +2,8 @@
 import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
 import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
-import { clipboardOf, cmp, ContextMenu, SearchBar, useDevice, useNarrow } from "@intentic/ui";
+import { clipboardOf, ui, ContextMenu, Modal, SearchBar, useDevice, useNarrow } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
-import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1356,7 +1355,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
-                        :class="cmp.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
+                        :class="ui.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
                         @click="showAllFinished = !showAllFinished"
                     >
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
@@ -1369,7 +1368,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <button
                         v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
                         type="button"
-                        :class="cmp.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
+                        :class="ui.addTile(`mx-2 mb-2 gap-1 rounded-lg py-1.5 text-2xs`)"
                         @click="archiveShown += ARCHIVE_PAGE"
                     >
                         <Icon name="chevron-down" class="text-2xs" />
@@ -1524,14 +1523,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              board to make by accident — so unlike stop / land / discard it stops here first. The dialog is the
              whole explanation of what the agent is about to do, because the drag hint that got here is four
              words long. -->
-        <Dialog
-            :visible="pendingResolve !== undefined"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
+        <Modal
+            :open="pendingResolve !== undefined"
+            size="sm"
             header="Have the agent resolve the conflict?"
-            @update:visible="cancelResolve"
+            @update:open="cancelResolve"
         >
             <p class="text-xs text-content">
                 {{ resolveTarget?.title ?? `This agent` }} will start a turn: it rebases its branch onto your current workspace, resolves the conflict
@@ -1542,21 +1538,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelResolve" />
                 <Button size="small" label="Ask the agent" @click="confirmResolve" />
             </template>
-        </Dialog>
+        </Modal>
         <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
              archive has been promising all along ("nothing is lost" — this is the press that revokes it) and
              what STAYS, because the commonest fear here is about work already landed in the workspace, which is
              the one thing deletion cannot touch. The destructive button names the count rather than saying
              "Delete": the number is the whole difference between clearing three throwaways and twelve agents. -->
-        <Dialog
-            :visible="pendingPurge"
-            :modal="true"
-            :draggable="false"
-            :dismissable-mask="true"
-            :style="{ width: '26rem' }"
-            header="Delete every archived agent?"
-            @update:visible="pendingPurge = false"
-        >
+        <Modal :open="pendingPurge" size="sm" header="Delete every archived agent?" @update:open="pendingPurge = false">
             <p class="text-xs text-content">
                 {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good — each one's branch, its
                 conversation and its history. This cannot be undone.
@@ -1571,7 +1559,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     Delete {{ archived.length }} agent{{ archived.length === 1 ? "" : "s" }}
                 </Button>
             </template>
-        </Dialog>
+        </Modal>
         <!-- The ghost is a real card so the drag reads as the card itself; pointer-events-none keeps the hit
              test underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">

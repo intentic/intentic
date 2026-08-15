@@ -8,7 +8,7 @@ import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDeta
  * surfaces had four copies of the same three lines (a ring, a tone class, a spoken percentage) and one shared
  * mistake: the per-pool breakdown was crammed into a hover LABEL.
  *
- * WHY IT IS NOT A TOOLTIP. A tooltip is a strip of text naming a control (see composables/tooltip.ts, which
+ * WHY IT IS NOT A TOOLTIP. A tooltip is a strip of text naming a control (see lib/tooltip.ts, which
  * says so and is right for everything else). This is a small TABLE — three or four separate allowances, each
  * with a figure and a reset instant — and pouring it into one line produced the box this replaces: four wrapped
  * lines of "5-hour session 56% (resets Mon 12:30 AM) · Weekly · all models 15% (resets Sun 5:00 AM) · …",

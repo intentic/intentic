@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ColorPicker, Row, RowGroup, Segmented, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
+import { ColorPicker, Row, RowGroup, SegmentedControl, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
 import { explorerTreatment } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -16,7 +16,7 @@ import { useIconRailSize } from "../../composables/useIconRailSize";
  * theme. Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
  * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
- * Segmented control and the Explorer preview flush in the row's #below. */
+ * SegmentedControl control and the Explorer preview flush in the row's #below. */
 
 const { scheme, set: setScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
@@ -48,7 +48,7 @@ const applyImport = (): void => {
     }
 };
 
-// Segmented option lists — labels capitalized, values are the raw token strings the composables store.
+// SegmentedControl option lists — labels capitalized, values are the raw token strings the composables store.
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
 const schemeOptions = [
     { label: `Light`, value: `light` as const },
@@ -85,7 +85,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <!-- Look — whole-workspace appearance choices. -->
         <RowGroup label="Look">
             <Row :icon="scheme === `dark` ? `moon` : `sun`" title="Theme" description="Light or dark appearance for the workspace.">
-                <template #control><Segmented :model-value="scheme" :options="schemeOptions" @update:model-value="setScheme" /></template>
+                <template #control><SegmentedControl :model-value="scheme" :options="schemeOptions" @update:model-value="setScheme" /></template>
             </Row>
             <!-- The colour the rest of the workspace is built out of. In #below rather than #control because it
                  is two rails and a row of swatches, and because the app around it repaints as they move — a
@@ -101,11 +101,11 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
             <Row icon="expand" title="Text size" description="How large everything reads — text, spacing and controls together.">
-                <template #control><Segmented :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize" /></template>
+                <template #control><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize" /></template>
             </Row>
             <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
                 <template #control>
-                    <Segmented :model-value="iconRailSize" :options="iconRailOptions" @update:model-value="(value) => (iconRailSize = value)" />
+                    <SegmentedControl :model-value="iconRailSize" :options="iconRailOptions" @update:model-value="(value) => (iconRailSize = value)" />
                 </template>
             </Row>
         </RowGroup>
@@ -114,7 +114,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <RowGroup label="File tree">
             <Row icon="sitemap" title="Explorer" description="Size, colour and emphasis of the file tree.">
                 <template #control>
-                    <Segmented :model-value="explorerStyle" :options="explorerOptions" @update:model-value="(value) => (explorerStyle = value)" />
+                    <SegmentedControl :model-value="explorerStyle" :options="explorerOptions" @update:model-value="(value) => (explorerStyle = value)" />
                 </template>
                 <template #below>
                     <div class="flex flex-col gap-0.5 pl-[1.85rem]">

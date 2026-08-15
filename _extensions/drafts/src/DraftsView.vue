@@ -3,7 +3,7 @@ import { type DraftSummary, roleAtLeast } from "@intentic/sandbox-contract";
 import {
     BrandMark,
     Button,
-    cmp,
+    ui,
     ConfirmDialog,
     formatTimestamp,
     InfoHint,
@@ -385,10 +385,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
              has no platform to be filed under. Both belong above the split rather than inside the slice. -->
         <template #strips>
             <NoticeStack :of="[actionError, listNotice, goingOutNotice]" />
-            <div v-if="invalid.length > 0" :class="cmp.alertWarning()">
-                <Icon name="exclamation-triangle" class="mr-1.5" />{{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be
-                read and won't post: <span class="font-mono">{{ invalid.join(", ") }}</span>
-            </div>
+            <Notice v-if="invalid.length > 0" tone="warning">
+                {{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be read and won't post:
+                <span class="font-mono">{{ invalid.join(", ") }}</span>
+            </Notice>
         </template>
 
         <!-- One platform's queue, or all of them. The rail NARROWS the body rather than selecting a document, so
@@ -404,7 +404,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 <!-- Nothing proposed, nothing sent, nothing broken. The rail hides its tile in this state, so the
                      page is only reached deliberately — and it owes an explanation of what would ever put
                      something here. -->
-                <p v-if="isEmpty" :class="cmp.emptyState(`py-8`)">
+                <p v-if="isEmpty" :class="ui.emptyState(`py-8`)">
                     No drafts waiting. Posts your agent proposes land here for you to approve before anything is published.
                 </p>
 
@@ -420,7 +420,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
+                                    :class="ui.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
                                     :aria-label="`Edit ${headline(draft)}`"
                                     :aria-pressed="edit.isEditing(draft)"
                                     v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
@@ -431,7 +431,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
                                     v-tooltip.top="`Reject — deletes the draft`"
                                     @click="rejecting = draft"
@@ -478,7 +478,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             <button
                                 v-if="canShip"
                                 type="button"
-                                :class="cmp.linkButton()"
+                                :class="ui.linkButton()"
                                 :disabled="save.isPending.value"
                                 @click="approvingAll = true"
                             >
@@ -502,7 +502,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
+                                    :class="ui.iconButton(`h-8 w-8`, edit.isEditing(draft) ? EDIT_ACTIVE : ``)"
                                     :aria-label="`Edit ${headline(draft)}`"
                                     :aria-pressed="edit.isEditing(draft)"
                                     v-tooltip.top="edit.isEditing(draft) ? `Done editing` : `Edit the post`"
@@ -513,7 +513,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton(`h-8 w-8 hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
                                     v-tooltip.top="`Reject — deletes the draft`"
                                     @click="rejecting = draft"
@@ -614,7 +614,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton()"
+                                    :class="ui.iconButton()"
                                     :aria-label="`Put ${headline(draft)} back in review`"
                                     v-tooltip.top="`Put back in review`"
                                     @click="holdBack(draft)"
@@ -624,7 +624,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton(`hover:bg-danger/10 hover:text-danger`)"
+                                    :class="ui.iconButton(`hover:bg-danger/10 hover:text-danger`)"
                                     :aria-label="`Reject ${headline(draft)}`"
                                     v-tooltip.top="`Reject — deletes the draft`"
                                     @click="rejecting = draft"
@@ -653,7 +653,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="cmp.iconButton()"
+                                    :class="ui.iconButton()"
                                     :aria-label="`Remove ${headline(draft)} from the list`"
                                     v-tooltip.top="`Remove from this list — the post itself stays up`"
                                     @click="rejecting = draft"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, Notice, noticeOf, Popover, ResizeSeam } from "@intentic/extension-ui";
+import { Button, ui, Icon, Notice, noticeOf, Popover, ResizeSeam } from "@intentic/extension-ui";
 import { type Workflow, workflowFaults } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import GatePanel from "./GatePanel.vue";
@@ -154,10 +154,10 @@ const commit = async (): Promise<void> => {
     <!-- The page does not scroll; the canvas fills it and the inspector scrolls itself. -->
     <div class="flex h-full min-h-0 flex-col">
         <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-            <button type="button" :class="cmp.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
+            <button type="button" :class="ui.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
             <input
                 :value="draft.name"
-                :class="[cmp.input(), `min-w-48 max-w-96 flex-1 font-medium`]"
+                :class="[ui.input(), `min-w-48 max-w-96 flex-1 font-medium`]"
                 aria-label="Workflow name"
                 placeholder="Name this workflow"
                 @input="patch({ name: ($event.target as HTMLInputElement).value })"
@@ -181,7 +181,7 @@ const commit = async (): Promise<void> => {
             </Button>
             <span class="flex-1"></span>
             <span v-if="faults.length > 0" class="truncate text-2xs text-warning">{{ faults[0] }}</span>
-            <button type="button" :class="cmp.linkButton()" @click="emit(`close`)">Cancel</button>
+            <button type="button" :class="ui.linkButton()" @click="emit(`close`)">Cancel</button>
             <Button label="Save" size="small" :disabled="!ready || save.isPending.value" @click="commit()">
                 <template #icon><Icon name="save" /></template>
             </Button>
@@ -237,7 +237,7 @@ const commit = async (): Promise<void> => {
                     >
                         {{ pickedStep.handoff === `continue` ? `Same agent` : `New agent` }}
                     </button>
-                    <button type="button" :class="cmp.iconButton(`text-danger`)" aria-label="Remove this dependency" @click="dropEdge()">
+                    <button type="button" :class="ui.iconButton(`text-danger`)" aria-label="Remove this dependency" @click="dropEdge()">
                         <Icon name="times" />
                     </button>
                 </div>
@@ -261,22 +261,22 @@ const commit = async (): Promise<void> => {
         <Popover ref="settings">
             <div class="flex w-80 flex-col gap-3 p-1">
                 <label class="flex flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">At once</span>
+                    <span :class="ui.sectionLabel()">At once</span>
                     <input
                         :value="draft.maxParallel"
                         type="number"
                         min="1"
                         max="8"
-                        :class="[cmp.input(), `w-20`]"
+                        :class="[ui.input(), `w-20`]"
                         @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
                     />
                     <span class="text-2xs text-subtle">How many steps may run side by side. Every one of them works in a worktree of its own.</span>
                 </label>
                 <label class="flex flex-col gap-1">
-                    <span :class="cmp.sectionLabel()">What it is for</span>
+                    <span :class="ui.sectionLabel()">What it is for</span>
                     <input
                         :value="draft.description ?? ``"
-                        :class="cmp.input()"
+                        :class="ui.input()"
                         placeholder="optional"
                         @input="patch({ description: ($event.target as HTMLInputElement).value })"
                     />

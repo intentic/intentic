@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
+import { Notice, type NoticeModel, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -34,7 +34,7 @@ import AgentSubagents from "./agent/AgentSubagents.vue";
  * sections — one of which (AI account) is a page in its own right, with a provider switcher, a row per
  * connection and a live sign-in that unfolds inside it. That is not a long form, it is four different errands
  * sharing a scrollbar: who the agent signs in as and what gets spent, what it is told, how a turn actually
- * runs, and what happens to the work when it is done. Four is what a <Segmented> is FOR — a few exclusive views
+ * runs, and what happens to the work when it is done. Four is what a <SegmentedControl> is FOR — a few exclusive views
  * of one subject — and four short labels come to well under half the body column, which is the measurement that
  * matters here: the hub's own index left this strip for a column at twelve destinations because twelve pills
  * overflowed. The same control at four is the case it was built for, not a repeat of that failure. */
@@ -101,7 +101,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
              under a border — two bordered strips stacked read as two controls at the same level, when one of
              them is the page and the other is a part of it. Bare pills sitting in the content column are what
              says which is which. -->
-        <Segmented v-model="section" :options="SECTIONS" aria-label="Agent settings category" />
+        <SegmentedControl v-model="section" :options="SECTIONS" aria-label="Agent settings category" />
 
         <!-- Both page-level, so they sit above whichever category is showing rather than inside one.
 
@@ -112,7 +112,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- A save the daemon accepted but stored WITHOUT one of its fields: the control has already snapped
              back to its old value, and without this line that reads as an input refusing to be typed into
              rather than as a sandbox that predates the setting. Page-level because any group can trip it. -->
-        <p v-if="settingsDropped" :class="cmp.alertWarning()">{{ settingsDropped }}</p>
+        <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
         <!-- Who the agent is and what it spends. The accounts it signs in as, and — directly under them,
              because it is a choice OVER them — which models get spent when nobody is at the composer. -->

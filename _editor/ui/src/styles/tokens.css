@@ -21,7 +21,6 @@
      * shapes an editable field incrementally, and appending a character after a ligature pair leaves the pair's
      * FIRST glyph blank ("pnpm test &&" + space renders "pnpm test  &"), which no repaint recovers. */
     --font-mono--font-feature-settings: "liga" 0, "calt" 0;
-    --font-default: var(--font-sans);
 
     --text-2xs: 0.6875rem;
     --text-2xs--line-height: 1rem;
@@ -55,12 +54,33 @@
     --container-pop: min(28rem, 92vw);
     --container-pop-lg: min(46rem, calc(100vw - 6rem));
 
+    /* THE MODAL, in four widths — the same decision as `pop` above (a comfortable width AND the clamp, as ONE
+       token) for the box that is centred rather than hung off a trigger. A separate scale because the two want
+       different numbers: a popover is a menu and stays narrow, a modal holds a form and a modal holds a
+       scrollback viewer.
+       Seventeen dialogs had spelled their own width out — 22, 24, 26, 28, 30, 32, 34, 36, 38, 44, 48, 64 and
+       80rem, thirteen answers to one question — and exactly ONE of the seventeen carried the viewport clamp.
+       The other sixteen overflowed a 360px phone, silently, because a desktop never shows you that. The band
+       edges are where the old widths actually clustered, so no dialog moves more than 4rem.
+       `sm` is a confirm or a rename; the default holds a form; `lg` is a document; `xl` is a terminal
+       scrollback or an embedded browser, where the content IS the width. */
+    --container-modal-sm: min(26rem, calc(100vw - 2rem));
+    --container-modal: min(36rem, calc(100vw - 2rem));
+    --container-modal-lg: min(48rem, calc(100vw - 3rem));
+    --container-modal-xl: min(72rem, calc(100vw - 4rem));
+    /* `full` has no rem ceiling on purpose — it is for the modal whose content is a CANVAS (a job graph, an
+       embedded browser), where the useful width is however much screen there is and a cap just letterboxes it. */
+    --container-modal-full: calc(100vw - 3rem);
+
     /* THE PANEL CEILING, named — for the same reason and out of the same spread (`max-h-[45dvh]`, `[55dvh]`,
      * `[60dvh]`, `[60vh]`, `[72dvh]`). A list inside a dialog or a popped-out pane has to stop somewhere short
      * of the viewport; `dvh` rather than `vh` so a phone's disappearing address bar does not clip the last row. */
-    --height-panel-sm: 45dvh;
     --height-panel: 60dvh;
     --height-panel-lg: 72dvh;
+    /* The near-full-height step, for the surface that is MEANT to take the screen: a bottom sheet the thumb
+     * drags up, a job graph opened fullscreen. Both had written their own (`85dvh`, `88vh`) — one step for the
+     * pair, in dvh so a phone's disappearing address bar does not clip it. */
+    --height-panel-xl: 85dvh;
     /* A drawn figure — a graph, a chart — wants a share of the viewport AND a ceiling in absolute terms, or it
        becomes a letterbox on a tall monitor. Hence the clamp rather than a plain `dvh`. */
     --height-figure: min(26rem, 50dvh);

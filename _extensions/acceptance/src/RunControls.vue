@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PickedModel } from "@intentic/extension-api";
-import { AgentRunButton, cmp, Icon, useAgentRunPick } from "@intentic/extension-ui";
+import { AgentRunButton, ui, Icon, useAgentRunPick } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -92,7 +92,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
             </span>
             <span v-else-if="chosen > 0" class="text-2xs text-muted">{{ spend }}</span>
 
-            <button v-if="narrowed" type="button" :class="cmp.linkButton(`text-2xs text-muted hover:text-content`)" @click="emit(`clear`)">
+            <button v-if="narrowed" type="button" :class="ui.linkButton(`text-2xs text-muted hover:text-content`)" @click="emit(`clear`)">
                 Clear
             </button>
 
