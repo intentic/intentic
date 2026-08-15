@@ -388,6 +388,9 @@ const onEditorSave = (value: string): void =>
             throw err;
         }
         edit.markSaved(path, value);
+        // The read view shows `text`, not the buffer: adopt the saved text too, or switching back to preview
+        // shows the file as it was BEFORE the save (the reconcile echo no-ops against the new baseline).
+        text.value = value;
     }, `Couldn't save your changes.`);
 </script>
 
