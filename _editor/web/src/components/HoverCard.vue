@@ -82,13 +82,6 @@ const GAP = 8;
 
 const widthIn = (room: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, room * SHARE)));
 
-/* How tall a picture may be, given the width it is being drawn at. It used to be a flat 16rem, which grew
- * WRONG as the card grew: `object-cover` crops whatever the box won't take, so a fixed ceiling over a widening
- * card means an ever harder crop — the opposite of what more room is for. So it is a shape (a 4:3 window on the
- * picture) bounded by a share of the card's own height allowance, which is what keeps a tall screenshot from
- * pushing the words that explain it out of the bottom of the card. */
-const imageHeightIn = (width: number, maxHeight: number): number => Math.round(Math.min(width * 0.75, maxHeight * 0.45));
-
 const placement = ref<{ content: HoverCardContent; left: number; width: number; top?: number; bottom?: number; maxHeight: number }>();
 
 // Anything at all to put under the title. An attachment counts before its bytes arrive: it is a picture the card
@@ -185,10 +178,13 @@ defineExpose({ show, hide });
     <!-- pointer-events-none so the card never eats the hover that summons it. -->
     <Teleport :to="to">
         <!-- overflow-hidden does two jobs: it holds the content to the height the placement allowed, and it is
-             what lets the full-bleed pictures below sit flush against the card's rounded corners. -->
+             what lets the full-bleed pictures below sit flush against the card's rounded corners.
+             A FLEX COLUMN, which is what shares the card's height out: the words are `shrink-0` and keep every
+             line they have, and the picture underneath takes whatever is left over — all of a tall window, a
+             sliver of a short one — instead of being drawn at a computed height and clipped by the edge above. -->
         <div
             v-if="placement"
-            class="pointer-events-none fixed z-50 min-w-[12rem] overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-lg"
+            class="pointer-events-none fixed z-50 flex min-w-[12rem] flex-col overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-lg"
             :style="{
                 maxWidth: `${placement.width}px`,
                 maxHeight: `${placement.maxHeight}px`,
@@ -197,36 +193,43 @@ defineExpose({ show, hide });
                 ...(placement.bottom !== undefined ? { bottom: `${placement.bottom}px` } : {}),
             }"
         >
-            <p v-if="placement.content.label" class="text-2xs uppercase tracking-wide text-subtle">{{ placement.content.label }}</p>
-            <p v-if="placement.content.title" class="break-words whitespace-pre-wrap text-xs font-medium leading-relaxed text-content">
+            <p v-if="placement.content.label" class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ placement.content.label }}</p>
+            <p v-if="placement.content.title" class="shrink-0 break-words whitespace-pre-wrap text-xs font-medium leading-relaxed text-content">
                 {{ placement.content.title }}
             </p>
             <!-- Accented, because it is the only line here that can be out of date a second from now. -->
-            <p v-if="placement.content.note" class="break-words text-2xs leading-relaxed text-link">{{ placement.content.note }}</p>
+            <p v-if="placement.content.note" class="shrink-0 break-words text-2xs leading-relaxed text-link">{{ placement.content.note }}</p>
             <div
                 v-for="(message, index) in messages"
                 :key="index"
+                class="flex min-h-0 flex-col"
                 :class="index > 0 || placement.content.title || placement.content.label ? 'mt-1.5 border-t border-line pt-1.5' : ''"
             >
                 <!-- Which end of the conversation this is, when there is more than one end on the card. -->
-                <p v-if="message.label" class="text-2xs uppercase tracking-wide text-subtle">{{ message.label }}</p>
-                <p v-if="message.text" class="line-clamp-[8] break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
+                <p v-if="message.label" class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ message.label }}</p>
+                <p v-if="message.text" class="line-clamp-[8] shrink-0 break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>
                 <!-- FULL-BLEED, out through the card's own padding: a picture inset inside a card that is
                      itself a narrow box is a thumbnail of a thumbnail, and the reason to put the picture here
-                     at all is that it is the fastest way to recognise which conversation this is. Cropped from
-                     the top rather than letterboxed, which is the same bargain the text above it makes — the
-                     card shows the start of a long thing, at full width, and stops. -->
-                <div v-if="message.images.length > 0" class="-mx-3 flex flex-col gap-px" :class="message.text || message.label ? 'mt-1.5' : ''">
-                    <img
-                        v-for="image in message.images"
-                        :key="image.src"
-                        :src="image.src"
-                        :alt="image.alt"
-                        class="w-full object-cover object-top"
-                        :style="{ maxHeight: `${imageHeightIn(placement.width, placement.maxHeight)}px` }"
-                    />
+                     at all is that it is the fastest way to recognise which conversation this is.
+                     WHOLE, never cropped. It used to be `object-cover` from the top under a computed ceiling,
+                     on the argument that a picture should stop where a long line of words stops. That bargain
+                     does not survive a screenshot: prose puts its most telling part first, a screenshot puts
+                     nothing anywhere in particular. The common case here is a portrait capture of one panel,
+                     whose subject sits in the lower half — so the top slice the card kept was the empty canvas
+                     above it, cut through a line of the app's own text, which is the one picture that identifies
+                     nothing. Contained, the card shows a smaller whole thing, and small-but-whole is what
+                     recognition actually needs.
+                     `min-h-0` is what lets it yield to the words in a card too short for both: a replaced
+                     element's automatic minimum size is its own content, so without it the picture would refuse
+                     to shrink and be clipped by the card's edge instead. -->
+                <div
+                    v-if="message.images.length > 0"
+                    class="-mx-3 flex min-h-0 flex-col gap-px"
+                    :class="message.text || message.label ? 'mt-1.5' : ''"
+                >
+                    <img v-for="image in message.images" :key="image.src" :src="image.src" :alt="image.alt" class="min-h-0 w-full object-contain" />
                 </div>
             </div>
         </div>

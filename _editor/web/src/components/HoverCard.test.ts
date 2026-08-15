@@ -169,24 +169,26 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
     card.hide();
 });
 
-/* A picture's height has to move WITH the card, not sit at a number. `object-cover` crops away whatever the box
- * won't take, so a fixed ceiling over a card that has grown means a harder crop the more room the card was
- * given — the exact opposite of what the extra room was for. */
-it(`gives a picture more height on a card that got more width`, async () => {
+/* A PICTURE IS NEVER CUT, and never sized by arithmetic. It used to be `object-cover` from the top under a
+ * computed ceiling, which on the common case — a portrait capture of one panel, subject in the lower half —
+ * kept the empty canvas above the subject and threw away the subject.
+ *
+ * So there is no height on the picture at all now: the card is a flex column, the words hold their lines, and
+ * the picture takes what is left and shrinks into it. That is the whole rule, and jsdom lays nothing out, so
+ * what is pinned here is the arrangement that produces it — including `min-h-0`, without which a replaced
+ * element refuses to shrink and gets clipped by the card's edge instead, which is the old bug in a new place. */
+it(`draws a picture whole, sized by the room the card has left`, async () => {
     const { card, style } = await mount();
-    const imageHeight = (): string => (document.body.querySelector(`img`) as HTMLElement).style.maxHeight;
+    const image = (): HTMLElement => document.body.querySelector(`img`) as HTMLElement;
     const content = { title: `Fix the tab strip`, messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png` }] }] };
 
     card.show(anchorEvent({ left: 40, top: 100, width: 120 }), content);
     await nextTick();
-    expect(style().maxWidth).toBe(`640px`);
-    expect(imageHeight()).toBe(`297px`); // held by the share of the card's own height, below the 4:3 shape
-    card.hide();
-
-    card.show(anchorEvent({ left: 550, top: 100, width: 120 }), content);
-    await nextTick();
-    expect(style().maxWidth).toBe(`320px`);
-    expect(imageHeight()).toBe(`240px`); // the narrow card's 4:3 window, which is the tighter of the two here
+    expect(style().maxHeight).toBe(`660px`); // the card still stops at the room its corner leaves
+    expect(image().style.maxHeight).toBe(``); // ...and the picture inside it is given no height of its own
+    expect(image().className).toContain(`object-contain`); // no crop, at any card size
+    expect(image().className).toContain(`min-h-0`); // it yields to the words rather than being clipped
+    expect(document.body.querySelector(`.fixed`)?.className).toContain(`flex-col`);
     card.hide();
 });
 
