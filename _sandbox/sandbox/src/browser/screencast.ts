@@ -25,12 +25,29 @@ const STILL_QUALITY = 85;
 // Twice the layout viewport. Past that the wire cost stops buying anything a 1280-CSS-px page can show.
 const STILL_SCALE = 2;
 /* HOW LONG A CAPTURE KEEPS DISTURBING THE PICTURE IT TOOK. Photographing the page at STILL_SCALE makes Chromium
- * re-raster it, and the screencast dutifully encodes that wobble as motion frames arriving ~20ms behind the
- * still. Left alone they replace the sharp picture with a blurry one AND re-arm the debounce that took it, so a
- * page where nothing whatsoever is happening pulsed sharp-blurry-sharp twice a second forever — flickering, and
- * paying for an encode and a tunnel round trip each time. Frames inside this window belong to our own camera.
- * Generous against a loaded machine and still well under STILL_DELAY_MS, so a real change never waits on it. */
+ * re-raster it, and the screencast dutifully encodes that wobble as motion frames arriving behind the still.
+ * Left alone they replace the sharp picture with a blurry one AND re-arm the debounce that took it, so a page
+ * where nothing whatsoever is happening pulsed sharp-blurry-sharp twice a second forever — flickering, and
+ * paying for an encode and a tunnel round trip each time. Frames inside this window belong to our own camera. */
 const CAPTURE_ECHO_MS = 250;
+/* …AND HOW LONG THAT IS DEPENDS ON THE MACHINE, which is why a constant on its own was wrong.
+ *
+ * The wobble is not delivered late — each frame reaches us ~10ms after Chromium stamps it, loaded or idle. It is
+ * PRODUCED late: the re-raster that our own screenshot triggers takes as long as the box is slow, and it goes on
+ * emitting frames for as long as it takes. Idle, the last of them is stamped ~50ms after the capture returns and
+ * 250ms covered it with room to spare. On a box running this monorepo's own suites the same burst was measured
+ * trailing 300-550ms behind, where a fixed window expires mid-wobble and forwards the tail of our own camera
+ * shake as though the page had moved — the blurry frame lands on top of the sharp one, and the flicker this
+ * whole mechanism exists to prevent is back exactly when the machine is too busy to hide it.
+ *
+ * So the window is measured in the only unit that tracks the machine: the capture we just took. The shake is
+ * that same raster work being redone by that same processor, so the capture's own cost is the honest estimate of
+ * how long it echoes — three times it, against the worst of the measured spread, with the constant above as the
+ * floor for a fast box. Being too wide costs nothing a viewer sees: a real change dropped inside the window is
+ * re-read by the next capture and arrives sharp instead of blurry, which is what the sweep in
+ * screencast.stale.integration.test.ts holds this to. Ceiling at STILL_IDLE_MS below, so that one freak capture
+ * on a thrashing box — 5.5 seconds was the worst measured — cannot answer with half a minute of stills only. */
+const CAPTURE_ECHO_FACTOR = 3;
 /* …EXCEPT THAT A FRAME INSIDE THAT WINDOW IS NOT ALWAYS OURS, and assuming it was is how the view came to lie.
  *
  * The window is our own camera's shake MOST of the time; it is also exactly where the frame showing the result
@@ -370,6 +387,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
          * rather than an error. So every settle after a scroll wiped the picture white and the next motion
          * frame brought it back: the view flickered exactly when someone was reading it. */
         capturing = true;
+        const startedAt = Date.now();
         const shot = await session
             .send("Page.getLayoutMetrics")
             .then(({ visualViewport }) =>
@@ -382,7 +400,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             // Navigated, closed, or blocked on a dialog mid-capture — the next motion frame schedules another.
             .catch(() => undefined);
         capturing = false;
-        echoUntil = Date.now() + CAPTURE_ECHO_MS;
+        // What the capture cost is what its echo will cost — see CAPTURE_ECHO_FACTOR.
+        const echoFor = Math.min(Math.max(CAPTURE_ECHO_MS, (Date.now() - startedAt) * CAPTURE_ECHO_FACTOR), STILL_IDLE_MS);
+        echoUntil = Date.now() + echoFor;
         if (shot === undefined || stopped || paused || session !== attached) {
             return;
         }
@@ -445,8 +465,13 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
                 armStill(session);
                 return;
             }
-            // A frame nobody's camera can account for: the page really moved, so the back-off starts over.
+            /* A frame nobody's camera can account for: the page really moved, so the back-off starts over — and
+             * the sharp frame is no longer what the client is looking at. Forgetting it matters, because the
+             * comparison below reads `lastStill` as "the picture already on their screen": leave it standing
+             * after a motion frame has covered it and the next capture recognises its own last still, calls the
+             * page unchanged, and sends nothing — stranding the viewer on the blurry one for good. */
             quiet = 0;
+            lastStill = undefined;
             onFrame({ data: frame.data, format: "jpeg" });
             armStill(session);
         });

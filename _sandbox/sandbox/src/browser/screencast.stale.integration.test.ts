@@ -43,8 +43,11 @@ const launch = async (): Promise<Browser | undefined> => {
         .catch(() => undefined);
 };
 
+/* A minute, for the reason spelled out over the same helper in screencast.integration.test.ts: the 2x screenshot
+ * every sharp frame is made of was measured taking 5.5 seconds while the rest of `pnpm test` had the cores, and
+ * a ten-second budget stops looking while the picture is still being taken. */
 const settle = async (until: () => boolean): Promise<void> => {
-    for (let attempt = 0; attempt < 1000 && !until(); attempt += 1) {
+    for (let attempt = 0; attempt < 6000 && !until(); attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 10));
     }
 };
@@ -117,9 +120,11 @@ test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles sti
 
             /* Converge, don't race: a press landing outside any window is forwarded at once, one landing
              * inside waits for the next capture to notice. Both are correct; being wrong FOREVER is not,
-             * and that is what a bounded wait for the right picture distinguishes. */
+             * and that is what a bounded wait for the right picture distinguishes. The bound is generous for
+             * the same measured reason as the settle above — the capture that has to notice takes seconds, not
+             * milliseconds, on a box running the whole monorepo's suites. */
             let centre = 255;
-            for (let attempt = 0; attempt < 80 && centre > 64; attempt += 1) {
+            for (let attempt = 0; attempt < 400 && centre > 64; attempt += 1) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 centre = await centreOf(reader, frames.at(-1)!);
             }

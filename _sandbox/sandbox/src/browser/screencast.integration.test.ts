@@ -47,9 +47,16 @@ const launch = async (): Promise<Browser | undefined> => {
  * and the same reason, as browser-sessions.integration.test.ts. The still is DEBOUNCED off the last motion
  * frame and taking it re-rasters the page, so the first webp lands ~600ms in on an idle box and far later when
  * the whole monorepo's suites are on the same cores. Generous and finite, so a real regression still fails on
- * the assertion that follows instead of hanging to the test timeout. */
+ * the assertion that follows instead of hanging to the test timeout.
+ *
+ * TEN SECONDS WAS NOT GENEROUS, and the way it failed is worth stating because it reads like a broken screencast
+ * and is nothing of the kind. `pnpm test` runs this suite beside the web one, and under that the 2x screenshot
+ * behind every still was measured taking 5.5 SECONDS — the same capture costs ~200ms on an idle box — putting
+ * the first sharp frame 9s past the first motion one. The picture always came; this loop had stopped looking a
+ * moment before it did, and reported an empty list as though nothing had been sent. So the budget is a full
+ * minute now: far past anything the machine has been seen to need, far short of the two the test is allowed. */
 const settle = async (until: () => boolean): Promise<void> => {
-    for (let attempt = 0; attempt < 200 && !until(); attempt += 1) {
+    for (let attempt = 0; attempt < 1200 && !until(); attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
 };
