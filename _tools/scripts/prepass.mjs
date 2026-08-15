@@ -2,10 +2,10 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Seven invariants live here, and all of them exist because the checks that catch drift used to run in
- * exactly one place — CI, on main, after the merge. (5, 6 and 7 — the release-heading contract, the
- * undeclared-shrink gate on the wire contract, and the armed-hooks check — are documented at their own blocks
- * below.)
+ * --only`. Eight invariants live here, and all of them exist because the checks that catch drift used to run in
+ * exactly one place — CI, on main, after the merge. (5 through 8 — the release-heading contract, the
+ * undeclared-shrink gate on the wire contract, the armed-hooks check, and the reusable-workflow permission
+ * ceiling — are documented at their own blocks below.)
  *
  * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
@@ -624,6 +624,101 @@ if (process.platform !== "win32" && existsSync(hooksDir)) {
     }
 }
 
+/* Invariant 8. A CALLED WORKFLOW STAYS INSIDE ITS CALLER'S CEILING. A reusable workflow can never hold more
+ * than the calling job grants, and Actions decides that BEFORE the run starts: a job in the callee naming a
+ * permission the caller's list omits is an invalid-workflow error, which fails the pipeline as a
+ * `startup_failure` — no job, no log, and a message that names neither file. ci.yml's release call carries a
+ * comment saying exactly this. The comment did not stop `actions: write` from landing in release.yml's publish
+ * job alone, and main went red on a pipeline that never started a job, with nothing to read but the diff.
+ *
+ * Line-scanned like invariant 4, for the same reason. `permissions:` sits at column 0 (the workflow's own,
+ * inherited by every job that names none) or column 4 (one job's, replacing it outright — a scope the block
+ * omits is `none`, not inherited). A workflow declaring neither leaves the ceiling to the repository default,
+ * which is not a fact in this checkout, so those are skipped rather than guessed at. */
+const RANK = { none: 0, read: 1, write: 2 };
+// What the shorthands (`permissions: read-all`) set every scope to at once.
+const SHORTHAND = { read: "read", write: "write", "read-all": "read", "write-all": "write", "{}": "none" };
+const SCOPES = [
+    "actions",
+    "attestations",
+    "checks",
+    "contents",
+    "deployments",
+    "discussions",
+    "id-token",
+    "issues",
+    "models",
+    "packages",
+    "pages",
+    "pull-requests",
+    "repository-projects",
+    "security-events",
+    "statuses",
+];
+
+// The `permissions:` blocks of one workflow, keyed by the job that owns each — "" for the workflow's own.
+const permissionsOf = (text) => {
+    const lines = text.split("\n");
+    const blocks = new Map();
+    let job = "";
+    let inJobs = false;
+    for (let i = 0; i < lines.length; i++) {
+        inJobs ||= /^jobs:\s*$/.test(lines[i]);
+        const header = inJobs && lines[i].match(/^ {2}([A-Za-z_][\w-]*):\s*$/);
+        if (header) {
+            job = header[1];
+            continue;
+        }
+        const declared = lines[i].match(/^( *)permissions:[ \t]*(.*?)\s*$/);
+        if (!declared || (declared[1].length !== 0 && declared[1].length !== 4)) {
+            continue;
+        }
+        const owner = declared[1].length === 0 ? "" : job;
+        if (declared[2] !== "") {
+            blocks.set(owner, Object.fromEntries(SCOPES.map((scope) => [scope, SHORTHAND[declared[2]] ?? "none"])));
+            continue;
+        }
+        // The scopes under the key, to the first line that is not indented past it. A comment among them is a
+        // line to step over, not a scope — several of these blocks explain themselves scope by scope.
+        const scopes = {};
+        const under = new RegExp(`^ {${declared[1].length + 2},}(?:#|([a-z-]+):[ \\t]*(\\S+))`);
+        for (let scope; (scope = (lines[i + 1] ?? "").match(under)); i++) {
+            if (scope[1]) {
+                scopes[scope[1]] = scope[2];
+            }
+        }
+        blocks.set(owner, scopes);
+    }
+    return blocks;
+};
+
+const overreach = [];
+for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml"))) {
+    const text = readFileSync(join(WORKFLOWS, file), "utf8");
+    const callerBlocks = permissionsOf(text);
+    for (const job of jobsOf(text).values()) {
+        const call = job.uses.match(/^\.\/(\.github\/workflows\/[\w.-]+\.yml)$/);
+        const granted = callerBlocks.get(job.name) ?? callerBlocks.get("");
+        if (!call || !granted) {
+            continue;
+        }
+        const calledText = readFileSync(join(root, call[1]), "utf8");
+        const calledBlocks = permissionsOf(calledText);
+        for (const called of jobsOf(calledText).values()) {
+            const wanted = calledBlocks.get(called.name) ?? calledBlocks.get("") ?? {};
+            for (const [scope, level] of Object.entries(wanted)) {
+                const held = granted[scope] ?? "none";
+                if ((RANK[level] ?? 0) > (RANK[held] ?? 0)) {
+                    overreach.push(
+                        `${call[1]}: job \`${called.name}\` asks for \`${scope}: ${level}\`, but .github/workflows/${file} job ` +
+                            `\`${job.name}\` grants it \`${scope}: ${held}\` — add \`${scope}: ${level}\` to that call's \`permissions\``,
+                    );
+                }
+            }
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
@@ -632,6 +727,7 @@ const reports = [
     ["The release-body headings drifted apart (they are parsed, not prose)", headingDrift],
     ["The wire contract shrank without a declared breaking change", undeclaredBreaks],
     ["Git hooks are disarmed on this checkout, so pushes skip these gates entirely", disarmed],
+    ["A called workflow asks for more than its caller grants — Actions fails this before any job starts", overreach],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -647,6 +743,7 @@ console.log(
     `wire contract: ${conversation ? "conversation worktree — the landing draft declares any shrink, and the push re-runs this gate from the primary checkout" : "nothing shrank undeclared against merge-base"}`,
 );
 console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
+console.log(`workflow permissions: every reusable-workflow call grants what the workflow it calls asks for`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */

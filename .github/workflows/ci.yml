@@ -902,3 +902,5 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      # publish dispatches npm-publish.yml and vscode-publish.yml once the tag exists.
+      actions: write
