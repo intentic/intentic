@@ -69,8 +69,11 @@ export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
  *    same rationale as Discord voice's MIN_UTTERANCE_BYTES.
  *  - Trailing-silence trim (250ms kept): the 1.5s pause that CLOSED the segment is not part of the message,
  *    and whisper time is paid per second of audio.
- *  - Hard cap (2 minutes): matches the daemon's MAX_UTTERANCE_WAV_BYTES; a monologue is cut and sent rather
- *    than grown until the route refuses it. */
+ *  - Hard cap (1 minute): matches the daemon's MAX_UTTERANCE_WAV_BYTES; a monologue is cut and sent rather
+ *    than grown until the route refuses it. One minute rather than two because the daemon transcribes with
+ *    whisper's turbo model at ~1.3× realtime: a full-cap utterance must come back inside Cloudflare's ~100s
+ *    origin cap (the same ceiling uploadChunking.ts chunks around) or the tunnel kills the request and the
+ *    words are lost. Cutting a monologue costs nothing — the pieces transcribe in order into the same draft. */
 export interface SegmenterTuning {
     readonly startThreshold: number;
     readonly sustainThreshold: number;
@@ -87,7 +90,7 @@ const SEGMENTER_DEFAULTS: SegmenterTuning = {
     silenceMs: 1500,
     minSpeechMs: 300,
     prerollMs: 300,
-    maxUtteranceMs: 120_000,
+    maxUtteranceMs: 60_000,
     keptTailMs: 250,
 };
 

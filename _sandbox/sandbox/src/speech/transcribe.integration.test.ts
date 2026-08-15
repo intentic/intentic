@@ -15,7 +15,7 @@ const rootWith = (model: boolean): string => {
     const root = mkdtempSync(join(tmpdir(), "speech-test-"));
     if (model) {
         mkdirSync(join(root, STATE_DIR, "whisper"), { recursive: true });
-        writeFileSync(join(root, STATE_DIR, "whisper", "ggml-small.bin"), "model bytes");
+        writeFileSync(join(root, STATE_DIR, "whisper", "ggml-large-v3-turbo.bin"), "model bytes");
     }
     return root;
 };
@@ -39,7 +39,7 @@ const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: 
 // here exactly the way `stat` tells them apart in the engine.
 const modelDir = (root: string): string => join(root, STATE_DIR, "whisper");
 const bytesOnDisk = (root: string, name: string): number => {
-    const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-small.bin" : entry.endsWith(".part")));
+    const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-large-v3-turbo.bin" : entry.endsWith(".part")));
     return found.reduce((total, entry) => total + statSync(join(modelDir(root), entry)).size, 0);
 };
 

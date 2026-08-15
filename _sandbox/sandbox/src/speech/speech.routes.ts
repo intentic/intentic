@@ -9,7 +9,7 @@ import { MAX_UTTERANCE_WAV_BYTES, SpeechModelNotReadyError, SpeechUnprovisionedE
  * /speech/status is what the mic button asks BEFORE recording: whether this image carries whisper at all, and
  * whether the model is on disk yet. Asking is arming — an absent model starts downloading on the first status
  * call, so the browser's "Preparing voice" poll needs no separate trigger and no request is ever held open for
- * a ~466MB download.
+ * a ~1.6GB download.
  *
  * /speech/transcribe takes ONE utterance the browser already segmented and WAV-framed (16kHz mono s16le) and
  * answers its text — empty when whisper heard only silence/noise, which the composer treats as "nothing said"

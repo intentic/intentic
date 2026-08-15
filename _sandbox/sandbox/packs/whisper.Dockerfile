@@ -1,6 +1,6 @@
 # whisper.cpp CLI for local speech-to-text — what the composer's voice input transcribes with
 # (src/speech/transcribe.ts). In the `standard` profile so voice works out of the box; the model is NOT here
-# (~466MB) — it downloads into the workspace volume on first use. The Discord connector composes the same
+# (~1.6GB) — it downloads into the workspace volume on first use. The Discord connector composes the same
 # build as an overlay fragment for images without this pack (_extensions/discord/env/whisper.Dockerfile —
 # connector spec data, a different mechanism; keep the two builds in step when bumping the pin).
 # Only cmake is purged after: g++ and make are baked into the sandbox image on purpose (node-pty ships no

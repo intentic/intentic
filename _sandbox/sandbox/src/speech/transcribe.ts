@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -21,15 +21,27 @@ import { downloadFile } from "@huggingface/hub";
  * rebuild instead of recording audio nobody can hear. */
 
 // One multilingual model for every request: the language arrives per-utterance from the browser's locale, so
-// the English-specialized variants Discord picks per-connector-config would be wrong here. `small` over
-// Discord's `medium` default: a composer utterance is a sentence or two and latency is the feel of the
-// feature, so the ~3× faster model wins the trade.
-const MODEL_FILE = "ggml-small.bin";
+// the English-specialized variants Discord picks per-connector-config would be wrong here. `large-v3-turbo`
+// over `small`, measured over 60 LibriSpeech test-other utterances (the deliberately hard set): 5.8% word
+// error down to 4.3% — a quarter of the remaining mistakes gone, which is the difference between dictation you
+// re-read and dictation you trust. It is paid for in CPU (~3.5× per utterance: 0.7× realtime on an idle
+// 16-core box and ~1.3× under load, so a 10s sentence lands in 7-13s) and in a 1.6GB first-use download
+// instead of 466MB. Full `large-v3` is NOT the next rung up — on a shared sample it scored no better while
+// running 2× slower again on a 3.1GB model, so turbo is the top of this curve rather than a midpoint on it.
+const MODEL_FILE = "ggml-large-v3-turbo.bin";
 const MODEL_REPO = "ggerganov/whisper.cpp";
 
-// A composer utterance is capped browser-side at 2 minutes; 16kHz mono s16le is 32,000 bytes/s, so 4 MiB
+// whisper-cli uses 4 threads whatever the box has, which on a 16-core sandbox left most of the speedup on the
+// table: 11s of speech took 13.2s at 4 threads, 7.7s at 8, 6.7s at 16 — the knee is 8, past which hyperthreads
+// contend for the same cores. Capped rather than uncapped because transcription shares the box with the agent
+// whose composer asked for it.
+const THREADS = Math.max(1, Math.min(8, availableParallelism()));
+
+// A composer utterance is capped browser-side at 1 minute; 16kHz mono s16le is 32,000 bytes/s, so 2 MiB
 // clears the longest legal utterance (+44B RIFF header) with room and refuses anything that isn't one.
-export const MAX_UTTERANCE_WAV_BYTES = 4 * 1024 * 1024;
+export const MAX_UTTERANCE_WAV_BYTES = 2 * 1024 * 1024;
+// The backstop on a wedged whisper, not the budget for a normal one: a full-cap utterance transcribes in ~80s
+// at turbo's measured rate, and the browser's request dies at Cloudflare's ~100s origin cap long before this.
 const TRANSCRIBE_TIMEOUT_MS = 120_000;
 
 export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
@@ -132,7 +144,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                 throw new Error(`speech model download failed: ${MODEL_REPO} has no ${MODEL_FILE}`);
             }
             await mkdir(dirname(modelPath), { recursive: true });
-            // Stream straight to disk (~466MB — never buffer it), landing BESIDE the model and only then taking
+            // Stream straight to disk (~1.6GB — never buffer it), landing BESIDE the model and only then taking
             // its place. Growing the real file in place is what broke voice: readiness is a bare stat, so the
             // model read as "ready" the instant the empty file was created, the browser stopped waiting and
             // started recording, and every utterance spoken over the remaining minutes of download met a
@@ -191,7 +203,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                     // whisper-cli defaults to -l en, silently mangling other languages — always pass one.
                     const { stdout } = await exec(
                         "whisper-cli",
-                        ["-m", modelPath, "-f", wavPath, "-l", whisperLanguage(locale), "--no-timestamps", "--no-prints"],
+                        ["-m", modelPath, "-f", wavPath, "-l", whisperLanguage(locale), "-t", String(THREADS), "--no-timestamps", "--no-prints"],
                         { timeout: TRANSCRIBE_TIMEOUT_MS },
                     );
                     return cleanTranscription(stdout) ?? "";
