@@ -178,9 +178,16 @@ const configSchema = z.object({
             // Google's OpenAI-compatible surface. Any OpenAI-shaped upstream works; this is the one whose free
             // tier is meant for serving end users. TRIAL_BASE_URL.
             baseUrl: z.url().default(`https://generativelanguage.googleapis.com/v1beta/openai`),
-            // Comma-separated model ids the trial may serve. Empty = whatever the upstream publishes, which is
-            // the honest default (a curated list here goes stale the day Google ships a model). Set it to keep
-            // the trial off the expensive end of a free tier. TRIAL_MODELS.
+            /* Comma-separated model ids the trial may serve. Empty = whatever the upstream publishes, which
+             * stays the default because narrowing is a decision only the operator can make — set it to keep the
+             * trial off the expensive end of a free tier.
+             *
+             * What empty deliberately does NOT mean any more is "offer nothing". Google's OpenAI-compatible
+             * `/models` answers a fresh key with an empty list while chat on it works fine, and this setting
+             * being blank in every deployment is what turned that into a trial with no model to pick. The floor
+             * beneath discovery is therefore in code (trial-pool.ts), not in this default: an operator cannot
+             * empty the picker by leaving a line blank, and one who repoints TRIAL_BASE_URL off Google should
+             * name their own ids here. TRIAL_MODELS. */
             models: z.string().default(``),
             // Messages per signed-in account per UTC day. Enough to judge the product, far too few to work on.
             // TRIAL_DAILY_MESSAGES.

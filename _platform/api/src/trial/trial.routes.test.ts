@@ -153,6 +153,22 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
+    it("refunds — and does not repeat Google's billing advice — when the whole pool is rate-limited", async () => {
+        const { prisma, spent } = fakePrisma();
+        const fetchFn = vi.fn(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const response = await chat(baseConfig, prisma);
+
+        // The ceiling is intentic's, not the reader's: they hold no plan with Google and never asked for one.
+        expect(response.status).toBe(502);
+        expect(await response.text()).not.toContain(`billing`);
+        // And an allowance that keeps counting down through turns nobody served is not an allowance.
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        expect(spent()).toBe(0);
+        vi.unstubAllGlobals();
+    });
+
     it("serves only the allowlisted models when one is configured", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = vi.fn(
@@ -168,6 +184,63 @@ describe("the free trial", () => {
 
         // The `models/` prefix Google puts on this surface is stripped — the harness addresses the bare id.
         expect(await response.json()).toEqual({ object: `list`, data: [{ id: `keep-me`, object: `model`, owned_by: `intentic-trial` }] });
+        vi.unstubAllGlobals();
+    });
+
+    /* THE WAY THE TRIAL ACTUALLY DIED, and the reason the configured list is a floor rather than a filter:
+     * Google's OpenAI-compatible /models answers a fresh key with an empty list while chat on that same key
+     * answers normally. Discovery alone therefore offered nothing to select, on a trial that worked — so every
+     * picker said "no models" and the feature was unreachable without a single error anywhere. */
+    it("offers the configured models when the upstream publishes none", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(
+            async () => new Response(JSON.stringify({ object: `list`, data: [] }), { status: 200, headers: { "content-type": `application/json` } }),
+        );
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const response = await call(configWith({ models: `gemini-flash-latest,gemini-3.7-flash` }), prisma, `/trial/v1/models`);
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+            object: `list`,
+            data: [
+                { id: `gemini-flash-latest`, object: `model`, owned_by: `intentic-trial` },
+                { id: `gemini-3.7-flash`, object: `model`, owned_by: `intentic-trial` },
+            ],
+        });
+        vi.unstubAllGlobals();
+    });
+
+    it("keeps offering them when the upstream catalog cannot be read at all", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(async () => new Response(`{}`, { status: 503 }));
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const response = await call(configWith({ models: `gemini-flash-latest` }), prisma, `/trial/v1/models`);
+
+        // NOT a 502. Which models this trial serves is a question the operator has already answered, and a
+        // momentarily unreachable listing surface must not empty a picker the user is choosing from.
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ object: `list`, data: [{ id: `gemini-flash-latest`, object: `model`, owned_by: `intentic-trial` }] });
+        vi.unstubAllGlobals();
+    });
+
+    it("still names models when neither the upstream nor the operator does", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(
+            async () => new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": `application/json` } }),
+        );
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        // Blank is what every deployment's env actually holds, so this is the case the trial has to survive:
+        // the built-in floor lives in code precisely so that leaving a line blank cannot empty the picker.
+        const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { data: { id: string }[] };
+        expect(body.data.length).toBeGreaterThan(0);
+        // Aliases, not pinned versions — the pin is what went stale and took the feature with it.
+        expect(body.data.every((model) => model.id.endsWith(`-latest`))).toBe(true);
         vi.unstubAllGlobals();
     });
 });

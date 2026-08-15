@@ -3,7 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
-import { callUpstream, type Fetcher, trialEnabled, trialModelAllowlist } from "./trial-pool.js";
+import { callUpstream, type Fetcher, poolRefused, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
 import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
 
 /* THE FREE TRIAL, served as a model API — the one place the platform sits ON the command path, and the reason
@@ -24,6 +24,10 @@ import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usag
  * Authenticated by the sandbox's connect token — the credential the daemon already holds and already presents
  * to /sandbox/announce — as a bearer, which is where an OpenAI-shaped client puts its API key. It resolves to
  * the sandbox's OWNER, and the owner is who the allowance belongs to. */
+
+// One row of an OpenAI-shaped catalog. `owned_by` names the trial rather than Google on purpose: what the user
+// is spending is intentic's allowance, and the surfaces that read this say so in those words.
+const modelEntry = (id: string) => ({ id, object: `model`, owned_by: `intentic-trial` });
 
 export interface TrialDeps {
     readonly config: Config;
@@ -70,10 +74,15 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         return c.json(await trialStatus(prisma, config, ownerId, now()));
     });
 
-    /* The model list, live from upstream rather than curated here — a list written into this file goes stale the
-     * day Google ships a model, and the endpoint machinery reading it would then offer a model that no longer
-     * exists. `trial.models` narrows it when an operator wants the trial kept off the expensive end of a free
-     * tier; unset, the trial serves what the upstream serves. */
+    /* The model list: discovery first, floor underneath — a ladder, like every other catalog in this product,
+     * for the reason none of them may answer nothing. What made this one worth a rewrite is that its bottom rung
+     * was the upstream's goodwill: Google's `/models` answers a fresh key with an EMPTY list while chat on that
+     * same key answers normally, so the trial ran fine and every picker showed a group with nothing in it.
+     *
+     * Discovery still leads — a list written down here goes stale the day Google ships a model, and `trial.models`
+     * narrows it for an operator keeping a free tier off the expensive end. Beneath it sits trialFloorModels,
+     * which is never empty (trial-pool.ts). So there is no 502 rung left: an unreachable listing surface is not a
+     * reason to empty a picker when we already know what this trial serves. */
     app.get(`/v1/models`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
@@ -81,24 +90,26 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if ((await ownerOf(c)) === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
+        const narrowedTo = trialModels(config);
         const attempt = await callUpstream(config, fetchFn, `/models`, { method: `GET` });
-        if (attempt === undefined) {
-            return c.json({ error: `the free trial is unavailable right now` }, 502);
-        }
-        if (!attempt.response.ok) {
-            return c.json({ error: `the free trial is unavailable right now` }, 502);
-        }
-        const body = (await attempt.response.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined;
-        const allowlist = trialModelAllowlist(config);
-        const data = (body?.data ?? []).flatMap((model) => {
+        const body =
+            attempt?.response.ok === true
+                ? ((await attempt.response.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined)
+                : undefined;
+        const discovered = (body?.data ?? []).flatMap((model) => {
             // Google returns ids as `models/<id>` on this surface; the harness addresses the bare id.
             const id = typeof model.id === `string` ? model.id.replace(/^models\//, ``) : undefined;
-            if (id === undefined || (allowlist.length > 0 && !allowlist.includes(id))) {
+            if (id === undefined || (narrowedTo.length > 0 && !narrowedTo.includes(id))) {
                 return [];
             }
-            return [{ id, object: `model`, owned_by: `intentic-trial` }];
+            return [modelEntry(id)];
         });
-        return c.json({ object: `list`, data });
+        if (discovered.length > 0) {
+            return c.json({ object: `list`, data: discovered });
+        }
+        const floor = trialFloorModels(config);
+        c.get(`logger`)?.info({ status: attempt?.response.status ?? 0, floor }, `trial: upstream offered no model, serving the floor`);
+        return c.json({ object: `list`, data: floor.map(modelEntry) });
     });
 
     /* One trial message. The allowance is spent BEFORE the upstream call and refunded if the call never
@@ -129,10 +140,15 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
                 429,
             );
         }
+        /* A turn NO key served is refunded and answered in our own words — including the pool's own quota
+         * ceiling, which used to ride through as upstream's 429. Two things were wrong with that: the account
+         * was billed a message nobody answered, so a "12 left today" that had served eight was simply untrue;
+         * and Google's refusal tells the reader to "check your plan and billing details", which belongs to
+         * intentic's key, not to a user who has no plan with Google and never asked for one. */
         const attempt = await callUpstream(config, fetchFn, `/chat/completions`, { method: `POST`, body });
-        if (attempt === undefined || attempt.response.status >= 500) {
+        if (attempt === undefined || poolRefused(attempt.response.status)) {
             await refundTrialMessage(prisma, ownerId, at);
-            c.get(`logger`)?.warn({ tried: attempt?.tried ?? 0 }, `trial: no key answered`);
+            c.get(`logger`)?.warn({ tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0 }, `trial: no key answered`);
             return c.json(
                 { error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } },
                 502,

@@ -13,10 +13,14 @@ import type { Config } from "../config.js";
  * steady trickle of one-message trials spreads across the pool instead of hammering the first key until it
  * refuses and only then discovering the second. */
 
-// A response worth trying the NEXT key for: the quota refusals (429) and upstream's own failures (5xx). Anything
-// else — a malformed request, an unsupported model, a rejected prompt — is about THIS request and would be
-// refused identically by every key in the pool, so it comes back as-is rather than burning the whole pool.
-const isWorthRetrying = (status: number): boolean => status === 429 || status >= 500;
+/* A response worth trying the NEXT key for: the quota refusals (429) and upstream's own failures (5xx). Anything
+ * else — a malformed request, an unsupported model, a rejected prompt — is about THIS request and would be
+ * refused identically by every key in the pool, so it comes back as-is rather than burning the whole pool.
+ *
+ * Read after the pool has been walked, the same predicate answers a second question the caller needs: whether
+ * NOBODY served the message. That is why it is exported — the allowance must not be spent on a turn the pool
+ * refused, and a user meeting intentic's quota ceiling has done nothing to be billed for. */
+export const poolRefused = (status: number): boolean => status === 429 || status >= 500;
 
 const trialKeys = (config: Config): string[] =>
     config.trial.keys
@@ -28,12 +32,34 @@ const trialKeys = (config: Config): string[] =>
 // nothing to spend, so the routes 404 and the daemon provisions no trial endpoint.
 export const trialEnabled = (config: Config): boolean => trialKeys(config).length > 0;
 
-// The model ids the trial may serve, or an empty list meaning "whatever the upstream publishes".
-export const trialModelAllowlist = (config: Config): string[] =>
+// The ids an operator narrowed the trial to, or an empty list meaning "whatever the upstream publishes".
+export const trialModels = (config: Config): string[] =>
     config.trial.models
         .split(`,`)
         .map((model) => model.trim())
         .filter((model) => model !== ``);
+
+/* THE FLOOR UNDER THE CATALOG, and the reason the trial is offerable at all.
+ *
+ * Every other catalog in this product ends in a seed list; this one ended in whatever Google felt like
+ * publishing, and one day that became nothing. Its OpenAI-compatible `/models` answers a fresh key with an
+ * EMPTY list while chat on that same key answers normally — so the trial worked, no request anywhere failed,
+ * and every picker showed a "Free trial" group with nothing in it. A feature is not shipped until it cannot be
+ * silently emptied by the other end.
+ *
+ * ALIASES, not versions. A pinned id is retired out from under a free key — `gemini-2.5-flash` now answers
+ * "no longer available to new users" — and a list of those would need re-shipping to notice; Google repoints
+ * `-latest` itself. Flash only: the free tier serves Pro no quota at all, so a Pro row would be one that only
+ * ever 429s. They name the DEFAULT upstream, so an operator who repoints TRIAL_BASE_URL elsewhere should name
+ * their own ids in TRIAL_MODELS — those win here whenever they are set. */
+const FALLBACK_TRIAL_MODELS: readonly string[] = [`gemini-flash-latest`, `gemini-flash-lite-latest`];
+
+// What the trial offers when discovery publishes nothing it can serve. Never empty, which is the whole point:
+// no combination of operator config and upstream silence may leave a user with no model to pick.
+export const trialFloorModels = (config: Config): readonly string[] => {
+    const declared = trialModels(config);
+    return declared.length > 0 ? declared : FALLBACK_TRIAL_MODELS;
+};
 
 /* The pool, rotated so consecutive requests start on different keys. Module state rather than per-request,
  * because the whole point is that request N+1 remembers where request N started; a counter is enough — it needs
@@ -93,7 +119,7 @@ export const callUpstream = async (
          * the SUPERSEDED one: the newest refusal is what the caller gets if no key answers, and a body that has
          * already been cancelled is a response that streams nothing. */
         await last?.body?.cancel().catch(() => undefined);
-        if (!isWorthRetrying(response.status)) {
+        if (!poolRefused(response.status)) {
             return { response, tried };
         }
         last = response;
