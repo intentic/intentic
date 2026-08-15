@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { Disposable } from "@intentic/extension-api";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
 import { clipboardOf, cmp, ContextMenu, SearchBar, useDevice, useNarrow } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import Dialog from "primevue/dialog";
@@ -738,6 +738,19 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
  * Held while that screen is up and dropped the moment it isn't — this route left, something connected, an agent
  * started — so the docked gate comes back on its own without anything having to remember to hand it back. */
 const offering = computed(() => !started.value && !archiveOpen.value && !connected.value);
+/* THE SAME OFFER, DEMOTED — the state this screen is in when the platform serves a free trial: the chat one
+ * column over can already send, so the offer is no longer the only thing that can happen here and must not be
+ * drawn as if it were. It goes below the starters, at the size the docked panel uses.
+ *
+ * It does not go AWAY, and that is the point of keeping it: the trial is a metered courtesy that runs through
+ * intentic's servers, and the free Google sign-in is the rung above it — no daily cap, still no subscription.
+ * A screen that hid it until the allowance ran out would be hiding the better deal.
+ *
+ * `isTrialProvider` rather than a count of connected accounts, because the repoint pass (useChat) prefers a
+ * real account over the trial in every case: a chat sitting ON the trial is exactly a chat with nothing else
+ * to run. Once the allowance is spent the trial stops being ready, `connected` drops, and `offering` above
+ * takes the screen back — which is how the card comes forward at the moment it becomes the only way on. */
+const trialOnly = computed(() => !started.value && !archiveOpen.value && connected.value && isTrialProvider(chat.provider.value));
 watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
 onUnmounted(() => (offerOnBoard.value = false));
 // Card click FOCUSES, it does not navigate: on desktop it only points the chat surface — this window's docked
@@ -1125,6 +1138,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     >
                         {{ starter.label }}
                     </button>
+                </div>
+                <!-- Running on the free trial: the chat beside this one works, so the way in is no longer the
+                     screen — it is a footnote under it, at the docked panel's own size. Not `prominent`, and
+                     deliberately below the starters: the first thing a user should do here is type, and the
+                     better deal is the second. -->
+                <div v-if="trialOnly" class="w-full max-w-sm rounded-xl border border-line bg-card/60 px-4 py-4">
+                    <ConnectOffer :view="chat" />
                 </div>
             </template>
             <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is

@@ -17,6 +17,7 @@ import {
     type ProviderRefusals,
     type RestoredMessage,
     TRIAL_LABEL,
+    TRIAL_PROVIDER,
     type TranslatorAccounts,
     type TrialStatusResponse,
     type UsageAccount,
@@ -39,7 +40,7 @@ import {
     trialStatus,
 } from "./providerCatalog";
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
-import { providerReady } from "./access";
+import { providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
 import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
@@ -477,8 +478,15 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.actsAs.value = value;
         },
     }),
-    // Whether this conversation's selection can actually send — the composer gate.
-    connected: computed(() => chatReady(conversation.value.provider.value, conversation.value.harness.value)),
+    /* Whether this conversation's selection can actually send — the composer gate, which is `providerReadyOn`
+     * (access.ts) and nothing else.
+     *
+     * It used to be a second copy of that rule living in this file, and the copy is what let the free trial
+     * exist without being usable: `providerReady` learned about endpoint providers, the copy never did, so a
+     * sandbox on the trial listed a trial row with an allowance badge on it and kept the composer shut the
+     * moment anybody chose it. One rule, read by the picker and the composer alike, is the only arrangement in
+     * which those two cannot drift apart again. */
+    connected: computed(() => providerReadyOn(conversation.value.provider.value, conversation.value.harness.value)),
     // This conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the
     // composer back to whatever was typed and attached there.
     draft: computed<string>({
@@ -832,20 +840,6 @@ const cancelTranslatorConnect = (): void => {
 // `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
 const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length > 0;
-// Whether a provider+harness selection can actually send — the composer gate, mirroring the daemon's own gate
-// (agent.routes). Codex has no native account: it always authenticates through the translator's ChatGPT
-// SUBSCRIPTION (native or under the Claude Code harness), so only that connection matters. Grok under the Claude
-// Code harness likewise rides the translator subscription. Everything else needs the provider's account; an ACP
-// provider is its own credential store — installed means chat-ready, so it never gates the composer.
-const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
-    if (subscriptionOnly(target)) {
-        return translatorAccounts.value[target].length > 0;
-    }
-    if (target === `grok` && loop === `claude-code`) {
-        return translatorAccounts.value.grok.length > 0;
-    }
-    return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
-};
 const claudeConnected = computed(() => hasAccount(`claude`));
 
 /* Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
@@ -862,8 +856,13 @@ const claudeConnected = computed(() => hasAccount(`claude`));
  * touch it again. `accountsLoaded` flips only once every read has settled, which is exactly the first moment an
  * empty list means "you have nothing connected" rather than "we haven't heard yet" — the same distinction
  * rememberedAccountFor draws for the account pick, for the same reason. It is a SOURCE as well as a guard so
- * the pass runs again on the completed picture rather than being lost with the partial one. */
-watch([providerAccounts, translatorAccounts, accountsLoaded], () => {
+ * the pass runs again on the completed picture rather than being lost with the partial one.
+ *
+ * THE TRIAL IS PART OF THAT PICTURE and lands on its own seam (loadCapabilityProviders, which discovers the
+ * endpoint and then reads the allowance), so both are sources too. Without them a sandbox whose accounts
+ * settled before the trial arrived would sit on the connect offer with a perfectly good free channel one
+ * column over — which is the first screen this whole pass exists to get right. */
+watch([providerAccounts, translatorAccounts, accountsLoaded, endpointProviders, trialStatus], () => {
     if (!accountsLoaded.value) {
         return;
     }
@@ -871,11 +870,14 @@ watch([providerAccounts, translatorAccounts, accountsLoaded], () => {
         if (
             conversation.session.value !== undefined ||
             conversation.messages.value.length > 0 ||
-            chatReady(conversation.provider.value, conversation.harness.value)
+            providerReadyOn(conversation.provider.value, conversation.harness.value)
         ) {
             continue;
         }
-        const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p));
+        /* A connected account first, the free trial only when there is none — the trial is a metered courtesy
+         * that runs through intentic's servers, so it is the floor under a sandbox with nothing connected and
+         * never a thing to move somebody onto who already owns a subscription. */
+        const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
         if (fallback) {
             // repointProvider, not selectProvider: this chat is being moved because its provider cannot serve
             // it, which says nothing about what the user wants NEXT time. Writing it back as the remembered
@@ -1975,14 +1977,18 @@ const loadCapabilityProviders = async (): Promise<void> => {
             const id = endpointProvider(entry.id);
             return { id, label: isTrialProvider(id) ? TRIAL_LABEL : entry.id };
         });
-    // The trial's allowance moves with every message, so it is read on the same seam that discovered the trial
-    // exists. Failure leaves the last figures — a picker that briefly shows a stale count is better than one
-    // that drops the row a user is mid-conversation on.
-    void loadTrialStatus();
     // Each endpoint's catalog is daemon-owned like every other provider's, so load them on the same seam. Not
     // part of loadAllProviderModels: that one runs over a fixed list, and which endpoints exist is what we have
     // only just learned.
     await Promise.all(endpointProviders.value.map((endpoint) => loadProviderModels(endpoint.id)));
+    /* The trial's allowance moves with every message, so it is read on the same seam that discovered the trial
+     * exists. Failure leaves the last figures — a picker that briefly shows a stale count is better than one
+     * that drops the row a user is mid-conversation on.
+     *
+     * LAST, and after the catalogs above, because this read is what tips the repoint pass onto the trial: a
+     * conversation moved there before the trial's models landed would take an empty model id and keep it, since
+     * nothing repoints a chat that can already send. */
+    await loadTrialStatus();
 };
 
 // Step 2 of the native paste-back connect: exchange the code Anthropic showed against the PKCE handshake.

@@ -39,14 +39,25 @@ const isEndpoint = (provider: AgentProvider): boolean => endpointProviders.value
 // Whether a provider can serve a fresh conversation. Mirrors the daemon's own gate (agent.routes): codex and
 // kimi and gemini authenticate ONLY through the translator's subscription, grok through either its native xAI account or
 // the translator, everything else through a daemon-stored account. Harness-independent on purpose — this answers
-// "is this provider usable at all", which is what a model row needs; the composer's gate (useChat.chatReady)
-// narrows it to the one harness the active conversation is actually set to.
+// "is this provider usable at all", which is what a model row needs; `providerReadyOn` below narrows it to the
+// one harness the active conversation is actually set to, and IS the composer's gate.
 export const providerReady = (provider: AgentProvider): boolean => {
     if (provider === `codex` || provider === `kimi` || provider === `gemini`) {
         return translatorAccounts.value[provider].length > 0;
     }
     if (provider === `grok`) {
         return accountsOf(provider).length > 0 || translatorAccounts.value.grok.length > 0;
+    }
+    /* THE TRIAL IS THE ONE ENDPOINT WHOSE EXISTENCE IS NOT ITS READINESS. Every other endpoint carries a
+     * credential that works until the user changes it; this one carries a daily meter, and a spent meter cannot
+     * serve a turn — the platform answers a 429 naming the reset (trial.routes).
+     *
+     * Reading the allowance here is what makes the whole product hand the screen back at the right moment: the
+     * composer closes, the connect offer returns to the board and the gate, and the picker's row goes locked
+     * beside a badge that already says "used up today". The alternative is a live composer that swallows a
+     * sentence and answers with an error, which is the shape this gate exists to prevent. */
+    if (isTrialProvider(provider)) {
+        return isEndpoint(provider) && trialStatus.value.available && trialStatus.value.remaining > 0;
     }
     // A configured endpoint is runnable by existing: whatever it needs to authenticate was configured with
     // it, so there is no second connection step the way there is for an account-backed provider.

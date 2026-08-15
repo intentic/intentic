@@ -9,7 +9,6 @@ import {
     type LoopDesign,
     loopDesignLine,
     loopFromDesign,
-    providerLabel,
     TRIAL_NOTICE,
     type Workflow,
 } from "@intentic/sandbox-contract";
@@ -21,7 +20,7 @@ import { openRunInChat } from "../composables/chat/openRun";
 import { modeMeta } from "../composables/chat/catalog";
 import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
-import { modelLabelFor } from "../composables/chat/providerCatalog";
+import { modelLabelFor, providerDisplayLabel, trialStatus } from "../composables/chat/providerCatalog";
 import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
@@ -177,9 +176,13 @@ const { activeSandboxId, reachable, connection } = useSandbox();
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const { mobile, keyboardInset } = useDevice();
 
-// Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
-// catalogs live in the contract's agent-catalog.ts (shared with the automations dialog) and chat/catalog.ts.
-const providerName = computed(() => providerLabel(provider.value));
+/* Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
+ * catalogs live in the contract's agent-catalog.ts (shared with the automations dialog) and chat/catalog.ts.
+ *
+ * `providerDisplayLabel`, not the static one: a capability-derived provider has no row in the static table, so
+ * the static label falls through to the RAW ID — which is how a chat on the free trial invited the user to
+ * "Ask endpoint/free-trial…". The display label is the one every other surface already reads. */
+const providerName = computed(() => providerDisplayLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
@@ -244,16 +247,26 @@ const activeAccountReauth = computed(() => {
 /* What the trial strip above the composer says, or nothing at all when this conversation isn't on the trial.
  *
  * Two sentences, because there are two states worth interrupting for and they want opposite things from the
- * reader. While there is allowance left the message is the DISCLOSURE — these messages pass through intentic —
- * which the user needs before typing, not after. Once it is spent the disclosure is moot and the only useful
- * sentence is where to go next, which is the free Google sign-in: no daily cap, still no subscription. */
+ * reader. While there is allowance left the message LEADS WITH THE COUNT and then discloses — these messages
+ * pass through intentic — which the user needs before typing, not after. Once it is spent the disclosure is
+ * moot and the only useful sentence is where to go next, which is the free Google sign-in: no daily cap, still
+ * no subscription.
+ *
+ * The count is here and not only on the picker's badge because this is the surface a person is looking at while
+ * they spend it. It also carries the one thing that surprises people about this meter: it counts MODEL CALLS,
+ * and an agent turn makes several of them, so a first question can cost more than one. Saying so beside the
+ * number is cheaper than letting somebody discover it by watching twelve become seven. */
+const onTrial = computed(() => isTrialProvider(provider.value));
+const trialLeft = computed(() => trialStatus.value.remaining);
 const trialNotice = computed(() => {
-    if (!isTrialProvider(provider.value)) {
+    if (!onTrial.value) {
         return undefined;
     }
-    return trialExhausted(provider.value)
-        ? `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`
-        : TRIAL_NOTICE;
+    if (trialExhausted(provider.value)) {
+        return `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`;
+    }
+    const left = `${trialLeft.value} free ${trialLeft.value === 1 ? `message` : `messages`} left today`;
+    return `${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
 });
 
 /* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
@@ -821,7 +834,9 @@ const composerPlaceholder = computed(() => {
         return `Reply to revise the plan…`;
     }
     if (!streaming.value) {
-        return `Ask ${providerName.value}…`;
+        // The trial has no vendor to name — it is the product's own channel, and "Ask Free trial…" invites a
+        // sentence to a thing rather than to somebody.
+        return onTrial.value ? `Ask anything…` : `Ask ${providerName.value}…`;
     }
     if (awaitingDecision.value) {
         return `Answer above, or add a message for after…`;
@@ -1680,7 +1695,13 @@ watch(
                          empty). Without this state the round-trip wears the "Start a conversation" text
                          below, which over a chat that merely hasn't arrived yet reads as data loss. -->
                     <ChatTranscriptSkeleton v-else-if="activeLoading" />
-                    <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
+                    <!-- "Start a conversation with X" names the provider because on every other one that is the
+                         fact worth having: whose model is about to answer. On the trial it is the wrong
+                         sentence — the reader has connected nothing, so what they need to know is that this
+                         works anyway, and naming a provider they never chose only raises a question. -->
+                    <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">
+                        {{ onTrial ? `Ask anything — this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
+                    </p>
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
 

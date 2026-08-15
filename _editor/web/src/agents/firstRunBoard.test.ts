@@ -6,11 +6,13 @@
 // send from, that the docked chat then drops its copy of that offer, and that once something CAN send a
 // starter fills the chat's composer rather than dispatching an agent. All three are asserted against the real
 // component.
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 import { offerOnBoard } from "../composables/chat/connectOffer";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../composables/chat/providerAccounts";
+import { endpointProviders, trialStatus } from "../composables/chat/providerCatalog";
 import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { PANELS } from "../composables/queryKeys";
@@ -56,11 +58,14 @@ afterEach(() => {
 });
 
 // The connection picture is the axis this screen turns on, so every test states it outright rather than
-// inheriting whatever the previous one left. Read: the daemon has answered, and the answer is "nothing".
+// inheriting whatever the previous one left. Read: the daemon has answered, and the answer is "nothing" — no
+// account, and no free trial either, which is what most platforms serve (it is off unless an operator sets keys).
 beforeEach(() => {
     accountsLoaded.value = true;
     providerAccounts.value = { ...providerAccounts.value, claude: [], grok: [] };
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    endpointProviders.value = [];
+    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0 };
 });
 
 const mount = (component: unknown): HTMLElement => {
@@ -147,4 +152,45 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
     // Still the first-run screen — filling the composer is not starting anything.
     expect(board.textContent).toContain(`Start your first agent`);
+});
+
+/* THE PLATFORM SERVES A FREE TRIAL, which is the case this whole screen used to get wrong: the product could
+ * already answer a question with nothing connected, and the first thing it showed anybody was a wall of
+ * sign-ins. A user who has just finished setup should be able to type.
+ *
+ * What the trial changes here is which of the two shapes this screen takes, so both halves are asserted: the
+ * offer stops being the screen (the chat one column over has a live composer, so the board goes back to asking
+ * for a task and hands the gate back), and it does NOT leave the screen — the free Google sign-in is the rung
+ * above the trial, with no daily cap, and hiding it until the allowance ran out would hide the better deal. */
+it(`chats on the free trial rather than demanding a sign-in first`, async () => {
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12 };
+    // The repoint pass is a watcher: it moves the untouched conversation onto the trial on the next flush.
+    await nextTick();
+
+    const board = mount(AgentsView);
+    await nextTick();
+
+    expect(useChat().active.value.provider.value).toBe(TRIAL_PROVIDER);
+    expect(useChat().connected.value).toBe(true);
+    // The board asks for the task, and gives the docked chat its gate back.
+    expect(board.textContent).toContain(`Start your first agent`);
+    expect(offerOnBoard.value).toBe(false);
+    // Demoted, not gone.
+    expect(board.textContent).toContain(`Try free with Google`);
+});
+
+// And the moment the allowance is spent the trial stops being a way to send, so the offer takes the screen
+// back — the one press that removes the daily cap, at the moment it becomes the only way on.
+it(`hands the screen back to the offer once the trial is used up`, async () => {
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0 };
+    await nextTick();
+
+    const board = mount(AgentsView);
+    await nextTick();
+
+    expect(useChat().connected.value).toBe(false);
+    expect(offerOnBoard.value).toBe(true);
+    expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(true);
 });
