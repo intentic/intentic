@@ -2718,6 +2718,28 @@ describe(`Conversation placeAsAgent`, () => {
         expect(conversation.error.value).toContain(`running a turn`);
     });
 
+    /* A CHANNEL conversation's place can be refused because the CHANNEL was unreachable — the daemon carries a
+     * placed line out to the Discord/Slack/Telegram thread it answers before appending, and refuses the whole
+     * place when it cannot. Its sentence is the only thing that says which audience missed the message, so the
+     * tab surfaces it verbatim rather than a generic "could not place". */
+    it(`surfaces the daemon's sentence when the channel delivery is refused`, async () => {
+        const conversation = new Conversation(`c-place-channel`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
+        await conversation.send(`first`, settings);
+        const before = conversation.messages.value.length;
+
+        sandboxRequestMock.mockImplementation(
+            async () =>
+                new Response(JSON.stringify({ message: `the discord gateway is not running, so the message cannot reach the channel` }), {
+                    status: 502,
+                }),
+        );
+        expect(await conversation.placeAsAgent(`planted`)).toBe(false);
+
+        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.error.value).toContain(`the discord gateway is not running`);
+    });
+
     // The mark survives a reopen: the record's `placed` maps back onto the bubble a restored tab draws.
     it(`restores a placed row with its mark`, () => {
         const conversation = new Conversation(`c-place-restore`);

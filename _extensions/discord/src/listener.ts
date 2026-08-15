@@ -51,6 +51,24 @@ export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<
         return entry;
     });
 
+/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn —
+ * the daemon's "speak as the agent" path for a Discord conversation. Which bot speaks is whichever connected
+ * one can see the channel; with several bots sharing a channel that is the first subscribed, matching the
+ * dedup order inbound messages already follow. Chunked at the same ceiling a streamed reply spills at. */
+export const deliverToChannel = async (subscribed: ReadonlyMap<string, Client>, channelId: string, text: string): Promise<void> => {
+    for (const client of subscribed.values()) {
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (channel === null || !("send" in channel)) {
+            continue;
+        }
+        for (let base = 0; base < text.length; base += DISCORD_MAX) {
+            await (channel as unknown as StreamChannel).send(text.slice(base, base + DISCORD_MAX));
+        }
+        return;
+    }
+    throw new Error("no connected Discord bot can post in this channel");
+};
+
 export interface DiscordListener {
     readonly onMessage: (message: Message) => void;
     readonly stopAll: () => void;

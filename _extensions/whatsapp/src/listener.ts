@@ -7,7 +7,7 @@ import type { WaMessageContent, WaRawMessage } from "./types.js";
  * automation fingerprint that gets numbers flagged, and every edit wears a visible "edited" label. The reply
  * buffers and lands once on turn end; the ceiling is a safety net, not a pagination scheme (WhatsApp takes
  * 65,536 chars). */
-const WHATSAPP_MAX = 60_000;
+export const WHATSAPP_MAX = 60_000;
 
 /* The inbound half of the gateway: every live message a paired session receives becomes a normalized listener
  * message POSTed to the daemon's dispatch route. On a mention we hold the streaming response, show "typing…"

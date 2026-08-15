@@ -2,7 +2,7 @@ import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runt
 import type { Client } from "discord.js";
 import { whisperCliMissing } from "./audio.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
-import { createDiscordListener } from "./listener.js";
+import { createDiscordListener, deliverToChannel } from "./listener.js";
 import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } from "./voice.js";
 
 // The Discord gateway process: a baked extension's autoStart process (contributes.processes). It reconciles a
@@ -61,6 +61,9 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 const voice = activeVoiceSession();
                 return { ...(voice !== undefined ? { voice } : {}), whisperReady };
             },
+            // The daemon's outbound door: a message the owner placed in a channel conversation, posted through
+            // whichever connected bot can see the channel (shell route /deliver).
+            deliver: (channelId, text) => deliverToChannel(subscribed, channelId, text),
             // The loopback control surface for the `discord-voice` CLI. Loopback + same-container only; the bot
             // token the CLI would need to talk to Discord itself is already in the agent's env, so no extra auth.
             routes: async (req, body) => {

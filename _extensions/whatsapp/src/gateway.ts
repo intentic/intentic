@@ -9,7 +9,7 @@ import {
     whatsappConnections,
     type WhatsAppConnection,
 } from "./client.js";
-import { createWhatsAppListener } from "./listener.js";
+import { createWhatsAppListener, WHATSAPP_MAX } from "./listener.js";
 
 /* The WhatsApp gateway process: a baked extension's autoStart process (contributes.processes). It reconciles
  * one paired multi-device session per configured capability against the daemon's /listeners/whatsapp/state,
@@ -113,6 +113,17 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
                     }
                 }
                 return Object.keys(pairing).length > 0 ? { pairing } : {};
+            },
+            // The daemon's outbound door (shell route /deliver): a message the owner placed in a chat
+            // conversation, sent through the paired session — the same first-ready pick the CLI's /send uses.
+            deliver: async (channelId, text) => {
+                const connection = firstReady();
+                if (connection === undefined) {
+                    throw new Error("WhatsApp is not connected — pair the device from the capability card first.");
+                }
+                for (let base = 0; base < text.length; base += WHATSAPP_MAX) {
+                    await connection.sendText(chatJidOf(channelId), text.slice(base, base + WHATSAPP_MAX));
+                }
             },
             // The loopback control surface the agent's `whatsapp` CLI drives (address published via
             // gateway.url). Every response is a human-readable string — the CLI prints it for the model.

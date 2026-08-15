@@ -111,6 +111,30 @@ export const addressesUs = (message: TelegramMessage, usernames: ReadonlySet<str
     return repliedTo !== undefined && selfIds.has(repliedTo.id);
 };
 
+/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a chat outside any live turn — the
+ * daemon's "speak as the agent" path for a Telegram conversation. Which bot speaks is whichever connected one
+ * the chat accepts; the next bot is only tried when NOTHING was posted (a partial spill re-sent through a
+ * second bot would duplicate its own chunks). Chunked at the same ceiling a streamed reply spills at. */
+export const deliverToChat = async (connections: ReadonlyMap<string, TelegramConnection>, chatId: string, text: string): Promise<void> => {
+    let refusal: unknown = new Error("no Telegram bot is connected");
+    for (const connection of connections.values()) {
+        let posted = false;
+        try {
+            for (let base = 0; base < text.length; base += TELEGRAM_MAX) {
+                await connection.call("sendMessage", { chat_id: chatId, text: text.slice(base, base + TELEGRAM_MAX) });
+                posted = true;
+            }
+            return;
+        } catch (error) {
+            if (posted) {
+                throw error;
+            }
+            refusal = error;
+        }
+    }
+    throw refusal;
+};
+
 export interface TelegramListener {
     readonly onUpdate: (connection: TelegramConnection, update: TelegramUpdate) => void;
     readonly stopAll: () => void;

@@ -16,11 +16,14 @@ that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to eac
 - Paint a streaming reply into a channel: one growing, rate-limit-aware message (or WhatsApp's deliberate
   buffer-and-send-once), one painter per matched automation — and, when a turn is not going to answer at all,
   say why instead of leaving the chat with typing dots that stopped.
+- Serve the daemon's outbound door (`POST /deliver` on the loopback surface): a message the owner placed in a
+  channel conversation between turns, carried into the channel through the connector's `deliver` hook — a
+  connector without one answers 501 and the daemon tells the owner so.
 
 ## Key files
 
 - [src/gateway.ts](src/gateway.ts) — `runConnectorGateway`: the reconcile/status/health/shutdown shell, and the
-  `GatewayHooks` seam a connector fills in (open, close, alive, fatal, phase).
+  `GatewayHooks` seam a connector fills in (open, close, alive, fatal, phase, deliver).
 - [src/daemon.ts](src/daemon.ts) — the client for `/listeners/<provider>/{state,dispatch,failure,status}`.
 - [src/painter.ts](src/painter.ts) — the streaming and buffered painters, and the per-automation fan-out.
 - [src/context.ts](src/context.ts) — what a connector's own modules get from the process (daemon, log,

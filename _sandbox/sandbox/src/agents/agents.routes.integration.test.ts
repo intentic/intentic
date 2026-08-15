@@ -1,3 +1,6 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+
 import { expect, test, vi } from "vitest";
 
 import type { RestoredMessage } from "@intentic/sandbox-contract";
@@ -6,9 +9,11 @@ import { createApp } from "../app.js";
 
 import type { Services } from "../composition.js";
 
+import { extensionProcessKey } from "../extensions/extension-processes.js";
+
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 
-import { clientFor, codexConnectedProxy, collect, errorCode, fakeHistory, runAgentTurn, services, withTranslator } from "../route-testing.js";
+import { clientFor, codexConnectedProxy, collect, errorCode, fakeHistory, fakeProcesses, runAgentTurn, services, withTranslator } from "../route-testing.js";
 
 /* The agents routes, driven over the daemon's HTTP surface exactly as the browser drives them.
  * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon —
@@ -488,6 +493,136 @@ test("agents.place appends the user's words as the agent's, retires the session,
 
     // An id the registry has never heard of has no transcript to place into.
     expect(await errorCode(client.agents.place({ id: "ghost", text: "boo" }))).toBe("NOT_FOUND");
+});
+
+/* SPEAKING AS THE AGENT IN A CHANNEL CONVERSATION — the placed line has a second audience. A conversation woken
+ * by an outside message (origin.channelId) is a thread somebody is watching from Discord/Slack/Telegram, so the
+ * daemon carries the line out through the provider's gateway (its loopback /deliver door) BEFORE appending, and
+ * a delivery that cannot happen refuses the whole place: the record never holds a sentence the channel did not
+ * get. These suites run against the repo's real _extensions manifests (testConfig.extensionsDir), which is how
+ * "discord has a gateway extension, webchat does not" is the same fact production reads. */
+
+// The in-memory record + one-frame turn the channel-place tests share; `ports` seeds the fake process table so
+// a test decides whether the discord gateway "runs" (and where its /deliver door answers).
+const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]) => {
+    const records = new Map<string, RestoredMessage[]>();
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "session", sessionId: "sess-live" };
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async (agent) => records.get(agent.id) ?? [],
+                    open: async (agent) => void (records.has(agent.id) || records.set(agent.id, [])),
+                    fork: async () => {},
+                    append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    lines: async (agent) => spokenLinesOf(records.get(agent.id) ?? []),
+                    count: async (agent) => (records.get(agent.id) ?? []).length,
+                    truncate: async () => 0,
+                },
+                processes: fakeProcesses(ports),
+                ...(activity !== undefined ? { activity: { append: async (event: unknown) => void activity.push(event), list: async () => [] } } : {}),
+            }),
+        ),
+    );
+    return { client, records };
+};
+
+// A local stand-in for a connector gateway's loopback surface: records every /deliver body, answers as told.
+const fakeGateway = async (answer: { status: number; body: string }): Promise<{ port: number; deliveries: unknown[]; close: () => void }> => {
+    const deliveries: unknown[] = [];
+    const server = createServer((req, res) => {
+        let raw = "";
+        req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
+        req.on("end", () => {
+            deliveries.push({ path: req.url, body: JSON.parse(raw) });
+            res.writeHead(answer.status, { "content-type": "text/plain" });
+            res.end(answer.body);
+        });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { port: (server.address() as AddressInfo).port, deliveries, close: () => server.close() };
+};
+
+test("agents.place in a channel conversation delivers the line to the provider's gateway, then appends and logs the send", async () => {
+    const gateway = await fakeGateway({ status: 200, body: "ok" });
+    const activity: unknown[] = [];
+    try {
+        const { client } = channelPlaceHarness({ [extensionProcessKey("intentic.discord", "gateway")]: gateway.port }, activity);
+        await runAgentTurn(client, {
+            prompt: "answer the mention",
+            conversationId: "conv1",
+            isolated: true,
+            origin: { automationId: "auto", provider: "discord", channelId: "123" },
+        });
+        expect(await client.agents.place({ id: "conv1", text: "On it — checking now." })).toEqual({ ok: true });
+        // The channel got the exact line, addressed by the origin's own channel id…
+        expect(gateway.deliveries).toEqual([{ path: "/deliver", body: { channelId: "123", text: "On it — checking now." } }]);
+        // …the record holds it marked, exactly as an ordinary place would…
+        expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
+            role: "assistant",
+            text: "On it — checking now.",
+            placed: true,
+        });
+        // …and the activity feed shows the channel was told, the same row an agent's own send leaves.
+        await vi.waitFor(() =>
+            expect(activity.filter((event) => (event as { type?: string }).type === "message.send")).toMatchObject([
+                { provider: "discord", direction: "out", channelId: "123", content: "On it — checking now.", conversationId: "conv1" },
+            ]),
+        );
+    } finally {
+        gateway.close();
+    }
+});
+
+test("agents.place refuses a channel conversation whose gateway is not running, leaving the record untouched", async () => {
+    const { client, records } = channelPlaceHarness({});
+    await runAgentTurn(client, {
+        prompt: "answer the mention",
+        conversationId: "conv1",
+        isolated: true,
+        origin: { automationId: "auto", provider: "discord", channelId: "123" },
+    });
+    expect(await errorCode(client.agents.place({ id: "conv1", text: "planted" }))).toBe("BAD_GATEWAY");
+    // Nothing appended and the session pointer kept: the conversation is exactly as it was before the attempt.
+    expect((records.get("conv1") ?? []).some((message) => message.placed === true)).toBe(false);
+    expect((await client.agents.list()).agents[0]).toMatchObject({ sessionId: "sess-live" });
+});
+
+test("agents.place surfaces the gateway's own refusal sentence", async () => {
+    const gateway = await fakeGateway({ status: 500, body: "no connected Discord bot can post in this channel" });
+    try {
+        const { client } = channelPlaceHarness({ [extensionProcessKey("intentic.discord", "gateway")]: gateway.port });
+        await runAgentTurn(client, {
+            prompt: "answer the mention",
+            conversationId: "conv1",
+            isolated: true,
+            origin: { automationId: "auto", provider: "discord", channelId: "123" },
+        });
+        const message = await client.agents.place({ id: "conv1", text: "planted" }).then(
+            () => undefined,
+            (error: unknown) => (error as Error).message,
+        );
+        expect(message).toBe("no connected Discord bot can post in this channel");
+    } finally {
+        gateway.close();
+    }
+});
+
+// A webchat (or webhook) origin has no gateway extension — there is nothing to carry the line, and that is the
+// ordinary place, not a failure: the visitor transport only exists while a turn streams (webchat.routes.ts).
+test("agents.place in a webchat conversation places into the record alone", async () => {
+    const { client, records } = channelPlaceHarness({});
+    await runAgentTurn(client, {
+        prompt: "answer the visitor",
+        conversationId: "conv1",
+        isolated: true,
+        origin: { automationId: "auto", provider: "webchat", channelId: "wc-visitor-1" },
+    });
+    expect(await client.agents.place({ id: "conv1", text: "We are on it." })).toEqual({ ok: true });
+    expect(records.get("conv1")?.at(-1)).toEqual({ role: "assistant", text: "We are on it.", placed: true });
 });
 
 // The illusion can only be established between turns: a running turn holds the very session placing exists to

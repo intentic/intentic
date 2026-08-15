@@ -69,6 +69,14 @@ export interface GatewayHooks<TConfig, THandle> {
     // Per-gateway extras that ride the status snapshot: discord's voice session + whisper presence, whatsapp's
     // pairing codes.
     readonly statusExtras?: () => Omit<ListenerStatus, "connections">;
+    /* Deliver one outbound message into a provider channel OUTSIDE any live turn stream — the daemon's
+     * "speak as the agent" door (POST /deliver, served by the shell). The turn painters above only exist while
+     * a dispatch response is held open; a message the OWNER places in a channel conversation between turns has
+     * no such stream, so the daemon knocks here instead. `channelId` arrives exactly as the connector's own
+     * listener reported it (a Discord channel id, a Slack channel, a Telegram chat id, a WhatsApp JID).
+     * Throwing reports the provider's own sentence back to the daemon; absent, the shell answers 501 and the
+     * daemon tells the owner this provider cannot carry a placed message. */
+    readonly deliver?: (channelId: string, text: string) => Promise<void>;
     // The connector's loopback control surface (discord-voice, the whatsapp CLI). Return undefined for an
     // unmatched route; throwing reports a 500 with the error's message. /health is the shell's.
     readonly routes?: (req: IncomingMessage, body: () => Promise<string>) => Promise<{ status?: number; body: string } | undefined>;
@@ -263,6 +271,26 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                  * returns only once the connections match. */
                 if (req.method === "POST" && path === "/reconcile") {
                     await reconcileNow();
+                    return send("ok");
+                }
+                /* The daemon's outbound door (see GatewayHooks.deliver): a message placed in a channel
+                 * conversation between turns, carried into the channel through the connection this process
+                 * holds. A deliver that fails answers 502 with the provider's BARE sentence — the daemon shows
+                 * that body to the owner instead of placing the message, so it must read as words, not as the
+                 * generic catch's `error:`-prefixed line. */
+                if (req.method === "POST" && path === "/deliver") {
+                    if (hooks.deliver === undefined) {
+                        return send(`the ${spec.provider} connector cannot post into a channel on its own`, 501);
+                    }
+                    const { channelId, text } = JSON.parse((await readBody(req)) || "{}") as { channelId?: unknown; text?: unknown };
+                    if (typeof channelId !== "string" || channelId === "" || typeof text !== "string" || text === "") {
+                        return send("channelId and text required", 400);
+                    }
+                    try {
+                        await hooks.deliver(channelId, text);
+                    } catch (error) {
+                        return send(error instanceof Error ? error.message : String(error), 502);
+                    }
                     return send("ok");
                 }
                 const handled = await hooks.routes?.(req, () => readBody(req));

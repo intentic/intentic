@@ -704,14 +704,20 @@ export class Conversation {
      * turn opens fresh and is seeded from the record — where the placed line reads as the agent's own words.
      *
      * Returns false when the daemon refused; the tab is left untouched, because a bubble drawn for a row the
-     * record never took would be the transcript lying about itself. */
+     * record never took would be the transcript lying about itself. In a CHANNEL conversation (a Discord
+     * mention's thread) the daemon also carries the line out to the channel before it appends — so a refusal
+     * here can be the channel being unreachable, and its sentence (the sandboxError branch) is the one thing
+     * that tells the user which audience missed the message. */
     async placeAsAgent(text: string): Promise<boolean> {
-        const response = await sandboxRequest(`/agents/${encodeURIComponent(this.conversationId)}/place`, jsonBody(`POST`, { text }));
+        const path = `/agents/${encodeURIComponent(this.conversationId)}/place`;
+        const response = await sandboxRequest(path, jsonBody(`POST`, { text }));
         if (!response.ok) {
             this.error.value =
                 response.status === 409
                     ? `This agent is running a turn — wait for it to finish before speaking as it.`
-                    : `Could not place the message${response.status === 404 ? ` — this conversation hasn't run a turn yet` : ``}.`;
+                    : response.status === 404
+                      ? `Could not place the message — this conversation hasn't run a turn yet.`
+                      : `Could not place the message — ${(await sandboxError(response, { method: `POST`, path })).message}`;
             return false;
         }
         this.transcript.append({ role: `assistant`, text, placed: true });

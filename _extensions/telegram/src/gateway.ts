@@ -1,6 +1,6 @@
 import { runConnectorGateway } from "@intentic/connector-runtime";
 import { closeTelegramConnection, FatalTelegramError, openTelegramConnection, telegramConnection, telegramConnections } from "./client.js";
-import { createTelegramListener } from "./listener.js";
+import { createTelegramListener, deliverToChat } from "./listener.js";
 
 // The Telegram gateway process: a baked extension's autoStart process (contributes.processes). It reconciles one
 // long-polling connection per configured bot against the daemon's /listeners/telegram/state, dispatches every
@@ -39,6 +39,9 @@ void runConnectorGateway<TelegramConnectorConfig, string>({
             close: (id, botToken) => closeTelegramConnection(botToken),
             alive: (id, botToken) => telegramConnection(botToken) !== undefined,
             fatal: (error) => (error instanceof FatalTelegramError ? error.message : undefined),
+            // The daemon's outbound door: a message the owner placed in a channel conversation, posted through
+            // whichever connected bot the chat accepts (shell route /deliver).
+            deliver: (channelId, text) => deliverToChat(telegramConnections(), channelId, text),
             shutdown: (wired) => {
                 for (const botToken of wired.values()) {
                     closeTelegramConnection(botToken);

@@ -4,6 +4,7 @@ import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { agentRepoChanges, agentRepoModules, anchorOf } from "./agent-changes.js";
@@ -175,10 +176,45 @@ export const createAgentsRoutes = (services: Services) => {
          * UNDER THE REWIND LEASE rather than a notRunning check, for rewind's own reason: a turn admitted
          * between check and append would resume the very session this exists to retire, and the placed line
          * would sit in a transcript the running turn's memory knows nothing about. The lease is the same mutex
-         * a turn takes, so the two cannot interleave; a held lease answers undefined ⇒ CONFLICT. */
+         * a turn takes, so the two cannot interleave; a held lease answers undefined ⇒ CONFLICT.
+         *
+         * A CHANNEL CONVERSATION'S AUDIENCE IS THE CHANNEL. One woken by an outside message (a Discord mention,
+         * a Telegram chat — origin.channelId names the thread) has two readers: the transcript and whoever is
+         * waiting where the message came from. A placed line that only reached the record answered into the
+         * void — the channel saw nothing, while the transcript claims the agent spoke — so the line is carried
+         * out through the provider's gateway first (extensions/listener-deliver.ts), and carried FIRST: a
+         * delivery that fails refuses the whole place (BAD_GATEWAY, with the gateway's own sentence), leaving
+         * the record untouched rather than holding a sentence its audience never got. Origins with no gateway
+         * (webchat, webhook) have no channel transport and place into the record alone, as every conversation
+         * without an origin does. */
         place: i.place.handler(async ({ input }) => {
             const agent = entryOf(input.id);
+            const origin = agent.origin;
             const outcome = await services.agents.withRewindLease(input.id, async () => {
+                if (origin?.channelId !== undefined) {
+                    let delivered: "delivered" | "no-gateway";
+                    try {
+                        delivered = await deliverToListenerChannel(services, origin.provider, origin.channelId, input.text);
+                    } catch (error) {
+                        throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : String(error) });
+                    }
+                    if (delivered === "delivered") {
+                        // The outbound trail: the same row an agent's own send leaves, so the activity feed
+                        // shows the channel got this line even though no turn ran.
+                        void services.activity
+                            .append({
+                                provider: origin.provider,
+                                direction: "out",
+                                type: "message.send",
+                                channelId: origin.channelId,
+                                content: input.text,
+                                conversationId: agent.id,
+                                ...(agent.title !== undefined ? { title: agent.title } : {}),
+                                origin,
+                            })
+                            .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
+                    }
+                }
                 await services.transcripts.open(agent);
                 await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true }]);
                 await services.agents.clearSession(input.id);

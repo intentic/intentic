@@ -95,6 +95,32 @@ export const toHistory = (
         return entry;
     });
 
+/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn —
+ * the daemon's "speak as the agent" path for a Slack conversation. The origin only recorded the channel, so the
+ * message lands top-level rather than in any one thread. Which app speaks is whichever connected one the channel
+ * accepts; the next app is only tried when NOTHING was posted (a partial spill re-sent through a second app
+ * would duplicate its own chunks). Chunked at the same ceiling a streamed reply spills at. */
+export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string): Promise<void> => {
+    let refusal: unknown = new Error("no Slack app is connected");
+    for (const connection of connections.values()) {
+        let posted = false;
+        try {
+            for (let base = 0; base < text.length; base += SLACK_MAX) {
+                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack's chat.postMessage, not window.postMessage; there is no targetOrigin to pass
+                await connection.web.chat.postMessage({ channel, text: text.slice(base, base + SLACK_MAX) });
+                posted = true;
+            }
+            return;
+        } catch (error) {
+            if (posted) {
+                throw error;
+            }
+            refusal = error;
+        }
+    }
+    throw refusal;
+};
+
 export interface SlackListener {
     readonly onEvent: (connection: SlackConnection, envelope: SlackEnvelope) => void;
 }
