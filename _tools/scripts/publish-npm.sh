@@ -21,9 +21,10 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/packages.sh"
 cd "$(repo_root)"
 
-# Versions are stamped by set-versions.sh before the tag is pushed, so by the time this runs every
-# package.json already carries $VERSION. Checked rather than assumed: a mismatch means the tag and the tree
-# disagree, and the tarball would go out under a version nobody asked for.
+# Versions live in the tag, not in git — every package.json reads 0.0.0 on disk until set-versions.sh stamps
+# it, which the publish workflow does right after checkout and before the build (npm-publish.yml). Checked
+# rather than assumed: a mismatch means that stamp did not happen, or happened at another version, and the
+# tarball would go out under a version nobody asked for.
 names=()
 for d in "${PUB[@]}"; do
   names+=("$(node -p "require('./$d/package.json').name")")

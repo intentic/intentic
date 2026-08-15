@@ -1,15 +1,19 @@
 # Publish the @intentic/* packages to npm, with provenance, at the tag semantic-release pushes.
 #
-# A `v*` tag is always a complete, version-stamped tree — release-prepare.sh stamps every package.json before
-# the tag exists — so there is nothing to bump and nothing to check out beyond the tag itself.
+# THE TAG CARRIES THE VERSION; THE TREE DOES NOT. Every first-party package.json stays at 0.0.0 in git — the
+# release version is stamped transiently, in CI only, by set-versions.sh (packages.sh says why). release.yml
+# does that in each of its build jobs; a checkout of the tag is therefore an UNSTAMPED tree, so this workflow
+# stamps it too, before anything is built or packed. Without that step publish-npm.sh's version assertion
+# fails on the first package every time ("_tools/base is at 0.0.0, not the released <version>") — the first
+# thing this workflow hit once it started running at all.
 #
 # DISPATCHED, NOT TAG-TRIGGERED. semantic-release pushes its tag with the built-in GITHUB_TOKEN, and GitHub
 # refuses to start a workflow from any event that token created — its loop guard. `on: push: tags` was
 # therefore a trigger that could never fire, which is how npm fell ~30 versions behind the tags while every
 # release reported green. workflow_dispatch is the documented exception to that guard, so it is the one
 # trigger the release job can pull (dispatch-publish.sh). The dispatch names THE TAG as its ref, which this
-# workflow depends on twice over: the checkout gets the version-stamped tree, and the OIDC claim and the
-# provenance attestation name that commit rather than whatever main had drifted to.
+# workflow depends on twice over: the checkout gets the released commit and the version stamped from its tag,
+# and the OIDC claim and the provenance attestation name that commit rather than whatever main had drifted to.
 #
 # Auth is TOKENLESS. `id-token: write` lets npm exchange this run's OIDC token for a short-lived publish
 # credential, which is also what makes the provenance attestation possible: the attestation names this
@@ -61,6 +65,12 @@ jobs:
       - run: npm install -g npm@latest
 
       - uses: ./.github/actions/pnpm-setup
+
+      # Stamp the release version onto the tree, BEFORE the build: the packed tarballs carry it, the version
+      # assertion in publish-npm.sh demands it, and a build that embeds a version must embed this one. Same
+      # call release.yml's build jobs make, so both halves of a release describe themselves identically.
+      - name: Stamp the release version
+        run: bash _tools/scripts/set-versions.sh "${GITHUB_REF_NAME#v}"
 
       # Only the published closure, in the same shape release-prepare.sh builds it — the desktop app and the
       # extensions are in this tree but are not npm artifacts, and building them here buys nothing.

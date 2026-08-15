@@ -1,6 +1,7 @@
 # Publish the VSCode extension to the Visual Studio Marketplace and Open VSX, at the tag semantic-release
-# pushes — the same trigger and shape as npm-publish.yml, for the same reason: a `v*` tag is a complete,
-# version-stamped tree, so there is nothing to bump and nothing to check out beyond the tag itself.
+# pushes — the same trigger and shape as npm-publish.yml. The version comes off the tag, never out of the tree
+# (package.json is 0.0.0 in git), and build-vscode-extension.sh stamps it onto the extension itself before
+# packing — which is why this workflow needs no separate stamping step and npm-publish.yml does.
 #
 # DISPATCHED, NOT TAG-TRIGGERED, and that distinction is the whole reason this workflow exists in a repository
 # where it had never once run. semantic-release pushes its tag with the built-in GITHUB_TOKEN, and GitHub
@@ -8,7 +9,7 @@
 # a trigger that could never fire: 200 releases went out and neither marketplace ever saw a version.
 # workflow_dispatch is the documented exception to that guard, so it is the one trigger the release job can
 # actually pull (dispatch-publish.sh). Dispatching AT THE TAG is what keeps the old contract intact — the run
-# checks out the version-stamped tree and reads its own version off the ref, exactly as a tag push would have.
+# checks out the released commit and reads its own version off the ref, exactly as a tag push would have.
 #
 # The build assembles the whole product the extension hosts: the web app the panels load, and the daemon
 # deployed as the extension's engine tree — then smoke-boots that engine in its local profile before packing,
