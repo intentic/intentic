@@ -53,16 +53,16 @@ export interface VerbTourItem {
 }
 
 /**
- * The ownership ledger: what sits on your hardware, against everything the platform holds. Two columns
- * of nouns rather than three paragraphs of argument: the claim is a comparison, so the shape that makes
- * it is a comparison.
+ * Why this is a workspace and not a chat box: the surfaces that let you check the work, against what a
+ * chat box gives you instead. Two columns of nouns rather than three paragraphs of argument, because the
+ * claim is a comparison.
  *
- * `platform.never` is one sentence rather than a list on purpose. As three more rows it made the
- * platform's card the taller of the two, which is the exact opposite of the point the band is making.
+ * `chat.missing` is one sentence rather than a list on purpose. As three more rows it made the thin card
+ * the taller of the two, which is the exact opposite of the point the band is making.
  */
-export interface OwnershipLedger {
-    yours: { label: string; note: string; items: string[] };
-    platform: { label: string; note: string; holds: string[]; never: string };
+export interface WorkspaceComparison {
+    ours: { label: string; note: string; items: string[] };
+    chat: { label: string; note: string; items: string[]; missing: string };
     footnote: string;
 }
 
@@ -79,12 +79,13 @@ export interface LandingContent {
      * home page and the feature pages read as one product. It replaces the old "loop" beats and "extend"
      * bento, which between them said the same powers three times over. */
     verbs: LandingSectionIntro & { items: VerbTourItem[]; cta: string };
-    ownership: LandingSectionIntro & { ledger: OwnershipLedger };
+    workspace: LandingSectionIntro & { comparison: WorkspaceComparison };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
     /* Who is behind the promises the page just made. It sits here, last before `#connect`, because the
-     * conversion order is claim → proof → objection → action: `#ownership` answers the architectural
-     * half of "can I trust this", and the human half is the objection still standing when `#connect`
-     * says "paste this command on your machine".
+     * conversion order is claim → proof → objection → action: its first card answers the architectural
+     * half of "can I trust this" (it is the only place on the page that does, now that the ownership
+     * band is retired), and the human half is the objection still standing when `#connect` says
+     * "paste this command on your machine".
      *
      * The cards come from `about.ts`, shared with /about/, and the commit numbers are measured from git
      * at build time: never authored. The band has no slot that can render a zero: an empty social-proof
@@ -107,8 +108,9 @@ export interface LandingContent {
 
 // One claim, proven once: your agents run on hardware you own, keep running when you look away, and
 // any browser, including a phone, reopens onto the same fleet, with nothing reaching your tree until you
-// have read the diff. The hero states it; the five verbs show it; the bands below answer the objections
-// it raises (who owns what, what it costs, who builds it) and then hand you the one command to start.
+// have read the diff. The hero states it; the five verbs show it; `#workspace` shows what you read it
+// WITH; the bands below answer the objections it raises (what it costs, who builds it) and then hand
+// you the one command to start.
 export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
@@ -137,7 +139,10 @@ export const landingContent: LandingContent = {
         // the bands, because framing it as the reader walking away argued against the co-piloted
         // stance the headline just set.
         subhead: "A workspace for coding agents. Nothing happens out of sight.",
-        chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
+        // "Works with Claude, Codex and Grok" replaces "Bring your own agent": the old chip asked the
+        // reader to already know what an agent is and that they have one, which is the assumption the
+        // whole first screen was making. Three names they recognise do the same job with no decoding.
+        chips: ["Free and open source", "Works with Claude, Codex and Grok", "Runs on your own machine"],
         shot: {
             name: "fleet-board",
             alt: "The intentic fleet board: an agent with a question for you and one blocked on a land conflict, beside three running on a Stripe checkout, a reviewed change and a latency spike, and three finished waiting to land. Each card shows its model, branch, cost and diff stats.",
@@ -154,13 +159,18 @@ export const landingContent: LandingContent = {
     // everywhere, because no honest capture of an automations screen exists.
     verbs: {
         eyebrow: "What you do",
-        heading: "Run a fleet. Stay in control.",
-        sub: "Run them, wire them to your systems, wake them on events, read every change.",
+        // The heading names the actor and the three things you actually do with it, in that order.
+        // It used to read "Run a fleet. Stay in control." over "Run them, wire them to your systems":
+        // two abstractions and a pronoun, so a reader who had not already decoded the hero got a
+        // second screenful with nothing in it to hold. The sub now spends its line on the one
+        // mechanical fact that makes "ten at once" believable instead of restating the heading.
+        heading: "Run agents. Give them what they need. Read every change.",
+        sub: "Each agent works on its own branch, so ten can run at once without touching each other's work.",
         items: [
             {
                 verb: "Run",
                 href: productHref("orchestrate"),
-                line: "The board holds every agent at once and brings the one that needs you to the front.",
+                line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -170,7 +180,7 @@ export const landingContent: LandingContent = {
             {
                 verb: "Connect",
                 href: productHref("empower"),
-                line: "Give an agent GitHub, Postgres, Stripe, Discord or any MCP server. The keys stay in your sandbox.",
+                line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
                     name: "capabilities",
                     alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data and Communication, with GitHub, Sentry, PostgreSQL, Discord, Docker and SSH marked as connected.",
@@ -180,13 +190,13 @@ export const landingContent: LandingContent = {
             {
                 verb: "Automate",
                 href: productHref("automate"),
-                line: "Wake an agent on an event you pick. Each run opens a fresh session you can watch.",
+                line: "Start an agent automatically on an event you pick. Every run is one you can open and watch.",
                 triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
             },
             {
                 verb: "Review",
                 href: productHref("supervise"),
-                line: "It plans first and you approve. Finished work waits on its branch until you have read the diff.",
+                line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
                     name: "workspace-changes",
                     alt: "The workspace Changes tab: five uncommitted files grouped by repo with their line counts, and the diff of one of them open beside the list.",
@@ -196,7 +206,7 @@ export const landingContent: LandingContent = {
             {
                 verb: "Host",
                 href: productHref("delegate"),
-                line: "Give the workspace its own server and hand off the day-to-day. It stays under your control.",
+                line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
                     name: "sandbox-overview",
                     alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",
@@ -206,40 +216,43 @@ export const landingContent: LandingContent = {
         ],
         cta: "Every feature, in detail",
     },
-    // The claim here is a COMPARISON: your hardware holds everything while the platform holds two fields, so
-    // it is made as one: two columns of nouns, side by side, where the asymmetry is the argument and needs
-    // no prose to carry it.
-    ownership: {
-        eyebrow: "Ownership",
-        heading: "Your code never leaves your machine.",
-        // The qualifier is load-bearing, not lawyering: the hosted starter box is a machine WE pay for, so for
-        // that one lane the heading above is not true, and an unqualified version of it is a claim the terms
-        // and the privacy policy would both have to contradict.
-        sub: "What stays on your machine, and everything the platform stores. (Take the sandbox we host instead, and the workspace lives on our provider's disk — /privacy says exactly what that means.)",
-        ledger: {
-            yours: {
-                label: "Your machine",
-                note: "Where the sandbox runs.",
+    // Replaces the ownership ledger (retired 2026-08-15). That band spent the page's third screenful
+    // answering a fear the reader had not had yet, in a heading that was a slogan ("Your code never
+    // leaves your machine"), and its argument was already made in full by the first trust card below,
+    // qualifier and link included. The slot goes to the question the hero actually raises: the hero
+    // promises you approve everything, so this is where the page shows what you approve WITH. The claim
+    // is a COMPARISON, so it is made as one: two columns of nouns, where the asymmetry carries it.
+    workspace: {
+        eyebrow: "Why a workspace",
+        heading: "You cannot approve what you cannot read.",
+        sub: "Agents write a lot of code, quickly. Checking it is the real work, so the tools for checking it are the product.",
+        comparison: {
+            ours: {
+                label: "Here",
+                note: "What you get to look at.",
                 items: [
-                    "Your repositories and working tree",
-                    "API keys, .env files, database passwords",
-                    "The agents, their sandboxes, their history",
-                    "Every file an agent reads or writes",
+                    "The diff of every file, before any of it lands",
+                    "The editor and the file tree, to look anywhere yourself",
+                    "The same terminal the agent is typing into",
+                    "The run as it happens, stoppable mid-thought",
+                    "What every run cost, agent by agent",
                 ],
             },
-            platform: {
-                label: "The intentic platform",
-                note: "Everything it stores, in full.",
-                holds: ["Your email address", "Your sandbox's URL"],
-                never: "No code, no keys, and no way to command your agents.",
+            // Two items and a short closing line, so this card stays visibly the shorter of the two.
+            // The silhouette is half the argument: a longer thin card would say the opposite of the band.
+            chat: {
+                label: "In a chat box",
+                note: "What you get instead.",
+                items: ["A wall of text", "An assurance that it worked"],
+                missing: "Nothing to open, and nothing to check.",
             },
-            footnote: "Your browser, not the platform, holds the token that drives the sandbox. The full source is MIT-licensed on GitHub.",
+            footnote: "Every agent works on its own branch, so nothing it writes touches the files you have open.",
         },
     },
     economics: {
-        eyebrow: "Economics",
-        heading: "A whole fleet, on the subscriptions you already pay for.",
-        sub: "Ten agents sounds expensive. Each one runs on a plan you already pay for.",
+        eyebrow: "What it costs",
+        heading: "Ten agents, on the AI plans you already pay for.",
+        sub: "intentic itself is free. You sign in with the AI accounts you already have, and nothing is charged on top.",
         accounts: [
             { name: "Claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
@@ -248,9 +261,9 @@ export const landingContent: LandingContent = {
             { name: "Google", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
         ],
         points: [
-            "No per-token metering. No markup on your model usage.",
-            "No rented cloud compute. Agents run where you run them.",
-            "Free, whole: every sandbox, capability and shared workspace included.",
+            "We never meter your tokens or add a markup.",
+            "No cloud compute to rent. Agents run on the machine you start them on.",
+            "Everything is included. No tiers, no limits, no card.",
         ],
     },
     // The name, bio, links and cards all live in about.ts: shared with /about/, so the two surfaces
@@ -260,24 +273,26 @@ export const landingContent: LandingContent = {
         cta: "More about who builds this",
     },
     connect: {
-        eyebrow: "Get connected",
-        heading: "One command, and an agent has a home.",
-        sub: "Sign in, paste one command, and the workspace opens the moment it answers.",
+        eyebrow: "Getting started",
+        heading: "Three steps to your first agent.",
+        sub: "Sign in, paste one command, and your workspace opens.",
         steps: [
             {
                 title: "Sign in with Google",
-                body: "No forms, no card. It stores your identity and the sandbox's URL, nothing else.",
+                // Step 2 is where "sandbox" first meets a reader who has never seen the word, so it is
+                // defined there rather than assumed. It is the only noun the product uses for the thing.
+                body: "No forms and no card. We keep your email address and your workspace's address, and nothing else.",
             },
             {
-                title: "The sandbox is waiting",
-                body: "Made and named for you, with a private tunnel under intentic's own domain. No Cloudflare account needed.",
+                title: "Your sandbox is waiting",
+                body: "A sandbox is the container your agents live in. We make one for you and give it a private address, with no Cloudflare account needed.",
             },
             {
                 title: "Paste one command",
-                body: "A one-liner starts the sandbox on your machine. Docker installs if missing, with your say-so.",
+                body: "One line starts it on your own machine. If Docker is missing, it offers to install that first.",
             },
         ],
-        commandNote: "This deploys nothing and opens no inbound ports. It creates a workspace for your agents.",
+        commandNote: "It creates a workspace on your machine. Nothing is deployed and no ports are opened.",
         desktop: {
             lead: "Rather not touch a terminal?",
             cta: "Get the app for Windows or Linux",
@@ -287,7 +302,9 @@ export const landingContent: LandingContent = {
         },
     },
     finalCta: {
-        heading: "Put ten agents to work. Come back whenever.",
-        sub: "One command, and it is free. Nothing lands until you have read the diff.",
+        // Persistence closes the page: it is the one claim that lives nowhere else on the scroll now,
+        // and at the bottom it reads as a reason to start rather than a reason to walk away.
+        heading: "Put ten agents to work today.",
+        sub: "It is free, it runs on your own machine, and the work carries on when you close the browser.",
     },
 };

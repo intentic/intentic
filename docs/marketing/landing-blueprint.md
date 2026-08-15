@@ -60,6 +60,30 @@ stance, the subhead still carries visibility as its second beat, and the shot un
 proof. The page title and meta description were re-cut the same way, category first, because a search
 result and a pasted link are the two places this product is met with no page around it.
 
+**Plain words everywhere 2026-08-15 (recorded decision, same pass).** The hero was not the only band
+running on slogans, so every section was rewritten to the simplest wording that is still accurate. The
+standing rule, which the copy rules above now enforce section by section rather than only in the hero:
+**no sentence may lean on a word the reader has not been given.** `#verbs` led with "Run a fleet. Stay
+in control." over "Run them, wire them to your systems" — two abstractions and a pronoun, a second
+screenful with nothing in it to hold; it now says "Run agents. Give them what they need. Read every
+change." Card lines lost their floating pronouns ("It plans first" became "The agent writes a plan").
+`Host` said "hand off the day-to-day" and now says what that is: move it to a server, invite your team.
+`#economics` reads "Ten agents, on the AI plans you already pay for." `#connect` is "Three steps to your
+first agent", and step ② is where **sandbox** is defined rather than assumed, because that is where a
+reader meets the word first. The hero chip "Bring your own agent" became "Works with Claude, Codex and
+Grok": the old one assumed the reader knew what an agent was and had one, which was the assumption the
+whole first screen was making.
+
+**The ownership ledger is retired 2026-08-15 (recorded decision, same pass).** The band headed "Your
+code never leaves your machine" is gone, and `#workspace` has its slot. Three reasons. It answered a
+fear the reader had not had yet, a whole screenful before the page asked for anything. Its heading was a
+slogan with a qualifier underneath long enough to undo it (the hosted box lives on our provider's disk).
+And its argument was already made in full by the trust band's first card, including that qualifier and a
+link to the detail, so the page was making its safety case twice and its product case not at all. What
+replaced it is the question the hero raises and the page never answered: you approve everything, so what
+do you approve *with*. Ownership keeps the hero chip, the economics band, `#trust`, `/features/host/`,
+`/privacy` and the FAQ. Do not re-add it as a band.
+
 **Re-cut around the verbs 2026-08-09 (recorded decision, supersedes the loop/extend split).** The
 middle of the page — the four-beat `#loop` and the six-row `#extend` bento — is now one band: a
 five-verb tour (`#verbs`) in the same order as the Features menu (Orchestrate · Empower · Automate ·
@@ -138,7 +162,7 @@ is in `about.ts` because `/about/` shares it.
    mid-thought — and the board cropped underneath is the proof, on sight, in the same screenful. **Scale is now shown, not
    said**: the shot is a full board, and "ten agents at once" had become the most crowded sentence in
    the category, so it bought nothing a competitor wasn't also saying. **Persistence moved down** to
-   the meta description, `#ownership` and the FAQ: every phrasing of it above the fold sold the
+   the meta description, the final CTA and the FAQ: every phrasing of it above the fold sold the
    reader's *absence* ("close the browser", "come back to the diffs"), which argues against the
    co-piloted stance the headline sets one line earlier, and it is the trope every agent product
    is running at once. Ownership stays out of both lines for the standing reason (it answers a fear,
@@ -153,20 +177,23 @@ is in `about.ts` because `/about/` shares it.
    capture exists (same rule as its feature page). This one band replaced the old four-beat `#loop` and
    six-row `#extend` (see the 2026-08-09 decision above): the product's powers were told three times —
    the loop beats, the extend bento, and the menu — and once is enough. (P2, P4, P5, P6)
-3. **Ownership (`#ownership`)** — the moat: browser → private tunnel → your machine, with the platform
-   dashed and off-path. Code and keys never leave your machine; the platform keeps identity and a URL.
-   Give it room — competitors can't copy this without re-architecting. (P1)
+3. **Why a workspace (`#workspace`)** — the answer to the question the hero raises. The hero promises
+   the reader approves everything, so this is where the page shows what they approve *with*: the diff,
+   the editor and file tree, the agent's own terminal, the run as it happens. Made as a comparison
+   against a chat box, two columns of nouns, because the asymmetry is the argument. Replaced the
+   ownership ledger on 2026-08-15 (recorded decision above). (P1, P6)
 4. **Economics (`#economics`)** — the deal, and the answer to the reflex that "ten agents" triggers:
    bring your own model subscription, run on your own hardware, pay us nothing — never a meter on model
    usage. Carries the free story. (P7)
 5. **About the creator (`#trust`)** — the last objection before the command. The page has just asked a
    visitor to run a container on their own machine and hand it a GitHub token and a database password;
-   `#ownership` answers the architectural half of *"can I trust this"*, and this answers the human half.
+   its own first card answers the architectural half of *"can I trust this"* and is now the only place
+   on the page that does, and the rest of the band answers the human half.
    Creator-forward: the name, the role, three profile chips, then four cards — *why trust intentic ·
    open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
    `/about/` so the two cannot drift. (P1, P4)
-6. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② The sandbox is waiting
-   (made and named for you) ③ Paste one command, with the real command block. Two of the three are things
+6. **Get connected (`#connect`)** — the speed proof: ① Sign in with Google ② Your sandbox is waiting
+   (made for you, and the step that defines the word) ③ Paste one command, with the real command block. Two of the three are things
    the visitor does not have to do, which is the point the band is making. (P3)
 7. **FAQ (`#faq`)** — see below.
 8. **Final CTA** — restate the claim + `Get started free` · `See the source`. (close)

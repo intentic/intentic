@@ -29,7 +29,15 @@ GitHub — the trust layer you can read and run yourself.
   their own business.
 - **Ownership is an answer, not an opener.** "On hardware you own" removes a fear, it does not create
   a want, so it never buys headline or subhead space. It earns its keep in the hero chip, the
-  ownership band, the comparison pages and the FAQ, where somebody is already asking.
+  economics band, the trust band, the comparison pages, `/features/host/` and the FAQ, where somebody
+  is already asking. It no longer gets a band of its own on the landing page (retired 2026-08-15, see
+  landing-blueprint.md): the trust band's first card was already making the whole argument.
+- **No sentence may lean on a word the reader has not been given.** A pronoun needs its noun on the
+  same screen, and a noun the product invented needs defining where it first appears. This is the rule
+  the page kept breaking: "Run them, wire them to your systems" under a heading whose only noun was
+  "a fleet", "It plans first" with no *it* in sight, "sandbox" used four bands before it was explained.
+  A visitor who arrives mid-page, or who does not already live in this category, is the reader every
+  line is checked against.
 - The product already wrote its best lines — reuse in-app copy verbatim before writing new copy.
   The app and the site must sound like one author.
 - Ownership language is the spine: "your machine", "your accounts", "you own every line",

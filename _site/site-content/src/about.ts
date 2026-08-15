@@ -5,7 +5,8 @@ import { githubProfileUrl, githubUrl, linkedinProfileUrl, personalSiteUrl } from
  *
  * It exists because the site asks for an unusual amount of trust: a visitor is about to run a container
  * on their own machine and hand it a GitHub token, a database password and write access to a repo.
- * "The platform architecturally cannot reach in" answers half of that (`#ownership`); the other half is
+ * "The platform architecturally cannot reach in" answers half of that, and since the ownership band was
+ * retired the first card below is the only place on the landing page that says it; the other half is
  * *who is making that promise*, and until now the founder existed only in the page's JSON-LD: told to
  * Google, never to the reader.
  *
