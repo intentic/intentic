@@ -1624,6 +1624,9 @@ importers:
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_editor/extension-ui
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_sandbox/sandbox-contract
       '@orpc/contract':
         specifier: 'catalog:'
         version: 1.14.13(@opentelemetry/api@1.9.1)

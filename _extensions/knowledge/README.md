@@ -11,6 +11,9 @@ happens among, browsable here and queryable by the agent.
   backend, so the browser never fetches the knowledge base in order to grep it.
 - Let the owner read, correct and delete a note, and see what is unfinished about the knowledge base as a whole.
 - Give the AGENT the same knowledge base through the `kb` CLI and the `knowledge` skill, driving the same engine.
+- Connect the owner's own **Obsidian** vault (the `obsidian` capability card), and carry notes between it and
+  the workspace folder in both directions — reading the vault's notes with this same parser, so a note means
+  one thing whichever side it is on.
 
 ## The format, in four rules
 
@@ -36,6 +39,14 @@ express a typed graph, so this reads the one it was already expressing.
 - [src/notes/read-notes.ts](src/notes/read-notes.ts) — the only file-touching module, so everything above it
   stays pure and the browser half can import its types.
 - [src/cli/kb.ts](src/cli/kb.ts) — the `kb` CLI (`contributes.bin`), built to `dist/bin/kb`.
+- [src/cli/obsidian.ts](src/cli/obsidian.ts) — the `obsidian` CLI beside it, built to `dist/bin/obsidian`: the
+  owner's live vault, and `pull`/`push` between it and the workspace folder.
+- [src/obsidian/connection.ts](src/obsidian/connection.ts) — which vaults this shell is carrying, read off the
+  environment the daemon injects. A half-filled card is a connection with a problem, not an absent one.
+- [src/obsidian/rest.ts](src/obsidian/rest.ts) — the Local REST API calls, and the two facts about that
+  transport that are not incidental: the host is `host.docker.internal`, and the certificate is self-signed.
+- [skills/obsidian/SKILL.md](skills/obsidian/SKILL.md) — the card's cheatsheet: which knowledge base to look in
+  first, and that writing to somebody's vault is off until they turn it on.
 - [src/server/server.ts](src/server/server.ts) — the backend half (`activateServer`), built to `dist/server.js`.
 - [src/contract.ts](src/contract.ts) — the extension's OWN wire contract, imported by both halves so their wire
   cannot drift.
@@ -74,3 +85,13 @@ owner reads what it believes and corrects it.
 - **`contributes.bin` needs the exec bit.** The daemon puts the directory on PATH; PATH resolution skips a file
   without it. The image chmods `dist/bin` — before that was true, three shipped extension CLIs were announced
   to the agent and could not be run.
+- **The vault is a copy, never a sync.** `obsidian pull` and `obsidian push` move bytes once, in the direction
+  asked for. Nothing watches and nothing merges, because a two-way merge of somebody's personal notes has no
+  safe default and the failure mode is silent loss of a paragraph they wrote. The workspace folder stays the
+  knowledge base that is always there; the vault only answers while Obsidian is open on the owner's machine.
+- **The card's skill lives in `skills/`, not `plugin/`.** Everything under `plugin/` is loaded every turn; a
+  capability's `skill` is read from the checkout when the card is connected and written per instance. A vault
+  cheatsheet under `plugin/` would be context spent, every turn, on a tool most sandboxes have not connected.
+- **`envSuffix` comes from `@intentic/sandbox-contract/capability-env`, the leaf module.** The package barrel is
+  the whole wire contract; importing it for that one naming rule pulled every oRPC route and zod into the CLI
+  bundle — 376 kB against 34 kB. Deep-import the leaf, as `./tunnel-ids` and `./session-names` exist to allow.

@@ -21,6 +21,64 @@
             }
         ],
         "bin": "dist/bin",
-        "agent": { "path": "plugin" }
+        "agent": { "path": "plugin" },
+        "capabilities": [
+            {
+                "id": "obsidian",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Obsidian",
+                    "logo": "obsidian",
+                    "description": "Your own Obsidian vault, live from the app.",
+                    "category": "business",
+                    "hint": "Reaches the vault open in Obsidian on your machine through its Local REST API plugin — the agent can read, search and open your notes there, and carry notes between that vault and this sandbox's Knowledge folder in both directions (`obsidian pull` / `obsidian push`). It is a copy each way, not a sync: nothing watches and nothing merges. Obsidian has to be running for any of it to work, which is why the workspace Knowledge folder stays the knowledge base the agent can always reach. Writing to your vault is off until you turn it on below.",
+                    "guide": {
+                        "url": "https://github.com/coddingtonbear/obsidian-local-rest-api",
+                        "linkLabel": "Open the Local REST API plugin",
+                        "steps": [
+                            "In Obsidian: `Settings` → `Community plugins` → `Browse`, install `Local REST API` and enable it.",
+                            "Open its settings and copy the `API Key` it shows.",
+                            "Leave its default encrypted (HTTPS) server on `27124`. Its certificate is self-signed, which this connection expects.",
+                            "The URL above is already right for a sandbox: `host.docker.internal` is this machine seen from the container — `localhost` would be the container itself.",
+                            "Obsidian must be OPEN for the vault to answer. Nothing here reaches it when the app is closed."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "baseUrl",
+                        "label": "Local REST API URL",
+                        "default": "https://host.docker.internal:27124",
+                        "hint": "The plugin's own address. Keep host.docker.internal unless Obsidian runs on a different machine than this sandbox."
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API key",
+                        "secret": true
+                    },
+                    {
+                        "key": "write",
+                        "label": "Let the agent write notes",
+                        "boolean": true,
+                        "default": "off",
+                        "hint": "Off means read and search only. On lets the agent add, edit and delete notes in your vault — these are notes you keep yourself, so it stays your call."
+                    },
+                    {
+                        "key": "folder",
+                        "label": "Folder for new notes",
+                        "optional": true,
+                        "placeholder": "the vault root",
+                        "hint": "Where notes the agent creates land, so they arrive somewhere you chose instead of scattered through your vault."
+                    }
+                ],
+                "env": {
+                    "OBSIDIAN_URL": "${baseUrl}",
+                    "OBSIDIAN_API_KEY": "${apiKey}",
+                    "OBSIDIAN_WRITE": "${write}",
+                    "OBSIDIAN_FOLDER": "${folder}"
+                },
+                "skill": "skills/obsidian/SKILL.md"
+            }
+        ]
     }
 }

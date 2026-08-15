@@ -92,7 +92,7 @@
             "entry": ["src/server/server.ts", "src/**/*.test.ts"]
         },
         "_extensions/knowledge": {
-            "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/**/*.test.ts"]
+            "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/cli/obsidian.ts", "src/**/*.test.ts"]
         },
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]

@@ -18,7 +18,7 @@
         }
     },
     "scripts": {
-        "build": "vite build --config vite.server.config.ts && vite build --config vite.cli.config.ts",
+        "build": "vite build --config vite.server.config.ts && vite build --config vite.cli.config.ts && vite build --config vite.obsidian.config.ts",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run"
     },
@@ -26,6 +26,7 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
         "@orpc/contract": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",

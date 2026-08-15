@@ -62,6 +62,17 @@
                 "default": "./dist/share-paths.js"
             }
         },
+        "./capability-env": {
+            "types": "./dist/capability-env.d.ts",
+            "import": {
+                "@intentic/src": "./src/capability-env.ts",
+                "default": "./dist/capability-env.js"
+            },
+            "require": {
+                "@intentic/src": "./src/capability-env.ts",
+                "default": "./dist/capability-env.js"
+            }
+        },
         "./session-names": {
             "types": "./dist/session-names.d.ts",
             "import": {

@@ -357,6 +357,11 @@ COPY _extensions/knowledge/intentic-extension.json /opt/extensions/knowledge/
 # panel cannot disagree about what a note says; that is also why it is here and not a straight COPY like
 # documentation's. The bin directory carries the exec bit — see the note above.
 COPY _extensions/knowledge/plugin /opt/extensions/knowledge/plugin
+# …and its Obsidian card's cheatsheet, which is NOT under plugin/ on purpose: everything in that directory is
+# loaded every turn, and a skill teaching a vault nobody connected is context spent on a tool that isn't there.
+# A `contributes.capabilities` skill is read from the checkout at connect time and written into the workspace
+# for that instance instead, so it exists exactly while the card does.
+COPY _extensions/knowledge/skills /opt/extensions/knowledge/skills
 COPY --from=trees extensions/knowledge/dist/server.js /opt/extensions/knowledge/dist/
 COPY --from=trees --chmod=755 extensions/knowledge/dist/bin /opt/extensions/knowledge/dist/bin
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
