@@ -159,7 +159,7 @@ const folderBound = computed(() => draft.folders.length > 0);
              in the list below, so the preview is the row rather than a bigger cousin of it. Absent when a row
              above is already showing both — see `showName`. -->
         <div v-if="showName" class="flex items-center gap-3">
-            <PersonaFace :persona="previewPersona" :size="32" />
+            <PersonaFace :persona="previewPersona" :size="40" />
             <!-- A name is three words. Capped, because an input stretched across the whole card reads as a field
                  expecting a paragraph. -->
             <div class="ui-field min-w-0 max-w-sm flex-1">

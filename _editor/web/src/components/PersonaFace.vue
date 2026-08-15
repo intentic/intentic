@@ -57,9 +57,9 @@ interface PersonaLike {
 
 /* THE SIZE DEFAULTS TO THE LIST SIZE, so the two surfaces that show a persona AS A PERSON — its own page and
  * the chat's persona rail — both say `<PersonaFace :persona />` and cannot drift apart the way a 32 here and a
- * 44 there did. The smaller numbers are the ones worth writing down: a picker row and a folder card are lists
+ * 56 there did. The smaller numbers are the ones worth writing down: a picker row and a folder card are lists
  * of something else that happen to name a persona. */
-const { persona, size = 44 } = defineProps<{ persona: PersonaLike; size?: number }>();
+const { persona, size = 56 } = defineProps<{ persona: PersonaLike; size?: number }>();
 
 // The name somebody chose, or the id it was filed under — see the note above for why this lives here and not
 // at four call sites.

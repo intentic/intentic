@@ -92,7 +92,7 @@ const openPersonas = (): void => {
                      dimmed face could still be argued for — you are choosing who to send as — but the line
                      underneath already says "not signed in yet" in words, and a greyed face said it in a way
                      that read as "this row is disabled" about a row that is perfectly pickable. -->
-                <PersonaFace :persona :size="20" class="mt-0.5" />
+                <PersonaFace :persona :size="28" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>

@@ -223,7 +223,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
                     <template #aside>
                         <!-- NO SIZE HERE, which is deliberate: the face's own default is this list size, and
                              the personas page asks for it the same way, so the two cannot drift apart the way a
-                             hand-written 44 here and a 32 there did. It is a fixed number rather than a share of
+                             hand-written 56 here and a 32 there did. It is a fixed number rather than a share of
                              the card because it is what SETS the row's height — a face this size is taller than
                              the two lines of text beside it, so the card is as tall as its mark and every row in
                              the column matches. Sizing it from the card instead (`h-full`) reads as the tidier

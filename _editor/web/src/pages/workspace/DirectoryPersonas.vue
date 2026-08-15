@@ -242,7 +242,7 @@ const submit = async (): Promise<void> => {
                 >
                     <!-- Smaller than the lists that exist to show personas off: this panel is about a FOLDER,
                          and these are the cards that happen to start in it. -->
-                    <PersonaFace :persona :size="24" />
+                    <PersonaFace :persona :size="32" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     <button type="button" :class="cmp.iconButton()" :aria-label="`Edit ${persona.label ?? persona.id}`" @click="startEdit(persona)">
@@ -302,7 +302,7 @@ const submit = async (): Promise<void> => {
                             :aria-pressed="chosen === persona.id"
                             @click="chosen = persona.id"
                         >
-                            <PersonaFace :persona :size="24" />
+                            <PersonaFace :persona :size="32" />
                             <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                             <span class="max-w-[45%] shrink-0 truncate text-xs text-subtle">
                                 {{ persona.workspace?.startIn === undefined ? `no starting folder` : `starts in ${persona.workspace.startIn}` }}
