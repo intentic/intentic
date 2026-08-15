@@ -96,7 +96,33 @@ it(`mirrors to the left for an anchor against the window's right edge`, async ()
     // The docked chat is the shell's right-hand column, so its tab strip has no room to its right.
     card.show(anchorEvent({ left: 900, top: 10, width: 100 }), { title: `Fix the tab strip` });
     await nextTick();
-    expect(style().left).toBe(`572px`); // anchor's left edge (900) − the gap − the card's 320px width
+    expect(style().left).toBe(`252px`); // anchor's left edge (900) − the gap − the width it took (640)
+    card.hide();
+});
+
+/* THE WIDTH IS THE ROOM, which is the whole reason the card is worth opening next to a narrow column: the space
+ * beside that column is the widest empty area on the screen, and a card that ignored it drew a prompt's
+ * screenshot at the width of the rail it was escaping. A SHARE of the room, so the card still reads as
+ * something floating over the page rather than a second page; floored at the width it always had, and capped
+ * so a wide monitor gets a preview rather than a document. */
+it(`takes a share of the room beside its anchor, floored and capped`, async () => {
+    const { card, style } = await mount();
+    // A rail against the left edge: 848px of room, four fifths of which is past the cap.
+    card.show(anchorEvent({ left: 40, top: 100, width: 120 }), { title: `Fix the tab strip` });
+    await nextTick();
+    expect(style().maxWidth).toBe(`640px`);
+    card.hide();
+
+    // A middling gutter (488px): the share binds, and what it leaves over is the card's breathing room.
+    card.show(anchorEvent({ left: 400, top: 100, width: 120 }), { title: `Fix the tab strip` });
+    await nextTick();
+    expect(style().maxWidth).toBe(`390px`);
+    card.hide();
+
+    // A gutter barely wide enough to open into: the floor holds it at the width it has always been.
+    card.show(anchorEvent({ left: 550, top: 100, width: 120 }), { title: `Fix the tab strip` });
+    await nextTick();
+    expect(style().maxWidth).toBe(`320px`);
     card.hide();
 });
 
@@ -140,6 +166,27 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
     expect(image.className).toContain(`w-full`);
     expect(image.parentElement?.className).toContain(`-mx-3`);
     expect(text()).toBe(`Fix the tab strip`); // the repeated line still goes; only the picture is new
+    card.hide();
+});
+
+/* A picture's height has to move WITH the card, not sit at a number. `object-cover` crops away whatever the box
+ * won't take, so a fixed ceiling over a card that has grown means a harder crop the more room the card was
+ * given — the exact opposite of what the extra room was for. */
+it(`gives a picture more height on a card that got more width`, async () => {
+    const { card, style } = await mount();
+    const imageHeight = (): string => (document.body.querySelector(`img`) as HTMLElement).style.maxHeight;
+    const content = { title: `Fix the tab strip`, messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png` }] }] };
+
+    card.show(anchorEvent({ left: 40, top: 100, width: 120 }), content);
+    await nextTick();
+    expect(style().maxWidth).toBe(`640px`);
+    expect(imageHeight()).toBe(`297px`); // held by the share of the card's own height, below the 4:3 shape
+    card.hide();
+
+    card.show(anchorEvent({ left: 550, top: 100, width: 120 }), content);
+    await nextTick();
+    expect(style().maxWidth).toBe(`320px`);
+    expect(imageHeight()).toBe(`240px`); // the narrow card's 4:3 window, which is the tighter of the two here
     card.hide();
 });
 

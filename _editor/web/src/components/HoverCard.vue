@@ -56,15 +56,40 @@ interface HoverCardContent {
     readonly messages?: readonly HoverCardMessage[];
 }
 
-/* The card's width, in px, and the ONLY statement of it: the template binds `maxWidth` from this rather than
- * repeating it as a `max-w-[320px]` utility. Two spellings of one number is how a card ends up placed for a
- * width it isn't drawn at — the placement below subtracts WIDTH from the viewport edge to decide whether there
- * is room beside the anchor, so a class that said 320 while this said something else would put the card off
- * the edge it just checked. */
-const WIDTH = 320;
+/* THE CARD'S WIDTH IS THE ROOM IT HAS, not a number. It was a flat 320px, which is the width of the narrow
+ * column it opens NEXT TO — and next to that column is the widest empty area on the screen. So a hover over a
+ * chat whose prompt was a screenshot drew that screenshot into a 320px slot with half the window free beside
+ * it, at which size a screenshot is a grey rectangle: the one thing pictures were put on this card to do,
+ * undone by the width.
+ *
+ * A SHARE of the room rather than all of it — the card is a thing that has appeared over the top of something,
+ * and one that runs edge to edge reads as a page rather than a peek. MIN is the width it always had, and also
+ * the width below which opening beside the anchor isn't worth doing (see the placement). MAX is what keeps a
+ * preview a preview on a wide monitor, where four fifths of the room would be most of the desk.
+ *
+ * These are the ONLY statement of the size: the template binds `maxWidth` from the placement rather than
+ * repeating a number as a utility class. Two spellings of one width is how a card ends up placed for a size it
+ * isn't drawn at — the placement measures the room against MIN to choose a side and then hands the width back
+ * out, so a class disagreeing with it would put the card off the edge it just checked.
+ *
+ * `maxWidth`, not `width`: the room is a ceiling, and short content should still draw a small card. What
+ * actually reaches for the ceiling is a long prompt and, above all, a picture — an image's own width is far
+ * past any of these, so a card carrying one always takes the whole of what it was allowed. */
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 640;
+const SHARE = 0.8;
 const GAP = 8;
 
-const placement = ref<{ content: HoverCardContent; left: number; top?: number; bottom?: number; maxHeight: number }>();
+const widthIn = (room: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, room * SHARE)));
+
+/* How tall a picture may be, given the width it is being drawn at. It used to be a flat 16rem, which grew
+ * WRONG as the card grew: `object-cover` crops whatever the box won't take, so a fixed ceiling over a widening
+ * card means an ever harder crop — the opposite of what more room is for. So it is a shape (a 4:3 window on the
+ * picture) bounded by a share of the card's own height allowance, which is what keeps a tall screenshot from
+ * pushing the words that explain it out of the bottom of the card. */
+const imageHeightIn = (width: number, maxHeight: number): number => Math.round(Math.min(width * 0.75, maxHeight * 0.45));
+
+const placement = ref<{ content: HoverCardContent; left: number; width: number; top?: number; bottom?: number; maxHeight: number }>();
 
 // Anything at all to put under the title. An attachment counts before its bytes arrive: it is a picture the card
 // is about to draw, and declining to open on it would make the card depend on a fetch the user can't see.
@@ -77,36 +102,49 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
-    // Right first — every surface here is a column with the app's wide area on its right. Left is the mirror
-    // for an anchor in a panel docked to the window's right edge (the docked chat's tab strip).
-    const beside = rect.right + GAP + WIDTH <= win.innerWidth ? rect.right + GAP : rect.left - GAP - WIDTH >= 0 ? rect.left - GAP - WIDTH : undefined;
-    if (beside === undefined) {
+    /* Right first — every surface here is a column with the app's wide area on its right. Left is the mirror
+     * for an anchor in a panel docked to the window's right edge (the docked chat's tab strip). Each side is
+     * measured, not tested against one number, because the room is now what the card is SIZED from as well as
+     * where it goes: a side qualifies at MIN and the card then takes its share of whatever it actually found. */
+    const roomRight = win.innerWidth - rect.right - GAP * 2;
+    const roomLeft = rect.left - GAP * 2;
+    const room = roomRight >= MIN_WIDTH ? roomRight : roomLeft >= MIN_WIDTH ? roomLeft : undefined;
+    if (room === undefined) {
         // No room either side (a window narrower than the card plus its anchor): fall back to under/over the
-        // anchor, whichever has more room, so the card is at least on screen.
-        const left = Math.min(Math.max(GAP, rect.left), win.innerWidth - WIDTH - GAP);
-        placement.value =
-            rect.top >= win.innerHeight - rect.bottom
-                ? { content, left, bottom: win.innerHeight - rect.top + GAP, maxHeight: rect.top - GAP * 2 }
-                : { content, left, top: rect.bottom + GAP, maxHeight: win.innerHeight - rect.bottom - GAP * 2 };
+        // anchor, whichever has more room, so the card is at least on screen. Nothing to take a share of out
+        // here — the window itself is the constraint — so it spends the width it is given.
+        const width = Math.min(MAX_WIDTH, win.innerWidth - GAP * 2);
+        const left = Math.min(Math.max(GAP, rect.left), win.innerWidth - width - GAP);
+        const over = rect.top >= win.innerHeight - rect.bottom;
+        const maxHeight = (over ? rect.top : win.innerHeight - rect.bottom) - GAP * 2;
+        placement.value = {
+            content,
+            left,
+            width,
+            maxHeight,
+            ...(over ? { bottom: win.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
+        };
         return;
     }
-    // Beside, the card's height is unknown until it renders, so it hangs from the anchor's top while the room
-    // below that edge is the larger, and rises from the anchor's bottom otherwise — no measurement needed, and
-    // an anchor at either end of a full-height rail still gets a card that fits.
-    //
-    // What it may NOT do is grow past the edge it was placed against, which pictures made a live risk: text
-    // clamps itself to a known number of lines, an image is however tall the user's screenshot was. So the
-    // corner the card hangs from also states how far it may reach from there, and the card clips at that —
-    // nothing can scroll a card the pointer passes straight through, so the cap has to be a cap.
-    placement.value =
-        win.innerHeight - rect.top >= rect.bottom
-            ? { content, left: beside, top: Math.max(GAP, rect.top), maxHeight: win.innerHeight - Math.max(GAP, rect.top) - GAP }
-            : {
-                  content,
-                  left: beside,
-                  bottom: Math.max(GAP, win.innerHeight - rect.bottom),
-                  maxHeight: Math.min(rect.bottom, win.innerHeight - GAP) - GAP,
-              };
+    /* Beside, the card's height is unknown until it renders, so it hangs from the anchor's top while the room
+     * below that edge is the larger, and rises from the anchor's bottom otherwise — no measurement needed, and
+     * an anchor at either end of a full-height rail still gets a card that fits.
+     *
+     * What it may NOT do is grow past the edge it was placed against, which pictures made a live risk: text
+     * clamps itself to a known number of lines, an image is however tall the user's screenshot was. So the
+     * corner the card hangs from also states how far it may reach from there, and the card clips at that —
+     * nothing can scroll a card the pointer passes straight through, so the cap has to be a cap. */
+    const width = widthIn(room);
+    const left = room === roomRight ? rect.right + GAP : rect.left - GAP - width;
+    const below = win.innerHeight - rect.top >= rect.bottom;
+    const maxHeight = below ? win.innerHeight - Math.max(GAP, rect.top) - GAP : Math.min(rect.bottom, win.innerHeight - GAP) - GAP;
+    placement.value = {
+        content,
+        left,
+        width,
+        maxHeight,
+        ...(below ? { top: Math.max(GAP, rect.top) } : { bottom: Math.max(GAP, win.innerHeight - rect.bottom) }),
+    };
 };
 const hide = (): void => {
     placement.value = undefined;
@@ -150,9 +188,9 @@ defineExpose({ show, hide });
              what lets the full-bleed pictures below sit flush against the card's rounded corners. -->
         <div
             v-if="placement"
-            class="pointer-events-none fixed z-50 min-w-[12rem] overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-2xl"
+            class="pointer-events-none fixed z-50 min-w-[12rem] overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-lg"
             :style="{
-                maxWidth: `${WIDTH}px`,
+                maxWidth: `${placement.width}px`,
                 maxHeight: `${placement.maxHeight}px`,
                 left: `${placement.left}px`,
                 ...(placement.top !== undefined ? { top: `${placement.top}px` } : {}),
@@ -175,18 +213,19 @@ defineExpose({ show, hide });
                 <p v-if="message.text" class="line-clamp-[8] break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>
-                <!-- FULL-BLEED, out through the card's own padding: a screenshot squeezed into a 296px column
-                     inside a 320px card is a thumbnail of a thumbnail, and the reason to put the picture on the
-                     card at all is that it is the fastest way to recognise which conversation this is. Capped in
-                     height and cropped from the top rather than letterboxed, which is the same bargain the text
-                     beside it makes — the card shows the start of a long thing, at full width, and stops. -->
+                <!-- FULL-BLEED, out through the card's own padding: a picture inset inside a card that is
+                     itself a narrow box is a thumbnail of a thumbnail, and the reason to put the picture here
+                     at all is that it is the fastest way to recognise which conversation this is. Cropped from
+                     the top rather than letterboxed, which is the same bargain the text above it makes — the
+                     card shows the start of a long thing, at full width, and stops. -->
                 <div v-if="message.images.length > 0" class="-mx-3 flex flex-col gap-px" :class="message.text || message.label ? 'mt-1.5' : ''">
                     <img
                         v-for="image in message.images"
                         :key="image.src"
                         :src="image.src"
                         :alt="image.alt"
-                        class="max-h-64 w-full object-cover object-top"
+                        class="w-full object-cover object-top"
+                        :style="{ maxHeight: `${imageHeightIn(placement.width, placement.maxHeight)}px` }"
                     />
                 </div>
             </div>
