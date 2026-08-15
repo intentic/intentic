@@ -130,6 +130,12 @@ catalog:
   "@commitlint/config-conventional": 21.2.0
   "@commitlint/types": 21.2.0
   "@dagrejs/dagre": 3.0.0
+  # DiceBear v10 discontinued the per-style npm packages (@dicebear/adventurer and its ~50 siblings) in favour of
+  # one package of JSON style definitions, so the pair below is what used to be `core` + `adventurer`. They
+  # version independently — core carries the renderer, styles carries the artwork — which is why both are here
+  # rather than one entry standing in for the other.
+  "@dicebear/core": 10.5.0
+  "@dicebear/styles": 10.4.0
   "@discordjs/opus": 0.10.0
   "@discordjs/voice": 0.19.2
   "@hono/node-server": 2.0.12
@@ -180,6 +186,9 @@ catalog:
   "@types/pg": 8.20.0
   "@types/ssh2": 1.15.5
   "@types/tar-stream": 3.1.4
+  # Doubles as the VS Code extension's minimum supported host: vsce refuses to package when this outruns the
+  # manifest's `engines.vscode`, so the two move together (_editor/vscode/package.json).
+  "@types/vscode": 1.125.0
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2
@@ -199,6 +208,9 @@ catalog:
   astro: 7.1.6
   astro-indexnow: 2.3.10
   astro-opengraph-images: 1.17.4
+  # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
+  # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
+  baileys: 7.0.0-rc14
   bcryptjs: 3.0.3
   better-auth: 1.6.25
   bun: 1.3.14

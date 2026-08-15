@@ -15,7 +15,7 @@
     "type": "module",
     "main": "./dist/extension.cjs",
     "engines": {
-        "vscode": "^1.96.0"
+        "vscode": "^1.125.0"
     },
     "categories": [
         "AI",
@@ -86,7 +86,7 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
-        "@types/vscode": "1.96.0",
+        "@types/vscode": "catalog:",
         "@typescript/native-preview": "catalog:",
         "@vscode/vsce": "catalog:",
         "esbuild": "catalog:",
