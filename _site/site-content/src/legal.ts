@@ -445,6 +445,24 @@ export const dpaDoc: LegalDoc = {
     ],
 };
 
+/* Third-party works whose licences ask for credit. Persona avatars use the Adventurer style, a set of
+ * illustrated face components drawn by Lisa Wischofsky and remixed by DiceBear under CC BY 4.0, which
+ * requires "appropriate credit" and a link to the licence. This page satisfies that — and is the single
+ * place to add future attributions if another dependency asks for one. */
+export const creditsDoc: LegalDoc = {
+    title: "Credits",
+    intro: "intentic uses the following open-source works that ask to be credited.",
+    sections: [
+        {
+            heading: "Persona avatars",
+            paragraphs: [
+                `Persona faces are generated with DiceBear (dicebear.com), an open-source avatar library by Florian Körner, MIT-licensed.`,
+                `The artwork is the "Adventurer" style, a remix of the Adventurer illustration set (figma.com/community/file/1184595184137881796) by Lisa Wischofsky, licensed under Creative Commons Attribution 4.0 International (CC BY 4.0, creativecommons.org/licenses/by/4.0/). Changes were made: the illustrations are assembled programmatically from the style's component variants rather than used as-is.`,
+            ],
+        },
+    ],
+};
+
 export const subprocessorsDoc: LegalDoc = {
     title: "Sub-processors",
     intro: `Effective ${LEGAL_VERSION}. The providers we use to run the intentic platform, what each one does, and where it processes data. We announce changes here before they take effect.`,
