@@ -649,15 +649,19 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
     expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
 });
 
-/* Gemini UNDER THE CLAUDE CODE HARNESS: the loop pointed at the translator, which is what every Gemini turn was
- * until Gemini got a native runtime. It is still a real selection (the picker offers both chips), so it keeps
- * its coverage — but the harness has to be NAMED now, because `native` no longer resolves here.
+/* GEMINI HAS NO CLAUDE CODE ROAD LEFT, and this is the test that holds the door shut.
  *
- * Worth knowing while reading these: this is the path Google refuses in practice. The Claude Code CLI bakes its
- * own identity line into every request and Antigravity matches on it, so what these tests pin is the routing and
- * the credential withholding, not that a real turn on it would be answered. */
-test("agent.run serves a Gemini turn under the Claude Code harness on the translator subscription, withholding the Claude OAuth token", async () => {
-    let seen: { baseUrl?: string; authToken?: string; model?: string; oauthToken?: string } | undefined;
+ * It used to have one — every Gemini turn was routed through that loop before it got a native runtime. Then
+ * Google's Antigravity channel began refusing on the identity line the Claude Code CLI bakes into every request
+ * and no option removes, reporting it as a spent quota it never was. That made the selection not a slower
+ * option but an impossible one, so the contract stopped offering it at all: capabilitiesOf answers Gemini's own
+ * runtime whatever harness is asked for.
+ *
+ * ASKING FOR IT EXPLICITLY IS THE CASE WORTH PINNING, because that is the one a stored conversation, an
+ * automation or an API caller can still do. It must land on the working loop rather than be honoured. */
+test("agent.run sends a Gemini turn to the native runtime even when the Claude Code harness is asked for by name", async () => {
+    let claudeCodeCalled = false;
+    let nativeCalled = false;
     const client = clientFor(
         createApp(
             services({
@@ -669,21 +673,23 @@ test("agent.run serves a Gemini turn under the Claude Code harness on the transl
                     disconnect: async () => {},
                     models: async () => [],
                 },
-                agent: async function* (request) {
-                    seen = request;
+                agent: async function* () {
+                    claudeCodeCalled = true;
+                    yield { kind: "done" };
+                },
+                geminiAgent: async function* () {
+                    nativeCalled = true;
                     yield { kind: "done" };
                 },
             }),
         ),
     );
+
     const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
+
     expect(events.some((event) => event.kind === "error")).toBe(false);
-    expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
-    expect(seen?.authToken).toBe("local-bearer");
-    // No model on the turn ⇒ the live Gemini catalog's own default, never an empty id.
-    expect(seen?.model).toBe("gemini-pro-agent");
-    // Setting the endpoint is what structurally withholds the user's Anthropic subscription token.
-    expect(seen?.oauthToken).toBeUndefined();
+    expect(nativeCalled).toBe(true);
+    expect(claudeCodeCalled).toBe(false);
 });
 
 test("agent.run serves Kimi K3 on the Kimi Code subscription through the translator", async () => {
@@ -725,6 +731,8 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
         disconnect: async () => {},
         models: async () => [],
     };
+    // Read off the NATIVE runner, which is the only one a Gemini turn reaches now — the catalog-membership rule
+    // itself is unchanged, and it is the rule this test is about.
     const run = async (model: string): Promise<string | undefined> => {
         let seen: { model?: string } | undefined;
         const client = clientFor(
@@ -736,14 +744,14 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                         ...testProviderCatalogs,
                         gemini: { models: async () => ({ models: models.map((id) => ({ id, label: id })), default: models[0]! }) },
                     },
-                    agent: async function* (request) {
+                    geminiAgent: async function* (request) {
                         seen = request;
                         yield { kind: "done" };
                     },
                 }),
             ),
         );
-        await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code", model });
+        await runAgentTurn(client, { prompt: "hi", agent: "gemini", model });
         return seen?.model;
     };
     expect(await run("gemini-3-flash")).toBe("gemini-3-flash");
@@ -751,22 +759,28 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
     expect(await run("gemini-2.5-pro")).toBe("gemini-pro-agent");
 });
 
-test("agent.run gates a Gemini turn with no Google account connected as subscription-required", async () => {
-    let agentCalled = false;
+// No Google account is still a refusal that names the fix, and it is the NATIVE runtime that owns that gate now
+// — both loops always wanted the same credential (the translator's), so removing the routed road cost the check
+// nothing. Asserted on the sentence rather than the code: this refusal comes from the turn plan, which speaks
+// prose, where the routed gate carried the composer's `subscription-required` discriminator.
+test("agent.run gates a Gemini turn with no Google account connected", async () => {
+    let nativeCalled = false;
     const client = clientFor(
         createApp(
             services({
                 config: withTranslator,
-                agent: async function* () {
-                    agentCalled = true;
+                geminiAgent: async function* () {
+                    nativeCalled = true;
                     yield { kind: "done" };
                 },
             }),
         ),
     );
-    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini", harness: "claude-code" });
-    expect(agentCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
+
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+
+    expect(nativeCalled).toBe(false);
+    expect(events.some((event) => event.kind === "error" && /Connect your Google account/.test(String(event.message)))).toBe(true);
 });
 
 /* A GEMINI TURN THAT NAMES NO HARNESS TAKES THE NATIVE RUNTIME — the default flipped when Gemini got one, and

@@ -158,13 +158,15 @@ export const PLAN_LIMIT_PROVIDERS: readonly NativeProvider[] = ["claude", "codex
 export const reportsPlanLimits = (provider: AgentProvider): boolean => PLAN_LIMIT_PROVIDERS.includes(provider as NativeProvider);
 
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;
-// `claude-code` = the Claude Code loop for any provider (codex/grok/gemini then route through the translator).
-// Surfaced for codex/grok/gemini — claude is always its own Claude Code loop, and kimi has no native runtime to
-// switch to (it only exists under this harness). See AgentHarness in schemas.ts.
+// `claude-code` = the Claude Code loop for any provider (codex/grok then route through the translator).
+// Surfaced for codex/grok alone. Claude is always its own Claude Code loop; kimi has no native runtime to switch
+// to (it only exists under this harness); and GEMINI IS THE MIRROR OF KIMI — it only exists under its native
+// one, because Google refuses Claude Code's traffic outright (capabilitiesOf says why). See AgentHarness in
+// schemas.ts.
 //
 // Gemini's `native` is OpenCode rather than a Google CLI: the image ships no Gemini binary, and OpenCode is
-// already here driving Grok. Both of Gemini's harnesses spend the same translator accounts — the switch changes
-// which agentic loop wraps them, not which credential pays.
+// already here driving Grok. It spends the same translator accounts a routed turn would have — what Google
+// refuses is the loop, never the credential.
 export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Native", value: "native" },
     { label: "Claude Code", value: "claude-code" },
@@ -352,8 +354,17 @@ export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): 
     if (provider === "grok") {
         return harness === "claude-code" ? CLAUDE_CODE : OPENCODE;
     }
+    /* GEMINI IGNORES THE HARNESS, and it is the only routed provider that does. The Claude Code loop announces
+     * itself in every request it sends and Google refuses on that announcement (see OPENCODE_GEMINI), so
+     * "Gemini under Claude Code" was never a slower or poorer option — it was one that could not complete a
+     * single turn, on any of the connected accounts, ever.
+     *
+     * Answering OPENCODE_GEMINI whatever the caller asked for is what makes that structural rather than a rule
+     * each surface has to remember. Everything downstream reads the runtime off this record — the adapter that
+     * serves a turn, the transcript store, the quick helper's choice of loop — so there is exactly one place
+     * where Gemini's loop is decided, and no way left to route Claude Code traffic at Google by asking for it. */
     if (provider === "gemini") {
-        return harness === "claude-code" ? CLAUDE_CODE : OPENCODE_GEMINI;
+        return OPENCODE_GEMINI;
     }
     if (isEndpointProvider(provider)) {
         return CLAUDE_CODE;

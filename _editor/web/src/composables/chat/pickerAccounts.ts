@@ -88,19 +88,21 @@ export const matchAccounts = <T extends { readonly label: string; readonly subti
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>) => {
     const accounts = computed(() => accountsOf(provider.value));
 
-    // The harness axis, shown as footer chips for codex/grok/gemini (claude is always its own loop). Both chips
-    // NAME the runtime they select — the native one is labelled for the provider whose loop it actually is
-    // ("ChatGPT", "Grok", "Gemini"), never "Default", which would say nothing about what runs while sitting
-    // opposite a chip that does.
+    // The harness axis, shown as footer chips for codex/grok (claude is always its own loop). Both chips NAME
+    // the runtime they select — the native one is labelled for the provider whose loop it actually is
+    // ("ChatGPT", "Grok"), never "Default", which would say nothing about what runs while sitting opposite a
+    // chip that does.
     const harnessOptions = computed<readonly { label: string; value: AgentHarness }[]>(() => [
         { label: providerDisplayLabel(provider.value), value: `native` },
         { label: `Claude Code`, value: `claude-code` },
     ]);
-    /* Gemini is here for a different reason than the other two, and the difference is worth knowing when reading
-     * this: for codex/grok the chip picks between two CREDENTIALS as well as two loops, while both of Gemini's
-     * loops spend the same translator accounts. Its chip picks the loop alone — which matters because Google's
-     * channel refuses the Claude Code loop's own baked-in identity line, so the native chip is the working one. */
-    const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok` || provider.value === `gemini`);
+    /* NO CHIP FOR GEMINI, and its absence is the honest version of what used to be here. The pair of chips is an
+     * offer, and offering a Claude Code loop for Google was offering a turn that cannot complete: that loop
+     * announces itself in every request and Google's channel refuses on the announcement, whatever account pays.
+     * A chip whose only outcome is a refusal is worse than no chip — it reads as a working alternative someone
+     * might reasonably pick when the other one is slow. Gemini runs its own loop, and the contract now says so
+     * for every surface at once (capabilitiesOf), so there is nothing here to choose. */
+    const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok`);
 
     /* THE SUBSCRIPTIONS THIS SELECTION WOULD RUN ON INSTEAD, for the three providers that own no account and for
      * Grok under the Claude Code harness. They are not a picker: CLIProxyAPI holds every auth file and balances

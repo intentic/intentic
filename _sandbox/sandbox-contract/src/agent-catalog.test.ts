@@ -86,27 +86,28 @@ describe("the pi provider", () => {
     });
 });
 
-/* The harness axis is real for exactly three providers. Claude is always its own Claude Code loop and Kimi has
- * no native runtime at all (Moonshot speaks the Anthropic protocol directly), so both run it whatever the client
- * sent — which is why "is the harness claude-code" was never the question worth asking.
- *
- * Gemini joined the list rather than being born on it: it was routed-only until the Claude Code loop's own
- * identity line — which the CLI bakes in and no option removes — started being refused by Google's Antigravity
- * channel. A second loop is what gives those accounts a road that carries somebody else's prompt. */
-test("only codex, grok and gemini change runtime with the harness", () => {
+/* The harness axis is real for exactly two providers, and the three exceptions are each a different shape of
+ * "there is nothing to choose". Claude is always its own Claude Code loop. Kimi has no native runtime at all
+ * (Moonshot speaks the Anthropic protocol directly), so it runs Claude Code whatever the client sent. Gemini is
+ * Kimi's mirror: it has no CLAUDE CODE road, because that loop announces itself in every request and Google's
+ * Antigravity channel refuses on the announcement — every account, every time, reported as a spent quota it
+ * never was. */
+test("only codex and grok change runtime with the harness", () => {
     const switched = PROVIDERS.filter((provider) => capabilitiesOf(provider.value, "native") !== capabilitiesOf(provider.value, "claude-code"));
 
-    expect(switched.map((provider) => provider.value)).toEqual(["codex", "grok", "gemini"]);
+    expect(switched.map((provider) => provider.value)).toEqual(["codex", "grok"]);
 });
 
-// Gemini's two loops differ in the loop alone. Same translator, same auth files, same abilities — so anything
-// that reads capabilities to decide what a Gemini turn can DO must get the same answer either way, and only the
-// runtime id (which keys adapter health) may move.
-test("gemini's native runtime differs from its Claude Code one only in the loop that serves it", () => {
+/* THE RULE THAT KEEPS CLAUDE CODE TRAFFIC AWAY FROM GOOGLE, asserted where it is decided rather than at each of
+ * the surfaces that obey it. Everything downstream — the adapter that serves a turn, the transcript store, the
+ * quick helper's choice of loop — reads the runtime off this record, so a Gemini turn asking for Claude Code and
+ * getting it back would put the refused loop on the road again everywhere at once. */
+test("gemini answers with its own runtime whatever harness is asked for", () => {
     const native = capabilitiesOf("gemini", "native");
 
     expect(native.runtime).toBe("opencode-gemini");
-    expect(capabilitiesOf("gemini", "claude-code").runtime).toBe("claude-code");
+    expect(capabilitiesOf("gemini", "claude-code")).toEqual(native);
+    // Same abilities as the Grok loop it shares — only the runtime id, which keys adapter health, differs.
     expect({ ...native, runtime: "opencode" }).toEqual(capabilitiesOf("grok", "native"));
 });
 

@@ -1,4 +1,5 @@
 import {
+    capabilitiesOf,
     endpointProvider,
     NATIVE_PROVIDERS,
     type NativeProvider,
@@ -10,6 +11,7 @@ import {
 import type { Services } from "../composition.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
+import { runGeminiOneShot } from "./one-shot-gemini.js";
 import { spentRung } from "./quick-model-quota.js";
 
 /* THE SANDBOX'S QUICK MODEL, resolved against what it actually has connected — the daemon half of the rule in
@@ -146,6 +148,26 @@ const cooling = (choice: QuickModelChoice, now: number): string | undefined => {
     return held !== undefined && held.until > now ? held.reason : undefined;
 };
 
+/* WHICH LOOP RUNS THIS RUNG — asked of the contract, never decided here. `capabilitiesOf` is where a provider's
+ * runtime is settled for the whole product (the adapter that serves a chat turn reads the same record), so a
+ * helper that named a provider of its own would be a second opinion on a question that already has one — and
+ * the day the two disagreed, a turn and its commit message would run on different loops.
+ *
+ * What it settles today: Gemini answers `opencode-gemini` whatever harness is asked for, because the Claude
+ * Code loop announces itself in every request and Google refuses on that announcement. Reading it rather than
+ * hard-coding it means this walk needs no opinion about Google at all — and that when another provider ends up
+ * native-only, this seam is already right. */
+const askRung = async (services: Services, choice: QuickModelChoice, prompt: string, signal: AbortSignal): Promise<string> => {
+    if (capabilitiesOf(choice.provider, `claude-code`).runtime === `opencode-gemini`) {
+        return runGeminiOneShot({ services, prompt, cwd: services.workspace.root, model: choice.model, signal });
+    }
+    const resolved = await resolveHarnessCredentials(services, { agent: choice.provider, model: choice.model });
+    if (!resolved.ok) {
+        throw new Error(resolved.message);
+    }
+    return runOneShot({ prompt, cwd: services.workspace.root, model: choice.model, credentials: resolved.credentials, signal });
+};
+
 /* RUN ONE PROMPT ON THE SANDBOX'S QUICK MODEL, WALKING DOWN THE CHAIN UNTIL ONE ANSWERS. The single seam every
  * one-click helper goes through, so they all spend the same rungs, in the same order, and all name what they
  * spent the same way.
@@ -242,17 +264,7 @@ export const askQuickModel = async (
                 // Inside the try with the call itself: a credential that fails on the way in (a token that no
                 // longer refreshes passes the cheap readiness check but fails resolution) is the same kind of
                 // dead end as one that fails on the way out, and the next model in the chain answers both.
-                const resolved = await resolveHarnessCredentials(services, { agent: choice.provider, model: choice.model });
-                if (!resolved.ok) {
-                    throw new Error(resolved.message);
-                }
-                const text = await runOneShot({
-                    prompt,
-                    cwd: services.workspace.root,
-                    model: choice.model,
-                    credentials: resolved.credentials,
-                    signal,
-                });
+                const text = await askRung(services, choice, prompt, signal);
                 // It answered, so whatever it last refused for is over — a memo outliving the condition it
                 // describes would keep steering work off an account that is plainly working again.
                 refusals.delete(key);

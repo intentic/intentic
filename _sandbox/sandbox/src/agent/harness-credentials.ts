@@ -280,11 +280,24 @@ export const resolveHarnessCredentials = async (
     if (endpointId !== undefined) {
         return resolveEndpointCredentials(services, endpointId, input.model);
     }
-    if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi" || input.agent === "gemini") {
+    /* GEMINI HAS NO CREDENTIAL HERE, and refusing is the point rather than an omission. This function exists to
+     * authenticate a CLAUDE CODE turn, and Google will not serve one: that loop announces itself in every
+     * request and Google's channel refuses on the announcement, whatever account pays. The contract already
+     * routes every Gemini turn to its own runtime (capabilitiesOf), so nothing should reach this — and if
+     * something ever does, a named refusal is what makes that visible, where falling through to the Anthropic
+     * branch below would quietly spend a Claude subscription on a turn the user asked Google for. */
+    if (input.agent === "gemini") {
+        return {
+            ok: false,
+            message: "Gemini doesn't run under the Claude Code harness — Google refuses that loop. It runs on its own runtime instead.",
+        };
+    }
+    if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
         if (services.config.translator.url === "") {
-            // Codex/Grok can fall back to their own runtime; Kimi/Gemini have none, so it can only be an image problem.
+            // Codex/Grok can fall back to their own runtime; Kimi has none, so for it this can only be an image
+            // problem. (Gemini never reaches here — it is refused above, having no Claude Code road at all.)
             const fallback =
-                input.agent === "kimi" || input.agent === "gemini"
+                input.agent === "kimi"
                     ? "Run a sandbox built from the published image."
                     : "Use the provider's native harness, or run a sandbox built from the published image.";
             return {

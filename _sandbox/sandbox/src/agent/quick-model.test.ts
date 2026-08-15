@@ -13,6 +13,12 @@ vi.mock("./harness-credentials.js", () => ({
 const oneShot = vi.fn<(params: { model: string }) => Promise<string>>();
 vi.mock("./one-shot.js", () => ({ runOneShot: (params: { model: string }) => oneShot(params) }));
 
+/* THE OTHER ROAD TO A MODEL, mocked separately from the one above precisely so the tests can tell which one a
+ * rung took. Google refuses the Claude Code harness outright (see askRung), so "which loop ran this" is a
+ * correctness property of the walk here, not an implementation detail. */
+const geminiOneShot = vi.fn<(params: { model: string }) => Promise<string>>();
+vi.mock("./one-shot-gemini.js", () => ({ runGeminiOneShot: (params: { model: string }) => geminiOneShot(params) }));
+
 const { askQuickModel, REFUSED_FOR_MS } = await import("./quick-model.js");
 
 /* WALKING THE CHAIN — the daemon half of the ordered quick model. The contract decides the ORDER (its own
@@ -83,11 +89,16 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: [`Date`] });
     clock += BETWEEN_TESTS_MS;
     vi.setSystemTime(clock);
-    vi.clearAllMocks();
+    /* RESET, not clear. `clearAllMocks` forgets the CALLS and keeps the queued one-time behaviours, so a
+     * `mockRejectedValueOnce` a test set up but never reached stays armed and fires inside the NEXT test — which
+     * reads as that test's own subject failing, several cases away from the one that armed it. Every mock below
+     * has its behaviour restored on the next two lines, so there is nothing for a reset to lose. */
+    vi.resetAllMocks();
     timed.length = 0;
     ready.mockResolvedValue({ claude: true, gemini: true, codex: true });
     credentials.mockResolvedValue({ ok: true });
     oneShot.mockResolvedValue(`fix: tree truncation`);
+    geminiOneShot.mockResolvedValue(`fix: tree truncation`);
 });
 
 afterEach(() => {
@@ -148,8 +159,9 @@ test("stops the moment the user cancels rather than spending the rest of the cha
 
 test("falls through Auto's own ladder when nothing is pinned", async () => {
     // Auto is an order too, so a sandbox with three accounts keeps its commit messages when the cheapest one is
-    // out — without anybody having opened the settings row.
-    oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
+    // out — without anybody having opened the settings row. Auto's head on these catalogs is the Gemini row (the
+    // cheapest tier of the cheapest channel), which is why the refusal is armed on that road.
+    geminiOneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
 
     const answer = await askQuickModel(fakeServices([]), `draft`, signal());
 
@@ -224,6 +236,28 @@ test("tries the whole chain anyway when every rung is cooling down", async () =>
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
+});
+
+/* GOOGLE NEVER SEES THE CLAUDE CODE HARNESS. That CLI writes an Anthropic identity line into every request, and
+ * Google's Antigravity channel refuses on that exact sentence while calling it a spent quota — so a Gemini rung
+ * taking that road is a rung that cannot answer, on any of the accounts, ever. The chat already runs Gemini on
+ * its own runtime for this reason; these two tests are what stop the helper drifting back. */
+
+test("runs a Gemini rung on its own runtime, never through the Claude Code harness", async () => {
+    const answer = await askQuickModel(fakeServices([`gemini:gemini-3-flash-lite`]), `draft`, signal());
+
+    expect(answer.choice).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
+    expect(geminiOneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `gemini-3-flash-lite` }));
+    expect(oneShot).not.toHaveBeenCalled();
+});
+
+test("keeps every other provider on the Claude Code harness", async () => {
+    // The fix is scoped to the provider that refuses that loop. Sending the rest down Gemini's road would swap
+    // one wrong runtime for another.
+    await askQuickModel(fakeServices([`codex:gpt-5.6`]), `draft`, signal());
+
+    expect(oneShot).toHaveBeenCalledWith(expect.objectContaining({ model: `gpt-5.6` }));
+    expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
 /* NOT DISCOVERING WHAT IS ALREADY WRITTEN DOWN. The memo above only learns by being refused — one wasted call
