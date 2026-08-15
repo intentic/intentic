@@ -328,6 +328,39 @@
                 "skill": "skills/outline/SKILL.md"
             },
             {
+                "id": "notion",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Notion",
+                    "logo": "notion",
+                    "description": "Pages and databases in your Notion workspace.",
+                    "category": "business",
+                    "hint": "The agent calls the Notion API with curl. An integration sees nothing on its own: share pages with it (page `•••` → `Connections`) and everything nested underneath comes along. When the agent reports a page as not found, it is usually one nobody shared.",
+                    "guide": {
+                        "url": "https://www.notion.so/profile/integrations",
+                        "linkLabel": "Open your Notion integrations",
+                        "scopes": "Read content — add Update + Insert content for an agent that writes",
+                        "steps": [
+                            "Open `Settings` → `Connections` → `Develop or manage integrations`, and create a `New integration` — type `Internal`, in the workspace the agent should reach.",
+                            "Under `Capabilities`, grant `Read content`; add `Update content` and `Insert content` if the agent should write. `No user information` is fine.",
+                            "Copy the `Internal Integration Secret` and paste it here.",
+                            "Share content with it: on each top-level page or database, open `•••` → `Connections` and add the integration — sub-pages inherit. Until this step the integration sees nothing at all."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "token",
+                        "label": "Internal integration secret",
+                        "secret": true
+                    }
+                ],
+                "env": {
+                    "NOTION_TOKEN": "${token}"
+                },
+                "skill": "skills/notion/SKILL.md"
+            },
+            {
                 "id": "signoz",
                 "kind": "cli",
                 "catalog": {
