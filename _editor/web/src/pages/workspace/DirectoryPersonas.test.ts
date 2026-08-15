@@ -204,6 +204,119 @@ it(`keeps the powers of a bounded card`, async () => {
     });
 });
 
+/* THE HEADER IS THE FOLDER'S QUESTION. "Personas in docs" claimed a list on a folder that has none — which is
+ * every folder somebody opens this from the first time — and read as cards stored in that folder besides. */
+it(`asks who works in the folder rather than announcing a list`, async () => {
+    mount(`docs`);
+    await nextTick();
+    expect(text()).toContain(`Who works in docs`);
+});
+
+/* ── Pointing a card you already have at this folder ───────────────────────────────────────────────────────
+ *
+ * The second reason anyone opens this panel: "Docs bot" exists, and it should work HERE. Before this the only
+ * route was the Personas page plus retyping the path, and the likelier outcome was a second card named
+ * "Docs bot 2" doing the same job. */
+it(`points an existing persona at this folder, keeping everything else about it`, async () => {
+    personas.value = [
+        {
+            id: `docs-bot`,
+            label: `Docs bot`,
+            capabilities: [`reddit-work`],
+            repos: [`intentic`],
+            powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: true },
+            workspace: { startIn: `docs`, folders: [`docs`] },
+        },
+    ];
+    mount(`knowledge`);
+    await nextTick();
+    buttonLabelled(`Use one I already have`)!.click();
+    await nextTick();
+    byAriaLabel(`Start Docs bot here`)!.click();
+    await nextTick();
+    buttonLabelled(`Start here`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0]).toEqual({
+        id: `docs-bot`,
+        label: `Docs bot`,
+        capabilities: [`reddit-work`],
+        repos: [`intentic`],
+        powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: true },
+        // The one field the mode is about. The fence it was given stays the fence it was given.
+        workspace: { startIn: `knowledge`, folders: [`docs`] },
+    });
+});
+
+// A card with no starting folder at all is the likeliest thing to point at one, so it has to be offered.
+it(`offers a persona that starts nowhere, and says so`, async () => {
+    personas.value = [{ id: `free-agent`, capabilities: [] }];
+    mount(`docs`);
+    await nextTick();
+    buttonLabelled(`Use one I already have`)!.click();
+    await nextTick();
+    expect(text()).toContain(`no starting folder`);
+    byAriaLabel(`Start free-agent here`)!.click();
+    await nextTick();
+    // Nothing is being taken away, so there is no move to warn about.
+    expect(text()).not.toContain(`This moves it`);
+    buttonLabelled(`Start here`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0]).toEqual({ id: `free-agent`, capabilities: [], workspace: { startIn: `docs` } });
+});
+
+/* A PERSONA HAS ONE STARTING FOLDER, so this MOVES it — and the folder losing it is not on this screen, which
+ * is the only place the change would otherwise be noticed. */
+it(`warns that pointing a card here takes it off the folder it starts in`, async () => {
+    personas.value = [{ id: `docs-bot`, label: `Docs bot`, capabilities: [], workspace: { startIn: `docs` } }];
+    mount(`knowledge`);
+    await nextTick();
+    buttonLabelled(`Use one I already have`)!.click();
+    await nextTick();
+    byAriaLabel(`Start Docs bot here`)!.click();
+    await nextTick();
+    const shown = text();
+    expect(shown).toContain(`This moves it`);
+    expect(shown).toContain(`docs`);
+});
+
+/* The cards already starting here are the list at the top of the panel. Offering them again would be an action
+ * that changes nothing, and there is nothing to point at a folder it already starts in. */
+it(`does not offer a persona that already starts here`, async () => {
+    personas.value = [
+        { id: `docs-bot`, capabilities: [], workspace: { startIn: `docs` } },
+        { id: `elsewhere`, capabilities: [], workspace: { startIn: `knowledge` } },
+    ];
+    mount(`docs`);
+    await nextTick();
+    buttonLabelled(`Use one I already have`)!.click();
+    await nextTick();
+    expect(byAriaLabel(`Start elsewhere here`)).toBeDefined();
+    expect(byAriaLabel(`Start docs-bot here`)).toBeUndefined();
+});
+
+// With no other card in the sandbox there is nothing to borrow, so the offer is absent rather than opening an
+// empty picker.
+it(`does not offer to reuse a persona when there is none to reuse`, async () => {
+    personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `docs` } }];
+    mount(`docs`);
+    await nextTick();
+    expect(buttonLabelled(`Use one I already have`)).toBeUndefined();
+});
+
+// The name and the picked card are answers to different questions, and only one of them is being asked.
+it(`switches cleanly between naming a new persona and picking an existing one`, async () => {
+    personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `knowledge` } }];
+    mount(`docs`);
+    await nextTick();
+    await type(`Half typed`);
+    buttonLabelled(`Use one I already have`)!.click();
+    await nextTick();
+    expect(nameField()).toBeUndefined();
+    buttonLabelled(`Add a new one instead`)!.click();
+    await nextTick();
+    expect(nameField().value).toBe(``);
+});
+
 /* A new card landing on a name already taken would upsert that card instead — including one belonging to a
  * different folder, which is the case this panel makes easy to hit. */
 it(`refuses a name another persona already has`, async () => {

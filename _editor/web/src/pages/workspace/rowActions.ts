@@ -83,13 +83,16 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
     actions.push({
         id: `personas`,
         icon: `user`,
-        // Names what clicking does, and how many cards are behind it — a "2" is the reason to expect a list.
+        /* Names what clicking does, and how many cards are behind it — a "2" is the reason to expect a list. It
+         * says "choose" rather than "add" because the panel it opens can also point a persona you ALREADY have
+         * at this folder, and a tooltip promising to add one sends people to the Personas page to build a second
+         * copy of a card they have. */
         tooltip:
             personaCount === 0
-                ? `Add a persona starting here`
+                ? `Choose who works here`
                 : personaCount === 1
-                  ? `Edit the persona starting here`
-                  : `Edit the ${personaCount} personas starting here`,
+                  ? `Change who works here — 1 persona`
+                  : `Change who works here — ${personaCount} personas`,
         standing: personaCount > 0,
         run: (): void => sources.openPersonas(dir),
     });
