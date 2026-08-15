@@ -414,7 +414,7 @@ const disallowedToolsOf = (request: AgentRequest): string[] => [
  * "Failed to authenticate. API Error: 401 ...". That is the difference between this harness and the VSCode
  * extension, which owns the whole credential (refresh token included) and re-mints it in place.
  *
- * Declared here because `@anthropic-ai/claude-agent-sdk@0.3.220` implements the option in sdk.mjs (it is
+ * Declared here because `@anthropic-ai/claude-agent-sdk@0.3.233` implements the option in sdk.mjs (it is
  * destructured alongside `canUseTool` and gates `hasBidirectionalNeeds`) but omits it from sdk.d.ts. Returning
  * the SAME token the CLI already holds is how we say "no refresh available"; it detects that and stops. */
 /* The SDK's spawn seam, used for what it was built for — running the CLI somewhere other than plainly here.

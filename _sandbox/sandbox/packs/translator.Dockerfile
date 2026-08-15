@@ -6,7 +6,7 @@
 # failure (native-harness turns never touch it).
 # CLIProxyAPI names its arm build `linux_aarch64` where dpkg (and every other asset) says `arm64` — mapped
 # below, verified against the release's asset list.
-RUN version=7.2.110 \
+RUN version=7.2.132 \
     && arch="$(dpkg --print-architecture)" \
     && case "$arch" in arm64) arch="aarch64" ;; esac \
     && mkdir -p /tmp/cliproxy \

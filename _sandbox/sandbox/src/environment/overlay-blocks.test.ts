@@ -139,7 +139,7 @@ test("finds a binary installed straight into a bin directory, and a global npm p
     expect(blockTools({ name: `whisper`, body: `RUN install /tmp/build/whisper-cli /usr/local/bin/whisper-cli` }).candidates).toContain(
         `whisper-cli`,
     );
-    expect(blockTools({ name: `codex`, body: `RUN npm install -g @openai/codex@0.146.0` }).candidates).toContain(`codex`);
+    expect(blockTools({ name: `codex`, body: `RUN npm install -g @openai/codex@0.147.0` }).candidates).toContain(`codex`);
 });
 
 test("reads the version out of whatever shape a tool prints it in", () => {
