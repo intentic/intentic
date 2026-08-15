@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Avatar, BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
+import { BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import FolderPicker from "./FolderPicker.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
-import { identityHue } from "../../composables/identityHue";
+import PersonaFace from "../../components/PersonaFace.vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
 /* The card editor, used in both places a card is written: opened inside an existing row, and standing alone at
@@ -86,9 +86,12 @@ const {
 
 const emit = defineEmits<{ submit: []; cancel: [] }>();
 
-// The persona being built, as it will look in the list. An unnamed draft gets the neutral avatar rather than a
-// colour it would lose the moment the first letter is typed.
-const previewName = computed(() => (draft.label.trim() === `` ? undefined : draft.label.trim()));
+// The persona being built, as it will look in the list. PersonaFace derives a face from the name, so the preview
+// wears the same character the saved card will — no initials, no mode switch, one avatar everywhere.
+const previewPersona = computed(() => ({
+    id: draft.original ?? draft.label.trim() || `persona`,
+    label: draft.label.trim() === `` ? undefined : draft.label.trim(),
+}));
 
 /* WHAT A CHIP CAN ADD BEYOND THE ACCOUNT'S OWN NAME — and nothing it already said.
  *
@@ -156,7 +159,7 @@ const folderBound = computed(() => draft.folders.length > 0);
              in the list below, so the preview is the row rather than a bigger cousin of it. Absent when a row
              above is already showing both — see `showName`. -->
         <div v-if="showName" class="flex items-center gap-3">
-            <Avatar :size="32" :name="previewName" :hue="previewName === undefined ? undefined : identityHue(draft.original ?? previewName)" />
+            <PersonaFace :persona="previewPersona" :size="32" />
             <!-- A name is three words. Capped, because an input stretched across the whole card reads as a field
                  expecting a paragraph. -->
             <div class="ui-field min-w-0 max-w-sm flex-1">
