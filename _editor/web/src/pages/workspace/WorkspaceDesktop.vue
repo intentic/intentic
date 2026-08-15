@@ -19,7 +19,6 @@ import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { toAppPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
-import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useDiffStat } from "../../composables/workspace/useDiffStat";
 import { useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
@@ -68,10 +67,6 @@ const changes = useChanges();
 const { repoDirs } = useRepos();
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
-
-// The Changes list's one reading preference, offered on this row and mirrored in Settings ▸ Appearance — see
-// useChangeGrouping.
-const { groupByModule } = useChangeGrouping();
 
 // The Changes tab's chip when there is no count to show: committed work still on this disk. Gated on a zero
 // count because the chip states ONE thing — with files to review, how many is the more urgent of the two.
@@ -783,21 +778,6 @@ const endResize = (event: PointerEvent): void => {
                          the switch's "Changes" tab already titles the panel and carries its count, so a second
                          line below it spent height restating both before a single file was named. -->
                     <template v-if="layout.sidebarPanel.value === 'changes'">
-                        <!-- How the list READS: paths, or a header per module with the file on the row. It sits
-                             here, one click from the list it reshapes, because that is a look-at-it-and-flip-it
-                             choice — sending someone to Settings to see what it does to their own changes is
-                             the wrong trade. Settings ▸ Appearance mirrors it (same persisted preference), the
-                             way the explorer's own toggles are reachable from both. -->
-                        <button
-                            type="button"
-                            :class="cmp.iconButton(groupByModule ? 'text-link' : '')"
-                            @click="groupByModule = !groupByModule"
-                            v-tooltip.bottom="groupByModule ? 'Grouping by module — show file paths' : 'Group changed files by module'"
-                            :aria-pressed="groupByModule"
-                            aria-label="Group changed files by module"
-                        >
-                            <Icon name="box" class="text-xs" />
-                        </button>
                         <button
                             type="button"
                             :class="cmp.iconButton()"
