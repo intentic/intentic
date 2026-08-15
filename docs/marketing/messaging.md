@@ -8,9 +8,10 @@ reached from any browser. The sandbox and CLI that run on your machine are MIT o
 GitHub — the trust layer you can read and run yourself.
 
 > **One word for the thing.** The object is always a **sandbox** — that is what the app's own tab,
-> the API, the packages and the docs call it, without exception. No synonym is licensed anywhere, not
-> even in the brand line, which names nothing in the system on purpose. The host machine is a
-> "laptop, desktop or VPS", never a second word for the sandbox. See the glossary below.
+> the API, the packages and the docs call it, without exception. No synonym is licensed anywhere,
+> including in the brand line, which names the **actor** ("agents", the app's own word for it) and
+> never the machine. The host machine is a "laptop, desktop or VPS", never a second word for the
+> sandbox. See the glossary below.
 
 ## Rules of voice
 
@@ -103,11 +104,26 @@ sandbox; "a window for you" cast the buyer as a spectator, which is the opposite
 product where the human approves the plan and reads every diff. "window" survives as glossary
 vocabulary for any signed-in browser, but it is no longer a brand noun.
 "specialized agent" survives as *mechanism* vocabulary (see the glossary); it is no longer the
-headline claim. The brand tagline is now "You delegate. They work. You approve."
+headline claim. **"You delegate. They work. You approve."** is retired as the brand line (2026-08-15):
+the pronoun named nothing in the system on purpose, and paid for that by having no antecedent
+anywhere above the fold. Strangers read the whole page and still could not say what the product was,
+and the model they built instead came off the loudest words on the page (Extensions, Earn,
+registries): "a place to share snippets that LLM agents use". A stance needs a subject the reader
+already holds.
+
+The brand tagline is now "You delegate. Agents work. You approve."
 (org metadata, `_site/site-content/src/site.ts`), rendered as the hero
-`You delegate. They work. / You approve.` — three beats split 2 + 1, so the line that stands alone is
-the one the reader has to believe. It states the working stance in words nobody has to translate and
-names nothing in the system, so no word in it can collide with the product's own vocabulary.
+`You delegate. Agents work. / You approve.` — three beats split 2 + 1, so the line that stands alone
+is the one the reader has to believe. It states the working stance in words nobody has to translate,
+and the single word it takes from the system is the app's own name for the actor, so it teaches a
+word the product answers to. It still licenses no second noun for the machine.
+
+**The hero subhead carries the category**: `A workspace for coding agents. Nothing happens out of
+sight.` Ownership is not the only thing kept out of the first screen by the rules above — any
+statement of what the product *is* was out too, and that is not a differentiator to be earned later,
+it is the sentence every other claim hangs on. So the category noun leads and the visibility claim
+(recorded 2026-08-12) follows unchanged as the second beat. Same order for the page title and the
+meta description: category first, differentiators after.
 
 ## Section order
 
@@ -229,14 +245,16 @@ section.
 
 - The landing is a single page — its title/description are **not** per-variant; they live in
   `_site/site-content/src/landing.ts` (`meta`). Title:
-  `intentic · You delegate. They work. You approve.`
+  `intentic · A workspace for coding agents` — the category, not the brand line. A search result, a
+  browser tab and a pasted link are the three places a stranger meets this product with no page
+  around it to explain it, so all three say what it is.
 - Org description (`_site/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `You delegate. They work. You approve.
-  Every agent works in a sandbox on hardware you own, in its own git worktree. It keeps
-  running when you close the browser. Reopen from any device, steer the same fleet, and read every
-  diff before it lands. Free.`
-- Keywords to carry naturally — the tagline carries none of them now, by design: it sells the stance,
-  and the words a searcher types are earned by body copy, which says "sandbox": persistent coding
+  the site and these docs in sync with it verbatim: `A workspace for coding agents. You delegate.
+  Agents work. You approve. Each one works in a sandbox on hardware you own, in its own git worktree.
+  It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read
+  every diff before it lands. Free.`
+- Keywords to carry naturally — the title now carries the category phrase and the tagline carries
+  "agents"; the rest are earned by body copy, which says "sandbox": persistent coding
   agent, self-hosted AI agent,
   run agents on your own hardware, control agents from anywhere, remote agent control, coding
   agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude

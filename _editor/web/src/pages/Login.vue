@@ -77,7 +77,7 @@ const signIn = async (): Promise<void> => {
                      headline is capped below the site's display size to keep each sentence on one line. The
                      panel is max-w-2xl for the headline's sake; the paragraph keeps its own measure below. -->
                 <h1 class="text-4xl font-semibold leading-tight tracking-tight 2xl:text-[2.75rem]">
-                    <span class="block text-balance">You delegate. They work.</span>
+                    <span class="block text-balance">You delegate. Agents work.</span>
                     <span class="block text-balance">You approve.</span>
                 </h1>
                 <p class="mt-5 max-w-xl text-base leading-relaxed text-pretty text-muted">

@@ -113,24 +113,30 @@ export const landingContent: LandingContent = {
     meta: {
         // Under 160 characters: a search result truncates past that, and this one has to survive
         // the cut with the claim and the price still in it.
-        title: "intentic · You delegate. They work. You approve.",
+        title: "intentic · A workspace for coding agents",
         description:
-            "Agents on hardware you own that keep running when you close the browser. Reopen from any device, steer the fleet, read every diff before it lands. Free.",
+            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere, read every diff before it lands. Free.",
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
         // headline owns the working stance — you hand over the work, the agent does it, nothing lands
-        // without you — and says it in words nobody has to translate.
-        headlineLines: ["You delegate. They work.", "You approve."],
-        // One claim, five words, and the board underneath is the proof. Visibility is what the
-        // headline leaves out: "You approve" is a gate at the end, this is the whole run, watched
-        // while it happens and interruptible mid-thought. Scale is deliberately no longer SAID here
-        // — the shot below shows a full board, and "ten agents at once" was the most crowded
-        // sentence in the category. Ownership stays out for the old reason (it answers a fear
-        // instead of creating a want) and persistence moves down to the meta description and the
-        // bands, because framing it as the reader walking away argued against the co-piloted stance
-        // the headline just set.
-        subhead: "Nothing happens out of sight.",
+        // without you — and says it in words nobody has to translate. "Agents", not "They": the line
+        // used to name nothing in the system on purpose, and the pronoun paid for that by having no
+        // antecedent anywhere above the fold. A reader who did not already know the category had
+        // nothing to resolve it against, so the first screen read as a stance with no subject.
+        headlineLines: ["You delegate. Agents work.", "You approve."],
+        // Two beats: what the thing IS, then the claim the board underneath proves. The category
+        // noun sits here rather than in the headline because the headline is a stance, and a stance
+        // needs a subject the reader already holds — the first screen was supplying none, and that
+        // is the one thing strangers reliably bounced on ("I read the whole page and still don't
+        // know what it does"). Visibility is what the headline leaves out: "You approve" is a gate
+        // at the end, this is the whole run, watched while it happens and interruptible mid-thought.
+        // Scale is still shown rather than SAID — the shot below is a full board, and "ten agents at
+        // once" was the most crowded sentence in the category. Ownership still stays out (it answers
+        // a fear instead of creating a want) and persistence still lives in the meta description and
+        // the bands, because framing it as the reader walking away argued against the co-piloted
+        // stance the headline just set.
+        subhead: "A workspace for coding agents. Nothing happens out of sight.",
         chips: ["Free and open source", "Bring your own agent", "Runs on your hardware"],
         shot: {
             name: "fleet-board",

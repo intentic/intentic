@@ -35,14 +35,30 @@ what the infrastructure buys — persistence and reach — as the brand line
 `Workstation for your agents. / A window for you.` (messaging.md's retired-framing list has the
 line it replaced and the reason). This was a re-center, not a re-cut.
 
-**Plain-worded 2026-08-12 (recorded decision, supersedes the 2026-08-07 brand line).** The brand
-line is now `You delegate. They work. / You approve.` Both of the old nouns charged the reader a
+**Plain-worded 2026-08-12 (recorded decision, supersedes the 2026-08-07 brand line; its pronoun is in
+turn superseded 2026-08-15, below).** The brand line became `You delegate. They work. / You approve.`
+Both of the old nouns charged the reader a
 translation — "workstation" reads as a desktop PC, and "a window for you" made the buyer a spectator
 of a product whose whole stance is that the human approves the plan and reads every diff. The
 claim itself did not move: the headline carries the stance and the subhead carries what it leaves
 out. Nothing else on the page changed, and the retired-framing list in messaging.md holds the full
 reason. (What the subhead carries changed later the same day — see the hero in the section list: it
 is visibility now, not scale and persistence.)
+
+**Said what it is 2026-08-15 (recorded decision, supersedes the pronoun and the subhead above).** The
+brand line is now `You delegate. Agents work. / You approve.`, and the subhead leads with the
+category: `A workspace for coding agents. Nothing happens out of sight.` The trigger was readers, not
+taste: strangers who read the landing page, the About page, the docs and the demo still could not say
+what the product was, and the model they built instead came off the nav's loudest words — that
+intentic is a place to publish snippets for LLM agents. Two faults, one cause. `They` had no
+antecedent anywhere above the fold, so the stance had no subject; and no line in the first screen
+named the category, because every candidate had been ruled out for arguing a differentiator too early
+(ownership answers a fear, persistence sells the reader's absence, scale was the crowded sentence).
+Those rules were right about differentiators and wrong by omission about the category, which is not a
+differentiator at all. The claim did not move and no band changed: the headline still carries the
+stance, the subhead still carries visibility as its second beat, and the shot underneath is still the
+proof. The page title and meta description were re-cut the same way, category first, because a search
+result and a pasted link are the two places this product is met with no page around it.
 
 **Re-cut around the verbs 2026-08-09 (recorded decision, supersedes the loop/extend split).** The
 middle of the page — the four-beat `#loop` and the six-row `#extend` bento — is now one band: a
@@ -112,12 +128,14 @@ One page, one continuous scroll — **the claim, a five-verb tour, two objection
 down from fourteen. Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy
 is in `about.ts` because `/about/` shares it.
 
-1. **Hero (`#hero`)** — the brand line, kept verbatim ("You delegate. They work. You approve.")
-   + the subhead `Nothing happens out of sight.` (recorded decision 2026-08-12, replaces
-   "Ten agents at once. They keep working after you close the browser."). The headline owns the
-   stance and the subhead owns **visibility**: "You approve" is a gate at the end of a run, the
-   subhead claims the whole of it — watched while it happens, interruptible mid-thought — and the
-   board cropped underneath is the proof, on sight, in the same screenful. **Scale is now shown, not
+1. **Hero (`#hero`)** — the brand line, kept verbatim ("You delegate. Agents work. You approve.")
+   + the subhead `A workspace for coding agents. Nothing happens out of sight.` (recorded decision
+   2026-08-15; its second beat is the 2026-08-12 decision, which replaced "Ten agents at once. They
+   keep working after you close the browser."). The subhead's **first beat says what the product
+   is** — nothing else above the fold did, and that is precisely what readers bounced on. The
+   headline owns the stance and the second beat owns **visibility**: "You approve" is a gate at the
+   end of a run, the subhead claims the whole of it — watched while it happens, interruptible
+   mid-thought — and the board cropped underneath is the proof, on sight, in the same screenful. **Scale is now shown, not
    said**: the shot is a full board, and "ten agents at once" had become the most crowded sentence in
    the category, so it bought nothing a competitor wasn't also saying. **Persistence moved down** to
    the meta description, `#ownership` and the FAQ: every phrasing of it above the fold sold the

@@ -10,13 +10,14 @@ export const API_URL = "https://api.intentic.dev";
 // into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
 export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
-/* The brand line: the working stance in three beats, naming nothing in the system so no word here can
- * collide with the product's own vocabulary. The thing that exists is the **sandbox**, which is what the
- * app, the API and the docs call it without exception; prose that needs the host machine says "laptop,
- * desktop or VPS". See docs/marketing/messaging.md for the rule. */
-export const ORG_TAGLINE = "You delegate. They work. You approve.";
+/* The brand line: the working stance in three beats. It names the ACTOR, in the app's own word for it —
+ * "agent" is what the /agents board, the API and the docs call it without exception — because the pronoun
+ * this replaced had no antecedent above the fold and left the stance without a subject. It still licenses
+ * no second word for the machine: that is the **sandbox**, without exception, and prose that needs the host
+ * machine says "laptop, desktop or VPS". See docs/marketing/messaging.md for the rule. */
+export const ORG_TAGLINE = "You delegate. Agents work. You approve.";
 export const ORG_DESCRIPTION =
-    "You delegate. They work. You approve. Every agent works in a sandbox on hardware you own, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
+    "A workspace for coding agents. You delegate. Agents work. You approve. Each one works in a sandbox on hardware you own, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 
