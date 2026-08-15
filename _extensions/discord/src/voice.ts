@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -52,12 +53,18 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
         throw new Error(`whisper model download failed: ${MODEL_REPO} has no ${file}`);
     }
     await mkdir(dirname(path), { recursive: true });
-    // Stream straight to disk (up to ~1.5GB — never buffer it); a torn download is removed so the next join retries.
+    // Stream straight to disk (up to ~1.5GB — never buffer it), landing BESIDE the model and only then taking
+    // its place: presence here is a bare stat, so a file growing in place is indistinguishable from a finished
+    // one — a torn download would look permanently present and every later join would feed whisper-cli a
+    // half-written model. rename is atomic within the directory, so the model is either absent or whole. The
+    // staged name is unique per attempt because the composer's own voice downloads into this same directory.
+    const staged = `${path}.${randomUUID()}.part`;
     try {
         // hub's web ReadableStream and the DOM lib's disagree on generics — same object at runtime.
-        await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(path));
+        await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(staged));
+        await rename(staged, path);
     } catch (error) {
-        await rm(path, { force: true });
+        await rm(staged, { force: true });
         throw error;
     }
     return path;

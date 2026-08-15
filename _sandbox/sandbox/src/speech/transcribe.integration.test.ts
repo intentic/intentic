@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -21,6 +21,27 @@ const rootWith = (model: boolean): string => {
 };
 
 const noFetch = (): Promise<Blob | null> => Promise.reject(new Error("must not download"));
+
+// A model whose BYTES arrive under the test's control — the real download's shape, where the fetch resolves in
+// milliseconds and the stream then flows for minutes. A Blob that hands over all its bytes at once cannot show
+// what the browser sees during those minutes.
+const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: () => void } => {
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) });
+    return {
+        blob: { stream: () => stream } as unknown as Blob,
+        push: (bytes) => controller.enqueue(new Uint8Array(bytes)),
+        finish: () => controller.close(),
+    };
+};
+
+// What is on disk in the model's directory, by name — the staged download and the model itself are told apart
+// here exactly the way `stat` tells them apart in the engine.
+const modelDir = (root: string): string => join(root, STATE_DIR, "whisper");
+const bytesOnDisk = (root: string, name: string): number => {
+    const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-small.bin" : entry.endsWith(".part")));
+    return found.reduce((total, entry) => total + statSync(join(modelDir(root), entry)).size, 0);
+};
 
 test("whisperLanguage extracts the primary subtag and falls back to auto-detection", () => {
     expect(whisperLanguage("en-US")).toBe("en");
@@ -66,6 +87,33 @@ test("a status poll on an absent model starts ONE download and reports ready onc
     await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
     release(new Blob(["model bytes"]));
     await expect.poll(async () => (await speech.status()).model).toBe("ready");
+});
+
+test("a model still streaming in never reads ready — it takes its place only once whole", async () => {
+    const root = rootWith(false);
+    const { blob, push, finish } = streamingModel();
+    const speech = createSpeech({
+        workspaceRoot: root,
+        log: () => {},
+        exec: () => Promise.resolve({ stdout: "usage: whisper-cli" }),
+        fetchModel: () => Promise.resolve(blob),
+    });
+    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
+
+    // Bytes are landing. Grown in place, the model file would exist from the download's first moment and this
+    // poll would answer "ready" — the browser would stop waiting, record, and meet a half-written model
+    // (whisper-cli: "failed to initialize whisper context"), which the composer can only word as "try again".
+    push(4096);
+    await expect.poll(() => bytesOnDisk(root, "staged")).toBeGreaterThan(0);
+    expect(bytesOnDisk(root, "model")).toBe(0);
+    expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
+    await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
+
+    finish();
+    await expect.poll(async () => (await speech.status()).model).toBe("ready");
+    // Whole, in one move, with nothing staged left behind.
+    expect(bytesOnDisk(root, "model")).toBe(4096);
+    expect(bytesOnDisk(root, "staged")).toBe(0);
 });
 
 test("a failed download does not poison later polls — the next status retries it", async () => {

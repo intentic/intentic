@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -132,12 +132,21 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                 throw new Error(`speech model download failed: ${MODEL_REPO} has no ${MODEL_FILE}`);
             }
             await mkdir(dirname(modelPath), { recursive: true });
-            // Stream straight to disk (~466MB — never buffer it); a torn download is removed so the next use retries.
+            // Stream straight to disk (~466MB — never buffer it), landing BESIDE the model and only then taking
+            // its place. Growing the real file in place is what broke voice: readiness is a bare stat, so the
+            // model read as "ready" the instant the empty file was created, the browser stopped waiting and
+            // started recording, and every utterance spoken over the remaining minutes of download met a
+            // half-written model — whisper-cli exits "failed to initialize whisper context" in 40ms and the
+            // composer could only say "try again". rename is atomic within the directory, so the model is
+            // either absent or whole. The staged name is unique per attempt because the Discord voice session
+            // downloads into this same directory and may be fetching this same file.
+            const staged = `${modelPath}.${randomUUID()}.part`;
             try {
                 // hub's web ReadableStream and the DOM lib's disagree on generics — same object at runtime.
-                await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(modelPath));
+                await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(staged));
+                await rename(staged, modelPath);
             } catch (error) {
-                await rm(modelPath, { force: true });
+                await rm(staged, { force: true });
                 throw error;
             }
         })()).catch((error) => {
