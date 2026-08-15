@@ -22,22 +22,43 @@ import type { Config } from "../config.js";
  * refused, and a user meeting intentic's quota ceiling has done nothing to be billed for. */
 export const poolRefused = (status: number): boolean => status === 429 || status >= 500;
 
-const trialKeys = (config: Config): string[] =>
-    config.trial.keys
+/* AN INLINE `#` COMMENT IS NOT PART OF THE VALUE, which the two settings below have to say themselves.
+ *
+ * TRIAL_MODELS reached a real deployment as the entire line an operator had been handed to paste — value,
+ * padding and trailing note — and the picker showed `# optional allowlist; empty = whatever upstream serves`
+ * as the name of the trial's only model: a row naming nothing, which no upstream would answer for. The env
+ * file format has always meant that text as a comment, and it survives anyway, from both ends. The loader we
+ * read `.env` through keeps everything after the `=` (its own document parser, used for editing and codegen,
+ * drops the comment — this is the seam between them); and a value arriving through a compose `environment:`
+ * block, a Komodo stack or a plain `export` never passes a dotenv parser at all.
+ *
+ * So it comes off here, at the one place operator text turns into ids and credentials we act on. A value that
+ * is NOTHING but a comment reads as empty, which is what whoever pasted the line meant by it: blank is the
+ * default for both settings, and each already knows what to do with it. */
+const withoutInlineComment = (raw: string): string => {
+    const text = raw.trimStart();
+    if (text.startsWith(`#`)) {
+        return ``;
+    }
+    const comment = text.search(/\s#/);
+    return comment === -1 ? text : text.slice(0, comment);
+};
+
+// Both settings are comma-separated lists of things that cannot contain a space, so they read the same way.
+const listed = (raw: string): string[] =>
+    withoutInlineComment(raw)
         .split(`,`)
-        .map((key) => key.trim())
-        .filter((key) => key !== ``);
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== ``);
+
+const trialKeys = (config: Config): string[] => listed(config.trial.keys);
 
 // Whether the trial is on at all. Empty keys is the default and the only sane one for a self-hosted platform:
 // nothing to spend, so the routes 404 and the daemon provisions no trial endpoint.
 export const trialEnabled = (config: Config): boolean => trialKeys(config).length > 0;
 
 // The ids an operator narrowed the trial to, or an empty list meaning "whatever the upstream publishes".
-export const trialModels = (config: Config): string[] =>
-    config.trial.models
-        .split(`,`)
-        .map((model) => model.trim())
-        .filter((model) => model !== ``);
+export const trialModels = (config: Config): string[] => listed(config.trial.models);
 
 /* THE FLOOR UNDER THE CATALOG, and the reason the trial is offerable at all.
  *

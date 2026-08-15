@@ -243,6 +243,46 @@ describe("the free trial", () => {
         expect(body.data.every((model) => model.id.endsWith(`-latest`))).toBe(true);
         vi.unstubAllGlobals();
     });
+
+    /* The line an operator was handed to paste, pasted whole. It reached a deployment exactly like this and the
+     * picker offered its trailing note as the model — so what is pinned is that the note is not a model id, and
+     * that a setting which is nothing but a comment means what a blank one means. */
+    it("reads a pasted `#` note as the blank setting it annotates, not as a model", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(
+            async () => new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": `application/json` } }),
+        );
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const models = `# optional allowlist; empty = whatever upstream serves`;
+        const response = await call(configWith({ models }), prisma, `/trial/v1/models`);
+
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { data: { id: string }[] };
+        expect(body.data.map((model) => model.id)).not.toContain(models);
+        expect(body.data.every((model) => model.id.endsWith(`-latest`))).toBe(true);
+        vi.unstubAllGlobals();
+    });
+
+    /* The same paste on the setting above it, where it costs more: a note glued to the last key makes that key
+     * a credential no upstream knows, and 401 is not one of the refusals the pool walks past — so the user is
+     * handed someone's documentation as an auth error. One key here, so the answer cannot depend on where the
+     * pool's rotating cursor happened to start. */
+    it("keeps a key a pasted note was glued to", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(async (_url: string, init: RequestInit) =>
+            (init.headers as Record<string, string>)[`authorization`] === `Bearer k1`
+                ? new Response(`{}`, { status: 200, headers: { "content-type": `application/json` } })
+                : new Response(`{"error":"invalid api key"}`, { status: 401, headers: { "content-type": `application/json` } }),
+        );
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const config = configWith({ keys: `k1   # comma-separated Google AI Studio keys; empty = no trial at all` });
+        const response = await chat(config, prisma);
+
+        expect(response.status).toBe(200);
+        vi.unstubAllGlobals();
+    });
 });
 
 // Referenced so the Prisma import matches app.test.ts's (createApp's error mapping narrows on it).
