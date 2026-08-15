@@ -1,7 +1,7 @@
 # @intentic/ext-connectors
 
 The systems an agent can be wired to — GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz,
-Komodo, Cloudflare, Postgres, MySQL.
+Komodo, Cloudflare, Firecrawl, Postgres, MySQL.
 
 Connecting one does two things at once: it turns on the capability other surfaces gate on (Pipelines appears when
 github or gitlab is on; Deployments when Komodo is), and it teaches the agent how to use that system by shipping
@@ -15,7 +15,7 @@ a skill alongside the credential.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the fourteen connectors, and what each one grants. This
+- [intentic-extension.json](intentic-extension.json) — the fifteen connectors, and what each one grants. This
   file IS the package; there is no `src/`.
 - [skills/github](skills/github) — a worked example of the shipped-skill half.
 - [env/postgres.Dockerfile](env/postgres.Dockerfile) — a connector that needs a client installed in the sandbox,

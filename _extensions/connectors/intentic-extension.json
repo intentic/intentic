@@ -171,6 +171,47 @@
                 "skill": "skills/npmjs/SKILL.md"
             },
             {
+                "id": "firecrawl",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Firecrawl",
+                    "icon": "download",
+                    "description": "Turn any website into clean text the agent can read.",
+                    "category": "extend",
+                    "hint": "Scrape one page, crawl a whole site, map its URLs or search the web — all coming back as markdown, so the agent reads sites that its own browser would choke on. Metered in credits: a crawl spends one per page, which is why the agent is told to always cap a crawl. Self-hosted Firecrawl works too — put its address in the URL field.",
+                    "guide": {
+                        "url": "https://www.firecrawl.dev/app/api-keys",
+                        "linkLabel": "Open your Firecrawl API keys",
+                        "scopes": "one key, full account — credits are shared, so watch the plan's balance",
+                        "steps": [
+                            "Sign in at `firecrawl.dev` and open `API Keys` in the dashboard.",
+                            "Copy a key — they start with `fc-` — and paste it here.",
+                            "The free plan comes with a one-off pot of credits and slow rate limits; paid plans refill monthly. One page scraped is roughly one credit.",
+                            "Self-hosting Firecrawl? Point the URL field at your instance instead and use a key it accepts."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "apiKey",
+                        "label": "API key",
+                        "secret": true,
+                        "placeholder": "fc-…"
+                    },
+                    {
+                        "key": "url",
+                        "label": "API URL",
+                        "default": "https://api.firecrawl.dev",
+                        "hint": "Only change this for a self-hosted Firecrawl."
+                    }
+                ],
+                "env": {
+                    "FIRECRAWL_API_KEY": "${apiKey}",
+                    "FIRECRAWL_API_URL": "${url}"
+                },
+                "skill": "skills/firecrawl/SKILL.md"
+            },
+            {
                 "id": "website",
                 "kind": "browser",
                 "catalog": {
