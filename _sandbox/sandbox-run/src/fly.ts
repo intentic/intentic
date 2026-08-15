@@ -56,6 +56,11 @@ export interface FlyMachineConfig {
      * identity. Machine updates REPLACE the whole config, so the claim's config (built by flyMachineConfig,
      * no init) is also what erases the override. */
     readonly init?: { readonly exec: readonly string[] };
+    /* Fly's own key/value bag on a Machine — the only label the provider can be ASKED about, since an app
+     * cannot be renamed and a Machine's name is fixed at birth. `flyMachineConfig` never sets it; the hosted
+     * lane writes what the machine currently is (warm stock vs. somebody's sandbox) and, because updates
+     * replace the whole config, the claim that brands a warm machine re-stamps this in the same call. */
+    readonly metadata?: Record<string, string>;
 }
 
 export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({

@@ -16,6 +16,17 @@ import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
 
 const BASE = `https://api.machines.dev/v1`;
 
+/* WHAT A MACHINE IS, in the one place Fly can be asked about it. Fly has no labels on an app, no way to
+ * rename one, and a machine's name is fixed at birth — so a warm machine's `<prefix>-pool-<hex>` app keeps
+ * that name for life, INCLUDING after somebody claims it. The console's app list therefore cannot tell the
+ * platform's own stock from a person's working sandbox, and no naming scheme can make it: the name is minted
+ * before anyone has asked for the machine. Machine metadata is the lever that does work — set at create,
+ * rewritten with the config at claim (updates replace the whole config), and filterable server-side, e.g.
+ * GET /apps/{app}/machines?metadata.intentic_role=sandbox. hosted-fleet.ts is the readable answer built on
+ * top; this is the vocabulary both the pool's builder and the sandbox's composer write. */
+export const FLY_ROLE_WARM = { intentic_role: `warm` } as const;
+export const flySandboxRole = (sandboxId: string): Record<string, string> => ({ intentic_role: `sandbox`, intentic_sandbox: sandboxId });
+
 // The operator misconfigured the platform (bad/expired token, wrong org) — nothing a user can fix, and the
 // route surfaces it as a gateway failure. Named so hosted.ts can log it apart from capacity weather.
 export class FlyError extends Error {}

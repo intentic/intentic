@@ -99,9 +99,14 @@ describe(`reconcileHostedPool`, () => {
         const regions = machines.map((entry) => (entry.body as { region: string }).region).toSorted();
         expect(regions).toEqual([`arn`, `iad`]);
         // The pull is the point; the sandbox must not run — real image, no-op exec, and no identity at all.
-        const posted = machines[0]?.body as { config: { image: string; init: { exec: string[] }; env: Record<string, string> } };
+        const posted = machines[0]?.body as {
+            config: { image: string; init: { exec: string[] }; env: Record<string, string>; metadata: Record<string, string> };
+        };
         expect(posted.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
         expect(posted.config.init).toEqual({ exec: [...WARM_BOOT_EXEC] });
+        // …and it says so to Fly, which is the only place the truth survives: this app is named `pool` for
+        // life, claimed or not, so the console's app list can never be the answer.
+        expect(posted.config.metadata).toEqual({ intentic_role: `warm` });
         expect(posted.config.env[`CONNECT_TOKEN`]).toBeUndefined();
         expect(posted.config.env[`OWNER_EMAIL`]).toBeUndefined();
         expect(create).toHaveBeenCalledTimes(2);

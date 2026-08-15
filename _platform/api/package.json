@@ -7,6 +7,7 @@
     "scripts": {
         "dev": "bun --watch --env-file=../../.env ./src/main.ts",
         "start": "bun ./src/main.ts",
+        "fleet": "bun --env-file=../../.env ./src/fleet.ts",
         "typecheck": "tsgo --noEmit",
         "docker:release": "bash ../../_tools/scripts/docker-release.sh api --prune",
         "test": "vitest run"

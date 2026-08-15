@@ -3,7 +3,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { createApp, createMachine, createVolume, deleteApp, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
+import { createApp, createMachine, createVolume, deleteApp, flySandboxRole, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
 
 /* The hosted lane's orchestration — what the routes call, over the fly.ts client. One machine + one volume in
  * one app per sandbox; the app name is derived from the sandbox's 12-hex tunnel id, so the Fly console, the
@@ -42,9 +42,14 @@ export interface HostedProvisionArgs {
  * identity gets in and how the pool's no-op boot override gets erased (updates replace the whole config).
  * One composer, so the two origins cannot drift: a machine claimed from the pool is byte-for-byte the machine
  * that would have been built to order. OWNER_EMAIL is in the env before the daemon ever runs, so the
- * first-bind trust story (only this Google identity may claim ownership) is origin-independent too. */
-const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) =>
-    flyMachineConfig({
+ * first-bind trust story (only this Google identity may claim ownership) is origin-independent too.
+ *
+ * The metadata stamp rides on that same "one composer" property: whatever the machine was a second ago, a
+ * machine holding this config is somebody's sandbox and says so to Fly — which is the only way to read a
+ * pool-born app's true state, since its name will say `pool` forever (fly.ts). The sandbox ID and not the
+ * owner's address: metadata is casually visible provider-side, and the ID joins to the platform's own rows. */
+const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineName: string, volumeId: string) => ({
+    ...flyMachineConfig({
         name: machineName,
         image: config.hosted.image,
         baseImage: config.hosted.image,
@@ -62,7 +67,9 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
             [`ZROK_NAMESPACE`, args.grant.namespaceToken],
             [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
         ],
-    });
+    }),
+    metadata: flySandboxRole(args.sandboxId),
+});
 
 /* Claim a warm machine for this sandbox, or answer undefined and let the cold path build one. The pool row
  * is won by a guarded update (`ready` → `claimed`), so two simultaneous claims can never brand the same

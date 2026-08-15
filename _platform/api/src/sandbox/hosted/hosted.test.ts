@@ -108,9 +108,10 @@ describe(`provisionHosted`, () => {
         expect(result.region).toBe(`iad`);
         expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);
         const machine = calls.find((entry) => entry.url.includes(`/machines`))?.body as {
-            config: { env: Record<string, string>; mounts: { volume: string }[] };
+            config: { env: Record<string, string>; mounts: { volume: string }[]; metadata: Record<string, string> };
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
+        expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1` });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(machine.config.env[`ZROK_TOKEN`]).toBe(`acct-1`);
         expect(machine.config.env[`ZROK_NAMESPACE`]).toBe(`ns-1`);
@@ -170,9 +171,12 @@ describe(`provisionHosted`, () => {
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
         // The identity goes in before the machine ever runs the sandbox, and the no-op boot override goes out.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
-            config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[] };
+            config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
             skip_launch: boolean;
         };
+        // The stamp flips with the identity, in the same call — the app name will say `pool` forever, so this
+        // is the only thing that can tell Fly this machine stopped being the platform's stock.
+        expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1` });
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
