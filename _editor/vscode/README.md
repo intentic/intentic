@@ -46,6 +46,11 @@ vendored Codex CLI, the onnx runtimes, foreign node-pty prebuilds), **smoke-boot
 (/health must answer with the local profile — a .vsix that would not start never reaches a marketplace), and
 pack one platform-specific .vsix per target into `dist-bin/`.
 
+`@types/vscode` is the one dependency here that is pinned literally rather than taken from the workspace
+catalog: vsce semver-parses the specifier *string* it finds in this manifest, so a `catalog:` there fails the
+pack outright ("Failed to parse semver of @types/vscode"). It also may not outrun `engines.vscode` — the two
+are one decision, the minimum VS Code host this extension supports, and move together.
+
 Publishing is gated on secrets and skips loudly without them, so the release train never fails over this
 artifact: `VSCE_PAT` (Azure DevOps PAT, Marketplace ▸ Manage, publisher `intentic` — creating that publisher
 is a one-time manual step) gates the Visual Studio Marketplace, `OVSX_PAT` gates Open VSX. Tokenless runs

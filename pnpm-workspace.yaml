@@ -186,9 +186,10 @@ catalog:
   "@types/pg": 8.20.0
   "@types/ssh2": 1.15.5
   "@types/tar-stream": 3.1.4
-  # Doubles as the VS Code extension's minimum supported host: vsce refuses to package when this outruns the
-  # manifest's `engines.vscode`, so the two move together (_editor/vscode/package.json).
-  "@types/vscode": 1.125.0
+  # NO @types/vscode HERE. It is the one dependency that cannot be catalogued: vsce reads the specifier
+  # STRING out of the extension manifest and semver-parses it, so a `catalog:` there fails the pack with
+  # "Failed to parse semver of @types/vscode". It stays pinned literally, beside the `engines.vscode` it
+  # doubles as the minimum supported host for (_editor/vscode/package.json).
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2

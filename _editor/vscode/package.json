@@ -86,7 +86,7 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
-        "@types/vscode": "catalog:",
+        "@types/vscode": "1.125.0",
         "@typescript/native-preview": "catalog:",
         "@vscode/vsce": "catalog:",
         "esbuild": "catalog:",
