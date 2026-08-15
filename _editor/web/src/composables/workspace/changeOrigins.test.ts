@@ -1,15 +1,6 @@
 import type { GitChange, LandedMessageDraft, RepoChanges } from "@intentic-app/api-contract";
 import { describe, expect, test } from "vitest";
-import {
-    chipMessageNotice,
-    commitMessageOf,
-    draftReportLines,
-    landedMessage,
-    ORIGIN_HUES,
-    originHue,
-    originsOf,
-    summarizeOrigins,
-} from "./changeOrigins";
+import { chipMessageNotice, commitMessageOf, draftReport, landedMessage, ORIGIN_HUES, originHue, originsOf, summarizeOrigins } from "./changeOrigins";
 
 const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });
 const repo = (name: string, sides: Partial<Pick<RepoChanges, `conflicted` | `staged` | `unstaged` | `origins`>>): RepoChanges => ({
@@ -131,7 +122,6 @@ describe(`chipMessageNotice`, () => {
         message: undefined as string | undefined,
         draft: undefined as LandedMessageDraft | undefined,
         boxIsYours: false,
-        now: NOW,
     };
 
     test(`says nothing when no chip is lit — nothing has been asked of the box`, () => {
@@ -142,16 +132,17 @@ describe(`chipMessageNotice`, () => {
         expect(chipMessageNotice({ ...state, message: `fix: cascading markers` })).toBeUndefined();
     });
 
-    // The wait names the model being asked and how long it has been — a wait that is visibly moving, instead
-    // of the bare "writing…" that read the same at second 2 and second 60.
-    test(`names the model being asked, and the seconds it is taking`, () => {
-        expect(chipMessageNotice({ ...state, draft: running() })).toBe(`Writing a message for Review panel · audit — Asking gemini-3-flash… 10s`);
+    /* THE BOX SAYS WHAT IS HAPPENING; THE REPORT UNDER IT SAYS HOW IT IS GOING. This line used to carry the
+     * walk's newest step as well ("— Asking gemini-3-flash… 10s"), which printed the same words twice a
+     * centimetre apart: here, and as the last row of the report list directly below. The row below keeps them —
+     * it has the glyph, the aligned clock and the width — and this line keeps the one thing only it can say,
+     * which is whose message the box is waiting for. */
+    test(`names whose message is coming, and leaves the step-by-step to the report below`, () => {
+        expect(chipMessageNotice({ ...state, draft: running() })).toBe(`Writing a message for Review panel · audit…`);
     });
 
-    test(`a draft that has not reached a model yet is reading the diff`, () => {
-        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } })).toBe(
-            `Writing a message for Review panel · audit — Reading the landed diff…`,
-        );
+    test(`says the same before any model has been reached — the report below has the phase`, () => {
+        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } })).toBe(`Writing a message for Review panel · audit…`);
     });
 
     test(`says a sentence is never coming when none was written`, () => {
@@ -191,20 +182,22 @@ describe(`chipMessageNotice`, () => {
     });
 });
 
-/* THE FULL REPORT, line by line — the walk's own record in the user's terms. What each status earns is pinned
- * here because these lines ARE the feature: the difference between a minute-long mystery and a minute-long
- * wait you can watch move. */
-describe(`draftReportLines`, () => {
+/* THE FULL REPORT, row by row — the walk's own record in the user's terms, split into the columns the panel
+ * lays out. What each status earns is pinned here because these rows ARE the feature: the difference between a
+ * minute-long mystery and a minute-long wait you can watch move. */
+describe(`draftReport`, () => {
     test(`no draft is no report — the one-line notice covers that case`, () => {
-        expect(draftReportLines(undefined, NOW)).toEqual([]);
+        expect(draftReport(undefined, NOW)).toEqual([]);
     });
 
     test(`an open draft with no steps is the diff being read`, () => {
-        expect(draftReportLines({ startedAt: 0, steps: [] }, NOW)).toEqual([`Reading the landed diff…`]);
+        expect(draftReport({ startedAt: 0, steps: [] }, NOW)).toEqual([
+            { key: `reading`, status: `reading`, detail: `Reading the landed diff…`, title: `Reading the landed diff…` },
+        ]);
     });
 
     test(`tells the whole walk: the skip with its remembered reason, the refusal in its own words, the answer`, () => {
-        const lines = draftReportLines(
+        const rows = draftReport(
             {
                 startedAt: 0,
                 steps: [
@@ -217,31 +210,104 @@ describe(`draftReportLines`, () => {
             },
             NOW,
         );
-        expect(lines).toEqual([
-            `Skipped gemini-3-flash — refused a moment ago: usage limit reached`,
-            `gpt-5.6 refused after 58s — no capacity`,
-            `claude-haiku answered in 7s`,
+        expect(rows.map((row) => [row.status, row.model, row.detail, row.elapsed])).toEqual([
+            [`skipped`, `gemini-3-flash`, `usage limit reached`, undefined],
+            [`refused`, `gpt-5.6`, `no capacity`, `58s`],
+            [`answered`, `claude-haiku`, `wrote the message`, `7s`],
         ]);
     });
 
-    // The in-flight line ticks against the reader's clock — 58 seconds into a silent model, the report says 58.
-    test(`an in-flight ask shows its elapsed, minutes and all`, () => {
-        expect(draftReportLines(running([{ provider: `gemini`, model: `gemini-3-flash`, status: `asking`, at: 2_000 }]), 64_000)).toEqual([
-            `Asking gemini-3-flash… 1m 2s`,
+    /* THE TOOLTIP IS THE ROW UNABRIDGED — the full model id, the verb spelled out and the vendor's whole
+     * sentence. Everything the columns shorten is one hover away, which is what makes shortening them safe. */
+    test(`each row keeps its unabridged sentence for the tooltip`, () => {
+        const rows = draftReport(
+            {
+                startedAt: 0,
+                steps: [
+                    { provider: `gemini`, model: `gemini-3-flash`, status: `skipped`, reason: `usage limit reached` },
+                    {
+                        provider: `claude`,
+                        model: `claude-haiku-4-5-20251001`,
+                        status: `refused`,
+                        at: 0,
+                        ms: 6_000,
+                        reason: `Claude usage limit reached — the allowance is exhausted. Try again once it resets.`,
+                    },
+                ],
+                outcome: `failed`,
+                finishedAt: 6_000,
+            },
+            NOW,
+        );
+        expect(rows.map((row) => row.title)).toEqual([
+            `Skipped gemini-3-flash — it refused a moment ago: usage limit reached`,
+            `claude-haiku-4-5-20251001 refused after 6s — Claude usage limit reached — the allowance is exhausted. Try again once it resets.`,
         ]);
+    });
+
+    /* THE TWO COMPRESSIONS THAT BOUGHT THE ROW ITS WIDTH BACK. A vendor's refusal is a headline followed by the
+     * same advice on every rung, and a release stamp is nine characters the reader has no use for — between
+     * them they were most of a sidebar-wide line, which is why the fact itself never fit on one. */
+    test(`drops the release stamp from the model and the boilerplate from the refusal`, () => {
+        const rows = draftReport(
+            {
+                startedAt: 0,
+                steps: [
+                    {
+                        provider: `gemini`,
+                        model: `gemini-3.5-flash-extra-low`,
+                        status: `refused`,
+                        at: 0,
+                        ms: 19_000,
+                        reason: `Google usage limit reached — the allowance is exhausted. Try again once it resets.`,
+                    },
+                    { provider: `claude`, model: `claude-haiku-4-5-20251001`, status: `asking`, at: 19_000 },
+                ],
+            },
+            21_000,
+        );
+        expect(rows.map((row) => [row.model, row.detail, row.elapsed])).toEqual([
+            [`gemini-3.5-flash-extra-low`, `Google usage limit reached`, `19s`],
+            [`claude-haiku-4-5`, `asking…`, `2s`],
+        ]);
+    });
+
+    // No em-dash to cut at, so the first sentence is the headline and the advice behind it goes to the tooltip.
+    test(`cuts a reason at its first sentence when there is no dash to cut at`, () => {
+        const rows = draftReport(
+            {
+                startedAt: 0,
+                steps: [
+                    { provider: `codex`, model: `gpt-5.6`, status: `refused`, at: 0, ms: 1_000, reason: `No capacity right now. Try again shortly.` },
+                ],
+            },
+            NOW,
+        );
+        expect(rows[0]?.detail).toBe(`No capacity right now`);
+    });
+
+    // The in-flight row ticks against the reader's clock — 62 seconds into a silent model, the report says so.
+    test(`an in-flight ask shows its elapsed, minutes and all`, () => {
+        const rows = draftReport(running([{ provider: `gemini`, model: `gemini-3-flash`, status: `asking`, at: 2_000 }]), 64_000);
+        expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([[`asking`, `gemini-3-flash`, `1m 2s`]]);
     });
 
     // The chain ran dry before any rung refused in words the steps carry — the report's own one-liner closes it.
-    test(`a failure the steps don't explain gets the report's own reason as its last line`, () => {
-        expect(
-            draftReportLines({ startedAt: 0, steps: [], outcome: `failed`, reason: `No AI account is connected`, finishedAt: 4_000 }, NOW),
-        ).toEqual([`No message was written — No AI account is connected`]);
+    test(`a failure the steps don't explain gets the report's own reason as its last row`, () => {
+        expect(draftReport({ startedAt: 0, steps: [], outcome: `failed`, reason: `No AI account is connected`, finishedAt: 4_000 }, NOW)).toEqual([
+            {
+                key: `failed`,
+                status: `failed`,
+                detail: `No message was written — No AI account is connected`,
+                title: `No message was written — No AI account is connected`,
+            },
+        ]);
     });
 
-    // A chain spent to the bottom already told each refusal in its own line — repeating the joined reasons
+    // A chain spent to the bottom already told each refusal in its own row — repeating the joined reasons
     // under it would say less, not more.
     test(`a failure the steps already explain adds nothing under them`, () => {
-        const lines = draftReportLines(
+        const rows = draftReport(
             {
                 startedAt: 0,
                 steps: [{ provider: `codex`, model: `gpt-5.6`, status: `refused`, at: 0, ms: 3_000, reason: `usage limit reached` }],
@@ -251,6 +317,6 @@ describe(`draftReportLines`, () => {
             },
             NOW,
         );
-        expect(lines).toEqual([`gpt-5.6 refused after 3s — usage limit reached`]);
+        expect(rows.map((row) => row.status)).toEqual([`refused`]);
     });
 });

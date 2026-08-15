@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { ChangeStatusMark, cmp, useDevice } from "@intentic/ui";
+import { ChangeStatusMark, cmp, useDevice, type IconName } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
@@ -19,8 +19,9 @@ import {
     ALL_SIDES,
     chipMessageNotice,
     commitMessageOf,
-    draftReportLines,
+    draftReport,
     draftRunning,
+    type DraftReportRow,
     landedMessage,
     originHue,
     originsOf,
@@ -306,10 +307,35 @@ const draftClock = useNow(() => draftRunning(filterDraft.value));
 /* The step list under the commit box: the whole walk while it runs, and the post-mortem after a failure — the
  * two states in which "what exactly happened" is the question on the user's mind. A draft that ENDED WELL
  * vanishes from here on purpose: its message is in the box, which is the only report success needs. */
-const filterDraftLines = computed<readonly string[]>(() => {
+const filterDraftRows = computed<readonly DraftReportRow[]>(() => {
     const draft = filterDraft.value;
-    return draft === undefined || draft.outcome === `written` ? [] : draftReportLines(draft, draftClock.value);
+    return draft === undefined || draft.outcome === `written` ? [] : draftReport(draft, draftClock.value);
 });
+
+/* HOW EACH ROW OF THAT LIST READS AT A GLANCE — a glyph and a colour per status, and they carry the ONLY
+ * colour in the block.
+ *
+ * The version this replaces tinted every row the same: muted while the walk ran, amber once it had failed. So
+ * mid-walk a refusal looked exactly like an ask in flight (nothing to scan for), and after a failure the whole
+ * paragraph went amber at once (nothing to scan within) — three lines of identical warning-coloured prose,
+ * which is the state in the screenshot that started this.
+ *
+ * Colour belongs in a narrow left column instead, where three glyphs stack into something the eye reads without
+ * reading words. The text stays calm at one weight, so the reason — the part that actually differs row to row —
+ * is what the reader lands on.
+ *
+ * A REFUSAL MID-WALK IS NOT AN ERROR, and is not drawn as one. The chain trying the next model is the fallback
+ * working exactly as designed; amber there would cry wolf on every ordinary draft that steps over a spent
+ * allowance. It is a quiet strike-out. Only the closing row of a draft that produced NOTHING is amber, because
+ * that is the only line here that leaves the user something to do. */
+const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: boolean; tone: string }> = {
+    reading: { icon: `spinner`, spin: true, tone: `text-subtle` },
+    asking: { icon: `spinner`, spin: true, tone: `text-link` },
+    answered: { icon: `check`, tone: `text-success` },
+    refused: { icon: `times`, tone: `text-subtle` },
+    skipped: { icon: `forward`, tone: `text-subtle` },
+    failed: { icon: `exclamation-triangle`, tone: `text-warning` },
+};
 
 /* BOTH EDGES OF THE WAIT — it started, and what became of it — are reported above this panel and outlive it
  * (composables/workspace/draftingReceipts.ts). Neither is this component's to make: the wait begins on the
@@ -369,7 +395,6 @@ const chipNotice = computed<string | undefined>(() =>
         message: filterMessage.value,
         draft: filterDraft.value,
         boxIsYours: boxIsYours.value,
-        now: draftClock.value,
     }),
 );
 
@@ -1082,22 +1107,54 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
             ></textarea>
-            <!-- THE DRAFT'S FULL REPORT, one line per model, while the lit chip's message is being written and
+            <!-- THE DRAFT'S FULL REPORT, one row per model, while the lit chip's message is being written and
                  after a draft that failed — the two states in which "what exactly is happening" is the question.
-                 Every line is a fact off the daemon's own walk: the model being asked right now with a ticking
+                 Every row is a fact off the daemon's own walk: the model being asked right now with a ticking
                  clock, each refusal with its duration and its own words, each skip with the reason remembered
                  for it. A draft that ends well takes the list with it — its message lands in the box above,
-                 which is all the report success needs. -->
-            <div v-if="filterDraftLines.length > 0" class="flex flex-col gap-0.5 px-0.5">
-                <p
-                    v-for="line in filterDraftLines"
-                    :key="line"
-                    class="min-w-0 truncate text-2xs leading-snug"
-                    :class="filterDraft?.outcome === `failed` ? `text-warning` : `text-muted`"
-                    v-tooltip.right.overflow="line"
-                >
-                    {{ line }}
-                </p>
+                 which is all the report success needs.
+
+                 A TABLE, NOT A PARAGRAPH, which is the whole of what changed here. The same facts used to be
+                 rendered as one pre-joined sentence per line at one colour, and three of those under an input
+                 is a grey block nobody reads: the status was a word in the middle of each line, the durations
+                 sat wherever the model's name happened to end, and the reason — the one part that differs from
+                 row to row — was the part the truncation ate. Now the status is a glyph in a column, the clock
+                 is a column of its own, and everything left over goes to the reason.
+
+                 A SURFACE OF ITS OWN, tucked in under the box, because this is the machine's log and everything
+                 else in this panel is the panel talking to the user. Undifferentiated, it read as a paragraph
+                 the panel was addressing to them — three sentences of apology under a commit box. -->
+            <div v-if="filterDraftRows.length > 0" class="flex flex-col gap-px rounded-md bg-overlay/60 px-1.5 py-1">
+                <div v-for="row in filterDraftRows" :key="row.key" class="flex min-w-0 items-center gap-1.5 leading-snug" v-tooltip.right="row.title">
+                    <!-- Every glyph is one em square, so the column self-aligns with no width set on it. -->
+                    <Icon
+                        :name="STEP_MARKS[row.status].icon"
+                        :spin="STEP_MARKS[row.status].spin"
+                        class="shrink-0 text-3xs"
+                        :class="STEP_MARKS[row.status].tone"
+                    />
+                    <!-- The model is the row's subject and keeps its width ahead of the reason — it is what the
+                         eye checks first ("did it get as far as Claude?"). Capped at the same width the origin
+                         chips use, though: a long tiered name (`gemini-3.5-flash-extra-low`) would otherwise
+                         take the whole row and push the reason — the part that differs from row to row — off
+                         the edge, which is the failure this all started as. Past the cap the name gives way and
+                         its full form is in the tooltip; a FIXED cap rather than a share of the row, so every
+                         pixel a wider panel adds goes to the reason, which is the part that can use it. -->
+                    <span
+                        v-if="row.model !== undefined"
+                        class="max-w-28 shrink-0 truncate text-2xs"
+                        :class="row.status === `refused` || row.status === `skipped` ? `text-muted` : `text-content`"
+                    >
+                        {{ row.model }}
+                    </span>
+                    <span class="min-w-0 flex-1 truncate text-2xs" :class="row.status === `failed` ? `text-warning` : `text-subtle`">
+                        {{ row.detail }}
+                    </span>
+                    <!-- Tabular figures in a column that is HELD whether or not this row spent any time, so the
+                         seconds line up to compare down — and so a skip (which spent none) doesn't run its text
+                         out past the rows above it into a ragged right edge. -->
+                    <span class="w-7 shrink-0 text-right text-2xs tabular-nums text-subtle">{{ row.elapsed }}</span>
+                </div>
             </div>
             <!-- What the commit will record, then the one button that records it. No checkboxes: the sentence
                  on the left is a readout of the index, not a control. A conflict replaces it outright — nothing

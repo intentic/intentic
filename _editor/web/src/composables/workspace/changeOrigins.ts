@@ -142,43 +142,110 @@ const seconds = (ms: number): string => {
     return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
 };
 
-/* ONE STEP OF THE DRAFT, ONE LINE — the walk's own record said in the user's terms, model named, time and
- * reason attached. The four statuses are the four things that can happen to a model in the chain, and each
- * earns different words:
- *   asking   — in flight, with a ticking elapsed read against `now` so the wait is visibly moving;
- *   answered — done, with what it cost;
- *   refused  — done, with what it cost AND its own words, because "refused" alone sends the user hunting;
- *   skipped  — never asked, on the strength of its own refusal minutes ago — the memo working, said as such. */
-const draftStepLine = (step: LandedMessageStep, now: number): string => {
-    switch (step.status) {
-        case `asking`:
-            return `Asking ${step.model}… ${step.at === undefined ? `` : seconds(Math.max(0, now - step.at))}`.trimEnd();
-        case `answered`:
-            return `${step.model} answered${step.ms === undefined ? `` : ` in ${seconds(step.ms)}`}`;
-        case `refused`:
-            return `${step.model} refused${step.ms === undefined ? `` : ` after ${seconds(step.ms)}`}${step.reason === undefined ? `` : ` — ${step.reason}`}`;
-        case `skipped`:
-            return `Skipped ${step.model} — refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
-    }
+/* THE MODEL AS A NAME RATHER THAN AN ID. A release stamp is how the vendor tells two builds apart and it is
+ * nine characters of nothing to a reader deciding whether to keep waiting — and in a sidebar it was nine
+ * characters taken off the far more useful end of the line, the reason. `claude-haiku-4-5-20251001` is
+ * `claude-haiku-4-5`; anything without a stamp is left exactly as it came. */
+const shortModel = (model: string): string => model.replace(/-\d{8}$/, ``).replace(/-\d{4}-\d{2}-\d{2}$/, ``);
+
+/* A REFUSAL'S FIRST CLAUSE — the part that differs between one refusal and the next.
+ *
+ * The vendors' sentences are built headline-then-advice ("Google usage limit reached — the allowance is
+ * exhausted. Try again once it resets."), and the advice is the same on every rung of the chain. Three of those
+ * stacked under a commit box is one fact repeated three times, each copy long enough to push the fact itself
+ * off the right edge — which is precisely how a report meant to explain a wait became a wall to skim past.
+ *
+ * So the row shows the head and the tooltip keeps the whole thing. Cut at the em-dash the frames use to hang
+ * the advice off the fact, or at the first sentence end when there is no dash. */
+const headline = (reason: string): string => {
+    const dash = reason.indexOf(` — `);
+    const head = (dash === -1 ? reason : reason.slice(0, dash)).trim();
+    const stop = head.indexOf(`. `);
+    return (stop === -1 ? head : head.slice(0, stop)).replace(/\.$/, ``).trim();
 };
 
-/* THE FULL REPORT, one line per fact, newest last — what "surface everything that is happening" renders to.
+/* ONE ROW OF THE REPORT, in the parts the panel lays out as COLUMNS rather than as one run-on sentence.
+ *
+ * The version this replaces handed the panel a finished string per step ("gemini-3.5-flash refused after 19s —
+ * Google usage limit reached — the allowance is exhausted…"), and a column of those is unreadable for reasons
+ * no wording can fix: the status is a word buried mid-line, the durations never line up, and the only part that
+ * varies between rows sits past the truncation. Split, the panel can put the status in a glyph, the elapsed in
+ * its own right-aligned column, and give the reason every pixel that is left. */
+export interface DraftReportRow {
+    // Stable across ticks so the list does not re-key while its clock moves: a step's place in the walk.
+    readonly key: string;
+    // The four model statuses, plus the two rows that are about the draft rather than about a model: the diff
+    // being read before the first ask, and the closing line of a draft that never produced a sentence.
+    readonly status: LandedMessageStep[`status`] | `reading` | `failed`;
+    // The model, named short. Absent on the two draft-level rows, which have no model to name.
+    readonly model?: string;
+    // What became of it, in as few words as carry the fact — the reason's headline, or the phase.
+    readonly detail?: string;
+    // Time spent, for the column on the right. Absent for a skip, which spent none.
+    readonly elapsed?: string;
+    // The row unabridged, for the tooltip: nothing compressed above is ever lost, only moved one hover away.
+    readonly title: string;
+}
+
+const stepRow = (step: LandedMessageStep, index: number, now: number): DraftReportRow => {
+    const model = shortModel(step.model);
+    const elapsed =
+        step.status === `asking`
+            ? step.at === undefined
+                ? undefined
+                : seconds(Math.max(0, now - step.at))
+            : step.ms === undefined
+              ? undefined
+              : seconds(step.ms);
+    const detail =
+        step.status === `asking`
+            ? `asking…`
+            : step.status === `answered`
+              ? `wrote the message`
+              : step.reason === undefined
+                ? step.status === `skipped`
+                    ? `skipped — refused a moment ago`
+                    : `refused`
+                : headline(step.reason);
+    // The tooltip says the whole thing the row abbreviates — the full model id, the verb spelled out, and the
+    // vendor's own sentence to its last word.
+    const said = step.reason === undefined ? `` : ` — ${step.reason}`;
+    const title =
+        step.status === `asking`
+            ? `Asking ${step.model}…${elapsed === undefined ? `` : ` ${elapsed}`}`
+            : step.status === `answered`
+              ? `${step.model} wrote the message${elapsed === undefined ? `` : ` in ${elapsed}`}`
+              : step.status === `refused`
+                ? `${step.model} refused${elapsed === undefined ? `` : ` after ${elapsed}`}${said}`
+                : `Skipped ${step.model} — it refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
+    return {
+        key: `${index}-${step.model}`,
+        status: step.status,
+        model,
+        ...(detail === undefined ? {} : { detail }),
+        ...(elapsed === undefined ? {} : { elapsed }),
+        title,
+    };
+};
+
+/* THE FULL REPORT, one row per fact, newest last — what "surface everything that is happening" renders to.
  * Empty for no draft at all (nothing has ever been asked; the notice below covers that in one line). A draft
- * with no steps yet is the diff being read, which is a real phase and gets its line. The failure line closes a
+ * with no steps yet is the diff being read, which is a real phase and gets its row. The failure row closes a
  * failed report with the one-line reason when the steps alone don't already say it (a chain spent to the
  * bottom repeats its rungs' reasons — repeating them again would say less, not more). */
-export const draftReportLines = (draft: LandedMessageDraft | undefined, now: number): readonly string[] => {
+export const draftReport = (draft: LandedMessageDraft | undefined, now: number): readonly DraftReportRow[] => {
     if (draft === undefined) {
         return [];
     }
-    const lines = draft.steps.map((step) => draftStepLine(step, now));
     if (draft.steps.length === 0 && draft.outcome === undefined) {
-        return [`Reading the landed diff…`];
+        return [{ key: `reading`, status: `reading`, detail: `Reading the landed diff…`, title: `Reading the landed diff…` }];
     }
+    const rows = draft.steps.map((step, index) => stepRow(step, index, now));
     if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {
-        return [...lines, `No message was written — ${draft.reason}`];
+        const closing = `No message was written — ${draft.reason}`;
+        return [...rows, { key: `failed`, status: `failed`, detail: closing, title: closing }];
     }
-    return lines;
+    return rows;
 };
 
 // What the commit box knows about the lit chip when it is deciding what to say: who is lit, what that chip has
@@ -194,8 +261,6 @@ export interface ChipMessageState {
     readonly draft: LandedMessageDraft | undefined;
     // The box holds something the user wrote, so a fill would be declined (commitMessage's `boxIsYours`).
     readonly boxIsYours: boolean;
-    // The reader's clock, for the in-flight step's ticking elapsed.
-    readonly now: number;
 }
 
 /* WHY THE BOX DID NOT JUST FILL ITSELF — said in the box, at the moment of the click that expected it.
@@ -226,11 +291,13 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
     if (state.boxIsYours && (state.message !== undefined || running)) {
         return `Keeping your message — clear the box to use ${state.label}'s`;
     }
-    /* The wait, as it stands THIS second: the walk's newest step, not a generic "writing…". The report list
-     * under the box carries the whole story; this is its last line, in the place the eye is already resting. */
+    /* The wait, and ONLY the wait. This used to append the walk's newest step ("— Asking claude-haiku-4-5-…
+     * 2s"), which put the very same words in two places a centimetre apart: here, and as the last row of the
+     * report list directly underneath. One of the two had to go, and it is this one — the row below has the
+     * status glyph, the aligned clock and the room to say more, while this line has a box's width to share with
+     * a session title. So the box says WHAT is happening and the list says HOW IT IS GOING. */
     if (running) {
-        const latest = state.draft === undefined ? undefined : draftReportLines(state.draft, state.now).at(-1);
-        return `Writing a message for ${state.label} — ${latest ?? `starting…`}`;
+        return `Writing a message for ${state.label}…`;
     }
     // Nothing was written and nothing is coming: the draft failed (its report below says exactly how), no
     // quick model answered, or the work landed before anything was writing these. The honest answer is that
