@@ -361,6 +361,59 @@
                 "skill": "skills/notion/SKILL.md"
             },
             {
+                "id": "sharepoint",
+                "kind": "cli",
+                "catalog": {
+                    "name": "SharePoint",
+                    "icon": "folder-open",
+                    "description": "Sites, document libraries and lists in SharePoint.",
+                    "category": "business",
+                    "hint": "Reached through Microsoft Graph with an Entra ID app registration — tenant, client id and secret, which the agent trades for an hour-long token itself. App permissions need an admin's consent, and they are tenant-wide: `Sites.Selected` plus a grant per site is the way to keep an agent to the sites you meant. Client secrets expire (24 months at most) — rotate here when Graph starts answering 401.",
+                    "guide": {
+                        "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+                        "linkLabel": "Open Entra ID app registrations",
+                        "scopes": "application permissions `Sites.Read.All` — or `Sites.ReadWrite.All` to write, `Sites.Selected` to scope per site",
+                        "steps": [
+                            "In the Entra admin centre open `App registrations` → `New registration`, name it, single tenant, no redirect URI.",
+                            "Copy the `Application (client) ID` and `Directory (tenant) ID` from the overview page.",
+                            "Open `Certificates & secrets` → `New client secret`, pick an expiry, and copy the secret `Value` — not the Secret ID, and it is shown only once.",
+                            "Open `API permissions` → `Add a permission` → `Microsoft Graph` → `Application permissions`, add `Sites.Read.All` (or `Sites.ReadWrite.All`), then click `Grant admin consent` — without that last click every call answers 403.",
+                            "Least privilege instead: add `Sites.Selected`, consent to it, then have a site owner grant this app read or write on each site it should reach (`Sites.Selected` alone reaches nothing until they do).",
+                            "The hostname below is the first part of your SharePoint URL, e.g. `contoso.sharepoint.com`. Optional — the agent can search your sites without it."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "tenantId",
+                        "label": "Directory (tenant) ID"
+                    },
+                    {
+                        "key": "clientId",
+                        "label": "Application (client) ID"
+                    },
+                    {
+                        "key": "clientSecret",
+                        "label": "Client secret value",
+                        "secret": true,
+                        "hint": "The secret's Value, copied at creation. Entra never shows it again — make a new one if it was missed."
+                    },
+                    {
+                        "key": "hostname",
+                        "label": "SharePoint hostname",
+                        "placeholder": "contoso.sharepoint.com",
+                        "optional": true
+                    }
+                ],
+                "env": {
+                    "SHAREPOINT_TENANT_ID": "${tenantId}",
+                    "SHAREPOINT_CLIENT_ID": "${clientId}",
+                    "SHAREPOINT_CLIENT_SECRET": "${clientSecret}",
+                    "SHAREPOINT_HOSTNAME": "${hostname}"
+                },
+                "skill": "skills/sharepoint/SKILL.md"
+            },
+            {
                 "id": "signoz",
                 "kind": "cli",
                 "catalog": {
