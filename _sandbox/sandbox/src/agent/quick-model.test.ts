@@ -28,12 +28,28 @@ const CATALOGS: Record<string, readonly string[]> = {
     codex: [`gpt-5.6`],
 };
 
-const fakeServices = (quickModel: readonly string[]): Services =>
+/* WHICH PROVIDERS' ACCOUNTS THE RECORDED QUOTA SAYS ARE SPENT. The reading itself has its own suite next door
+ * (quick-model-quota.test.ts); what these tests are about is what the WALK does with it, so the two seams it
+ * reads through are stood up at their thinnest — a fleet is spent or it is not.
+ *
+ * Default: nothing spent, so every existing test below asks its chain exactly as it always did. */
+const fakeServices = (quickModel: readonly string[], spent: readonly string[] = []): Services =>
     unstubbed<Services>(`services`, {
         sandboxSettings: unstubbed<Services[`sandboxSettings`]>(`sandboxSettings`, {
             get: async () => ({ quickModel: [...quickModel] }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
         }),
         capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [] }),
+        cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
+            turnLimit: async (provider) => (spent.includes(provider) ? { spent: 1, withHeadroom: 0 } : { spent: 0, withHeadroom: 1 }),
+        }),
+        claudeStore: unstubbed<Services[`claudeStore`]>(`claudeStore`, {
+            list: async () => [{ id: `claude-one` }] as Awaited<ReturnType<Services[`claudeStore`][`list`]>>,
+        }),
+        accountUsage: unstubbed<Services[`accountUsage`]>(`accountUsage`, {
+            read: async () => ({
+                "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4 }], measuredAt: 0 },
+            }),
+        }),
         providerCatalogs: Object.fromEntries(
             Object.entries(CATALOGS).map(([provider, models]) => [provider, { models: async () => ({ models: models.map((id) => ({ id })) }) }]),
         ) as Services[`providerCatalogs`],
@@ -208,6 +224,40 @@ test("tries the whole chain anyway when every rung is cooling down", async () =>
 
     expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(oneShot).toHaveBeenCalledTimes(1);
+});
+
+/* NOT DISCOVERING WHAT IS ALREADY WRITTEN DOWN. The memo above only learns by being refused — one wasted call
+ * per rung, re-bought every time it expires. For most providers the answer is on file before anything is spent:
+ * every account's headroom and the provider's own renewal instant. Measured the day this landed: a plan reading
+ * 100% with a renewal three days out was still asked three times in a single landing. */
+
+test("steps over a rung the recorded quota already says is spent", async () => {
+    const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`]), `draft`, signal());
+
+    expect(answer.choice).toEqual({ provider: `claude`, model: `claude-haiku-4-5` });
+    expect(oneShot).toHaveBeenCalledTimes(1);
+    expect(oneShot).not.toHaveBeenCalledWith(expect.objectContaining({ model: `gpt-5.6` }));
+    // Reported rather than silently dropped, and in terms of the allowance rather than of a reading.
+    expect(answer.skipped).toEqual([{ choice: { provider: `codex`, model: `gpt-5.6` }, reason: expect.stringContaining(`out of allowance`) }]);
+});
+
+test("a rung with headroom on file is asked, whatever the rest of the fleet looks like", async () => {
+    const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), `draft`, signal());
+
+    expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
+    expect(answer.skipped).toEqual([]);
+});
+
+/* The same rule the memo answers to, for the same reason: a shortcut may never be why nothing is asked at all.
+ * A snapshot can sit minutes behind a window that has already reopened, and a helper that went quiet on one
+ * would be a worse failure than the wasted call it was avoiding. */
+test("asks every rung anyway when the quota says the whole chain is spent", async () => {
+    const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`], [`codex`, `claude`]), `draft`, signal());
+
+    expect(answer.choice).toEqual({ provider: `codex`, model: `gpt-5.6` });
+    expect(oneShot).toHaveBeenCalledTimes(1);
+    // The second pass RETRACTS the first's skips rather than adding to them — one walk, one entry per rung.
+    expect(answer.skipped).toEqual([]);
 });
 
 // A user who stopped the loop stopped this call; the model did nothing wrong and must not be skipped next time.

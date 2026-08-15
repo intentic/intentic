@@ -10,6 +10,7 @@ import {
 import type { Services } from "../composition.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
+import { spentRung } from "./quick-model-quota.js";
 
 /* THE SANDBOX'S QUICK MODEL, resolved against what it actually has connected — the daemon half of the rule in
  * the contract's quick-model.ts. The contract owns the ORDER (which of the available models to try, and in
@@ -185,65 +186,111 @@ export const askQuickModel = async (
         }
     };
     const now = Date.now();
-    /* THE MEMO MAY NEVER EMPTY THE CHAIN. When every rung is cooling down at once this walk ignores it and asks
-     * them all: a memo exists to save time, and one that could stand between the user and every account they
-     * have would turn a slow feature into a dead one for the length of its own window — the same failure it was
-     * added to prevent, arriving from the other side. */
-    const honourMemo = chain.some((choice) => cooling(choice, now) === undefined);
     const skipped: QuickModelRefusal[] = [];
-    for (const choice of chain) {
-        // Stepped over without being asked, and reported in the words it used when it did refuse — so `skipped`
-        // stays the honest account of what stood between the caller and the model that answered.
-        const remembered = honourMemo ? cooling(choice, now) : undefined;
-        if (remembered !== undefined) {
-            skipped.push({ choice, reason: remembered });
-            attempts.push({ choice, status: `skipped`, reason: remembered });
+    /* WHY THIS RUNG IS NOT WORTH ASKING, in the words the user will read — or undefined, which means ask it.
+     *
+     * Two sources, cheapest first. The MEMO is what this rung said last time it was asked, and costs a map
+     * lookup. The READING is what every account of that provider has left and when it renews (quick-model-quota
+     * .ts), and costs a local call — so it is consulted only for the rungs the walk actually reaches, never for
+     * the ones below the one that answers.
+     *
+     * They are ordered by cost rather than by authority because they rarely disagree, and where they do the
+     * answer is the same either way: step over it. */
+    const stepOverReason = async (choice: QuickModelChoice): Promise<string | undefined> =>
+        cooling(choice, now) ?? (await spentRung(services, choice, now))?.reason;
+    /* ONE PASS OVER THE CHAIN. `honourSkips` is what separates the two it may take — see below.
+     *
+     * `asked` is the fact the caller needs and the answer cannot carry: a walk that skipped every rung and a
+     * walk that asked every rung and was refused by all of them both end with no text, and they call for
+     * opposite things next. */
+    const walk = async (honourSkips: boolean): Promise<{ answer?: QuickModelAnswer; asked: boolean }> => {
+        // The timeline is rebuilt, not appended to: a second pass is a RETRACTION of the first's skips, and
+        // showing both would report every rung twice — once stepped over, once asked — for one walk.
+        attempts.length = 0;
+        skipped.length = 0;
+        let asked = false;
+        for (const choice of chain) {
+            // Stepped over without being asked, and reported in the words that stood in the way — so `skipped`
+            // stays the honest account of what the caller's answer cost, rather than going quiet about the
+            // accounts this walk never touched.
+            const stepOver = honourSkips ? await stepOverReason(choice) : undefined;
+            if (stepOver !== undefined) {
+                skipped.push({ choice, reason: stepOver });
+                attempts.push({ choice, status: `skipped`, reason: stepOver });
+                tell();
+                continue;
+            }
+            asked = true;
+            /* EVERY RUNG IS TIMED, answered or refused, and named as it is spent. The call as a whole was already
+             * measured by its caller (landing.subject and its siblings), and that number cannot say the one thing
+             * worth knowing when a helper turns slow: WHICH model took the time. Finding that out meant watching
+             * the CLI processes by hand. One record per attempt makes the next occurrence self-evident, and the
+             * memo's effect legible too — a rung that stops appearing is one the walk has stopped paying for. */
+            const from = Date.now();
+            const spent = (): number => Date.now() - from;
+            const key = quickModelKey(choice);
+            // In flight, said before the wait rather than after: "asking X" during the seconds X is taking is the
+            // one line of this report that answers a user staring at it right now.
+            attempts.push({ choice, status: `asking`, at: from });
             tell();
-            continue;
+            // The in-flight entry settles in place — the walk's list is a timeline, and one rung is one entry.
+            const settle = (attempt: QuickModelAttempt): void => {
+                attempts[attempts.length - 1] = attempt;
+                tell();
+            };
+            try {
+                // Inside the try with the call itself: a credential that fails on the way in (a token that no
+                // longer refreshes passes the cheap readiness check but fails resolution) is the same kind of
+                // dead end as one that fails on the way out, and the next model in the chain answers both.
+                const resolved = await resolveHarnessCredentials(services, { agent: choice.provider, model: choice.model });
+                if (!resolved.ok) {
+                    throw new Error(resolved.message);
+                }
+                const text = await runOneShot({
+                    prompt,
+                    cwd: services.workspace.root,
+                    model: choice.model,
+                    credentials: resolved.credentials,
+                    signal,
+                });
+                // It answered, so whatever it last refused for is over — a memo outliving the condition it
+                // describes would keep steering work off an account that is plainly working again.
+                refusals.delete(key);
+                services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model });
+                settle({ choice, status: `answered`, at: from, ms: spent() });
+                return { answer: { text, choice, skipped }, asked };
+            } catch (error) {
+                if (signal.aborted) {
+                    // The user's own cancel is not the model's failure, so it earns no memo: the next call must
+                    // ask this rung as if nothing had happened, because nothing about it did.
+                    throw error;
+                }
+                services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model }, true);
+                refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
+                services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
+                skipped.push({ choice, reason: refusalText(error) });
+                settle({ choice, status: `refused`, at: from, ms: spent(), reason: refusalText(error) });
+            }
         }
-        /* EVERY RUNG IS TIMED, answered or refused, and named as it is spent. The call as a whole was already
-         * measured by its caller (landing.subject and its siblings), and that number cannot say the one thing
-         * worth knowing when a helper turns slow: WHICH model took the time. Finding that out meant watching
-         * the CLI processes by hand. One record per attempt makes the next occurrence self-evident, and the
-         * memo's effect legible too — a rung that stops appearing is one the walk has stopped paying for. */
-        const from = Date.now();
-        const spent = (): number => Date.now() - from;
-        const key = quickModelKey(choice);
-        // In flight, said before the wait rather than after: "asking X" during the seconds X is taking is the
-        // one line of this report that answers a user staring at it right now.
-        attempts.push({ choice, status: `asking`, at: from });
-        tell();
-        // The in-flight entry settles in place — the walk's list is a timeline, and one rung is one entry.
-        const settle = (attempt: QuickModelAttempt): void => {
-            attempts[attempts.length - 1] = attempt;
-            tell();
-        };
-        try {
-            // Inside the try with the call itself: a credential that fails on the way in (a token that no longer
-            // refreshes passes the cheap readiness check but fails resolution) is the same kind of dead end as
-            // one that fails on the way out, and the next model in the chain answers both.
-            const resolved = await resolveHarnessCredentials(services, { agent: choice.provider, model: choice.model });
-            if (!resolved.ok) {
-                throw new Error(resolved.message);
-            }
-            const text = await runOneShot({ prompt, cwd: services.workspace.root, model: choice.model, credentials: resolved.credentials, signal });
-            // It answered, so whatever it last refused for is over — a memo outliving the condition it
-            // describes would keep steering work off an account that is plainly working again.
-            refusals.delete(key);
-            services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model });
-            settle({ choice, status: `answered`, at: from, ms: spent() });
-            return { text, choice, skipped };
-        } catch (error) {
-            if (signal.aborted) {
-                // The user's own cancel is not the model's failure, so it earns no memo: the next call must ask
-                // this rung as if nothing had happened, because nothing about it did.
-                throw error;
-            }
-            services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model }, true);
-            refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
-            services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
-            skipped.push({ choice, reason: refusalText(error) });
-            settle({ choice, status: `refused`, at: from, ms: spent(), reason: refusalText(error) });
+        return { asked };
+    };
+
+    const walked = await walk(true);
+    if (walked.answer !== undefined) {
+        return walked.answer;
+    }
+    /* WHAT IS ON FILE MAY NEVER EMPTY THE CHAIN. Every rung stepped over and NOTHING asked is the one outcome
+     * the walk above is not allowed to end on: both of its sources are shortcuts, and a shortcut that can stand
+     * between the user and every account they have turns a slow feature into a dead one — the same failure they
+     * were added to prevent, arriving from the other side. A memo can go stale; a quota snapshot can be minutes
+     * behind a window that has since reopened, or measure a pool the vendor has quietly renamed.
+     *
+     * So the second pass retracts them both and asks everything. It costs a full walk exactly when a full walk
+     * was going to be needed anyway, and it is the reason neither source has to be individually trustworthy. */
+    if (!walked.asked) {
+        const everything = await walk(false);
+        if (everything.answer !== undefined) {
+            return everything.answer;
         }
     }
     throw new Error(skipped.map((refusal) => `${refusal.choice.model}: ${refusal.reason}`).join(`; `));
