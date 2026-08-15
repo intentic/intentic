@@ -1,52 +1,49 @@
 <script setup lang="ts">
 import type { SystemPromptMode } from "@intentic/sandbox-contract";
-import { BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
-import Button from "primevue/button";
+import { BrandMark, cmp, Notice, type NoticeModel, Segmented } from "@intentic/ui";
 import { computed, ref } from "vue";
 import FolderPicker from "./FolderPicker.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
-import PersonaFace from "../../components/PersonaFace.vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
-/* The card editor, used in both places a card is written: opened inside an existing row, and standing alone at
- * the tail of the group for a new one. One component because the two are the same four questions — the only
- * difference is the verb on the button — and a second copy is how the edit form and the add form drift into
- * disagreeing about what a persona has.
+/* THE CARD EDITOR — a saved persona, opened inside its own row on the Personas page.
  *
- * FOUR QUESTIONS: a name, who it speaks as, what it may do and where, and what it is told. It used to ask six of
- * a different kind — a paragraph on how the persona writes, a publish-or-draft switch and a three-way choice of
- * workspace tree, all gone (see PersonaSchema). The fourth question here is not that paragraph returning: it is
- * the system prompt itself, plus the skills only this card's turns reach, which is the difference between a
- * label and a working posture. Every field still changes what a session can actually reach or is actually told.
+ * IT ASKS FOUR QUESTIONS AND SHOWS ONE AT A TIME. Stacked, they ran to roughly thirty controls in one scroll:
+ * an account picker, nine permission switches in two columns, two folder pickers, a prompt and a skill list.
+ * Every one of them was on screen for someone who came to change a single thing, and the effect was a card that
+ * read as a settings dump rather than as a person being described. The three answers are exclusive views of one
+ * subject, which is what <Segmented> is for — and it is the same control, at the same size, that the Agent tab
+ * one level up uses for exactly the same reason.
  *
- * IT SHOWS YOU WHO YOU ARE MAKING. The avatar at the head is not decoration: it takes the name as it is typed
- * and wears the colour that persona will wear in every list it appears in afterwards, so the form reads as
- * building a person rather than filling in four settings about one. Before this the surface was a stack of
- * uppercase labels with nothing at the top to say what the stack was for.
+ * WHY THREE PILLS AND NOT FOUR. "Where it works" is the obvious fourth, and it stays inside "What it may do" on
+ * purpose: a folder fence is a limit on your own tree, the same question as the file dropdown directly above it,
+ * and PersonaPowersFields already hosts it in the workspace column for that reason. A tab of two pickers would
+ * split one question across two screens to make the strip symmetrical.
  *
- * THAT HEADER IS THE ROW'S JOB WHEN THERE IS A ROW — `showName`. Opened inside an existing persona, this form
- * used to restate the name it was opened from: the row's title said "test" and the first field of the form said
- * "test" again, one read-only and one editable, which reads as two subjects rather than one thing being edited.
- * So the row lends its own title to the input and this form starts at the accounts. A NEW card has no row to
- * borrow from and keeps the header — same component, same fields, one of them hosted a line higher up.
+ * AND WHY THE PERMISSIONS ARE NOT SPLIT FURTHER. Their own two columns — "in your workspace" and "reaching out" —
+ * would make a tidy four-pill strip and would break the one property that block is built around: a reader arrives
+ * asking "which of these did I turn off?", and that scan only works while every switch is on one screen. A
+ * permission you cannot see is one you cannot audit, so the tabs cut between the card's QUESTIONS and never
+ * through the middle of its permissions.
+ *
+ * A NAME IS NOT ONE OF THE FOUR, because by the time this form exists the card has one: creating a persona asks
+ * for a name and nothing else, and the row this opens inside carries it as its title (SandboxPersonas.vue).
+ *
+ * The draft is the parent's, mutated in place. Deliberate: the parent owns "which card is open" and autosaves
+ * the whole card on a debounce, so copying it down and emitting it up would buy encapsulation at the price of
+ * the one write path.
  *
  * ONE TYPE SCALE, and only two steps of it that this file chooses. Labels and the things you type into are
  * `text-sm`; everything that comments on them — a hint, an account chip, a fence's caveat — is `text-xs`, and
- * where a chip needs a second tier inside one line it takes it from TONE rather than from a third size. The
- * form used to run from `text-base` on the name down to `text-2xs` under an account, which stacked four sizes
- * in 300 pixels and read as four different forms. (<Segmented> keeps its own toolbar-pill size, which is the
- * shared control's decision and the same on every surface that uses one.)
- *
- * The draft is the parent's, mutated in place. Deliberate: the parent owns "which card is open" and has to read
- * the draft back to validate the name against the other personas, so copying it down and emitting it up would
- * buy encapsulation at the price of the one check that keeps two personas from sharing an id. */
+ * where a chip needs a second tier inside one line it takes it from TONE rather than from a third size. */
 
 // The whole card as a form. The shelves and the per-id grants come from PersonaPowersDraft, because the quick
 // panel in the Workspace tree writes those same nine fields and <PersonaPowersFields> renders them for both.
 export interface PersonaDraft extends PersonaPowersDraft {
-    original: string | undefined;
+    /** The saved card's id. Always set: a card is created before it is edited. */
+    original: string;
     label: string;
     capabilities: string[];
     // Both are lists of workspace-relative folders, and `startIn` holds at most one — the shape <FolderPicker>
@@ -62,18 +59,7 @@ export interface PersonaDraft extends PersonaPowersDraft {
     systemPromptMode: SystemPromptMode | undefined;
 }
 
-const {
-    draft,
-    accounts,
-    connected,
-    grantables,
-    valid,
-    saving,
-    submitLabel,
-    error,
-    nameHint,
-    showName = true,
-} = defineProps<{
+const { draft, accounts, connected, grantables, error } = defineProps<{
     draft: PersonaDraft;
     /** The logged-in browser profiles — one per account, so a twice-connected site appears twice. */
     accounts: readonly BrowserAccount[];
@@ -81,27 +67,23 @@ const {
     connected: readonly string[];
     /** The connectors, computers and MCP connections this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
-    valid: boolean;
-    saving: boolean;
-    /* The verb on the button, and whether there IS one. Absent ⇒ this card is already saved as it is changed
-     * (the accordion on the personas page), so an action row would offer to commit what is committed. Present
-     * only where something has to be created before it exists anywhere. */
-    submitLabel?: string;
     error?: NoticeModel;
-    /** Why the name is not usable yet, when it isn't. */
-    nameHint?: string;
-    /** False when a row above is already hosting the name input — see the header. */
-    showName?: boolean;
 }>();
 
-const emit = defineEmits<{ submit: []; cancel: [] }>();
+/* The three questions, in the order somebody thinks in: who is this, what may it touch, what is it told. Each
+ * label is the heading that part used to carry, so nothing has to be relearned — the card that was one scroll
+ * of three headings is the same card with those headings turned into a strip. */
+const SECTIONS = [
+    { label: `Speaks as`, value: `identity` },
+    { label: `What it may do`, value: `powers` },
+    { label: `What it is told`, value: `told` },
+] as const;
+type Section = (typeof SECTIONS)[number][`value`];
 
-// The persona being built, as it will look in the list. PersonaFace derives a face from the name, so the preview
-// wears the same character the saved card will — no initials, no mode switch, one avatar everywhere.
-const previewPersona = computed(() => ({
-    id: draft.original ?? (draft.label.trim() || `persona`),
-    label: draft.label.trim() === `` ? undefined : draft.label.trim(),
-}));
+/* LOCAL, and reset by the card being closed and reopened rather than remembered. A card is opened to change one
+ * thing and the first pill is the one that says who the persona IS — landing on whichever tab was last used on a
+ * DIFFERENT persona would open the card on a screen that has nothing to do with why it was opened. */
+const section = ref<Section>(`identity`);
 
 /* WHAT A CHIP CAN ADD BEYOND THE ACCOUNT'S OWN NAME — and nothing it already said.
  *
@@ -165,141 +147,122 @@ const folderBound = computed(() => draft.folders.length > 0);
          side. A settings grid is not prose; the thing that has to stay narrow is the one field you read a line of
          text in, and that field caps itself below. -->
     <div class="flex max-w-4xl flex-col gap-5">
-        <!-- Who you are making: the live persona, then its name, on one line. The avatar is the size it will be
-             in the list below, so the preview is the row rather than a bigger cousin of it. Absent when a row
-             above is already showing both — see `showName`. -->
-        <div v-if="showName" class="flex items-center gap-3">
-            <PersonaFace :persona="previewPersona" :size="40" />
-            <!-- A name is three words. Capped, because an input stretched across the whole card reads as a field
-                 expecting a paragraph. -->
-            <div class="ui-field min-w-0 max-w-sm flex-1">
-                <input
-                    v-model="draft.label"
-                    :class="cmp.input('w-full font-medium')"
-                    placeholder="Name this persona — Work, Personal, Acme…"
-                    aria-label="Name"
-                />
-                <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
-            </div>
-        </div>
+        <!-- Bare pills in the card's own column, with no rule under them: the row this opens inside is already a
+             bordered thing, and a second bordered strip immediately inside it reads as two controls at the same
+             level when one of them is the card and the other is a part of it. The same call the Agent tab's own
+             strip makes one level up. -->
+        <Segmented v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
 
-        <div class="ui-field">
-            <span class="ui-field-label">Speaks through</span>
-            <!-- Nothing to offer, said as a fact about this sandbox rather than as something missing from the
-                 card: a persona with no accounts is finished, not half-made. -->
-            <p v-if="accounts.length === 0" class="text-xs text-subtle">No accounts connected in this sandbox yet.</p>
-            <template v-else>
-                <!-- WHAT IT SPEAKS THROUGH, AND THE WAY TO CHANGE IT, on one line. A chip here is a persona's
-                     account and clicking it takes that account away, which is why it wears an × rather than the
-                     tick the chooser's chips wear: in this row every entry is already picked. -->
-                <div class="flex flex-wrap items-center gap-1.5">
-                    <button
-                        v-for="mark in pickedMarks"
-                        :key="mark.id"
-                        type="button"
-                        class="group flex cursor-pointer items-center gap-1.5 rounded-lg border border-link bg-link/10 py-1 pl-1.5 pr-2 text-xs transition-colors hover:border-danger"
-                        :aria-label="`Stop speaking through ${mark.id}`"
-                        @click="toggleAccount(mark.id)"
-                    >
-                        <BrandMark
-                            :size="16"
-                            :name="mark.account?.site ?? mark.id"
-                            :logo="mark.account?.logo"
-                            :icon="mark.account?.icon ?? `globe`"
-                            :idle="!connected.includes(mark.id)"
-                        />
-                        <span class="truncate font-medium text-content">{{ mark.id }}</span>
-                        <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
-                    </button>
-                    <!-- A card that speaks nowhere is a perfectly good card — most personas that work in a
-                         folder are one — so the empty row says nothing at all about it. The button beside it is
-                         the whole state: nothing picked, and here is where you would pick some. -->
-                    <button
-                        type="button"
-                        :class="cmp.linkButton('gap-1 text-xs text-muted hover:text-content')"
-                        :aria-expanded="open"
-                        @click="open = !open"
-                    >
-                        <!-- "Add another" and not "Change", because removing one is the chip's own job: the
-                             control that opens the list only ever adds to what is already on the row. -->
-                        <Icon :name="open ? `check` : `plus`" class="text-2xs" />
-                        {{ open ? `Done choosing` : pickedMarks.length === 0 ? `Choose accounts` : `Add another` }}
-                    </button>
-                </div>
-
-                <!-- THE CHOOSER, only while it is being used. Capped and scrollable rather than as tall as the
-                     sandbox is signed into: every account this box holds is pickable, and none of them decides
-                     how much room the rest of the form gets. -->
-                <div v-if="open" class="mt-1 flex flex-col gap-2 rounded-lg border border-line bg-overlay/50 p-2">
-                    <input
-                        v-if="accounts.length > 6"
-                        v-model="filter"
-                        :class="cmp.input('w-full py-1 text-xs')"
-                        placeholder="Filter by name or site"
-                        aria-label="Filter accounts"
-                    />
-                    <!-- Toggles rather than a multi-select: picking several is the normal case, and every entry
-                         carries a second fact a <select> has nowhere to put — whether it is signed in. The brand
-                         mark is what makes a persona reading across two sites visible at a glance. -->
-                    <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
+        <template v-if="section === `identity`">
+            <div class="ui-field">
+                <span class="ui-field-label">Speaks through</span>
+                <!-- Nothing to offer, said as a fact about this sandbox rather than as something missing from the
+                     card: a persona with no accounts is finished, not half-made. -->
+                <p v-if="accounts.length === 0" class="text-xs text-subtle">No accounts connected in this sandbox yet.</p>
+                <template v-else>
+                    <!-- WHAT IT SPEAKS THROUGH, AND THE WAY TO CHANGE IT, on one line. A chip here is a persona's
+                         account and clicking it takes that account away, which is why it wears an × rather than the
+                         tick the chooser's chips wear: in this row every entry is already picked. -->
+                    <div class="flex flex-wrap items-center gap-1.5">
                         <button
-                            v-for="account in shown"
-                            :key="account.id"
+                            v-for="mark in pickedMarks"
+                            :key="mark.id"
                             type="button"
-                            :aria-pressed="picked(account.id)"
-                            :class="[
-                                `group flex cursor-pointer items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 text-left transition-colors`,
-                                picked(account.id) ? `border-link bg-link/10` : `border-line hover:border-line-strong hover:bg-card`,
-                            ]"
-                            @click="toggleAccount(account.id)"
+                            class="group flex cursor-pointer items-center gap-1.5 rounded-lg border border-link bg-link/10 py-1 pl-1.5 pr-2 text-xs transition-colors hover:border-danger"
+                            :aria-label="`Stop speaking through ${mark.id}`"
+                            @click="toggleAccount(mark.id)"
                         >
-                            <!-- The brand keeps its colour whether or not it is picked: colour is how you FIND
-                                 the site you meant in a list of five, and draining it until after the click makes
-                                 the picker monochrome exactly when it is being scanned. `idle` is kept for its
-                                 documented meaning — present but switched off — which here is an account not yet
-                                 signed in. -->
                             <BrandMark
-                                :size="20"
-                                :name="account.site"
-                                :logo="account.logo"
-                                :icon="account.icon"
-                                :idle="!connected.includes(account.id)"
+                                :size="16"
+                                :name="mark.account?.site ?? mark.id"
+                                :logo="mark.account?.logo"
+                                :icon="mark.account?.icon ?? `globe`"
+                                :idle="!connected.includes(mark.id)"
                             />
-                            <!-- ONE LINE, ONE SIZE. The account's name and whatever is left to say about it sit
-                                 side by side at `text-xs`, told apart by tone rather than by a second, smaller
-                                 size — which is what a two-row chip needed, and what made the picker the noisiest
-                                 thing on the page. -->
-                            <span class="flex min-w-0 items-baseline gap-1.5 text-xs">
-                                <span class="truncate font-medium" :class="picked(account.id) ? `text-content` : `text-muted`">
-                                    {{ account.id }}
-                                </span>
-                                <span v-if="detailOf(account) !== undefined" class="truncate text-subtle">{{ detailOf(account) }}</span>
-                            </span>
-                            <Icon v-if="picked(account.id)" name="check" class="ml-0.5 shrink-0 text-xs text-link" />
+                            <span class="truncate font-medium text-content">{{ mark.id }}</span>
+                            <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
                         </button>
-                        <span v-if="shown.length === 0" class="px-1 py-1 text-xs text-subtle">No account matches “{{ filter.trim() }}”.</span>
+                        <!-- A card that speaks nowhere is a perfectly good card — most personas that work in a
+                             folder are one — so the empty row says nothing at all about it. The button beside it is
+                             the whole state: nothing picked, and here is where you would pick some. -->
+                        <button
+                            type="button"
+                            :class="cmp.linkButton('gap-1 text-xs text-muted hover:text-content')"
+                            :aria-expanded="open"
+                            @click="open = !open"
+                        >
+                            <!-- "Add another" and not "Change", because removing one is the chip's own job: the
+                                 control that opens the list only ever adds to what is already on the row. -->
+                            <Icon :name="open ? `check` : `plus`" class="text-2xs" />
+                            {{ open ? `Done choosing` : pickedMarks.length === 0 ? `Choose accounts` : `Add another` }}
+                        </button>
                     </div>
-                </div>
-            </template>
-        </div>
 
-        <!-- WHAT IT MAY DO. Below the identity question because that is the order people think in — who is this,
-             then what may it touch — and because the account picker above is the one shelf that was here before
-             the rest existed. -->
-        <div class="flex flex-col gap-3 border-t border-line pt-4">
-            <div class="flex flex-col gap-0.5">
-                <span class="ui-field-label">What it may do</span>
-                <span class="text-xs text-subtle"
-                    >Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</span
-                >
+                    <!-- THE CHOOSER, only while it is being used. Capped and scrollable rather than as tall as the
+                         sandbox is signed into: every account this box holds is pickable, and none of them decides
+                         how much room the rest of the form gets. -->
+                    <div v-if="open" class="mt-1 flex flex-col gap-2 rounded-lg border border-line bg-overlay/50 p-2">
+                        <input
+                            v-if="accounts.length > 6"
+                            v-model="filter"
+                            :class="cmp.input('w-full py-1 text-xs')"
+                            placeholder="Filter by name or site"
+                            aria-label="Filter accounts"
+                        />
+                        <!-- Toggles rather than a multi-select: picking several is the normal case, and every entry
+                             carries a second fact a <select> has nowhere to put — whether it is signed in. The brand
+                             mark is what makes a persona reading across two sites visible at a glance. -->
+                        <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
+                            <button
+                                v-for="account in shown"
+                                :key="account.id"
+                                type="button"
+                                :aria-pressed="picked(account.id)"
+                                :class="[
+                                    `group flex cursor-pointer items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 text-left transition-colors`,
+                                    picked(account.id) ? `border-link bg-link/10` : `border-line hover:border-line-strong hover:bg-card`,
+                                ]"
+                                @click="toggleAccount(account.id)"
+                            >
+                                <!-- The brand keeps its colour whether or not it is picked: colour is how you FIND
+                                     the site you meant in a list of five, and draining it until after the click makes
+                                     the picker monochrome exactly when it is being scanned. `idle` is kept for its
+                                     documented meaning — present but switched off — which here is an account not yet
+                                     signed in. -->
+                                <BrandMark
+                                    :size="20"
+                                    :name="account.site"
+                                    :logo="account.logo"
+                                    :icon="account.icon"
+                                    :idle="!connected.includes(account.id)"
+                                />
+                                <!-- ONE LINE, ONE SIZE. The account's name and whatever is left to say about it sit
+                                     side by side at `text-xs`, told apart by tone rather than by a second, smaller
+                                     size — which is what a two-row chip needed, and what made the picker the noisiest
+                                     thing on the page. -->
+                                <span class="flex min-w-0 items-baseline gap-1.5 text-xs">
+                                    <span class="truncate font-medium" :class="picked(account.id) ? `text-content` : `text-muted`">
+                                        {{ account.id }}
+                                    </span>
+                                    <span v-if="detailOf(account) !== undefined" class="truncate text-subtle">{{ detailOf(account) }}</span>
+                                </span>
+                                <Icon v-if="picked(account.id)" name="check" class="ml-0.5 shrink-0 text-xs text-link" />
+                            </button>
+                            <span v-if="shown.length === 0" class="px-1 py-1 text-xs text-subtle">No account matches “{{ filter.trim() }}”.</span>
+                        </div>
+                    </div>
+                </template>
             </div>
+        </template>
+
+        <template v-else-if="section === `powers`">
+            <p class="text-xs text-subtle">Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</p>
 
             <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound">
                 <!-- WHERE IT WORKS RIDES IN THE WORKSPACE COLUMN, because a folder fence is a limit on your own
                      tree — the same question as the two controls above it, and nothing to do with what this card
-                     can reach outside. It used to be a section of its own below all seven outward switches, which
-                     put a screenful of unrelated rows between the two halves of "what can it touch in my repo".
-                     It lives HERE rather than inside the shared block because the quick panel has no pickers. -->
+                     can reach outside. It lives HERE rather than inside the shared block because the quick panel
+                     has no pickers. -->
                 <template #where="{ rail }">
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-col gap-0.5">
@@ -340,21 +303,15 @@ const folderBound = computed(() => draft.folders.length > 0);
                     </div>
                 </template>
             </PersonaPowersFields>
-        </div>
+        </template>
 
-        <!-- LAST, and below the bounds rather than above them, because it is the only section whose answer is
-             prose: everything above is a decision you make in a click, and putting a textarea in front of them
-             would make the form look like something to write rather than something to set. -->
         <PersonaKitFields
+            v-else
             :persona-id="draft.original"
             :mode="draft.systemPromptMode"
             @update:mode="(next: SystemPromptMode | undefined) => (draft.systemPromptMode = next)"
         />
 
         <Notice v-if="error !== undefined" :of="error" />
-        <div v-if="submitLabel !== undefined" class="flex items-center gap-3">
-            <Button :label="submitLabel" size="small" :loading="saving" :disabled="!valid" @click="emit('submit')" />
-            <button type="button" :class="cmp.linkButton('text-muted hover:text-content')" @click="emit('cancel')">Cancel</button>
-        </div>
     </div>
 </template>

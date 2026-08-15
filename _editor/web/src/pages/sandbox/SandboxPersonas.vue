@@ -9,7 +9,7 @@ import { createInlineRename } from "../../composables/inlineRename";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import PersonaFace from "../../components/PersonaFace.vue";
-import { FULL_POWERS, grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
+import { grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 
@@ -65,8 +65,7 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
  * A persona is settings, not a document: nine switches, two folder answers and a list of accounts, each of which
  * means something on its own. So an OPEN card writes as you change it — flip a switch and it is flipped, the way
  * every settings surface people already use behaves — and there is no Save button to leave a card half-decided
- * behind. A NEW card is the exception and keeps its explicit Create, because there is nothing to write to until
- * it has a name, and because "added a persona" should be something somebody did on purpose.
+ * behind.
  *
  * The row is the disclosure. There is no pencil-to-edit mode: the thing you click to see a card is the thing you
  * click to change it, which is one affordance instead of two and the pattern the Environment tab already uses.
@@ -74,7 +73,6 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
 
-const NO_SCOPE = { startIn: [], folders: [] };
 const draftOf = (persona: Persona): PersonaDraft => ({
     original: persona.id,
     label: persona.label ?? persona.id,
@@ -110,28 +108,42 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
+/* ── Making one ──────────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * A NAME, AND NOTHING ELSE. Creating a persona used to open the whole editor with a Create button under it, so
+ * the first thing this page ever asked a new user was thirty questions about a thing that did not exist yet —
+ * which accounts it speaks through, nine permissions, two folders, a system prompt. Almost every answer is a
+ * default, and the one that is not is the name.
+ *
+ * So it is one field. The card is written with the defaults the schema already means (full toolbox, whole
+ * workspace, the sandbox's prompt — all of which it stores as ABSENT, so the committed file says nothing about
+ * questions nobody was asked), and then the new card OPENS, which is where the rest is set at leisure with the
+ * row's own title above it saying what is being edited.
+ *
+ * The name lives in its own ref rather than in a half-built draft: a draft with no `original` was a card that
+ * did not exist wearing the type of one that did, and every field on it was optional-until-saved in a way the
+ * editor had to keep re-checking. */
+const newName = ref<string | undefined>(undefined);
+
 const startAdd = (): void => {
     saveError.value = undefined;
-    quietly(() => {
-        // No prompt answer, which is "follow the sandbox" — the default a new card should open on, and the one
-        // that leaves the committed file saying nothing about a question nobody was asked.
-        draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE, systemPromptMode: undefined };
-    });
+    draft.value = undefined;
+    newName.value = ``;
 };
 const cancelAdd = (): void => {
-    draft.value = undefined;
+    newName.value = undefined;
     saveError.value = undefined;
 };
 
-const draftId = computed(() => draft.value?.original ?? personaSlug(draft.value?.label ?? ``));
+const newId = computed(() => personaSlug(newName.value ?? ``));
 // A new card may not land on a name already taken — saving would silently edit the other one instead.
-const taken = computed(() => draft.value?.original === undefined && personas.value.some((persona) => persona.id === draftId.value));
-const draftValid = computed(() => draftId.value !== `` && !taken.value);
+const taken = computed(() => personas.value.some((persona) => persona.id === newId.value));
+const newValid = computed(() => newId.value !== `` && !taken.value);
 const nameHint = computed(() => {
-    if (draft.value === undefined || draft.value.label === `` || draftValid.value) {
+    if (newName.value === undefined || newName.value === `` || newValid.value) {
         return undefined;
     }
-    return taken.value ? `You already have a persona called ${draftId.value}.` : `Use letters or digits.`;
+    return taken.value ? `You already have a persona called ${newId.value}.` : `Use letters or digits.`;
 });
 
 /* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits nothing
@@ -141,7 +153,8 @@ const nameHint = computed(() => {
  * That is the same rule the label follows, applied to two objects instead of a field. The powers half lives in
  * personaCard.ts, because the tree's quick panel writes cards too and two copies of this rule is two answers to
  * "was anything actually decided here". */
-const cardFrom = (state: PersonaDraft, id: string): Persona => {
+const cardFrom = (state: PersonaDraft): Persona => {
+    const id = state.original;
     const workspace = {
         ...(state.startIn[0] !== undefined ? { startIn: state.startIn[0] } : {}),
         ...(state.folders.length > 0 ? { folders: [...state.folders] } : {}),
@@ -159,15 +172,25 @@ const cardFrom = (state: PersonaDraft, id: string): Persona => {
     };
 };
 
-// The explicit half: creating a card, which closes the form on success.
+/* CREATE, THEN OPEN. The card is written with nothing on it but its name and an empty account list — every
+ * other answer is a default the schema already means, and storing them would put a decision nobody made into a
+ * tracked file. Then the new card opens, because "made a persona" and "now set it up" are one errand and the
+ * editor is where the second half happens. */
 const submit = async (): Promise<void> => {
-    if (draft.value === undefined || !draftValid.value) {
+    if (!newValid.value) {
         return;
     }
+    const id = newId.value;
+    const label = (newName.value ?? ``).trim();
     saveError.value = undefined;
     try {
-        await save.mutateAsync(cardFrom(draft.value, draftId.value));
-        draft.value = undefined;
+        await save.mutateAsync({ id, capabilities: [], ...(label !== id ? { label } : {}) });
+        newName.value = undefined;
+        // Quietly, like any other open: the autosave watcher must not read a card being SHOWN as a card being
+        // edited and write back the row it just created.
+        quietly(() => {
+            draft.value = draftOf({ id, capabilities: [], ...(label !== id ? { label } : {}) });
+        });
     } catch (err) {
         saveError.value = noticeFrom(err, `Could not save this persona.`);
     }
@@ -180,12 +203,12 @@ const submit = async (): Promise<void> => {
 let pending: ReturnType<typeof setTimeout> | undefined;
 const persist = async (): Promise<void> => {
     const state = draft.value;
-    if (state?.original === undefined) {
+    if (state === undefined) {
         return;
     }
     saveError.value = undefined;
     try {
-        await save.mutateAsync(cardFrom(state, state.original));
+        await save.mutateAsync(cardFrom(state));
     } catch (err) {
         saveError.value = noticeFrom(err, `Could not save this persona.`);
     }
@@ -193,7 +216,7 @@ const persist = async (): Promise<void> => {
 watch(
     draft,
     () => {
-        if (settling || draft.value?.original === undefined) {
+        if (settling || draft.value === undefined) {
             return;
         }
         clearTimeout(pending);
@@ -220,7 +243,7 @@ const rename = createInlineRename(
             return;
         }
         const open = draft.value?.original === id ? draft.value : undefined;
-        await save.mutateAsync(open !== undefined ? { ...cardFrom(open, id), label: name } : { ...renameTarget.value!, label: name });
+        await save.mutateAsync(open !== undefined ? { ...cardFrom(open), label: name } : { ...renameTarget.value!, label: name });
         if (open !== undefined) {
             quietly(() => {
                 open.label = name;
@@ -276,7 +299,7 @@ const confirmRemove = async (): Promise<void> => {
             <!-- NO PERSONAS AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line
                  of apology in it. It says what is true right now — automations are mute, chats are unrestricted
                  — because that is the consequence someone is here to change, and offers the one action. -->
-            <div v-if="personas.length === 0 && draft === undefined" :class="cmp.emptyState('flex flex-col items-center gap-3 py-8')">
+            <div v-if="personas.length === 0 && newName === undefined" :class="cmp.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">No personas yet</span>
@@ -294,7 +317,7 @@ const confirmRemove = async (): Promise<void> => {
             <RowGroup v-else label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
                 <template #actions>
                     <Button
-                        v-if="personas.length > 0 && draft === undefined"
+                        v-if="personas.length > 0 && newName === undefined"
                         label="Add a persona"
                         size="small"
                         severity="secondary"
@@ -430,37 +453,36 @@ const confirmRemove = async (): Promise<void> => {
                          in here would ALSO close the card it belongs to. -->
                     <template v-if="isOpen(persona)" #below>
                         <div class="pt-4" @click.stop>
-                            <PersonaForm
-                                :draft="draft!"
-                                :accounts="accounts"
-                                :connected="connected"
-                                :grantables="grantables"
-                                :valid="draftValid"
-                                :saving="save.isPending.value"
-                                :error="saveError"
-                                :show-name="false"
-                            />
+                            <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                         </div>
                     </template>
                 </Row>
 
-                <!-- A NEW card has no row to open inside, so it gets one of its own at the tail of the group —
-                     and it is the one card with an explicit action, because there is nothing to write to until
-                     it has a name. -->
-                <div v-if="draft !== undefined && draft.original === undefined" class="px-4 py-4">
-                    <PersonaForm
-                        :draft="draft"
-                        :accounts="accounts"
-                        :connected="connected"
-                        :grantables="grantables"
-                        :valid="draftValid"
-                        :saving="save.isPending.value"
-                        :error="saveError"
-                        :name-hint="nameHint"
-                        submit-label="Add persona"
-                        @submit="submit"
-                        @cancel="cancelAdd"
-                    />
+                <!-- MAKING ONE ASKS FOR A NAME AND NOTHING ELSE, at the tail of the group where the new row will
+                     appear. Everything else about a persona has a default worth keeping, and the card opens the
+                     moment it exists — so this is the one field between "I want a persona" and having one, rather
+                     than a form standing in front of thirty answers nobody has an opinion about yet. -->
+                <div v-if="newName !== undefined" class="flex flex-col gap-2 px-4 py-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="32" />
+                        <!-- A name is three words. Capped, because an input stretched across the card reads as a
+                             field expecting a paragraph. Enter commits it, like any single-field form. -->
+                        <input
+                            v-model="newName"
+                            :class="cmp.input('min-w-0 max-w-xs flex-1 font-medium')"
+                            placeholder="Name it — Work, Studio, Reddit Writer…"
+                            aria-label="Name this persona"
+                            autofocus
+                            @keydown.enter="submit"
+                        />
+                        <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
+                        <button type="button" :class="cmp.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
+                    </div>
+                    <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
+                    <span v-else class="text-xs text-subtle">
+                        It starts with the full toolbox, the whole workspace and the sandbox's own prompt. Change any of that once it opens.
+                    </span>
+                    <Notice v-if="saveError !== undefined" :of="saveError" />
                 </div>
             </RowGroup>
         </template>

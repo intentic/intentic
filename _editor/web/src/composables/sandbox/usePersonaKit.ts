@@ -21,25 +21,23 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * ceremony to fail.
  *
  * The id is reactive because this hangs off an accordion: opening a different card must refetch rather than keep
- * showing the last one's prompt. `enabled` is what keeps a card being CREATED from fetching a kit that cannot
- * exist yet — the routes answer a missing persona with a 404, deliberately, so that nothing can mint a kit for a
- * card nobody named. */
+ * showing the last one's prompt. It is never absent — a persona is created before it is edited, and the routes
+ * answer a missing card with a 404 deliberately, so that nothing can mint a kit for a persona nobody named. */
 
 const kitKey = (id: string): readonly unknown[] => PERSONAS.of(id, `kit`);
 
-export function usePersonaKit(personaId: MaybeRefOrGetter<string | undefined>) {
+export function usePersonaKit(personaId: MaybeRefOrGetter<string>) {
     const id = computed(() => toValue(personaId));
 
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => kitKey(id.value ?? ``)),
-        queryFn: async () => PersonaKitSchema.parse(await sandboxJson(`/personas/${encodeURIComponent(id.value ?? ``)}/kit`)),
-        enabled: computed(() => id.value !== undefined),
+        queryKey: computed(() => kitKey(id.value)),
+        queryFn: async () => PersonaKitSchema.parse(await sandboxJson(`/personas/${encodeURIComponent(id.value)}/kit`)),
     });
 
     // Only this card's kit moves. A prompt or a skill changes no other persona and no capability, so a wider
     // invalidation would refetch caches to observe that they are identical.
-    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: kitKey(id.value ?? ``) });
-    const path = (tail: string): string => `/personas/${encodeURIComponent(id.value ?? ``)}${tail}`;
+    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: kitKey(id.value) });
+    const path = (tail: string): string => `/personas/${encodeURIComponent(id.value)}${tail}`;
 
     // The same client, handed over rather than injected — see the header. `useMutation` resolves it through the
     // injection context too, so passing it is what lets this component be rendered outside a plugin-installed app.

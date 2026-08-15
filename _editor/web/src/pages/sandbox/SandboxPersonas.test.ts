@@ -32,7 +32,13 @@ vi.hoisted(() => {
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
-const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
+/* Upserts into the list, because the real one does: a save invalidates the personas query and the row comes back
+ * in the refetch. Creating a persona now OPENS it, and the card renders inside the row the list draws — so a mock
+ * that resolved without adding the card would make every creation test assert against a page that never redrew. */
+const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
+    personas.value = [...personas.value.filter((entry) => entry.id !== persona.id), persona];
+    return { ok: true };
+});
 const remove = vi.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
 vi.mock(`../../composables/sandbox/usePersonas`, () => ({
@@ -179,6 +185,27 @@ const chooseAccounts = async (el: HTMLElement): Promise<void> => {
     await nextTick();
 };
 
+/* MAKING ONE IS A NAME AND A BUTTON, and then the card is open — so this is what every test that wants a card to
+ * poke at now does, exactly as a person would. It used to be "open the form, fill in whatever this test cares
+ * about, press Create", which is why so many of these tests reached into a card that did not exist yet. */
+const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await type(nameField(el), name);
+    buttonLabelled(el, `Create`)!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await nextTick();
+};
+
+/* An open card shows one of its three questions at a time. The pills are <Segmented>, which renders tabs — found
+ * by role so this cannot be satisfied by a stray button whose label happens to match a heading in the body. */
+const openTab = async (el: HTMLElement, label: string): Promise<void> => {
+    [...el.querySelectorAll(`[role="tab"]`)]
+        .find((tab) => (tab.textContent ?? ``).trim() === label)!
+        .dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    await nextTick();
+};
+
 beforeEach(() => {
     save.mockClear();
     remove.mockClear();
@@ -235,16 +262,39 @@ it(`offers to add a persona when this sandbox has no accounts at all`, () => {
 // The claim the whole layer rests on: a persona spans platforms, so the card it saves carries both accounts.
 it(`saves one persona holding accounts on two different sites`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
-    await type(nameField(el), `Work`);
+    await addPersona(el, `Work`);
+    // The card opens on "Speaks as", which is the question it opens on precisely because this is the first thing
+    // anyone does to a persona they just made.
     await chooseAccounts(el);
     buttonLabelled(el, `reddit-work`)!.click();
     buttonLabelled(el, `x-company`)!.click();
+
+    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    expect(save.mock.calls.at(-1)![0]).toMatchObject({ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] });
+});
+
+/* MAKING ONE ASKS FOR A NAME AND NOTHING ELSE. It used to open the whole editor with a Create button under it,
+ * so the first thing this page asked was thirty questions about a thing that did not exist — and every answer
+ * but the name was a default. The card carries those defaults by storing NOTHING, and opens for the rest. */
+it(`asks only for a name, then opens the card it made`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
-    buttonLabelled(el, `Add persona`)!.click();
+
+    // Nothing else is on screen to answer: no permissions, no folders, no prompt.
+    const asked = text(el);
+    expect(asked).not.toContain(`Run commands`);
+    expect(asked).not.toContain(`Only these folders`);
+    expect(asked).not.toContain(`System prompt`);
+
+    await type(nameField(el), `Work`);
+    buttonLabelled(el, `Create`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] });
+    expect(save.mock.calls[0]![0]).toEqual({ id: `work`, label: `Work`, capabilities: [] });
+
+    // …and now it is open, on the card that was just made.
+    await nextTick();
+    expect(text(el)).toContain(`Speaks through`);
 });
 
 /* The form is now three questions rather than one, and the two new sections are the whole feature — a card that
@@ -252,8 +302,8 @@ it(`saves one persona holding accounts on two different sites`, async () => {
  * powers to set. This is the check that the sections are actually there and labelled. */
 it(`offers the powers and where-it-works sections when a card is open`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
     const rendered = text(el);
     expect(rendered).toContain(`What it may do`);
     expect(rendered).toContain(`Run commands`);
@@ -269,8 +319,8 @@ it(`offers the powers and where-it-works sections when a card is open`, async ()
  * grouping is invisible and the section is the flat column it used to be. */
 it(`sorts what a persona may do into workspace and outward groups`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
     const rendered = text(el);
     expect(rendered).toContain(`In your workspace`);
     expect(rendered).toContain(`Reaching out`);
@@ -282,8 +332,8 @@ it(`sorts what a persona may do into workspace and outward groups`, async () => 
  * what says which column a heading landed in: workspace things first, outward things after all of them. */
 it(`keeps where-it-works in the workspace group rather than after the outward one`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
     const rendered = text(el);
     expect(rendered.indexOf(`In your workspace`)).toBeLessThan(rendered.indexOf(`Where it works`));
     expect(rendered.indexOf(`Where it works`)).toBeLessThan(rendered.indexOf(`Reaching out`));
@@ -294,8 +344,8 @@ it(`keeps where-it-works in the workspace group rather than after the outward on
  * moment a shelf or a grant group is added without one — which is the only way the rail can rot. */
 it(`gives every permission row an icon`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
 
     // A switch row is a <label> with a checkbox in it — ToggleSwitch under its skin.
     const rows = [...el.querySelectorAll(`label`)].filter((row) => row.querySelector(`input[type="checkbox"]`) !== null);
@@ -315,8 +365,8 @@ it(`gives every permission row an icon`, async () => {
  * that stops arriving fails SILENTLY — the icons keep rendering, unsized and undimmed, one column out of true. */
 it(`lends the powers rail to the location rows so their icons stay in line`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
 
     /* Found through the label's own text rather than by icon name: <FolderPicker> draws a `folder-open` of its
      * own inside the Choose button, so a document-wide query for one is a test that passes on the wrong element
@@ -340,8 +390,8 @@ it(`lends the powers rail to the location rows so their icons stay in line`, asy
  * worktree that lets two of them run at once. */
 it(`states that every session works in its own copy, and offers no choice about it`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
+    await openTab(el, `What it may do`);
     const rendered = text(el);
     expect(rendered).toContain(`its own copy of the workspace`);
     expect(rendered).not.toContain(`Whatever started it`);
@@ -353,9 +403,8 @@ it(`states that every session works in its own copy, and offers no choice about 
  * produced a persona fenced to a folder that does not exist, which refuses everything, silently. */
 it(`fences a card to a folder chosen from the workspace tree`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
-    await type(nameField(el), `Docs`);
+    await addPersona(el, `Docs`);
+    await openTab(el, `What it may do`);
 
     // Neither picker shows the tree until it is asked for — the form is a form, not a file browser.
     expect(folderRow(`docs`)).toBeUndefined();
@@ -368,10 +417,9 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
     expect(folderRow(`node_modules`)).toBeUndefined();
 
     folderRow(`docs`)!.click();
-    await nextTick();
-    buttonLabelled(el, `Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.calls[0]![0].workspace).toEqual({ folders: [`docs`] });
+
+    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    expect(save.mock.calls.at(-1)![0].workspace).toEqual({ folders: [`docs`] });
 });
 
 /* THE ROW IS THE DISCLOSURE, and there is no second way in. A pencil that opens what clicking the row also
@@ -379,12 +427,49 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
 it(`opens a card by clicking its row, and closes it by clicking again`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    expect(text(el)).not.toContain(`What it may do`);
+    expect(text(el)).not.toContain(`Speaks through`);
     await openCard(el, `work`);
-    expect(text(el)).toContain(`What it may do`);
+    expect(text(el)).toContain(`Speaks through`);
     rowFor(el, `work`).click();
     await nextTick();
-    expect(text(el)).not.toContain(`What it may do`);
+    expect(text(el)).not.toContain(`Speaks through`);
+});
+
+/* THREE QUESTIONS, ONE AT A TIME. Stacked, they were roughly thirty controls in one scroll for somebody who came
+ * to change one thing. What this pins is that the strip is the only way to reach the other two — a card that
+ * rendered every section regardless would pass a text assertion on any of them and be the wall this replaced. */
+it(`shows one of the card's three questions at a time`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    await openCard(el, `work`);
+
+    // It opens on who the persona is, and the other two are not also on screen.
+    expect(text(el)).toContain(`Speaks through`);
+    expect(text(el)).not.toContain(`Run commands`);
+    expect(text(el)).not.toContain(`Its own skills`);
+
+    await openTab(el, `What it may do`);
+    expect(text(el)).toContain(`Run commands`);
+    expect(text(el)).not.toContain(`Speaks through`);
+
+    await openTab(el, `What it is told`);
+    expect(text(el)).toContain(`Its own skills`);
+    expect(text(el)).not.toContain(`Run commands`);
+});
+
+/* THE PERMISSIONS ARE NOT CUT IN HALF BY THE TABS, and that is the one thing the strip must not do. A reader
+ * arrives at that block asking "which of these did I turn off?", and the scan only works while every switch is
+ * on one screen — so the workspace column and the outward column share a tab however tidy four pills would look. */
+it(`keeps every permission on one screen rather than splitting them across tabs`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    await openCard(el, `work`);
+    await openTab(el, `What it may do`);
+
+    const rendered = text(el);
+    expect(rendered).toContain(`In your workspace`);
+    expect(rendered).toContain(`Reaching out`);
+    expect(rendered).toContain(`Where it works`);
 });
 
 /* A NAME READS AS A NAME until you ask to change it. An input parked in the title permanently makes a settings
@@ -432,6 +517,7 @@ it(`saves an open card as soon as a switch is flipped, with no Save button`, asy
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
     await openCard(el, `work`);
+    await openTab(el, `What it may do`);
     expect(buttonLabelled(el, `Save`)).toBeUndefined();
 
     const runCommands = [...el.querySelectorAll(`input[type="checkbox"]`)];
@@ -456,11 +542,7 @@ it(`writes nothing when a card is only opened`, async () => {
  * the diff on a card someone DID bound is buried in noise on every other card. */
 it(`saves no powers block for a card nobody has bounded`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
-    await type(nameField(el), `Work`);
-    buttonLabelled(el, `Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await addPersona(el, `Work`);
     expect(save.mock.calls[0]![0].powers).toBeUndefined();
     expect(save.mock.calls[0]![0].workspace).toBeUndefined();
 });
@@ -483,7 +565,7 @@ it(`refuses a new persona whose name is already taken`, async () => {
     await nextTick();
     await type(nameField(el), `Work`);
     expect(text(el)).toContain(`You already have a persona called work`);
-    buttonLabelled(el, `Add persona`)!.click();
+    buttonLabelled(el, `Create`)!.click();
     await nextTick();
     expect(save).not.toHaveBeenCalled();
 });
@@ -496,8 +578,7 @@ it(`does not repeat the site under an account already named after it`, async () 
     accounts.value = [account(`reddit`, `reddit`), account(`main-account`, `reddit`)];
     connected.value = [`reddit`, `main-account`];
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
     await chooseAccounts(el);
     expect(text(buttonLabelled(el, `reddit`)!).replace(/\s+/g, ` `).trim()).toBe(`reddit`);
     // ...and still says it where the id does not, which is the whole reason the line exists.
@@ -510,8 +591,7 @@ it(`does not repeat the site under an account already named after it`, async () 
  * chooser is one click away. */
 it(`keeps every account out of the form until the chooser is opened`, async () => {
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
     expect(text(el)).not.toContain(`reddit-personal`);
     await chooseAccounts(el);
     expect(text(el)).toContain(`reddit-personal`);
@@ -544,8 +624,7 @@ it(`narrows the chooser by name or site`, async () => {
     // Long enough to be worth filtering — the field only appears once the list is past a glance.
     accounts.value = [...accounts.value, ...[`a`, `b`, `c`, `d`, `e`].map((suffix) => account(`spam-${suffix}`, `reddit`))];
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await addPersona(el, `Work`);
     await chooseAccounts(el);
     await type(el.querySelector<HTMLInputElement>(`input[aria-label="Filter accounts"]`)!, `x-comp`);
     expect(text(el)).toContain(`x-company`);
@@ -554,7 +633,7 @@ it(`narrows the chooser by name or site`, async () => {
 
 /* ── What the persona is TOLD ────────────────────────────────────────────────────────────────────────────────
  *
- * The fourth question the card answers. Two properties are worth pinning here and both are about the FILE: that
+ * The third of the card's questions. Two properties are worth pinning here and both are about the FILE: that
  * a card following the sandbox stores nothing (the default, and what almost every card means — a stored
  * "inherit" would put a decision nobody made into a tracked file), and that a card given its own base stores
  * exactly that. The TEXT is not the card's and is not asserted here: it lives in the kit, behind its own routes,
@@ -563,6 +642,7 @@ it(`stores nothing about the prompt for a card that follows the sandbox`, async 
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
     await openCard(el, `work`);
+    await openTab(el, `What it may do`);
     toggleSwitch(el, `Run commands`);
 
     await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
@@ -573,20 +653,34 @@ it(`stores the base a card was given one of its own`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
     await openCard(el, `work`);
+    await openTab(el, `What it is told`);
 
     // The picker is the sandbox's own three words plus the one only a card can give.
-    buttonLabelled(el, `Claude`)!.click();
+    await openTab(el, `Claude`);
 
     await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
     expect(save.mock.calls[0]![0].systemPromptMode).toBe(`claude`);
 });
 
-// A card being created cannot carry files yet: the kit routes refuse a persona that does not exist, so nothing
-// can mint one by writing at it. The form has to say so rather than offer an editor whose save would fail.
-it(`tells you the prompt and skills come after the persona exists`, async () => {
+/* A KIT SKILL IS WRITTEN THE WAY EVERY OTHER SKILL IN THIS APP IS. It was hand-rolled here first — a text link
+ * to add one, three bare inputs to write it — which put a second, worse skill editor two clicks from the real
+ * one. So the row that adds one is the same full-width row the Skills list uses, and what it opens is that
+ * list's own form, markdown editor and all. */
+it(`adds a persona's own skill through the same row and the same editor as the skills list`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
-    buttonLabelled(el, `Add a persona`)!.click();
-    await nextTick();
+    await openCard(el, `work`);
+    await openTab(el, `What it is told`);
 
-    expect(el.textContent).toContain(`Create this persona first`);
+    // The affordance is a row, not a link: full width, in the list it adds to.
+    const add = buttonLabelled(el, `Write a skill`)!;
+    expect(add.className).toContain(`w-full`);
+
+    add.click();
+    await nextTick();
+    // <SkillForm>'s own three questions, in its own words — the proof it is that component and not a copy.
+    const rendered = text(el);
+    expect(rendered).toContain(`When to use it`);
+    expect(rendered).toContain(`What it should do`);
+    expect(rendered).toContain(`Add skill`);
 });

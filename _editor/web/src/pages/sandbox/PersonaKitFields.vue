@@ -1,32 +1,43 @@
 <script setup lang="ts">
-import type { SystemPromptMode } from "@intentic/sandbox-contract";
-import { cmp, Notice, Segmented } from "@intentic/ui";
+import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
+import { cmp, Icon, Notice, Row, Segmented } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
+import SkillForm from "./agent/SkillForm.vue";
+import SkillRow from "./agent/SkillRow.vue";
 import { usePersonaKit } from "../../composables/sandbox/usePersonaKit";
 import { useDraft } from "../../composables/useDraft";
 
-/* WHAT THIS PERSONA IS TOLD, AND WHAT IT ALONE KNOWS — the fourth question the card answers, and the one that
- * turns a persona from a label into a working posture.
+/* WHAT THIS PERSONA IS TOLD, AND WHAT IT ALONE KNOWS — the third of the card's questions, and the one that turns
+ * a persona from a label into a working posture.
  *
- * TWO THINGS, ONE SECTION, because they are one folder and one decision: a release-notes writer is a prompt AND
- * the house style it reads, and splitting them across the page would make the second look like an unrelated
- * feature. The daemon keeps both in the card's own kit (`.intentic/personas/<id>/`), laid out so the agent's own
- * loader reads them on the turns wearing this card and no others.
+ * TWO THINGS, ONE TAB, because they are one folder and one decision: a release-notes writer is a prompt AND the
+ * house style it reads, and splitting them across the card would make the second look like an unrelated feature.
+ * The daemon keeps both in the card's own kit (`.intentic/personas/<id>/`), laid out so the agent's own loader
+ * reads them on the turns wearing this card and no others.
+ *
+ * THE SKILLS ARE THE SKILLS PAGE'S OWN ROWS AND ITS OWN EDITOR, and that is the whole of why this file is short.
+ * They were hand-rolled here first — a text link to add one, three bare inputs to write it — which put a second,
+ * worse way to write a skill two clicks from the real one: no markdown editor, no preview, no "why is the button
+ * grey", a different delete, a different everything. A skill is a skill wherever it is kept, so <SkillRow> and
+ * <SkillForm> render these exactly as Agent ▸ Skills renders the sandbox's, and the row that adds one is the
+ * same full-width `+` row that list uses rather than a link nothing else in the app has.
+ *
+ * WHAT THE ROWS ARE HANDED is a summary built here rather than one the daemon sends, because these skills are
+ * not in that inventory's shape: a kit skill has no switch (it is on exactly when its persona is worn) and no
+ * owner to name (the card it sits on is three lines up). Everything else — the mark, the chip, the open-in-place
+ * reading, the confirm before delete — comes free with the row.
  *
  * IT IS NOT PART OF THE CARD'S AUTOSAVE, and that is the point of it being a separate component with its own
  * store. The rest of the form writes the whole card on a debounce — right for nine switches, wrong for a system
  * prompt, where it would commit every intermediate sentence to a tracked file. So the MODE (a click) rides the
- * card, and the TEXT commits on blur or from a Save button, exactly like the sandbox-wide prompt above it.
- *
- * ONLY FOR A CARD THAT EXISTS. The kit routes answer a missing persona with a 404 deliberately — nothing should
- * be able to mint a persona by writing a file at it — so a card being created says what it will be able to carry
- * rather than offering an editor that would fail on save. */
+ * card, and the TEXT commits on blur or from a Save button, exactly like the sandbox-wide prompt it stands in
+ * for. */
 
 const { personaId, mode } = defineProps<{
-    /** The saved card's id, or undefined while one is being created — see the header. */
-    personaId: string | undefined;
+    /** The saved card's id. A card is created before it is edited, so there is always one. */
+    personaId: string;
     mode: SystemPromptMode | undefined;
 }>();
 const emit = defineEmits<{ "update:mode": [SystemPromptMode | undefined] }>();
@@ -53,7 +64,7 @@ const error = ref<string | undefined>(undefined);
 
 const commitPrompt = async (): Promise<void> => {
     prompt.value = prompt.value.trim();
-    if (!promptDirty.value || personaId === undefined) {
+    if (!promptDirty.value) {
         return;
     }
     error.value = undefined;
@@ -65,44 +76,75 @@ const commitPrompt = async (): Promise<void> => {
 };
 
 /* ── Its own skills ──────────────────────────────────────────────────────────────────────────────────────────
- * One editor, opened onto whichever skill is being written — a list of textareas would render every skill's
- * instructions at once, and a group of one-line rows should not cost the sum of its bodies to draw.
  *
- * `editing` holds the NAME being edited, "" while a new one is being written. Undefined is the closed state. */
-const editing = ref<string | undefined>(undefined);
-const form = ref({ name: ``, description: ``, body: `` });
+ * One row per skill, one of them open at a time — the Skills page's rule, for its reason: a list that renders
+ * every body at once costs the sum of its instructions to draw, and a card is not the place to discover that.
+ *
+ * A KIT SKILL IS ALWAYS THE OWNER'S, which is what makes these rows simpler than that page's. There is nothing
+ * here that arrived with an extension or a plugin, so every row is editable and removable and none is
+ * switchable — and <SkillRow> opens an editable skill straight into the form, so reading and editing are the
+ * same click. */
+const summaryOf = (skill: { name: string; description: string }): SkillSummary => ({
+    id: skill.name,
+    name: skill.name,
+    description: skill.description,
+    origin: `persona`,
+    enabled: true,
+    // On exactly when its persona is worn, so there is nothing here to switch; the owner's to rewrite and to
+    // delete, because they wrote it.
+    switchable: false,
+    editable: true,
+    removable: true,
+});
+
+// The rows need what the marks are drawn from. A kit skill belongs to no extension and no connection, so it
+// falls to its origin glyph — and asking for those lists would be two cached reads to answer "nothing".
+const NO_SOURCES = { capabilities: [], extensions: [] };
+
+// Which row is open, by name, and whether the new-skill form is. Separate flags rather than a sentinel name,
+// for the reason the skills list keeps them separate: a skill may be called anything.
+const openName = ref<string | undefined>(undefined);
+const adding = ref(false);
+// The open row's text, once it has arrived — its own ref, because a body is a fetch and the row is already on
+// screen. Undefined while it is in flight, which is what draws the row's "Reading…" line.
+const openBody = ref<string | undefined>(undefined);
+const bodyError = ref<string | undefined>(undefined);
 const busy = ref(false);
 
-const openSkill = async (name: string): Promise<void> => {
-    error.value = undefined;
-    editing.value = name;
-    form.value = { name, description: ``, body: `` };
-    try {
-        const loaded = (await readSkill(name)) as { name: string; description: string; body: string };
-        form.value = { name: loaded.name, description: loaded.description, body: loaded.body };
-    } catch (err) {
-        error.value = noticeFrom(err, `Couldn't read that skill.`).detail;
-        editing.value = undefined;
-    }
-};
-const openNew = (): void => {
-    error.value = undefined;
-    editing.value = ``;
-    form.value = { name: ``, description: ``, body: `` };
+const close = (): void => {
+    openName.value = undefined;
+    openBody.value = undefined;
+    bodyError.value = undefined;
+    adding.value = false;
 };
 
-// A skill needs all three parts to be worth saving: the name is the folder the agent finds it by, and the
-// description is the only line it reads before deciding whether to open the rest.
-const skillValid = computed(
-    () => /^[a-z0-9][a-z0-9-]*$/.test(form.value.name) && form.value.description.trim() !== `` && form.value.body.trim() !== ``,
-);
+// Open a row and fetch its text — or close it if it is the one already open. The name is set BEFORE the await so
+// the row shows it is opening rather than appearing to ignore the click for a round trip.
+const toggle = async (name: string): Promise<void> => {
+    if (openName.value === name) {
+        close();
+        return;
+    }
+    close();
+    openName.value = name;
+    try {
+        openBody.value = ((await readSkill(name)) as { body: string }).body;
+    } catch (err) {
+        bodyError.value = noticeFrom(err, `Couldn't read that skill.`).detail;
+    }
+};
+
+const startAdd = (): void => {
+    close();
+    adding.value = true;
+};
 
 const run = async (action: () => Promise<unknown>, whenItFails: string): Promise<void> => {
     error.value = undefined;
     busy.value = true;
     try {
         await action();
-        editing.value = undefined;
+        close();
     } catch (err) {
         error.value = noticeFrom(err, whenItFails).detail;
     } finally {
@@ -110,57 +152,45 @@ const run = async (action: () => Promise<unknown>, whenItFails: string): Promise
     }
 };
 
-const submitSkill = (): Promise<void> =>
-    run(
-        () => saveSkill.mutateAsync({ name: form.value.name, description: form.value.description.trim(), body: form.value.body.trim() }),
-        `Couldn't save that skill.`,
-    );
-const dropSkill = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), `Couldn't remove that skill.`);
+const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), `Couldn't save that skill.`);
+const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), `Couldn't remove that skill.`);
 
 // Switching to a different card closes whatever was open on the last one — the accordion reuses this component,
 // and a body left on screen would belong to a persona nobody is looking at.
 watch(
     () => personaId,
     () => {
-        editing.value = undefined;
+        close();
         error.value = undefined;
     },
 );
 </script>
 
 <template>
-    <div class="flex flex-col gap-3 border-t border-line pt-4">
-        <div class="flex flex-col gap-0.5">
-            <span class="ui-field-label">What it is told</span>
-            <span class="text-xs text-subtle">
+    <div class="flex flex-col gap-5">
+        <div class="flex flex-col gap-3">
+            <p class="text-xs text-subtle">
                 The instructions a session wearing this card carries, and the skills only its turns can reach. Every other chat in this sandbox is
                 unaffected.
-            </span>
-        </div>
+            </p>
 
-        <!-- The base, as a click. Same three words the sandbox setting uses, plus the one answer only a card can
-             give — follow the sandbox, which is what an untouched card means. -->
-        <label class="flex flex-wrap items-center justify-between gap-3">
-            <span class="flex min-w-0 flex-col">
-                <span class="flex items-center gap-2 text-sm text-content">
-                    <Icon name="pencil" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                    System prompt
+            <!-- The base, as a click. Same three words the sandbox setting uses, plus the one answer only a card
+                 can give — follow the sandbox, which is what an untouched card means. -->
+            <label class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex min-w-0 flex-col">
+                    <span class="flex items-center gap-2 text-sm text-content">
+                        <Icon name="pencil" class="w-4 shrink-0 text-center text-xs text-subtle" />
+                        System prompt
+                    </span>
+                    <span class="text-xs text-subtle">
+                        <template v-if="picked === `custom`">Its own words, replacing the sandbox's prompt on this persona's turns.</template>
+                        <template v-else-if="picked === `inherit`">Whatever the sandbox is set to — change it in Agent ▸ Instructions.</template>
+                        <template v-else>A built-in prompt, for this persona only.</template>
+                    </span>
                 </span>
-                <span class="text-xs text-subtle">
-                    <template v-if="picked === `custom`">Its own words, replacing the sandbox's prompt on this persona's turns.</template>
-                    <template v-else-if="picked === `inherit`">Whatever the sandbox is set to — change it in Agent ▸ Instructions.</template>
-                    <template v-else>A built-in prompt, for this persona only.</template>
-                </span>
-            </span>
-            <Segmented :model-value="picked" :options="MODES" @update:model-value="setMode" />
-        </label>
+                <Segmented :model-value="picked" :options="MODES" @update:model-value="setMode" />
+            </label>
 
-        <!-- A card that has not been created yet cannot carry files: the kit routes refuse a persona that does
-             not exist, so that nothing can bring one into being by writing at it. Say so rather than offering an
-             editor whose save would fail. -->
-        <p v-if="personaId === undefined" class="text-xs text-subtle">Create this persona first, then you can give it a prompt and its own skills.</p>
-
-        <template v-else>
             <template v-if="picked === `custom`">
                 <textarea
                     v-model="prompt"
@@ -173,9 +203,9 @@ watch(
                     @change="commitPrompt"
                 ></textarea>
                 <div class="flex items-center justify-between gap-3">
-                    <!-- The same cost the sandbox-wide prompt states, scoped to the turns this card actually
-                         governs: a replacement drops what this app tells the assistant about its own cards and
-                         panels, and a reader who only sees "your text" will not guess that. -->
+                    <!-- What Custom costs, scoped to the turns this card governs: a replacement drops what this
+                         app tells the assistant about its own cards and panels, and a reader who only sees "your
+                         text" will not guess that. -->
                     <span class="text-2xs text-subtle">
                         Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its question cards,
                         checklist panel and browser tools. Leave it empty to fall back to the sandbox's.
@@ -194,84 +224,71 @@ watch(
                     />
                 </div>
             </template>
+        </div>
 
-            <!-- Its own skills. Shown whatever the prompt is set to: a persona on the sandbox's prompt can still
-                 carry a checklist that only it reads, and those are independent answers. -->
-            <div class="flex flex-col gap-2">
-                <span class="flex items-center gap-2 text-sm text-content">
-                    <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                    Its own skills
-                </span>
-                <div v-if="kit.skills.length > 0" class="flex flex-col gap-1">
-                    <div
-                        v-for="skill in kit.skills"
-                        :key="skill.name"
-                        class="flex items-center justify-between gap-3 rounded-lg border border-line px-2.5 py-1.5"
-                    >
-                        <span class="flex min-w-0 flex-col">
-                            <span class="truncate text-xs font-medium text-content">{{ skill.name }}</span>
-                            <span class="truncate text-2xs text-subtle">{{ skill.description }}</span>
-                        </span>
-                        <span class="flex shrink-0 items-center gap-2">
-                            <button type="button" :class="cmp.linkButton('text-2xs text-link')" @click="openSkill(skill.name)">Edit</button>
-                            <button
-                                type="button"
-                                :class="cmp.linkButton('text-2xs text-muted hover:text-danger')"
-                                :disabled="busy"
-                                @click="dropSkill(skill.name)"
-                            >
-                                Remove
-                            </button>
-                        </span>
+        <!-- ITS OWN SKILLS, as the Skills page draws them. Shown whatever the prompt is set to: a persona on the
+             sandbox's prompt can still carry a checklist that only it reads, and those are independent answers.
+
+             Bordered and divided like a row group, because that is what it is — a small list inside a card. -->
+        <div class="flex flex-col gap-2">
+            <span class="flex items-center gap-2 text-sm text-content">
+                <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
+                Its own skills
+            </span>
+            <div class="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                <!-- The invitation is a ROW inside the list, not a line above it — the Skills page's shape. Above
+                     it, an empty list said the same thing twice: a paragraph explaining there is nothing, and a
+                     bordered box holding nothing but the button that would fix it. -->
+                <Row
+                    v-if="kit.skills.length === 0 && !adding"
+                    icon="book"
+                    density="compact"
+                    description="None yet. A skill here is instructions the agent reads only while acting as this persona — a house style, a review checklist, the steps for one job."
+                />
+
+                <SkillRow
+                    v-for="skill in kit.skills"
+                    :key="skill.name"
+                    :skill="summaryOf(skill)"
+                    :expanded="openName === skill.name"
+                    :body="openName === skill.name ? openBody : undefined"
+                    :body-error="openName === skill.name ? bodyError : undefined"
+                    :sources="NO_SOURCES"
+                    :disabled="busy"
+                    @toggle="void toggle(skill.name)"
+                    @save="save"
+                    @remove="remove(skill.name)"
+                />
+
+                <!-- The new skill is written in the same place a written one is read, so the form is never a
+                     different screen from the list it joins — the Skills page's own arrangement. -->
+                <div v-if="adding" class="bg-content/6">
+                    <div class="flex items-center gap-2.5 py-2.5 pl-2.5 pr-3">
+                        <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
+                        <span class="text-sm font-medium text-content">New skill</span>
+                    </div>
+                    <div class="border-t border-line py-3 pl-9 pr-3">
+                        <SkillForm :disabled="busy" @save="save" @cancel="close" />
                     </div>
                 </div>
-                <p v-else class="text-xs text-subtle">
-                    None yet. A skill here is instructions the agent reads only while acting as this persona — a house style, a review checklist, the
-                    steps for one job.
-                </p>
 
-                <div v-if="editing !== undefined" class="flex flex-col gap-2 rounded-lg border border-line bg-overlay/50 p-2">
-                    <input
-                        v-model="form.name"
-                        :class="cmp.input('w-full text-xs')"
-                        :disabled="editing !== ``"
-                        placeholder="house-style"
-                        aria-label="Skill name"
-                    />
-                    <input
-                        v-model="form.description"
-                        :class="cmp.input('w-full text-xs')"
-                        placeholder="When to use it — the one line the agent reads before opening the rest."
-                        aria-label="When to use this skill"
-                    />
-                    <textarea
-                        v-model="form.body"
-                        rows="6"
-                        :class="cmp.input('w-full resize-y font-mono text-xs')"
-                        placeholder="The instructions themselves."
-                        aria-label="Skill instructions"
-                    ></textarea>
-                    <div class="flex items-center gap-3">
-                        <Button label="Save skill" size="small" :loading="busy" :disabled="!skillValid" @click="submitSkill" />
-                        <button type="button" :class="cmp.linkButton('text-xs text-muted hover:text-content')" @click="editing = undefined">
-                            Cancel
-                        </button>
-                        <span v-if="!skillValid && form.name !== ``" class="text-2xs text-subtle">
-                            A name of lowercase letters, digits and dashes, plus both lines of text.
-                        </span>
-                    </div>
-                </div>
-                <button v-else type="button" :class="cmp.linkButton('self-start gap-1 text-xs text-muted hover:text-content')" @click="openNew">
-                    <Icon name="plus" class="text-2xs" />
-                    Add a skill
-                </button>
+                <!-- Hidden while something is open, so there is only ever one skill being written or read. -->
+                <Row
+                    v-else-if="openName === undefined"
+                    as="button"
+                    icon="plus"
+                    density="compact"
+                    interactive
+                    title="Write a skill"
+                    @click="startAdd"
+                />
             </div>
+        </div>
 
-            <Notice
-                v-if="kitError !== undefined"
-                :of="{ tone: `danger`, title: `Couldn't read this persona's own prompt and skills.`, detail: kitError }"
-            />
-            <p v-if="error !== undefined" :class="cmp.alertWarning('text-2xs')">{{ error }}</p>
-        </template>
+        <Notice
+            v-if="kitError !== undefined"
+            :of="{ tone: `danger`, title: `Couldn't read this persona's own prompt and skills.`, detail: kitError }"
+        />
+        <p v-if="error !== undefined" :class="cmp.alertWarning('text-2xs')">{{ error }}</p>
     </div>
 </template>
