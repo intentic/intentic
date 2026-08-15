@@ -78,5 +78,6 @@ export const extensionUiNames = [
     "useListNavigation",
     "useNarrow",
     "useNow",
+    "useRailMemory",
     "useTheme",
 ];

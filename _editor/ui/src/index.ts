@@ -173,6 +173,11 @@ export { type Device, useDevice } from "./composables/useDevice.js";
  * chat panel is never as wide as the screen. */
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
+/* The other half of a narrowing rail: where the reader left it. Four surfaces grew one of these menus and all
+ * four forgot the pick the moment you clicked away, because the choice lives in the URL and the rail tile opens
+ * a view at its bare address. Shipped as one composable rather than solved four times, for the same reason
+ * <SplitView> is here at all. */
+export { useRailMemory } from "./composables/useRailMemory.js";
 /* The wall clock and the mutation-report shape moved here from the web app when the drafts queue became an
  * extension: both are exactly what every view with a live readout or a user-facing mutation hand-rolls, and the
  * app's four independent `now` intervals were the original argument for the first one. */

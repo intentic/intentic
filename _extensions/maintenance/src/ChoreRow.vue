@@ -32,6 +32,7 @@ const { verdict, run } = defineProps<{ verdict: ChoreVerdict; run: ChoreRun | un
 const emit = defineEmits<{
     toggle: [];
     start: [pick: AgentRunChoice | undefined];
+    remeasure: [];
     snooze: [];
     unsnooze: [];
     open: [conversationId: string];
@@ -48,10 +49,15 @@ const startRun = (): void => {
 };
 
 // The state, as one badge. `unavailable` is deliberately NOT a warning colour: nothing is wrong, we simply have
-// not measured it, and painting that amber would make every repo without knip look broken.
+// not measured it, and painting that amber would make every repo without knip look broken. `stale` is quiet for
+// the same reason and one more: it is the state a row lands in BECAUSE the work got done, and a colour that reads
+// as a problem would make finishing a chore look like breaking something.
 const status = computed<{ variant: StatusVariant; label: string } | undefined>(() => {
     if (verdict.state === `due`) {
         return verdict.severity === `warning` ? { variant: `warning`, label: `carrying` } : { variant: `info`, label: `due` };
+    }
+    if (verdict.state === `stale`) {
+        return { variant: `neutral`, label: `re-measure` };
     }
     if (verdict.state === `snoozed`) {
         return { variant: `neutral`, label: `snoozed` };
@@ -62,12 +68,28 @@ const status = computed<{ variant: StatusVariant; label: string } | undefined>((
     return { variant: `success`, label: `clear` };
 });
 
-/* "Ran, and the evidence has not moved since." Said in the row rather than hidden, because the alternative — a
- * chore that silently stops appearing due after a run — is how a surface loses the owner's trust in the other
- * direction: they fix nothing, the row goes quiet, and they conclude it was never real. */
-const settledNote = computed<string | undefined>(() =>
-    verdict.settled && run !== undefined ? `a turn ran against this exact evidence ${timeAgo(run.manifest.createdAt)}` : undefined,
-);
+/* HOW OLD THE NUMBERS ARE, on the collapsed row beside the numbers themselves. Every measured state carries it,
+ * not just the stale one, because the failure this prevents is general: a count from last Tuesday and a count
+ * from an hour ago are different claims, they were drawn identically, and the row was the only place a reader
+ * would ever look. The scope strip says the same thing per probe, but that is one line above a list of thirteen
+ * and it is not what the eye is on when it reads "279 unreferenced files". */
+const measured = computed<string | undefined>(() => (verdict.measuredAt === undefined ? undefined : `measured ${timeAgo(verdict.measuredAt)}`));
+
+/* WHAT THE LAST RUN MEANS FOR THIS EVIDENCE — two sentences that were one, and had to be split because they are
+ * opposite claims. "We looked again and it has not moved" is a finding; "we have not looked since" is the absence
+ * of one. Both are said out loud rather than left implicit, because the alternative — a chore that silently stops
+ * appearing due after a run — is how a surface loses the owner's trust in the other direction: they fix nothing,
+ * the row goes quiet, and they conclude it was never real. */
+const evidenceNote = computed<string | undefined>(() => {
+    if (verdict.state === `stale`) {
+        return run === undefined
+            ? `This measurement was taken before the last turn against this chore, and nothing has measured since.`
+            : `This measurement was taken before the turn that ran ${timeAgo(run.manifest.createdAt)}, and nothing has measured since.`;
+    }
+    return verdict.settled && run !== undefined
+        ? `Re-measured since the turn that ran ${timeAgo(run.manifest.createdAt)}, and the evidence has not moved.`
+        : undefined;
+});
 
 const liveAgent = computed(() => (run?.running === true ? run.manifest.conversationId : undefined));
 </script>
@@ -97,7 +119,12 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                         {{ repoName(verdict.repo) }}
                     </span>
                 </span>
-                <span class="min-w-0 flex-1 truncate text-xs text-subtle">{{ verdict.headline }}</span>
+                <!-- The age never truncates and the headline always does: a clipped count is still readable as a
+                     count, where "measured 6 d…" is worse than not saying it. -->
+                <span class="flex min-w-0 flex-1 items-baseline gap-2">
+                    <span class="min-w-0 truncate text-xs text-subtle">{{ verdict.headline }}</span>
+                    <span v-if="measured" class="shrink-0 text-2xs text-subtle/70">{{ measured }}</span>
+                </span>
             </span>
             <Icon v-if="liveAgent" name="spinner" spin class="shrink-0 text-subtle" />
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
@@ -120,7 +147,7 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                 <li v-for="line in verdict.detail" :key="line" class="font-mono text-2xs text-content">{{ line }}</li>
             </ul>
 
-            <p v-if="settledNote" class="mt-3 text-2xs text-subtle">{{ settledNote }}</p>
+            <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs text-subtle">{{ evidenceNote }}</p>
 
             <!-- The last run, whatever it concluded. A `clean` outcome is shown as prominently as any other: it is
                  the agent saying the findings did not hold up, and that is a result, not a non-event. -->
@@ -145,6 +172,21 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     @run="startRun"
                     @pick="runModel.choose"
                 />
+                <!-- The one move a stale row has, and the reason it has no "Fix it" beside it: nobody can decide
+                     whether there is work here until something has looked at the tree since the last turn. -->
+                <Button
+                    v-if="verdict.state === `stale`"
+                    size="small"
+                    severity="secondary"
+                    label="Re-measure"
+                    title="Measure this again now — a deep check can take a few minutes"
+                    :disabled="busy"
+                    @click="emit(`remeasure`)"
+                >
+                    <!-- The kit's icon set, through the slot: the underlying Button's own `icon` prop takes a
+                         PrimeIcons class name, so passing a name from our set renders an empty box. -->
+                    <template #icon><Icon name="refresh" /></template>
+                </Button>
                 <Button v-if="liveAgent" size="small" severity="secondary" text label="Watch it" @click="emit(`open`, liveAgent)" />
                 <Button
                     v-if="verdict.state === `due`"

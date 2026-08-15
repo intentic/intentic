@@ -157,6 +157,76 @@ describe(`the ledger debounces; it cannot hide`, () => {
     });
 });
 
+/* The distinction the digest alone cannot draw, and the one whose absence had the panel quoting a six-day-old
+ * dead-code count an hour after the turn that deleted it. An unchanged digest is what a probe that never re-ran
+ * produces, so "the fix did not move the numbers" and "we have not looked since the fix" reached the same branch
+ * and both came out as a confident `due`. */
+describe(`a measurement older than the work is not evidence about the work`, () => {
+    const withAdvisories = report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] });
+    const ledgerEntry = (over: Partial<ChoreLedgerEntry> = {}): ChoreLedgerEntry => ({
+        repo: `app`,
+        chore: `security-advisories`,
+        ranAt: NOW - DAY,
+        runId: `r1`,
+        outcome: `acted`,
+        digest: verdictFor(withAdvisories, `security-advisories`).digest,
+        ...over,
+    });
+
+    // The probe ran a day ago; the turn started an hour ago. Whatever it did, nothing has looked since.
+    test(`a turn that landed after the measurement steps the chore down from due`, () => {
+        const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })] }, `security-advisories`);
+        expect(verdict.state).toBe(`stale`);
+        // The evidence stays on the row — it is what the reader checks the claim against — and the claim comes off.
+        expect(verdict.detail).not.toEqual([]);
+        expect(verdict.settled).toBe(false);
+    });
+
+    // No prompt, so the row cannot offer to spend a second turn on a finding nobody has re-checked; and no badge,
+    // which is what stops the tile lighting for work that is already done.
+    test(`a stale chore offers no turn and never badges`, () => {
+        const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })] }, `security-advisories`);
+        expect(verdict.prompt).toBeUndefined();
+        expect(unseenVerdicts([verdict], {})).toEqual([]);
+    });
+
+    // Re-measuring is the whole cure: the same run, against evidence taken after it, is settled rather than stale.
+    test(`re-measuring after the turn restores the verdict — due, and now genuinely settled`, () => {
+        const remeasured = report({
+            repos: [{ repo: `app`, probes: [{ ...auditProbe([`left-pad`]), ranAt: NOW - 60_000 }], signals: signals() }],
+            ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })],
+        });
+        const verdict = verdictFor(remeasured, `security-advisories`);
+        expect(verdict.state).toBe(`due`);
+        expect(verdict.settled).toBe(true);
+    });
+
+    // The agent's own "these were false positives" is a judgement about the live tree, made after the measurement.
+    // It outranks staleness, or every clean run would be re-opened by the very probe age it was reported against.
+    test(`an agent reporting the findings did not hold up still clears the chore`, () => {
+        const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, outcome: `clean` })] }, `security-advisories`);
+        expect(verdict.state).toBe(`clear`);
+    });
+
+    // A snooze is the owner speaking, and it outranks both.
+    test(`a snooze still wins`, () => {
+        const verdict = verdictFor(
+            { ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, snoozedUntil: NOW + DAY })] },
+            `security-advisories`,
+        );
+        expect(verdict.state).toBe(`snoozed`);
+    });
+
+    // Every measured row carries when it was taken, so no row can pass off a week-old count as this morning's.
+    test(`every measured verdict says when it was measured, and the unmeasurable ones say nothing`, () => {
+        expect(verdictFor(withAdvisories, `security-advisories`).measuredAt).toBe(NOW - DAY);
+        // A survey rests on no measurement — it is decided by the calendar, and has nothing to be out of date.
+        expect(verdictFor(report(), `standardize-patterns`).measuredAt).toBeUndefined();
+        // Nor does a probe that never ran.
+        expect(verdictFor(report(), `security-advisories`).measuredAt).toBeUndefined();
+    });
+});
+
 describe(`surveys are due because time passed, and say so`, () => {
     const surveyLedger = (ranAt: number): ChoreLedgerEntry => ({
         repo: `app`,

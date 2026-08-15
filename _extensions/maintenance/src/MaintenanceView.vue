@@ -38,7 +38,14 @@ import { useRuns } from "./useRuns";
  *
  * Opening the page acknowledges what is on it (attention.ts): the rail's badge means "evidence you have not seen",
  * so seeing it is what clears it. Nothing is marked done, nothing is dismissed — the chores stay exactly as due as
- * they were. */
+ * they were.
+ *
+ * EVERY NUMBER ON THIS PAGE SAYS HOW OLD IT IS, and the page never claims a measurement it knows is out of date.
+ * The deep probes refresh on a weekly TTL, so an hour after a turn deleted the dead code the row was still
+ * quoting the count from six days before it — with a line underneath saying a turn had run, which read as "we
+ * checked and nothing moved". Nothing had checked. The measurement's age now rides on the row itself, and a chore
+ * whose evidence predates its last turn steps down to `stale` (verdict.ts): still listed, still showing what it
+ * found, but no longer due and offering a re-measure rather than a second turn. */
 
 // Bound by the host for a `directory` activation; absent for the rail's workspace-wide tile, which picks its own.
 const { repo: pinned } = defineProps<{ repo?: string }>();
@@ -93,8 +100,13 @@ const scoped = computed(() => (repo.value === undefined ? byRepo.value : byRepo.
  * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
  * exist. It is not hidden either: <RepoScope> counts them in one line and opens to every one of them and why, so
  * "why is there no Docker chore in this repository?" has an answer one click away rather than a support question. */
+/* `stale` is under "Needs attention" alongside due and snoozed, and it has to be. It is the state a chore lands
+ * in the moment a turn finishes on it, so filtering it out would make a chore VANISH from the page exactly when
+ * the owner came back to see what happened to it — the same disappearance the settled note exists to prevent,
+ * arriving through the filter instead. What it needs is a measurement rather than a turn, but it does need one. */
 const shown = (verdict: ChoreVerdict): boolean =>
-    verdict.state !== `not-applicable` && (filter.value === `all` || verdict.state === `due` || verdict.state === `snoozed`);
+    verdict.state !== `not-applicable` &&
+    (filter.value === `all` || verdict.state === `due` || verdict.state === `snoozed` || verdict.state === `stale`);
 
 /* Chore-major within the scope: under "All repositories" the same chore's rows from every repository sit together,
  * which is what makes the repository name on the row the thing being compared. CHORES is already in the book's
@@ -185,6 +197,14 @@ const onRefreshProbe = (id: string): void => {
     void attempt(`refresh that measurement`, () => refreshProbe(at, id));
 };
 
+// Re-measure everything ONE chore rests on, from its own row — the move a stale row offers instead of a turn.
+// The row carries its repository, so this works under "All repositories" where the scope strip's buttons cannot.
+const onRemeasure = (verdict: ChoreVerdict): void => {
+    void attempt(`refresh that measurement`, async () => {
+        await Promise.all(verdict.chore.needs.map((id) => refreshProbe(verdict.repo, id)));
+    });
+};
+
 // `pick` is set only when the reader used the caret beside this chore's button; otherwise the daemon opens the
 // session on the sandbox's agent-run list, which is the ordinary path.
 const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void => {
@@ -211,7 +231,18 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     { label: `Everything`, value: `all`, title: `Every chore in the book, including the clear and the unmeasured` },
                 ]"
             />
-            <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the evidence" :disabled="busy" @click="void refresh()" />
+            <!-- IT RE-READS, IT DOES NOT RE-MEASURE, and it used to say "Refresh · Re-read the evidence" — which
+                 is the button anyone presses after a chore's work lands, and the reason they conclude the page is
+                 broken when the numbers do not move. Measuring again costs a subprocess and minutes, so it stays
+                 a per-chore decision on the row that needs it; this one says what it actually does. -->
+            <PageAction
+                quiet
+                icon="refresh"
+                label="Reload"
+                hint="Re-read the latest results — to measure again, open a chore"
+                :disabled="busy"
+                @click="void refresh()"
+            />
         </template>
 
         <template #strips>
@@ -271,6 +302,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                             :busy="busy"
                             @toggle="expanded = expanded === rowKey(verdict) ? undefined : rowKey(verdict)"
                             @start="(pick) => onStart(verdict, pick)"
+                            @remeasure="onRemeasure(verdict)"
                             @snooze="void attempt(`snooze that chore`, () => snooze(verdict, Date.now() + SNOOZE_MS))"
                             @unsnooze="void attempt(`un-snooze that chore`, () => snooze(verdict, 0))"
                             @open="(conversationId) => api.chat.openSession(conversationId)"

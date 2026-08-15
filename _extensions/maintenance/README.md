@@ -9,7 +9,7 @@ the daemon computed rather than by a model's impression.
 ## Responsibilities
 
 - Assess every chore against the current signals and say which are due.
-- Show the evidence behind a verdict, including for the chores that are clear.
+- Show the evidence behind a verdict, including for the chores that are clear, and say how old that evidence is.
 - Run a chore as an agent turn, and keep the history of what those runs found.
 - Carry a badge for what is due, and let a chore be snoozed without being forgotten.
 
@@ -38,3 +38,9 @@ would mean the first time an owner sees this surface is the first time it has ba
 
 - A cleared chore still shows its evidence. "Nothing is due" is a claim, and a claim you cannot inspect is one you
   cannot trust.
+- Every row says how old its measurement is, and a chore whose evidence predates its last turn is `stale` rather
+  than due — the probes refresh on a daily-to-weekly TTL, so an hour after a run the numbers on the row describe a
+  tree that no longer exists. A stale row keeps its evidence, drops the claim, and offers a re-measure instead of a
+  second turn.
+- The page's own Refresh **re-reads**, it does not re-measure. Measuring again costs a subprocess and minutes, so
+  it stays a decision made on the row that needs it.

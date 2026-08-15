@@ -40,7 +40,7 @@ export interface CapabilityScope {
 </script>
 
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact } from "@intentic/ui";
+import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact, useRailMemory } from "@intentic/ui";
 import { computed } from "vue";
 
 const { pinned, categories } = defineProps<{
@@ -50,6 +50,10 @@ const { pinned, categories } = defineProps<{
 }>();
 
 const selected = defineModel<string>({ required: true });
+
+// Which slice you were last browsing, kept across visits — the pinned ones included, since "Connected" is as
+// much a place somebody works from as any category is.
+useRailMemory(`capabilities.category`, selected, () => [...pinned, ...categories].map((scope) => scope.key));
 
 // One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
 const groups = computed<NavGroup<CapabilityScope>[]>(() => [{ key: `categories`, items: [...categories] }]);

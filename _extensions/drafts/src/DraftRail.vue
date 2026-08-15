@@ -29,7 +29,7 @@ export interface DraftScope {
 </script>
 
 <script setup lang="ts">
-import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice } from "@intentic/extension-ui";
+import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice, useRailMemory } from "@intentic/extension-ui";
 import { computed } from "vue";
 
 const { all, platforms } = defineProps<{
@@ -39,6 +39,10 @@ const { all, platforms } = defineProps<{
 }>();
 
 const selected = defineModel<string>({ required: true });
+
+// Which platform's queue you were last working through, kept across visits. Validated against the platforms
+// actually on offer, so a connector that has since been removed cannot open the page on an empty slice.
+useRailMemory(`drafts.platform`, selected, () => platforms.map((scope) => scope.key));
 
 // One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
 const groups = computed<NavGroup<DraftScope>[]>(() => [{ key: `platforms`, items: [...platforms] }]);

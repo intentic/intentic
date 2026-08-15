@@ -154,6 +154,11 @@ export {
     /* "Is my own element too narrow for this layout" — the question every extension view actually means, since it
      * renders into a pane the reader can drag to half its width, not into the window. */
     useNarrow,
+    /* Where the reader left a narrowing rail. Ships for the reason <SplitView> did: three extension views grew
+     * the same index column, all three keep the pick in the URL, and all three lost it the moment you clicked the
+     * tile again — because a tile opens a view at its bare address. Solving that per extension would be three
+     * copies of one rule about what a link means versus what a memory is allowed to guess. */
+    useRailMemory,
     useTheme,
 } from "@intentic/ui";
 // Also reachable as `@intentic/extension-ui/format` — see the note there for why an extension's pure logic

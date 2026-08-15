@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerGroup, type PickerOptions, Row, useCompact } from "@intentic/extension-ui";
+import { type NavGroup, NavRail, Picker, type PickerGroup, type PickerOptions, Row, useCompact, useRailMemory } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { type RepoStanding, standingNote } from "./repoStandings";
 
@@ -27,6 +27,10 @@ import { type RepoStanding, standingNote } from "./repoStandings";
 const { standings } = defineProps<{ standings: readonly RepoStanding[] }>();
 // undefined = every repository. Kept undefined rather than a sentinel so the URL simply omits the parameter.
 const selected = defineModel<string | undefined>();
+
+// Which repository you were last watching, kept across visits. "All" is remembered as readily as one of them:
+// somebody who deliberately widened the board back out should find it wide when they come back.
+useRailMemory(`pipelines.repo`, selected, () => standings.map((standing) => standing.repo.repo));
 
 const failing = computed(() => standings.reduce((sum, standing) => sum + standing.failing, 0));
 

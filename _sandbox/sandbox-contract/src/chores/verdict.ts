@@ -6,7 +6,7 @@ import { probeSpec } from "./probes.js";
  * allowed to. Both the Maintenance panel and its rail badge run this function over the same report, so the number
  * on the tile and the reason in the panel are the same computation and cannot drift apart.
  *
- * Five states, and the distinctions between them are the whole design:
+ * Six states, and the distinctions between them are the whole design:
  *
  *   not-applicable  this chore is not a QUESTION worth asking of this repository — there is no Dockerfile to
  *                slim, no pipeline to tighten, no documentation to re-read. Dropped from the panel entirely
@@ -18,23 +18,31 @@ import { probeSpec } from "./probes.js";
  *   clear        we measured, and there is nothing to do. This is the common state, and it has to be visibly
  *                reachable or the panel is just a list of complaints.
  *   snoozed      the owner said "not now". Still listed, still showing its evidence, silent until it lapses.
+ *   stale        we measured, then work landed, and we have not measured since. The evidence is still shown; the
+ *                CLAIM comes off it, because it describes a tree that no longer exists.
  *   due          there is something to do.
  *
  * The first three are all ways of saying "no", and keeping them apart is what makes the surface trustworthy: they
  * mean we cannot ask, we did not measure, and we measured and found nothing — three different claims, and only
  * the last one is reassurance.
  *
- * And one flag that is not a state: `settled`. A due chore whose evidence is UNCHANGED since a turn was already
- * spent on it stays due — because it is — but must never light the rail again. This is what stops the surface
- * repeating itself while a fix sits in review, and it is why the ledger stores a digest rather than a timestamp:
- * "ran 3 days ago" cannot tell you whether it ran against THIS.
+ * And one flag that is not a state: `settled`. A due chore that has been RE-MEASURED since a turn was spent on
+ * it, and whose evidence did not move, stays due — because it is — but must never light the rail again. This is
+ * what stops the surface repeating itself while a fix sits in review, and it is why the ledger stores a digest
+ * rather than a timestamp: "ran 3 days ago" cannot tell you whether it ran against THIS.
+ *
+ * `stale` is the other half of that sentence, and it exists because the digest alone cannot tell the two apart.
+ * A probe that never re-ran produces an unchanged digest for free, so "the fix did not move the numbers" and "we
+ * have not looked since the fix" arrived at this function looking identical — and the panel showed the second as
+ * the first, quoting a week-old count an hour after the work that invalidated it. Comparing the run's time to the
+ * MEASUREMENT's time is what separates them, and it is a comparison of two numbers the report already carries.
  *
  * Nothing here can hide a problem. Snoozing and settling change whether the rail SPEAKS; the panel still shows
  * the chore, its evidence and its state. The one thing that removes a row entirely is `not-applicable`, and that
  * is not hiding — it is the absence of a subject, counted in the panel's scope strip and expandable to the reason.
  * A maintenance surface you can quietly bury findings in is a maintenance surface nobody trusts. */
 
-export type ChoreState = "due" | "clear" | "snoozed" | "unavailable" | "not-applicable";
+export type ChoreState = "due" | "clear" | "snoozed" | "stale" | "unavailable" | "not-applicable";
 
 export interface ChoreVerdict {
     readonly chore: Chore;
@@ -46,14 +54,29 @@ export interface ChoreVerdict {
     readonly detail: readonly string[];
     // The evidence identity. Empty for `unavailable`, where there is no evidence to identify.
     readonly digest: string;
+    /* WHEN THE EVIDENCE WAS TAKEN — the fact every row shows beside its numbers, and the one whose absence let a
+     * measurement from last Tuesday read as this morning's. Undefined when the verdict rests on no measurement at
+     * all: a survey is decided by the calendar, and an unavailable chore has nothing to be out of date. */
+    readonly measuredAt: number | undefined;
     // The turn. Present only when there is something to do — a "start an agent" button on a clear chore is an
     // invitation to spend money proving that nothing is wrong.
     readonly prompt: string | undefined;
     readonly lastRun: ChoreLedgerEntry | undefined;
-    // A turn has already been spent on exactly this evidence, and the chore's cadence has not lapsed since. Still
-    // due, still shown, never badged.
+    // A turn has been spent on this chore, the evidence has been re-measured since and did not move, and the
+    // chore's cadence has not lapsed. Still due, still shown, never badged.
     readonly settled: boolean;
 }
+
+/* HOW OLD THE EVIDENCE IS: the OLDEST of the measurements a verdict rests on, because a claim is only as current
+ * as the least current thing it was computed from. Undefined when it rests on none — a survey has no measurement,
+ * and an unavailable chore's probe did not produce one. */
+const measurementAge = (needs: readonly ProbeId[], probes: ReadonlyMap<ProbeId, ProbeResult>): number | undefined => {
+    const taken = needs.flatMap((id) => {
+        const probe = probes.get(id);
+        return probe?.state === `ok` ? [probe.ranAt] : [];
+    });
+    return taken.length === 0 ? undefined : Math.min(...taken);
+};
 
 // A survey that is clear is clear because it was READ recently, and saying so is the only way its row means
 // anything — "nothing to do" under a chore that has no measurement would be a claim about the code rather than
@@ -91,17 +114,28 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
      * groups these rows BY it — is the only place it will ever be read. */
     const inapplicable = chore.applies?.(context.signals);
     if (inapplicable !== undefined) {
-        return { ...base, state: `not-applicable`, severity: `info`, headline: inapplicable, detail: [], digest: `` };
+        return { ...base, state: `not-applicable`, severity: `info`, headline: inapplicable, detail: [], digest: ``, measuredAt: undefined };
     }
 
     const unmeasured = unmeasuredDetail(chore.needs, context.probes);
     if (unmeasured.length > 0) {
-        return { ...base, state: `unavailable`, severity: `info`, headline: `Not measured`, detail: unmeasured, digest: `` };
+        return { ...base, state: `unavailable`, severity: `info`, headline: `Not measured`, detail: unmeasured, digest: ``, measuredAt: undefined };
     }
+
+    // Every state below this line rests on a measurement that ran, so all of them carry when it was taken.
+    const measuredAt = measurementAge(chore.needs, context.probes);
 
     const finding = chore.assess(context);
     if (finding === undefined) {
-        return { ...base, state: `clear`, severity: `info`, headline: clearHeadline(chore, ledger, context.nowMs), detail: [], digest: `` };
+        return {
+            ...base,
+            state: `clear`,
+            severity: `info`,
+            headline: clearHeadline(chore, ledger, context.nowMs),
+            detail: [],
+            digest: ``,
+            measuredAt,
+        };
     }
 
     /* Has the last run's settlement lapsed? A cadence of 0 means "this is decided by evidence alone" — an advisory
@@ -123,13 +157,23 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
             headline: clearHeadline(chore, ledger, context.nowMs),
             detail: finding.detail,
             digest: finding.digest,
+            measuredAt,
         };
     }
 
     const prompt = chorePrompt(chore, finding, context.repo);
 
     if (ledger?.snoozedUntil !== undefined && ledger.snoozedUntil > context.nowMs) {
-        return { ...base, state: `snoozed`, severity: `info`, headline: finding.headline, detail: finding.detail, digest: finding.digest, prompt };
+        return {
+            ...base,
+            state: `snoozed`,
+            severity: `info`,
+            headline: finding.headline,
+            detail: finding.detail,
+            digest: finding.digest,
+            measuredAt,
+            prompt,
+        };
     }
 
     /* The agent looked at exactly this evidence and reported that there was nothing in it — knip's findings were
@@ -144,7 +188,19 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
             headline: `Checked — the findings did not hold up`,
             detail: finding.detail,
             digest: finding.digest,
+            measuredAt,
         };
+    }
+
+    /* THE MEASUREMENT IS OLDER THAN THE WORK. A turn landed after the last time we looked, so the evidence below
+     * describes a tree that no longer exists — an hour after a run deleted the dead code, the row was still
+     * quoting the count from six days before it. `sameEvidence` cannot catch this: an unchanged digest is exactly
+     * what a probe that never re-ran produces, so the flag says "settled" at its most confident when it knows
+     * least. The chore steps down instead — evidence stays on the row, the CLAIM comes off it — and carries no
+     * prompt, because the honest next move is to measure again rather than to spend a second turn on a finding
+     * nobody has re-checked. It cannot badge either, which is what stops the tile lighting for work already done. */
+    if (ledger !== undefined && measuredAt !== undefined && ledger.ranAt > measuredAt) {
+        return { ...base, state: `stale`, severity: `info`, headline: finding.headline, detail: finding.detail, digest: finding.digest, measuredAt };
     }
 
     return {
@@ -154,6 +210,7 @@ export const assessChore = (chore: Chore, context: ChoreContext, ledger: ChoreLe
         headline: finding.headline,
         detail: finding.detail,
         digest: finding.digest,
+        measuredAt,
         prompt,
         settled: sameEvidence,
     };
@@ -178,8 +235,9 @@ export const assessReport = (report: ChoresReport, nowMs: number): ChoreVerdict[
  * never "here is a statistic" — the extension API states that bar and this is the function that holds this
  * surface to it. Three filters, and every one of them removes a case that would otherwise light the tile forever:
  *
- *   state === due   the obvious one.
- *   !settled        a turn has already been spent on this exact evidence.
+ *   state === due   the obvious one — and it is also what keeps `stale` silent, since a measurement taken before
+ *                   the last turn is not a fact anyone should be interrupted about.
+ *   !settled        a turn has been spent on this chore and the re-measured evidence did not move.
  *   unseen digest   the owner has already LOOKED at this evidence in the panel. Acknowledgement is per digest
  *                   rather than per chore, so acknowledging today's finding does not also swallow tomorrow's.
  *

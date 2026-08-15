@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact } from "@intentic/extension-ui";
+import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact, useRailMemory } from "@intentic/extension-ui";
 import { repoName } from "@intentic/sandbox-contract/chores";
 import { computed } from "vue";
 
@@ -22,6 +22,10 @@ import { computed } from "vue";
 const { repos } = defineProps<{ repos: readonly { repo: string; due: number; carrying: number }[] }>();
 // undefined = every repository. Kept undefined rather than a sentinel so the URL simply omits the parameter.
 const selected = defineModel<string | undefined>();
+
+// Which repository you were last reading about, kept across visits — the rail is where this page is steered
+// from, and re-picking the same row on arrival was the cost of a URL that starts empty every time.
+useRailMemory(`maintenance.repo`, selected, () => repos.map((entry) => entry.repo));
 
 const total = computed(() => repos.reduce((sum, entry) => sum + entry.due, 0));
 const carrying = computed(() => repos.reduce((sum, entry) => sum + entry.carrying, 0));
