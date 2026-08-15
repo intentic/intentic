@@ -249,12 +249,8 @@ const toggleDetail = (id: string): void => {
         <PageHeader title="Automations" description="Wake your agent on a schedule, a webhook, a live provider event, or your fleet's own work.">
             <template #info>
                 <InfoHint label="How an automation fires">
-                    <span class="block text-sm font-medium text-content">Trigger → guard → wake</span>
+                    <span class="block text-sm font-medium text-content">Trigger → wake</span>
                     <span class="mt-1 block text-xs text-muted">
-                        An optional <b>guard</b> command runs in your workspace first: exit 0 wakes the agent, anything else skips that run and is
-                        recorded as <b>skipped</b>.
-                    </span>
-                    <span class="mt-2 block text-xs text-muted">
                         Every wake is a fresh agent session on your own hardware; its transcript appears with your chats.
                     </span>
                 </InfoHint>

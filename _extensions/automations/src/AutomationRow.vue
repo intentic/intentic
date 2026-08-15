@@ -197,7 +197,16 @@ const doorbell = computed(() => {
                     <Icon :name="TRIGGER_ICON[trigger.kind]" class="text-2xs" />
                     {{ triggerLabel }}
                 </span>
-                <Icon v-if="automation.guard" name="shield" v-tooltip.top="`Guarded — a check runs first`" class="shrink-0 text-2xs text-subtle" />
+                <!-- Chores carry their own check (knip clean, no advisories, duplication under the floor) and
+                     wake only when it finds something. There is no longer a field for one — the icon says the
+                     row behaves that way, which is what explains its "skipped" runs; the command itself was a
+                     line of shell in a list of automations, read by nobody. -->
+                <Icon
+                    v-if="automation.guard"
+                    name="shield"
+                    v-tooltip.top="`Wakes only when its own check finds something`"
+                    class="shrink-0 text-2xs text-subtle"
+                />
                 <Icon
                     v-if="automation.requireApproval"
                     name="lock"
@@ -315,13 +324,6 @@ const doorbell = computed(() => {
 
             <template v-else>
                 <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">{{ automation.prompt }}</p>
-
-                <div v-if="automation.guard" class="flex items-start gap-1.5">
-                    <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                    <code class="line-clamp-2 min-w-0 font-mono text-2xs break-all text-subtle" :title="automation.guard">{{
-                        automation.guard
-                    }}</code>
-                </div>
 
                 <div v-if="trigger.kind === `event`" class="flex items-center gap-1.5">
                     <Icon name="link" class="shrink-0 text-2xs text-subtle" />

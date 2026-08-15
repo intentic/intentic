@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { personaBounds, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
-import { cmp, formatDateTime, Icon, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
+import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { cmp, formatDateTime, Icon, Picker, type PickerOption, ProseField, ResizeSeam, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
@@ -52,27 +52,34 @@ const {
 /* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Runs as" picker below. Read here rather than passed in because
  * it is the same list for every automation and changes only when the owner edits it.
  *
- * Each option also carries whether its accounts are actually signed in, because the honest failure this picker
- * has to make visible is a card that exists and cannot act — the ordinary state of a workspace someone has just
- * cloned, where every persona is one login short of working — and how bounded the card is, because picking one
- * now decides what the wake may DO and not only whose name is on it. */
+ * NAMES ONLY. This picker used to badge every card with whether its accounts were signed in and print its
+ * bounds underneath, which made a perfectly good persona look broken on the one surface where you are choosing
+ * one: a card with no connected account still scopes the toolbox and the folders, and where it can post is a
+ * fact the Personas page already tells. A picker's job here is to name the choices. */
 const personaList = useQuery({
     queryKey: host().sandbox.key(`personas`),
     queryFn: () => host().sandbox.rpc.personas.list(),
     enabled: computed(() => host().sandbox.reachable()),
 });
 const personas = computed(() =>
-    (personaList.data.value?.personas ?? []).map((persona) => ({
-        id: persona.id,
-        label: persona.label ?? persona.id,
-        // Signed in enough to act at all. A card naming three accounts with one connected is still usable —
-        // the turn simply reaches the one — so this marks only the persona that can reach nothing whatsoever.
-        ready: persona.capabilities.some((capability) => (personaList.data.value?.connected ?? []).includes(capability)),
-        // From the contract, so this sentence and the badge on the Personas page describe a card the same way.
-        bounds: `${personaBounds(persona)}${persona.workspace?.folders === undefined ? `` : `, ${persona.workspace.folders.join(`, `)} only`}.`,
-    })),
+    (personaList.data.value?.personas ?? [])
+        .map((persona) => ({ value: persona.id, label: persona.label ?? persona.id }))
+        // Ordered, because a picker whose rows arrive in the file's order is a list you have to read twice.
+        .toSorted((a, b) => a.label.localeCompare(b.label)),
 );
-const actsAsLabel = computed(() => personas.value.find((persona) => persona.id === form.actsAs));
+
+/* The rows, blank first. Blank means something different on a Doorbell — a stranger writes those prompts, so
+ * leaving it alone is filled in with the read-only front desk on save — and the row says which it is.
+ *
+ * A PIN WHOSE CARD IS GONE still has to appear, or the trigger renders empty and reads as "nobody", which is
+ * the one other thing it could mean and behaves very differently: that one gets nothing at all. */
+const personaOptions = computed<readonly PickerOption[]>(() => [
+    isDoorbell.value ? { value: ``, label: `Front desk`, description: `read-only` } : { value: ``, label: `Nobody`, description: `no accounts` },
+    ...personas.value,
+    ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
+        ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, disabled: true }]
+        : []),
+]);
 
 // A CI trigger's delivery path — whether this will fire instantly, be polled, or never fire at all. Only
 // fetched while a CI trigger is on screen. See useCiDelivery.
@@ -158,8 +165,11 @@ const WORKSPACE_EVENTS = [
     { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
 ] as const;
 
-// Guard/agent/approval fold away by default — revealed on demand or when a recipe prefilled a guard.
-const advancedOpen = ref(form.guard !== ``);
+// Model/persona/approval fold away by default, and open by themselves on an automation that has any of them
+// set — a pin you cannot see is a pin you will not remember making.
+const advancedOpen = ref(
+    form.model !== `` || form.account !== `` || form.actsAs !== `` || form.allowedTools !== `` || form.requireApproval || form.holdForSeconds > 0,
+);
 
 /* WHAT THE WAKE RUNS ON — provider, account, harness and model, as one chip opening the app's own picker.
  *
@@ -185,6 +195,9 @@ const runsOn = computed(() =>
         harness: form.harness,
     }),
 );
+// ONE LINE, the way the workflow step's chip reads: model · account. The account used to sit outside the
+// control as "on <name>", which put a second sentence beside a control that was already saying the thing.
+const runsOnLabel = computed(() => [runsOn.value.label, runsOn.value.accountLabel].filter((part) => part !== undefined && part !== ``).join(` · `));
 const pinned = computed(() => form.model !== `` || form.account !== ``);
 
 // The element the shell hangs its picker off — a popover on desktop, a sheet on mobile; the host decides.
@@ -390,10 +403,7 @@ const setProvider = (provider: string): void => {
                                 <Icon name="exclamation-triangle" class="text-2xs" />
                                 {{ originsError }}
                             </span>
-                            <p v-else class="text-2xs text-subtle">
-                                One per line. Only these sites may embed the chat — scheme and host, no path. www and the bare domain are different
-                                origins.
-                            </p>
+                            <p v-else class="text-2xs text-subtle">One per line, scheme and host only. www and the bare domain count separately.</p>
                         </label>
                         <div class="ui-field">
                             <span class="ui-field-label">Who can chat</span>
@@ -418,10 +428,7 @@ const setProvider = (provider: string): void => {
                                 class="font-mono"
                                 :class="cmp.input()"
                             />
-                            <p class="text-2xs text-subtle">
-                                Your site's own OAuth client — Google only issues a token to an origin you've authorized on it, so it can't be ours.
-                                Add each allowed site above as an authorized JavaScript origin.
-                            </p>
+                            <p class="text-2xs text-subtle">Your site's own OAuth client. Add each allowed site to it as an authorized origin.</p>
                         </label>
                         <div class="ui-field">
                             <span class="ui-field-label">Bot check</span>
@@ -438,14 +445,9 @@ const setProvider = (provider: string): void => {
                                 </button>
                             </div>
                             <p class="text-2xs text-subtle">
-                                <template v-if="form.antiBot === 'pow'">
-                                    Costs each new visitor about a second of their browser's time, and costs a bot the same per conversation. No
-                                    accounts, no keys.
-                                </template>
-                                <template v-else-if="form.antiBot === 'turnstile'"
-                                    >Invisible for most visitors. Needs a Cloudflare Turnstile widget.</template
-                                >
-                                <template v-else>The allowed-sites list and the rate limit are then the only gate.</template>
+                                <template v-if="form.antiBot === 'pow'">About a second of each visitor's browser time. No keys.</template>
+                                <template v-else-if="form.antiBot === 'turnstile'">Invisible for most visitors. Needs a Cloudflare widget.</template>
+                                <template v-else>Only the allowed sites and the daily limit are left.</template>
                             </p>
                         </div>
                         <template v-if="form.antiBot === 'turnstile'">
@@ -473,8 +475,7 @@ const setProvider = (provider: string): void => {
                                 :class="cmp.input()"
                             />
                             <p class="text-2xs text-subtle">
-                                Every message runs an agent turn on your account. Left blank, a Doorbell stops answering after
-                                {{ WEBCHAT_DAILY_MAX_DEFAULT }} messages a day and resumes the next day.
+                                Each message runs an agent turn on your account. Blank means {{ WEBCHAT_DAILY_MAX_DEFAULT }} a day.
                             </p>
                         </label>
                     </template>
@@ -570,8 +571,7 @@ const setProvider = (provider: string): void => {
                     Wakes when an external system POSTs its webhook URL — shown after you create it.
                 </p>
                 <p v-else-if="isDoorbell" class="text-xs text-muted">
-                    Wakes when a visitor writes in the chat widget on your site. Each visitor's messages continue one conversation you can watch live
-                    and take over. The agent answers with a read-only toolbox — it can look things up, not change them.
+                    Wakes when a visitor writes in the chat widget on your site — one conversation each, live for you to take over.
                 </p>
                 <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider
              webhook, or by polling when that webhook could not be registered. Which of the two — or neither —
@@ -586,9 +586,7 @@ const setProvider = (provider: string): void => {
                         </span>
                     </p>
                 </template>
-                <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
-                    Fires instantly over {{ listenerSource.label }}'s live connection when the selected events happen — "Any" wakes on every kind.
-                </p>
+                <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">Fires the moment {{ listenerSource.label }} sends one of these.</p>
             </div>
 
             <div class="flex min-w-0 flex-col gap-3 @3xl:border-l @3xl:border-line @3xl:pl-5">
@@ -605,7 +603,7 @@ const setProvider = (provider: string): void => {
                         Prompt
                         <span v-if="recipeNote" class="ml-1 text-2xs font-normal text-subtle">· starter from {{ recipeNote }}</span>
                         <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="ml-1 text-2xs font-normal text-subtle">
-                            · {{ listenerSource.label }} starter — edit it, or leave it and it follows the source
+                            · {{ listenerSource.label }} starter
                         </span>
                     </span>
                     <!-- IT IS A WRITING SURFACE, not a form control. What goes in it is the longest text on
@@ -681,9 +679,17 @@ const setProvider = (provider: string): void => {
              It lived at the foot of the "Then" column, and being there made it the one control that could
              unbalance the layout by being used: opening it grew that column by 400px and left the trigger
              column beside it ending in a void — the exact defect the two panes were rebuilt to remove, only
-             mirrored. It is also simply the wrong half. A guard decides whether a wake happens at all, and the
-             model chip is what the wake RUNS ON; neither is "what it wakes with", and neither changes when the
-             trigger does.
+             mirrored. It is also simply the wrong half: the model chip is what the wake RUNS ON, which is not
+             "what it wakes with", and it does not change when the trigger does.
+
+             FOUR CONTROLS AND ALMOST NO PROSE, where there were four controls and eleven paragraphs. Every one
+             of those paragraphs was true, and together they turned a settings fold into a page to read: the
+             guard's shell contract, two notes on what a blank model and a blank account resolve to at wake
+             time, a persona's bounds, a warning that the persona was not signed in, a warning that approval and
+             hold conflict. What replaced them: the guard is gone from this form entirely, defaults are the
+             empty state of their own control, the conflict is enforced by disabling the field it beats, and the
+             only sentences left are the two where saving does something the control does not show.
+
              `mt-2` and no rule: at the container's own gap the collapsed line sat 18px under "Next runs" and
              read as the last field of the trigger column. A border would separate it, but the footer above the
              buttons already draws one, and two rules forty pixels apart is a louder answer than the question. -->
@@ -696,125 +702,60 @@ const setProvider = (provider: string): void => {
             >
                 <Icon class="text-2xs" :name="advancedOpen ? 'chevron-down' : 'chevron-right'" />
                 <span>Advanced</span>
-                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, model, approval</span>
+                <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· model, persona, approval</span>
             </button>
             <template v-if="advancedOpen">
-                <label class="ui-field">
-                    <span class="ui-field-label">Guard command (optional)</span>
-                    <input v-model="form.guard" placeholder="test -s .intentic/queue.json" class="font-mono" :class="cmp.input()" />
-                    <p class="text-xs text-muted">
-                        <template v-if="form.kind === 'event'">
-                            Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the agent,
-                            anything else skips that run.
-                        </template>
-                        <template v-else-if="form.kind === 'listener'">
-                            Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0
-                            wakes the agent, anything else skips that run.
-                        </template>
-                        <template v-else>Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template>
-                    </p>
-                </label>
-                <!-- WHAT IT RUNS ON — one chip over the app's own picker, where four rows of chips used to be.
-                     The chip states the model, and beside it the account, because those are the two facts that
-                     decide whether a 6am wake gets an answer; the harness and the provider are inside the pick
-                     rather than beside it, since choosing "Claude Opus 5" has already answered both. -->
-                <div class="ui-field">
-                    <span class="ui-field-label">Runs on</span>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button
-                            ref="chip"
-                            type="button"
-                            class="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-content transition-colors hover:border-line-strong"
-                            :aria-label="`Provider, account and model for this automation: ${runsOn.label}`"
-                            @click="choose"
-                        >
-                            <Icon name="sparkles" class="shrink-0 text-subtle" />
-                            <span class="max-w-64 truncate">{{ runsOn.label }}</span>
-                            <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-                        </button>
-                        <!-- The pinned account, named by the shell (its sign-in identity — the label is "Claude"
-                             on an account nobody renamed, which says nothing when three are connected).
-                             UNNAMED IS SILENT, not a warning: a pin the shell cannot name is either a credential
-                             disconnected since, or an account list that has not been read yet, and those are the
-                             same absence. Guessing the first is how a sandbox that is merely still starting up
-                             tells you every automation is broken — a claim the UI then has to take back. -->
-                        <span v-if="runsOn.accountLabel" class="min-w-0 truncate text-xs text-muted">on {{ runsOn.accountLabel }}</span>
-                        <button
-                            v-if="pinned"
-                            type="button"
-                            :class="cmp.linkButton(`ml-auto text-2xs text-muted hover:text-content`)"
-                            @click="useDefaults"
-                        >
-                            Use defaults
-                        </button>
+                <!-- TWO PICKERS, ONE ROW, matching triggers. They are the same KIND of question — which model,
+                     which persona — and standing them side by side is also what keeps them from being read as
+                     one: "Runs on" is which subscription pays for the wake, "Runs as" is who it is when it
+                     reaches outside, and a stacked pair invited exactly the mix-up the persona layer exists to
+                     prevent. They stack again under 32rem, where side-by-side would truncate both. -->
+                <div class="grid gap-3 @xl:grid-cols-2">
+                    <!-- WHAT IT RUNS ON — one trigger over the app's own picker, where four rows of chips used
+                         to be. It names model · account, because those are the two facts that decide whether a
+                         6am wake gets an answer; the harness and the provider are inside the pick rather than
+                         beside it, since choosing "Claude Opus 5" has already answered both. A blank model or
+                         account is the DEFAULT, which is what the unpinned label says and no longer what two
+                         paragraphs underneath explain; × clears back to it, and only exists once there is a pin. -->
+                    <div class="ui-field min-w-0">
+                        <span class="ui-field-label">Runs on</span>
+                        <div class="flex min-w-0 items-center gap-1.5">
+                            <button
+                                ref="chip"
+                                type="button"
+                                class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-left text-sm text-content transition-colors hover:border-line-strong"
+                                :aria-label="`Provider, account and model for this automation: ${runsOnLabel}`"
+                                @click="choose"
+                            >
+                                <Icon name="sparkles" class="shrink-0 text-subtle" />
+                                <span class="min-w-0 flex-1 truncate">{{ runsOnLabel }}</span>
+                                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+                            </button>
+                            <button
+                                v-if="pinned"
+                                type="button"
+                                v-tooltip.top="`Back to the default model and account`"
+                                :class="cmp.iconButton()"
+                                aria-label="Back to the default model and account"
+                                @click="useDefaults"
+                            >
+                                <Icon name="times" />
+                            </button>
+                        </div>
                     </div>
-                    <p v-if="form.account === ``" class="text-xs text-muted">
-                        On the default account this runs on whichever comes first — so it starts failing when that one runs out of headroom or its
-                        plan is switched off. Pin one to keep this automation on an account you know can answer.
-                    </p>
-                    <p v-if="form.model === ``" class="text-xs text-muted">
-                        On the default model the provider picks one at each wake, which is what keeps this working after a model is retired.
-                    </p>
+                    <!-- RUNS AS — the persona this wake wears: whose accounts it may speak through, what it may
+                         do, and where in the workspace it works, in one choice. The app's own picker rather than
+                         a native <select>, so it matches every other choice in the product. -->
+                    <div class="ui-field min-w-0">
+                        <span class="ui-field-label">Runs as</span>
+                        <Picker v-model="form.actsAs" :options="personaOptions" aria-label="Persona this automation runs as" class="w-full" />
+                    </div>
                 </div>
-                <!-- RUNS AS — the persona this wake wears, which is now one choice covering three things: whose
-                     accounts it may speak through, what it may do, and where in the workspace it works. Kept
-                     deliberately apart from "Runs on" just above it, because the two read almost the same and
-                     mean opposite things: "Runs on" is which subscription PAYS for the wake. Sharing a row would
-                     invite exactly the mix-up the persona layer exists to prevent.
-
-                     Blank is the strict end of this control for accounts and the permissive end for tools, and
-                     the note under it says both — that asymmetry is the product's own decision (an unrepeatable
-                     post is worth defaulting to nothing for; an over-powered turn in a disposable container is
-                     not) and a picker that implied otherwise either way would be lying. -->
-                <div class="ui-field">
-                    <label class="ui-field-label" for="automation-acts-as">Runs as</label>
-                    <select id="automation-acts-as" v-model="form.actsAs" :class="cmp.input()">
-                        <!-- Blank means something different on a Doorbell, and the option has to say so: a
-                             stranger writes the prompt, so leaving this alone is filled in with the read-only
-                             front desk on save rather than left unbounded. -->
-                        <option v-if="isDoorbell" value="">Front desk — reads the workspace, speaks as nobody</option>
-                        <option v-else value="">Nobody — no accounts, and every tool</option>
-                        <option v-for="persona in personas" :key="persona.id" :value="persona.id">
-                            {{ persona.label }}{{ persona.ready ? `` : ` (not signed in yet)` }}
-                        </option>
-                        <!-- A pin whose card is gone still has to be VISIBLE in the control, or the select
-                             renders blank and reads as "nobody" — which is the one other thing it could
-                             mean, and the two behave very differently: this one gets NOTHING at all. -->
-                        <option v-if="form.actsAs !== `` && actsAsLabel === undefined" :value="form.actsAs" disabled>
-                            {{ form.actsAs }} (no longer exists)
-                        </option>
-                    </select>
-                    <!-- The states this picker can be in, most specific first. The Doorbell case comes first
-                         because it is the one where blank is not "unbounded" — the note below it would otherwise
-                         promise the opposite of what saving does. The orphan case is third-from-last rather than
-                         folded into "not signed in": a pin to a persona that no longer exists is read by the turn
-                         as no accounts AND no tools, and telling someone to go finish a login for a card that
-                         isn't there would send them looking for something they deleted. -->
-                    <p v-if="isDoorbell && form.actsAs === ``" class="text-xs text-muted">
-                        Strangers write these prompts, so this chat is answered by a front desk: it reads the workspace to answer questions and can do
-                        nothing else — no accounts, no commands, no edits. Saving adds it to your personas, where you can widen it.
-                    </p>
-                    <p v-else-if="personas.length === 0" class="text-xs text-muted">
-                        You haven't set up any personas yet, so this wake can do anything and speak as nobody.
-                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">Set one up</button>
-                    </p>
-                    <p v-else-if="form.actsAs === ``" class="text-xs text-muted">
-                        This wake reaches none of your connected accounts — it can work but not post, reply or send as anyone. It does get the full
-                        toolbox: pick a persona to bound what it may touch.
-                    </p>
-                    <p v-else-if="actsAsLabel === undefined" class="text-xs text-warning">
-                        This is pinned to a persona that no longer exists, so it gets no accounts and no tools at all. Pick another one.
-                    </p>
-                    <p v-else-if="!actsAsLabel.ready" class="text-xs text-warning">
-                        {{ actsAsLabel.label }} isn't signed in yet, so this wake still can't post. Finish its login under Capabilities first.
-                    </p>
-                    <p v-else class="text-xs text-muted">
-                        {{ actsAsLabel.bounds }}
-                        <button type="button" :class="cmp.linkButton('inline')" @click="host().navigate(`/sandbox/personas`)">
-                            Edit this persona
-                        </button>
-                    </p>
-                </div>
+                <!-- The one sentence saving needs: on a Doorbell, leaving this blank does not mean "unbounded",
+                     it WRITES a read-only front-desk persona — a thing no control on screen shows. -->
+                <p v-if="isDoorbell && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
+                    Strangers write these prompts, so saving adds a read-only front desk to your personas.
+                </p>
 
                 <!-- NARROW THIS FURTHER — raw tool names, folded away, and deliberately not how anyone is
                      expected to answer this question. The persona above is the reusable answer; this is for the
@@ -829,20 +770,17 @@ const setProvider = (provider: string): void => {
                             placeholder="Read, Grep, Glob"
                             aria-label="Tool names this job may call"
                         />
-                        <p class="text-xs text-subtle">
-                            Comma-separated tool names. Leave empty to use everything the persona allows — anything named here is narrowed on top of
-                            it, never added back.
-                        </p>
+                        <p class="text-2xs text-subtle">Tool names, comma-separated. Empty leaves the persona's own list alone.</p>
                     </div>
                 </details>
                 <label class="flex items-center gap-2 text-sm text-content">
                     <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />
                     Require my approval before it runs
                 </label>
-                <p v-if="form.requireApproval" class="-mt-1 text-2xs text-subtle">
-                    Each time this fires, the agent waits — you approve or reject it under "Pending approvals" before it acts.
-                </p>
-                <label class="flex items-center gap-2 text-sm text-content">
+                <!-- THE CONFLICT IS ENFORCED, not narrated. Approval always beat the hold — a held run never
+                     started by itself while it was on — and the old form said so in a warning under a field it
+                     left editable, which is a rule you have to read to obey. Disabled, the field says it. -->
+                <label class="flex items-center gap-2 text-sm" :class="form.requireApproval ? `text-subtle` : `text-content`">
                     Hold each run for
                     <input
                         v-model.number="form.holdForSeconds"
@@ -850,24 +788,17 @@ const setProvider = (provider: string): void => {
                         min="0"
                         step="10"
                         class="w-20 font-mono"
-                        :class="cmp.input()"
+                        :class="cmp.input(`disabled:cursor-default disabled:opacity-40`)"
+                        :disabled="form.requireApproval"
                         aria-label="Seconds to hold each run before it starts"
                     />
                     seconds before it starts
                 </label>
-                <p v-if="form.holdForSeconds > 0 && !form.requireApproval" class="-mt-1 text-2xs text-subtle">
-                    Each fire waits that long under "Waiting for you", with a countdown — cancel it, start it early, or let it run. It also never
-                    starts while another agent is mid-turn.
-                </p>
-                <p v-if="form.holdForSeconds > 0 && form.requireApproval" class="-mt-1 text-2xs text-warning">
-                    "Require my approval" wins: the hold never runs by itself while that is on — only your click starts it.
-                </p>
                 <!-- The one place this caveat lands where it changes a decision. It is in the Doorbell docs, but
                      nobody reads those while flipping a toggle, and a support chat that can never answer is not
                      what "require my approval" sounds like. -->
                 <p v-if="form.requireApproval && isDoorbell" class="-mt-1 text-2xs text-warning">
-                    On a Doorbell this means visitors never get an answer in the widget: they see "a human will review this", and the approved reply
-                    lands on the conversation for you to handle, not back on their chat.
+                    Visitors get no answer in the widget — approved replies land in your chat instead.
                 </p>
             </template>
         </div>

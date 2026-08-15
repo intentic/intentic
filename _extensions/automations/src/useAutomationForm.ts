@@ -52,6 +52,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     const form = reactive({
         kind: `schedule` as TriggerKind,
         id: ``,
+        /* CARRIED, NOT EDITED. A guard is a shell command that decides whether a wake happens at all, and the
+         * form no longer offers a box for one: hand-authoring shell in a settings fold is a support ticket in
+         * waiting, and the person writing "wake me when the queue is non-empty" was better served by writing it
+         * in the prompt. The FIELD stays because the shipped chores are built on it — "wakes only on findings"
+         * is a guard running knip and exiting 1 when it is clean — so a chore picked from the gallery has to
+         * reach `build` with its own guard intact rather than saved as a nightly sweep that wakes regardless. */
         guard: ``,
         prompt: ``,
         agent: `claude` as AgentProvider,
