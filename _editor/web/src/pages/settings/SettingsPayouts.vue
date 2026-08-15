@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { ClaimChallenge, CreatorState } from "@intentic-app/api-contract";
-import { Card, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Card, cmp, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
-import InputText from "primevue/inputtext";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { apiClient } from "../../composables/useApi";
@@ -199,7 +198,12 @@ const connect = async (): Promise<void> => {
                         Earnings add up against the publisher name in your manifest. Prove it's yours and they become payable to you.
                     </p>
                     <div class="flex gap-2">
-                        <InputText v-model="publisher" placeholder="your publisher name" size="small" class="flex-1" @keyup.enter="askChallenge" />
+                        <input
+                            v-model="publisher"
+                            placeholder="your publisher name"
+                            :class="cmp.input('min-w-0 flex-1')"
+                            @keyup.enter="askChallenge"
+                        />
                         <Button label="Check" severity="secondary" size="small" :loading="checking" @click="askChallenge" />
                     </div>
                     <Notice v-if="checkNotice" :of="checkNotice" />

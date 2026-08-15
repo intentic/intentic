@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Card, cmp, Code, Row } from "@intentic/ui";
 import Button from "primevue/button";
-import InputText from "primevue/inputtext";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
 import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
@@ -187,7 +186,7 @@ onUnmounted(stop);
                 </p>
                 <div v-if="!portsOnly" class="flex flex-col gap-1.5">
                     <label class="text-2xs font-medium text-muted" for="desktop-sync-folder">Local folder</label>
-                    <InputText id="desktop-sync-folder" v-model="folder" class="w-full font-mono text-xs" spellcheck="false" />
+                    <input id="desktop-sync-folder" v-model="folder" spellcheck="false" :class="cmp.input('w-full font-mono text-xs')" />
                 </div>
 
                 <template v-if="pairToken === undefined">
