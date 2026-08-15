@@ -240,9 +240,9 @@ watch(flow, (live) => {
                  looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirect
                  that actually dead-ends; Anthropic's paste-back lands on a real page and needs none of this. -->
             <template v-if="kind === `routed`">
-                <p :class="prominent ? `text-xs text-muted` : `text-2xs text-subtle`">
-                    {{ destination }} finishes on a page that <span class="font-medium text-body">won't load</span> — that's expected, it points back
-                    inside your sandbox. Copy its address and come back here.
+                <p :class="prominent ? `text-xs text-content` : `text-2xs text-muted`">
+                    After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back inside
+                    your sandbox.
                 </p>
                 <div class="overflow-hidden rounded-lg border border-line bg-canvas select-none" aria-hidden="true">
                     <div class="flex items-center gap-2 border-b border-line px-2 py-1.5">
