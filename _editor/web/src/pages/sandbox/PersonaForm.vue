@@ -89,7 +89,7 @@ const emit = defineEmits<{ submit: []; cancel: [] }>();
 // The persona being built, as it will look in the list. PersonaFace derives a face from the name, so the preview
 // wears the same character the saved card will — no initials, no mode switch, one avatar everywhere.
 const previewPersona = computed(() => ({
-    id: draft.original ?? draft.label.trim() || `persona`,
+    id: draft.original ?? (draft.label.trim() || `persona`),
     label: draft.label.trim() === `` ? undefined : draft.label.trim(),
 }));
 
