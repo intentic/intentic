@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Retry a registry write that GHCR refused for going too fast — and nothing else.
+# Retry a registry write that GHCR itself dropped — going too fast, or losing an upload halfway — and nothing else.
 #
 #   . "$(dirname "$0")/registry-retry.sh"
 #   registry_retry docker buildx build ... --push "$context"
@@ -21,6 +21,18 @@
 # idempotent, the blobs that landed stay landed, and the build behind it is fully cached, so a second attempt
 # costs one manifest PUT rather than a rebuild.
 #
+# THE REGISTRY ALSO LOSES UPLOADS IT ACCEPTED. The sandbox image is ~1.5 GB and its export takes minutes;
+# GHCR hands out an upload session per blob and forgets some of them under load, which surfaces at the very
+# end of the push as an OCI `BLOB_UPLOAD_UNKNOWN`:
+#
+#   #119 pushing layers 202.7s done
+#   #119 ERROR: failed to push ghcr.io/intentic/sandbox:1.207.0-amd64: unknown: blob upload unknown to registry
+#
+# That is what killed the 1.207.0 release, on the amd64 half — and the `images` lane pushed the identical
+# bytes of that same commit twenty minutes later without complaint, which is the whole argument that nothing
+# was wrong with the build. It is the same "try it again" as the rate limit: the session is gone, a retry
+# opens a new one, and every blob that did land is skipped on the way back through.
+#
 # ONLY THAT CLASS OF FAILURE RETRIES. A broken Dockerfile, a missing build context or a token that genuinely
 # lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
 # a five-minute red pipeline becomes a twenty-minute one that reads like an infrastructure flake. So the
@@ -36,12 +48,19 @@ REGISTRY_RETRY_DELAY="${REGISTRY_RETRY_DELAY:-60}"
 # permission_denied and a throttled one are the same "403 Forbidden: denied: permission_denied" up front and
 # differ only in the body GHCR attaches. The rest of the list is the ordinary transport failure set — a
 # registry under load dropping a connection mid-upload is the same "wait and try again" as an explicit 429.
+#
+# The blob-upload pair are the registry losing its own side of an upload it had accepted (unknown = the
+# session is gone, invalid = it no longer matches what we are sending). Both are state ON THE REGISTRY, never
+# anything this repo can get wrong, so neither can mask a mistake of ours the way a broader status match
+# would.
 registry_retry_transient() {
     grep -Eqi \
         -e 'exceeded a secondary rate limit' \
         -e 'toomanyrequests' \
         -e '(status|code)[: ]+429' \
         -e '429 too many requests' \
+        -e 'blob upload (unknown|invalid)' \
+        -e 'blob_upload_(unknown|invalid)' \
         -e 'unexpected status: 50[0-9]' \
         -e '(502 bad gateway|503 service unavailable|504 gateway time)' \
         -e 'connection reset by peer' \
