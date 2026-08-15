@@ -35,8 +35,11 @@ The shipped default is the assembled engine tree at `engine/` (entry `engine/dis
 
 ## Releasing
 
-`.github/workflows/vscode-publish.yml` runs on every `v*` tag semantic-release pushes — the same trigger as
-the npm publish. It calls `_tools/scripts/publish-vscode.sh`, which for each target runs
+`.github/workflows/vscode-publish.yml` runs at every `v*` tag semantic-release pushes — the same trigger as
+the npm publish, and like it, *dispatched* rather than triggered by the tag. GitHub starts no workflow from an
+event the built-in token created, so the release job dispatches both against the new tag once semantic-release
+returns (`_tools/scripts/dispatch-publish.sh`); the workflows still read their version off the ref, exactly as
+a tag push would have given it. It calls `_tools/scripts/publish-vscode.sh`, which for each target runs
 `_tools/scripts/build-vscode-extension.sh`: build the closure, deploy the daemon as `engine/` (hoisted
 layout — vsce cannot package pnpm's symlink forest), prune what the local profile can never use (the
 vendored Codex CLI, the onnx runtimes, foreign node-pty prebuilds), **smoke-boot the assembled engine**

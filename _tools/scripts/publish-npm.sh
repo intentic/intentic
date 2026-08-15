@@ -2,8 +2,9 @@
 # Publish the first-party npm packages at <version>, idempotently — versions already on npm are SKIPPED.
 # This makes the release safe to re-run: a failed run just re-publishes whatever didn't land yet.
 #
-# Runs in GitHub Actions (.github/workflows/npm-publish.yml), on the `v*` tag semantic-release pushes to this
-# repository once prepare has built and verified the artifacts. Auth is TOKENLESS: npm exchanges the workflow's
+# Runs in GitHub Actions (.github/workflows/npm-publish.yml), at the `v*` tag semantic-release pushes to this
+# repository once prepare has built and verified the artifacts — that workflow is dispatched against the tag
+# rather than triggered by it (dispatch-publish.sh says why), so `GITHUB_REF_NAME` is the tag either way. Auth is TOKENLESS: npm exchanges the workflow's
 # OIDC id-token for a short-lived credential, so there is no NPM_TOKEN to rotate, and every tarball carries a
 # provenance attestation linking it to the commit and workflow run that built it. Each package must have this
 # repository and this workflow registered as its trusted publisher on npmjs.com — one that hasn't been fails

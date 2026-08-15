@@ -1,7 +1,15 @@
-# Publish the @intentic/* packages to npm, with provenance, from the tag semantic-release pushes.
+# Publish the @intentic/* packages to npm, with provenance, at the tag semantic-release pushes.
 #
-# A pushed `v*` tag is always a complete, version-stamped tree — release-prepare.sh stamps every package.json
-# before the tag exists — so there is nothing to bump and nothing to check out beyond the tag itself.
+# A `v*` tag is always a complete, version-stamped tree — release-prepare.sh stamps every package.json before
+# the tag exists — so there is nothing to bump and nothing to check out beyond the tag itself.
+#
+# DISPATCHED, NOT TAG-TRIGGERED. semantic-release pushes its tag with the built-in GITHUB_TOKEN, and GitHub
+# refuses to start a workflow from any event that token created — its loop guard. `on: push: tags` was
+# therefore a trigger that could never fire, which is how npm fell ~30 versions behind the tags while every
+# release reported green. workflow_dispatch is the documented exception to that guard, so it is the one
+# trigger the release job can pull (dispatch-publish.sh). The dispatch names THE TAG as its ref, which this
+# workflow depends on twice over: the checkout gets the version-stamped tree, and the OIDC claim and the
+# provenance attestation name that commit rather than whatever main had drifted to.
 #
 # Auth is TOKENLESS. `id-token: write` lets npm exchange this run's OIDC token for a short-lived publish
 # credential, which is also what makes the provenance attestation possible: the attestation names this
@@ -15,9 +23,10 @@
 # tag until after the repository is public, or use _tools/scripts/publish-catchup.sh from a maintainer machine.
 name: npm publish
 
+# Run it by hand from a tag the same way the release job does: Actions ▸ npm publish ▸ Run workflow, with the
+# tag selected as the ref.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read

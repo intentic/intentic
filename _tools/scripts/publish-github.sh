@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # One GitHub Release, with the installers and the machine-agent binaries attached: the download surface behind
 # `curl https://intentic.dev/sync | sh` and `.../computer | sh`. semantic-release's publishCmd, so the `v*` tag
-# it hangs off is already on the remote — pushed by semantic-release itself the moment prepare returned, which
-# is also what triggers .github/workflows/npm-publish.yml (provenance, tokenless, attested to the tagged commit).
+# it hangs off is already on the remote — pushed by semantic-release itself the moment prepare returned.
+#
+# That tag does NOT start the registry publishes, however much it looks like it should. GitHub starts no
+# workflow off an event the built-in token created, so npm-publish.yml and vscode-publish.yml are dispatched
+# explicitly at this tag once semantic-release returns (dispatch-publish.sh, release.yml).
 #
 # There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
 # development moved onto that same repo the export published straight over main — the v1.0.0 snapshot took
 # .github/workflows and _platform/api with it. The tag names the commit CI already checked out, so there is no
 # second tree to keep in step and nothing to force-push.
 #
-# CI setup: GITHUB_TOKEN, a masked CI variable holding a fine-grained PAT with Contents: read+write. Locally,
-# without it, this SKIPS so a release dry-run stays runnable — but IN CI a missing token is fatal. It has to be:
-# a quiet skip on a real release leaves a tagged version whose installers nobody can download and still reports
-# green, which is the shape of how v1.177.0-v1.179.0 were tagged with no packages behind them.
+# CI setup: GITHUB_TOKEN, the run's own built-in token, with `contents: write` from release.yml's publish job.
+# It was described here for a long time as a fine-grained PAT, which it never was — and that sentence is worth
+# keeping the correction of, because a PAT is the one thing that would have made `on: push: tags` work and the
+# note read as if it had been supplied. Locally, without a token, this SKIPS so a release dry-run stays
+# runnable — but IN CI a missing token is fatal. It has to be: a quiet skip on a real release leaves a tagged
+# version whose installers nobody can download and still reports green, which is the shape of how
+# v1.177.0-v1.179.0 were tagged with no packages behind them.
 #   bash _tools/scripts/publish-github.sh 1.177.0
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
@@ -25,7 +31,7 @@ TAG="v${VERSION}"
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   if [ -n "${CI:-}" ]; then
-    echo "GITHUB_TOKEN is unset — this tag is the npm release's only trigger, so this is fatal in CI." >&2
+    echo "GITHUB_TOKEN is unset — this tag is what every publish workflow is dispatched against, so this is fatal in CI." >&2
     exit 1
   fi
   echo "  skip     GitHub tag + Release (no GITHUB_TOKEN, not CI)"

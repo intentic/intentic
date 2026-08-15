@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publish the VSCode extension to the Visual Studio Marketplace and Open VSX, from the tag semantic-release
-# pushes — invoked by vscode-publish.yml, the same shape as publish-npm.sh / publish-action.sh.
+# pushes — invoked by vscode-publish.yml, the same shape as publish-npm.sh / publish-action.sh. That workflow
+# is dispatched against the tag rather than triggered by it (dispatch-publish.sh says why).
 #
 # Inert until the marketplace tokens exist, and LOUDLY so: VSCE_PAT (an Azure DevOps PAT with Marketplace ▸
 # Manage scope, for the `intentic` publisher) gates the VS Marketplace push, OVSX_PAT (an open-vsx.org token)

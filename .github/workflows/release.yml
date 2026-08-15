@@ -322,6 +322,9 @@ jobs:
       # Writes the build provenance for the assets and the images below. Without it the attest steps fail at
       # the upload rather than at a permissions check, which is a confusing way to learn this is missing.
       attestations: write
+      # Starts npm-publish.yml and vscode-publish.yml once the tag exists (dispatch-publish.sh). Without it
+      # the dispatch is a 403 at the end of an otherwise complete release.
+      actions: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Not for signing — that happened where the installers were built. The assemble step reads it as the
@@ -369,6 +372,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm exec semantic-release
+
+      # The registries. Everything semantic-release just did lives on GitHub — the tag, the Release, the
+      # installers attached to it — and the two workflows that carry this version to npm and to the editor
+      # marketplaces are started here, explicitly, because the tag alone cannot start them: GitHub runs no
+      # workflow off an event the built-in token created. dispatch-publish.sh has the long version and is
+      # where a new publishing target is added.
+      #
+      # AFTER semantic-release for the obvious reason — the tag they check out does not exist until it has
+      # run — and before the attestation below, which is about a different set of artifacts entirely.
+      - name: Publish to npm and the editor marketplaces
+        run: bash _tools/scripts/dispatch-publish.sh "${{ needs.plan.outputs.version }}"
 
       # --- provenance -------------------------------------------------------------------------------------
       # Everything below binds what we just published to the commit it was built from, in a public
