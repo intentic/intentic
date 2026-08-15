@@ -104,6 +104,34 @@ test("isolated requires conversationId at the contract gate", async () => {
     expect(await errorCode(client.agent.run({ prompt: "hi", isolated: true }))).toBe("BAD_REQUEST");
 });
 
+/* A SPENT ALLOWANCE IS FILED AS ONE, whatever words the provider spent it in.
+ *
+ * The refusal a turn files is what the account surfaces read afterwards, and its `kind` picks the sentence they
+ * print: a `limit` says the account hit its ceiling, an `auth` says its credential was refused. Google's
+ * Antigravity wording is not in the shared spent-allowance list on purpose (failure-sentences.ts), so a routed
+ * turn that ran out of weekly headroom used to be filed as `auth` — and the picker told the user to go and
+ * reconnect an account whose sign-in was perfect. */
+test("a rate-limited turn is filed as a limit even when the provider's wording is not one this daemon knows", async () => {
+    const filed: { kind: string; message: string }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "error", code: "rate_limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" };
+                    yield { kind: "done" };
+                },
+                providerRefusals: {
+                    read: async () => ({}),
+                    record: async (_provider, refusal) => void filed.push({ kind: refusal.kind, message: refusal.message }),
+                    clear: async () => {},
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "keep going", conversationId: "conv-limit" });
+    expect(filed).toEqual([{ kind: "limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" }]);
+});
+
 /* DISMISSING A QUESTION ENDS THE TURN, HERE — one request, not the browser's old two.
  *
  * The rule is old: the card was raised because the agent could not choose, so waving it away answers nothing

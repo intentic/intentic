@@ -1,7 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
-import { createOpencodeClient, createOpencodeServer, type Event as OpenCodeEvent, type OpencodeClient } from "@opencode-ai/sdk";
+import {
+    type Config as OpenCodeConfig,
+    createOpencodeClient,
+    createOpencodeServer,
+    type Event as OpenCodeEvent,
+    type OpencodeClient,
+} from "@opencode-ai/sdk";
 import { noteDelegationSignal } from "../agent/subagents.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
@@ -156,6 +162,49 @@ const foldSessionEvent = (event: OpenCodeEvent): void => {
     }
 };
 
+/* EVERY PERMISSION OPENCODE HAS, ANSWERED — because the ones this block forgets do not fail, they HANG.
+ *
+ * The container is the isolation boundary here (same posture as Claude's bypassPermissions and Codex's
+ * danger-full-access), so the intent was always allow-all. What was written was allow-THREE, and OpenCode
+ * defaults the rest to `ask` — an ask that reaches a runtime with no permission channel, no TUI and nobody to
+ * press anything. The session simply stops, silently, mid-turn: no error, no idle, no further events. Two
+ * minutes later the adapter's inactivity watchdog aborts the turn and the user is told "timed out waiting for
+ * OpenCode", which names the wrong thing entirely.
+ *
+ * Measured, and this is the case that found it: an ISOLATED conversation runs in a worktree while its
+ * attachments stay on /work (turn-plan.ts), so reading the image the user attached is a read OUTSIDE the
+ * session's directory — `external_directory`, which is not `read`. Five turns of one conversation died that
+ * way in half an hour, each one 120s after asking, each one with its work half done.
+ *
+ * So the block is written out IN FULL against the SDK's own key list, and the type is what keeps it that way:
+ * a key OpenCode adds later is a compile error here rather than another silent stall. `doom_loop` (OpenCode's
+ * are-you-stuck guard) is allowed for the same reason the others are — a turn the model can't get out of is
+ * bounded by the adapter's own turn cap, while a turn nobody can answer is bounded by nothing. */
+const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>> = {
+    edit: "allow",
+    bash: "allow",
+    webfetch: "allow",
+    doom_loop: "allow",
+    external_directory: "allow",
+};
+
+/* ...AND THE SAME ANSWER GIVEN LIVE, for the asks the block above cannot cover.
+ *
+ * A permission kind a future OpenCode adds is `ask` by default and unknown to the config we spawned with, which
+ * puts it exactly where external_directory was: a wedged turn and a sentence blaming the clock. Any ask that
+ * reaches a watched directory therefore gets a standing yes on the spot, so the worst an unknown kind can cost
+ * is one round-trip rather than the turn.
+ *
+ * "always" rather than "once": the pattern is allowed for the rest of the session, so a tool that reads twenty
+ * files under one directory asks about the first and none of the rest. */
+const allowPermission = async (client: OpencodeClient, permission: { id: string; sessionID: string }, directory: string): Promise<void> => {
+    await client.postSessionIdPermissionsPermissionId({
+        path: { id: permission.sessionID, permissionID: permission.id },
+        query: { directory },
+        body: { response: "always" },
+    });
+};
+
 // How many times the event stream may die in a row before the watcher gives up. The service never restarts a
 // dead warm server either (`booting` is memoized for the daemon's life), so a stream that cannot come back is
 // the server being gone — retrying forever would only keep test processes and dying daemons alive.
@@ -193,6 +242,12 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
                 for await (const event of sse.stream) {
                     failures = 0;
                     foldSessionEvent(event as OpenCodeEvent);
+                    if (event.type === "permission.updated") {
+                        // Detached: the reply is a round-trip of its own, and awaiting it here would stop reading
+                        // the very stream the answer's effects arrive on. A failed one leaves the ask standing,
+                        // which is where it already was.
+                        void allowPermission(client, event.properties, directory).catch(() => {});
+                    }
                 }
             } catch {
                 // The stream ended or never opened — count it and try again below.
@@ -295,9 +350,10 @@ export const createOpenCodeService = (
             server = await createOpencodeServer({
                 timeout: BOOT_TIMEOUT_MS,
                 // No provider key — xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
-                // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access).
+                // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access),
+                // and every permission is answered here rather than most of them (ALLOW_EVERY_PERMISSION).
                 config: {
-                    permission: { edit: "allow", bash: "allow", webfetch: "allow" },
+                    permission: ALLOW_EVERY_PERMISSION,
                     provider: {
                         xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },
                         ...geminiProvider,

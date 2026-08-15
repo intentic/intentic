@@ -245,6 +245,11 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.fast !== undefined) {
         conversation.fast.value = tab.fast;
     }
+    // The one restored pick that is about what happens while nobody is looking, which is why it comes back at
+    // all: a reload during an unattended run must not quietly disarm the thing keeping it going.
+    if (tab.autoContinue !== undefined) {
+        conversation.autoContinue.value = tab.autoContinue;
+    }
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;
     }
@@ -393,6 +398,12 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * inviting them to send another. */
     resumable: computed(() => conversation.value.resumable.value && !conversation.value.streaming.value),
     continuation: computed(() => continuationFor(conversation.value.messages.value)),
+    /* ...and the standing version of that press: whether this chat continues itself, and when the one it has
+     * scheduled goes (Conversation.autoContinue). The instant is what the strip counts down to — the wait has to
+     * be visible, or a chat quietly sitting on a timer is indistinguishable from one nothing is happening to. */
+    autoContinue: computed(() => conversation.value.autoContinue.value),
+    autoContinueAt: computed(() => conversation.value.autoContinueAt.value),
+    setAutoContinue: (on: boolean): void => conversation.value.setAutoContinue(on),
     // This conversation's undelivered messages (submitted while its turn was running) and whether its running
     // turn can take one mid-flight — the composer renders the first and words its hints from the second.
     queued: computed(() => conversation.value.queued.value),

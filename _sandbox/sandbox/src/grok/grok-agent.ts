@@ -2,6 +2,7 @@ import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
 import { withFileNote } from "../agent/attachment-note.js";
+import { mentionsSpentAllowance } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
@@ -49,9 +50,9 @@ const eventSessionId = (event: Event): string | undefined => {
         case "session.error":
         case "todo.updated":
         case "permission.updated":
-        // Not consumed by streamTurn — carried purely so the inactivity watchdog below counts it as life. A
-        // model that thinks for minutes before its first token emits nothing else, and killing that turn at two
-        // minutes is the same false timeout this file already paid for once.
+        // The watchdog counts this as life — a model that thinks for minutes before its first token emits
+        // nothing else, and killing that turn at two minutes is the same false timeout this file already paid
+        // for once. It is also where a retry (and with it a rate limit) announces itself; see streamTurn.
         case "session.status":
             return event.properties.sessionID;
         case "message.part.updated":
@@ -197,6 +198,16 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     continue;
                 }
                 inactivityDeadline = Date.now() + inactivityMs;
+                /* A RETRY IS A WAIT OPENCODE HAS ALREADY NAMED THE END OF, and the watchdog must respect it.
+                 *
+                 * OpenCode rides out a refused request (a 429 above all) inside the turn on its own escalating
+                 * backoff, and announces each wait ONCE with the instant it will try again. Left at the ordinary
+                 * two minutes, any backoff longer than that would be read as silence and the turn killed while it
+                 * was doing exactly what it said it would — so the deadline moves out past the promised instant,
+                 * still under the hard turn cap that bounds everything here. */
+                if (event.type === "session.status" && event.properties.status.type === "retry") {
+                    inactivityDeadline = Math.max(inactivityDeadline, event.properties.status.next + inactivityMs);
+                }
                 // Self-heal a stale/renamed model in-place, instead of surfacing the error and making the user
                 // re-send: xAI's rejection NAMES the account's valid models (the authoritative catalog). Record
                 // them (fixes the picker + every future turn) and re-prompt this same session once with a valid
@@ -241,6 +252,25 @@ const errorText = (error: unknown): string => {
 // Tag it so the client reloads the live catalog and drops the bad pinned model, mirroring the session-not-found
 // self-heal — any other error stays uncoded (e.g. an auth rejection).
 const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
+
+/* THE PROVIDER SAID NO BECAUSE OF HOW MUCH HAS BEEN ASKED OF IT — an allowance, a quota, a rate.
+ *
+ * Worth telling apart from every other failure because the recovery is nothing but time: coded, the chat shows
+ * it as a muted "wait and retry" notice with the reset instant, and — the part that matters more — it stops
+ * offering Continue, which on a spent allowance re-fails on the press by construction.
+ *
+ * Google is the wording this is written from: an Antigravity account with no weekly headroom left refuses with
+ * `RESOURCE_EXHAUSTED` / "You exceeded your current quota", and CLIProxyAPI hands that back once its own walk
+ * across the account fleet has run out of credentials to try (translator.ts).
+ *
+ * It reads MORE wordings than the shared mentionsSpentAllowance does — that helper deliberately keeps "rate
+ * limit" out, because on the Claude harness the phrase also appears in retries the CLI is still working
+ * through, and reading one of those as a spent plan would park a turn that was about to succeed. Here it cannot:
+ * OpenCode's own in-turn retries (the session.status waits above) are spent by the time a session.error is
+ * emitted, so a refusal reaching this line is the last word rather than a stage of one. */
+const RATE_LIMITED = /rate.?limit|resource.?exhausted|too many requests|\b429\b/i;
+
+const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
 
 // Plan phase holds back the assistant text (it becomes the plan) instead of streaming it; `sessionId` is the
 // session to resume for the execute phase, captured from session.created (or the resumed id).
@@ -383,9 +413,36 @@ async function* streamTurn(
                     costUsd: info.cost,
                 });
             }
+        } else if (event.type === "session.status" && event.properties.status.type === "retry") {
+            /* THE TURN IS ALIVE AND WAITING ON THE PROVIDER, which is otherwise indistinguishable from a hang.
+             *
+             * OpenCode retries a refused request inside the turn and says so once per wait, carrying the
+             * provider's own sentence and the instant of the next attempt. Nothing else is emitted meanwhile, so
+             * without this the chat sits on a cycling "Thinking…" for the whole backoff — and the one move a
+             * user makes against an apparent hang is Stop, the only move that throws the work away.
+             *
+             * `status: 429` is how the chat's line says WHY: a wait it can name as rate-limiting is a wait the
+             * user can act on (come back later, or pick a model on another allowance), where "not responding"
+             * sends them looking for a fault that isn't there. No maxAttempts — OpenCode publishes which attempt
+             * it is on and no bound for it, and inventing one would be a promise the retry never made. */
+            const status = event.properties.status;
+            yield {
+                kind: "provider_retry",
+                attempt: status.attempt,
+                nextAttemptAt: status.next,
+                ...(isRateLimited(status.message) ? { status: 429 } : {}),
+            };
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
-            yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
+            yield {
+                kind: "error",
+                message,
+                ...(MODEL_INVALID.test(message)
+                    ? { code: "grok-model-invalid" as const }
+                    : isRateLimited(message)
+                      ? { code: "rate_limit" as const }
+                      : {}),
+            };
             capture.errored = true;
             // Terminal: OpenCode does not reliably emit session.idle after an error, so ending here (rather than
             // waiting for an idle that never comes) is what lets runGrokAgent reach its `done`.

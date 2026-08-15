@@ -525,16 +525,19 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * actually loses the work — so the wait has to be visible, with its own next-attempt clock.
      *
      * `attempt`/`maxAttempts` are the harness's own counters; `nextAttemptAt` (epoch ms) is when it will try
-     * again, so the readout counts down instead of freezing on a number nobody can interpret. Optional because
-     * only Claude's harness reports the delay: Codex says which attempt it is on and nothing else
-     * (codex-agent.ts), and inventing a countdown for it would be a clock the retry never keeps. */
+     * again, so the readout counts down instead of freezing on a number nobody can interpret. BOTH are optional
+     * for the same reason, which is that each runtime publishes a different half of the wait and none of them
+     * publishes all of it: Claude's harness reports the delay and the bound, Codex says which attempt it is on
+     * and nothing else (codex-agent.ts), OpenCode names the next instant but no bound (grok-agent.ts). Inventing
+     * the missing half would be a countdown, or a limit, the retry never agreed to. */
     z.object({
         kind: z.literal("provider_retry"),
         attempt: z.number(),
-        maxAttempts: z.number(),
+        maxAttempts: z.number().optional(),
         nextAttemptAt: z.number().optional(),
-        // The HTTP status behind it when there was one (529 reads as capacity, 500 as a fault — the client says
-        // which). Absent for a transport failure that never got a response.
+        // The HTTP status behind it when there was one (529 reads as capacity, 429 as a rate limit, 500 as a
+        // fault — the client says which). Absent for a transport failure that never got a response, and for a
+        // runtime that reports the refusal as prose rather than a code (grok-agent.ts reads it back off that).
         status: z.number().optional(),
     }),
     // Every plan-limit pool for the account that served the turn, read from the CLI's usage endpoint once the

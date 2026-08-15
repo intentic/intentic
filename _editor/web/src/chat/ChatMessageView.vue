@@ -286,9 +286,14 @@ const retryWait = computed(() => {
     const nextAttemptAt = providerRetry.value?.nextAttemptAt;
     return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - now.value) / 1000))}s`;
 });
-// 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
-// their request was fine and a smaller model would probably go through right now, which is actionable.
-const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at capacity` : `not responding`));
+/* 529 is capacity, 429 is the allowance, everything else in this frame is a fault. All three are worth telling
+ * apart because each points somewhere different: "at capacity" says the request was fine and a smaller model
+ * would probably go through right now, "rate-limiting" says the account has been asked for too much and only
+ * time or another account fixes it, and "not responding" says nobody's request is getting through. Told none of
+ * that, a user watching a long wait goes looking for a fault in their own work. */
+const retryReason = computed(() =>
+    providerRetry.value?.status === 529 ? `at capacity` : providerRetry.value?.status === 429 ? `rate-limiting` : `not responding`,
+);
 
 // --- Interactive question card ---------------------------------------------------------------
 // Selection state for a pending question card, keyed by question index. Held here because it is UI state of

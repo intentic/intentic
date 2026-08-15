@@ -1224,6 +1224,138 @@ describe(`Conversation`, () => {
         }
     });
 
+    /* THE SAME PRESS, LEFT ON. A chat that stops short five times in half an hour is five presses, and the
+     * fourth of them happens while nobody is at the keyboard — which is the whole point of arming this. */
+    it(`continues itself after a turn that stopped short, once its wait is up`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+            await conversation.send(`ship the parser`, settings);
+
+            // Scheduled, not sent: the wait is what makes the automation something a person can get in front of.
+            expect(conversation.resumable.value).toBe(true);
+            expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
+            expect(turnBodies()).toHaveLength(1);
+
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+            await vi.advanceTimersByTimeAsync(6_000);
+
+            // It said the sentence the button says, and the chat is running again with nobody having touched it.
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+            expect(conversation.autoContinueAt.value).toBeUndefined();
+            expect(conversation.resumable.value).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Armed while a stopped turn is already on screen — which is where the switch is offered — it takes that
+    // stop too. Waiting for the next one would leave the user pressing Continue anyway.
+    it(`takes the stop it was armed in front of`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+            await conversation.send(`ship the parser`, settings);
+            expect(conversation.autoContinueAt.value).toBeUndefined();
+
+            conversation.setAutoContinue(true);
+            expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /* THE ONE ENDING IT MUST NEVER ANSWER. Stop is the user saying "not this" — restarting the turn they just
+     * stopped is the exact opposite of what they asked for, and it is the same `resumable` flag either way, so
+     * the difference has to be read off who ended it rather than off what was left behind. */
+    it(`stays out of the way of a turn the user stopped`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+            const turn = conversation.send(`ship the parser`, settings);
+            await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+            await conversation.stop();
+            await turn;
+
+            expect(conversation.resumable.value).toBe(true);
+            expect(conversation.autoContinueAt.value).toBeUndefined();
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(turnBodies()).toHaveLength(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /* AND THE OTHER HALF OF LEAVING IT ON: knowing when to stop. Turns that die in seconds mean something is
+     * actually wrong, and the fastest way to make that expensive is to retry it unattended forever — so each
+     * wait is longer than the last, and after three the automation stands down and says why. */
+    it(`backs off, then gives up and says so, when nothing it continues gets anywhere`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+
+            const waits: number[] = [];
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                await conversation.send(attempt === 0 ? `ship the parser` : CONTINUATIONS.plain, settings);
+                waits.push(conversation.autoContinueAt.value! - Date.now());
+                await vi.advanceTimersByTimeAsync(0);
+            }
+            expect(waits).toEqual([5_000, 15_000, 45_000]);
+
+            // The fourth stop is the one it declines to answer: off, with a line saying so where the user reads.
+            await conversation.send(CONTINUATIONS.plain, settings);
+            expect(conversation.autoContinue.value).toBe(false);
+            expect(conversation.autoContinueAt.value).toBeUndefined();
+            expect(conversation.messages.value.at(-1)).toMatchObject({
+                role: `notice`,
+                text: expect.stringContaining(`Auto-continue stopped`),
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // ...and a turn that ran long enough to have done some of the job starts the ladder over, so an all-night
+    // run of real turns keeps its short pauses however many times it is picked back up.
+    it(`resets the backoff after a turn that got somewhere`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            const instant = sseResponse([{ kind: `error`, message: `agent did not complete` }]);
+            sandboxRequestMock.mockImplementation(instant);
+            await conversation.send(`ship the parser`, settings);
+            // Exactly the wait, so the clock stands where the next one is scheduled from and the assertions below
+            // read the delay itself rather than the delay minus however far the test overshot.
+            await vi.advanceTimersByTimeAsync(5_000);
+            // The second stop is on the ladder's second rung, having bought nothing.
+            expect(conversation.autoContinueAt.value! - Date.now()).toBe(15_000);
+
+            // A turn that spent a minute working before it stopped — the clock moves inside the request, which is
+            // the one seam a canned stream has for "this took a while".
+            sandboxRequestMock.mockImplementation((path, init) => {
+                if (path === `/agent`) {
+                    vi.setSystemTime(Date.now() + 60_000);
+                }
+                return instant(path, init);
+            });
+            await vi.advanceTimersByTimeAsync(15_000);
+            expect(conversation.autoContinueAt.value! - Date.now()).toBe(5_000);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     /* THE CASE THE WHOLE THING IS FOR: a tool the user refused, the agent stopped waiting to be told what to do,
      * and the sentence that tells it. It has to name the refusal — a bare "continue" reads as "go on then, run
      * it", which is how a declined command gets run on the second press — and it has to FOLD, so that pressing

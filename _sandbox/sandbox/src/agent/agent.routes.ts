@@ -1071,16 +1071,26 @@ async function* runTurn(
                  * was watching — an automation at 4am, a fleet agent — left no mark anywhere a person could find.
                  *
                  * `kind` is read off the SENTENCE (mentionsSpentAllowance) rather than off the code, because for
-                 * every provider but Claude the two disagree — see failure-sentences.ts. The exception is the
-                 * entitlement refusal, which is the one condition the sentence CANNOT be read for twice: it was
-                 * already classified by its own sentence upstream (isEntitlementRefusalText), and the code is
-                 * that reading carried down here. Fire-and-forget, the same contract as every other turn-end
-                 * write: a refusal must not be able to fail the turn it is describing. */
+                 * every provider but Claude the two disagree — see failure-sentences.ts. Two codes are read
+                 * directly instead, and each is a case where the sentence has ALREADY been classified somewhere
+                 * that knew more than this line does: the entitlement refusal (isEntitlementRefusalText upstream),
+                 * and a rate_limit raised by an adapter that read the refusal itself (grok-agent.ts, off Google's
+                 * `RESOURCE_EXHAUSTED` and the bare rate-limit wordings the shared helper deliberately leaves
+                 * alone). Without that second one a spent Antigravity allowance filed as an `auth` refusal, and
+                 * the account picker told the user to reconnect a credential in perfect health.
+                 *
+                 * Fire-and-forget, the same contract as every other turn-end write: a refusal must not be able
+                 * to fail the turn it is describing. */
                 if (event.code === "rate_limit" || event.code === "claude-token-refused" || event.code === "claude-not-entitled") {
                     void services.providerRefusals
                         .record(provider, {
                             at: Date.now(),
-                            kind: event.code === "claude-not-entitled" ? "entitlement" : mentionsSpentAllowance(event.message) ? "limit" : "auth",
+                            kind:
+                                event.code === "claude-not-entitled"
+                                    ? "entitlement"
+                                    : event.code === "rate_limit" || mentionsSpentAllowance(event.message)
+                                      ? "limit"
+                                      : "auth",
                             message: event.message,
                             // Routed turns have no account to name: CLIProxyAPI picks the auth file itself.
                             ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),

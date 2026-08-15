@@ -6,13 +6,39 @@ import { humanizeModelId, SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService } from "./opencode.js";
 
 // Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).
-const { serverSpawns } = vi.hoisted(() => ({ serverSpawns: [] as { config?: unknown }[] }));
+// The client is a double too: an event stream the test feeds, and a record of every permission answered on it.
+const { serverSpawns, permissionReplies, streamEvents } = vi.hoisted(() => ({
+    serverSpawns: [] as { config?: unknown }[],
+    permissionReplies: [] as { id: string; permissionID: string; directory: string | undefined; response: string | undefined }[],
+    streamEvents: [] as unknown[],
+}));
 vi.mock("@opencode-ai/sdk", () => ({
     createOpencodeServer: async (options: { config?: unknown }) => {
         serverSpawns.push(options);
         return { url: "http://127.0.0.1:0", close: (): void => {} };
     },
-    createOpencodeClient: () => ({}),
+    createOpencodeClient: () => ({
+        event: {
+            subscribe: async () => ({
+                stream: {
+                    async *[Symbol.asyncIterator]() {
+                        yield* streamEvents;
+                        // Then stay open, like the real subscription — a stream that ended would send the
+                        // watcher round its retry ladder and spawn a second reader mid-assertion.
+                        await new Promise(() => {});
+                    },
+                },
+            }),
+        },
+        postSessionIdPermissionsPermissionId: async (options: {
+            path: { id: string; permissionID: string };
+            query?: { directory?: string };
+            body?: { response?: string };
+        }) => {
+            permissionReplies.push({ ...options.path, directory: options.query?.directory, response: options.body?.response });
+            return {};
+        },
+    }),
 }));
 
 const roots: string[] = [];
@@ -138,6 +164,38 @@ test("client() spawns the server with store:false for every known xai model (see
     for (const model of Object.values(models)) {
         expect(model.options).toEqual({ store: false });
     }
+});
+
+/* THE PERMISSION BLOCK, IN FULL — the three-key version of this cost a conversation five turns in half an hour.
+ *
+ * OpenCode defaults every key the config omits to `ask`, and an ask on this runtime reaches nobody: no TUI, no
+ * permission channel, no user. The session just stops emitting, and two minutes later the adapter's watchdog
+ * calls it a timeout. `external_directory` is the one that found it — an isolated conversation runs in a
+ * worktree while its attachments stay on /work, so reading the image the user attached is a read outside the
+ * session's own directory. */
+test("client() spawns the server with EVERY permission allowed, not merely the ones anyone thought of", async () => {
+    const xdg = await scratch();
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
+    const spawn = serverSpawns.at(-1) as { config: { permission: Record<string, string> } };
+    expect(spawn.config.permission).toEqual({
+        edit: "allow",
+        bash: "allow",
+        webfetch: "allow",
+        doom_loop: "allow",
+        external_directory: "allow",
+    });
+});
+
+/* ...and the same answer given live, for a permission kind this build has never heard of. A future OpenCode's
+ * new key is `ask` by default and absent from the config we spawned with, which puts it exactly where
+ * external_directory was — so an ask that reaches a watched directory is answered on the spot instead. */
+test("a permission ask on a watched directory is answered with a standing yes", async () => {
+    const xdg = await scratch();
+    streamEvents.push({ type: "permission.updated", properties: { id: "per_1", sessionID: "ses_1", type: "some_future_gate" } });
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: "/work" }).client();
+    // The watcher reads its stream detached from the boot that started it, so let its first read land.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
 });
 
 test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {

@@ -135,6 +135,9 @@ const {
     pendingPlanMessage,
     resumable,
     continuation,
+    autoContinue,
+    autoContinueAt,
+    setAutoContinue,
     contextUsage,
     mode,
     provider,
@@ -775,6 +778,19 @@ const sendBlock = computed(() => {
  * else. */
 const continueOffer = computed(
     () => resumable.value && !staged.value && queued.value.length === 0 && pendingPlanMessage.value === undefined && connected.value,
+);
+/* THE SAME OFFER, LEFT ON — and the strip carries it because that is where the user is when they wish they had
+ * it: reading "this turn stopped before it finished" for the third time in half an hour.
+ *
+ * Shown WHENEVER the automation is armed, not only alongside the offer, because the switch has to be reachable
+ * to be turned off. The armed line is the whole of what a chat looks like while it is waiting on itself — a
+ * countdown when one is scheduled, otherwise the standing promise — and without it a conversation sitting on a
+ * five-second timer looks exactly like one nothing is happening to. */
+const autoContinueStrip = computed(() => autoContinue.value && connected.value);
+const autoContinueLine = computed(() =>
+    autoContinueAt.value === undefined
+        ? `Auto-continue is on — this chat picks itself back up when a turn stops short.`
+        : `Auto-continue is on — continuing in ${formatWait(autoContinueAt.value / 1000)}.`,
 );
 const canSend = computed(() => {
     if (sendBlock.value !== undefined) {
@@ -1827,6 +1843,18 @@ watch(
                         >
                             <Icon name="pause" class="shrink-0" />
                             <span class="min-w-0 flex-1">This turn stopped before it finished — the work so far is still here.</span>
+                            <!-- The standing version of the same press, offered where the wish for it happens:
+                                 reading this line for the third time in half an hour. Only while it is OFF —
+                                 armed, the strip below carries both the state and the way out of it. -->
+                            <button
+                                v-if="!autoContinue"
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
+                                v-tooltip.top="'Keep pressing Continue for me whenever a turn stops short'"
+                                @click="setAutoContinue(true)"
+                            >
+                                Auto-continue
+                            </button>
                             <button
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
@@ -1834,6 +1862,24 @@ watch(
                                 @click="continueTurn"
                             >
                                 Continue<span v-if="!mobile" class="font-normal text-subtle"> · Enter</span>
+                            </button>
+                        </div>
+                        <!-- WHAT AN ARMED CHAT LOOKS LIKE WHILE IT WAITS ON ITSELF. On screen for as long as the
+                             automation is, because a switch with no off is a trap, and because a chat sitting on
+                             a five-second timer is otherwise indistinguishable from one nothing is happening to. -->
+                        <div
+                            v-if="autoContinueStrip"
+                            class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                        >
+                            <Icon name="repeat" class="shrink-0" />
+                            <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                v-tooltip.top="'Stop continuing this chat by itself'"
+                                @click="setAutoContinue(false)"
+                            >
+                                Turn off
                             </button>
                         </div>
                         <template v-if="connected">

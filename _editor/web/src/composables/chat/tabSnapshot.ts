@@ -39,6 +39,10 @@ export interface StoredTab {
     // of this chat, and a reload should show the same chat back — but a new chat starts from off (turnDefaults
     // deliberately doesn't carry it; see Conversation.fast).
     readonly fast?: boolean;
+    // Whether this chat continues itself when a turn stops short (Conversation.autoContinue). Persisted per TAB
+    // like `fast`, and for a stronger reason than the picks above: it is armed precisely for the stops nobody is
+    // sitting there for, so a reload dropping it would silently end the unattended run it was turned on for.
+    readonly autoContinue?: boolean;
     // The persona this tab acts as, by id. Per TAB and nowhere else: it is never a remembered default (a
     // narrowing must not follow the user into their next chat), so this store is the only thing standing
     // between a picked persona and a page reload. Absent ⇒ the ordinary chat, every account reachable.
@@ -81,6 +85,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     actsAs: conversation.actsAs.value,
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
+    autoContinue: conversation.autoContinue.value,
     harness: conversation.harness.value,
     session: conversation.session.value && {
         id: conversation.session.value.id,
@@ -168,6 +173,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readText(`actsAs`, raw[`actsAs`]),
         ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
         ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
+        ...(typeof raw[`autoContinue`] === `boolean` ? { autoContinue: raw[`autoContinue`] } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
         ...(validSession !== undefined ? { session: validSession } : {}),
         ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),

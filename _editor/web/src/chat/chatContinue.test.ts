@@ -116,9 +116,11 @@ const mountPanel = async (): Promise<void> => {
     await settle();
 };
 
+// A button by the words on it, or nothing — how every affordance here is read off the DOM.
+const button = (label: string): HTMLButtonElement | undefined =>
+    [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
 // The offer, as the DOM has it: the button that carries the word, or nothing.
-const continueButton = (): HTMLButtonElement | undefined =>
-    [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim().startsWith(`Continue`));
+const continueButton = (): HTMLButtonElement | undefined => button(`Continue`);
 // The one hint slot under the box — how anyone learns the key exists.
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
@@ -201,6 +203,47 @@ it(`stands down the moment the user types something of their own`, async () => {
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
     expect(enqueue).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
+});
+
+/* THE STANDING VERSION OF THE PRESS, offered at the moment anyone wishes for it — reading "this turn stopped
+ * before it finished" again. Arming it is one click from there, and the strip then says what the chat is doing
+ * about itself, because a switch with no readout and no way off is a trap rather than an automation. */
+it(`offers to keep continuing by itself, and says so once it is on`, async () => {
+    const conversation = stoppedChat();
+    await mountPanel();
+
+    const arm = button(`Auto-continue`);
+    expect(arm).toBeDefined();
+    arm!.click();
+    await settle();
+
+    expect(conversation.autoContinue.value).toBe(true);
+    expect(composerText()).toContain(`Auto-continue is on`);
+    // The offer is not repeated once taken — the armed strip is where the state and the way out of it live now.
+    expect(button(`Auto-continue`)).toBeUndefined();
+    expect(continueButton()).toBeDefined();
+
+    button(`Turn off`)!.click();
+    await settle();
+    expect(conversation.autoContinue.value).toBe(false);
+    expect(composerText()).not.toContain(`Auto-continue is on`);
+});
+
+// The armed line outlives the stop that armed it: switching it on and losing the switch the moment the chat
+// moves on would leave an automation nobody can reach.
+it(`keeps the armed line up on a chat with nothing to continue`, async () => {
+    const chat = useChat();
+    const conversation = chat.active.value;
+    conversation.restoreMessages([
+        { role: `user`, text: `clean the sandbox` },
+        { role: `assistant`, text: `done` },
+    ]);
+    conversation.setAutoContinue(true);
+    await mountPanel();
+
+    expect(continueButton()).toBeUndefined();
+    expect(composerText()).toContain(`Auto-continue is on`);
+    expect(button(`Turn off`)).toBeDefined();
 });
 
 // A chat that ended cleanly is not offered anything: the strip is for work left hanging, and one that showed up

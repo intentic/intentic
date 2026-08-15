@@ -21,10 +21,19 @@ import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
+import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
 import { providerModels, providerTabs } from "./providerCatalog";
-import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, recordedRows, withCancelledCards } from "./transcript";
+import {
+    type CardKind,
+    type ChatAttachment,
+    type ChatMessage,
+    continuationFor,
+    isAwaitingDecision,
+    recordedRows,
+    withCancelledCards,
+} from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import { TranscriptClock } from "./transcriptClock";
 import { rememberedModelFor, rememberedProviderFor, startingMode, turnDefaults } from "./turnDefaults";
@@ -104,6 +113,24 @@ export class Conversation {
      * Cleared by the next turn starting, whichever it is: the continuation itself, or whatever the user decided
      * to send instead of it. */
     readonly resumable = ref(false);
+
+    /* THE SAME PRESS, STANDING — this chat continues itself for as long as it keeps stopping short.
+     *
+     * A standing instruction rather than a per-stop choice, which is why it lives on the conversation and is
+     * persisted with the tab: the whole point is the stops that happen while nobody is watching. It arms nothing
+     * on its own — only a turn that ends `resumable` schedules anything, so a chat whose turns finish normally
+     * never sees it act, and a failure that names something to fix (a spent allowance, a dead credential) is not
+     * one of those endings by construction.
+     *
+     * autoContinue.ts holds the schedule and the argument for it; `autoContinueAt` is the instant the pending
+     * one fires, which is what the composer's strip counts down to (and what makes the wait visible instead of
+     * the chat merely appearing to sit there). */
+    readonly autoContinue = ref(false);
+    readonly autoContinueAt = ref<number | undefined>();
+    private autoContinueTimer: ReturnType<typeof setTimeout> | undefined;
+    // Consecutive automatic continuations that bought nothing — the rung of autoContinue.ts's ladder this chat
+    // is on. Reset by a turn that got somewhere, and by the switch being thrown again.
+    private autoContinueTries = 0;
     // True while a daemon read that should produce this conversation's transcript is in flight and nothing is
     // painted meanwhile — a history open, or a restored tab whose local mirror came up empty. The panel shows
     // its loading state on it instead of the "Start a conversation" invitation, which over a chat that merely
@@ -910,8 +937,9 @@ export class Conversation {
         this.interrupted = false;
         this.error.value = null;
         // A turn is running, so there is nothing left stopped to pick up — this IS the picking up, or the message
-        // the user sent in its place.
+        // the user sent in its place. Either way a scheduled continuation has been overtaken by it.
         this.resumable.value = false;
+        this.cancelAutoContinue();
         // A live turn supersedes the waits a failed one opened — THIS turn is the retry, or the send that
         // replaced it, whether the scheduler fired it or another window did.
         this.failures.clear();
@@ -921,6 +949,9 @@ export class Conversation {
     // Settle it: drain whatever the typewriter still holds, drop the streaming affordances, mirror the finished
     // transcript, and let anything queued behind the turn go.
     private endTurn(): void {
+        // Read before turnStartedAt is cleared: how long this turn ran is what tells the auto-continue ladder
+        // whether the last continuation bought anything (autoContinue.ts).
+        const ranForMs = this.turnStartedAt.value === undefined ? 0 : Date.now() - this.turnStartedAt.value;
         this.transcript.settle();
         this.inflight = null;
         this.streaming.value = false;
@@ -929,7 +960,88 @@ export class Conversation {
         this.turnStartedAt.value = undefined;
         this.failures.armRenewalProbe();
         this.persist();
+        this.scheduleAutoContinue(ranForMs);
         void this.drainQueue();
+    }
+
+    /* THE STANDING PRESS, SCHEDULED — run at the end of every turn, and does nothing for nearly all of them.
+     *
+     * The three conditions are the same ones that make the button appear at all, minus the composer's (those are
+     * read when the timer fires, since a draft can arrive during the wait): the automation is armed, this turn
+     * ended in the one shape a continuation answers, and nobody INTERRUPTED it — a Stop, a closed tab, a sandbox
+     * switch. That last one is the important exclusion: restarting a turn somebody just stopped is the exact
+     * opposite of what they asked for, and `interrupted` is what tells the two endings apart. */
+    private scheduleAutoContinue(ranForMs: number): void {
+        if (!this.autoContinue.value || !this.resumable.value || this.interrupted) {
+            return;
+        }
+        if (ranForMs >= AUTO_CONTINUE_PROGRESS_MS) {
+            this.autoContinueTries = 0;
+        }
+        this.armAutoContinue();
+    }
+
+    // Put the next continuation on the clock at whatever rung of the ladder this chat has reached — or, past the
+    // end of it, stand down and say why.
+    private armAutoContinue(): void {
+        const delay = autoContinueDelay(this.autoContinueTries);
+        if (delay === undefined) {
+            // The ladder is spent: three turns in a row went nowhere, so something is wrong that continuing does
+            // not fix. Stand down and SAY so — an automation that quietly stopped would leave the user waiting on
+            // a chat that is no longer waiting on anything.
+            this.autoContinue.value = false;
+            this.transcript.notice(
+                `Auto-continue stopped — ${AUTO_CONTINUE_TRIES} turns in a row ended without getting anywhere. Press Continue to carry on.`,
+            );
+            this.persist();
+            return;
+        }
+        this.autoContinueTries += 1;
+        this.autoContinueAt.value = Date.now() + delay;
+        this.autoContinueTimer = setTimeout(() => {
+            this.autoContinueAt.value = undefined;
+            this.autoContinueTimer = undefined;
+            /* SOMEBODY AT THE KEYBOARD OUTRANKS THE TIMER. Words in the composer, a staged file, a message
+             * already queued: each is the user's own answer to "what happens next", and firing a bare "Continue"
+             * over one would start a turn they did not ask for and did not see coming. The automation stays
+             * armed — it simply lets this stop go by, and the send they are in the middle of is what continues
+             * the chat instead. */
+            if (this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0 || this.streaming.value) {
+                return;
+            }
+            void this.enqueue(continuationFor(this.messages.value));
+        }, delay);
+    }
+
+    // Drop a pending continuation: a turn starting (it has been overtaken), the automation being switched off,
+    // the tab going away. Leaves the ladder where it is — a turn that got somewhere resets that, and so does
+    // arming the switch again; nothing else should.
+    private cancelAutoContinue(): void {
+        clearTimeout(this.autoContinueTimer);
+        this.autoContinueTimer = undefined;
+        this.autoContinueAt.value = undefined;
+    }
+
+    /* The switch itself, and the one thing it does beyond flipping the flag: turning it OFF drops whatever it had
+     * already scheduled, because the press people reach for it with is "not that, not now". Turning it ON starts
+     * from the front of the ladder — arming an automation is a fresh instruction, not a resumption of the one
+     * that gave up. It does not schedule anything by itself: the next turn to stop short is what does that. */
+    setAutoContinue(on: boolean): void {
+        this.autoContinue.value = on;
+        this.autoContinueTries = 0;
+        // No persist(): that mirrors the TRANSCRIPT, and nothing was said. The switch rides the tab snapshot,
+        // which the strip's own reactivity carries out of snapshotTab (tabSnapshot.ts).
+        if (!on) {
+            this.cancelAutoContinue();
+            return;
+        }
+        /* ARMED ON A CHAT THAT IS ALREADY STOPPED — which is exactly where the switch is offered — takes that
+         * stop too. The press means "and get on with it"; waiting for the NEXT one would ask the user to press
+         * Continue as well, and not pressing Continue is the entire point. No `interrupted` guard here, unlike
+         * the turn-end path: somebody who stops a turn and then arms this is asking for that turn to carry on. */
+        if (this.resumable.value && !this.streaming.value) {
+            this.armAutoContinue();
+        }
     }
 
     /* The composer's one send path — the message is accepted whatever the conversation is doing, and the
@@ -1140,8 +1252,10 @@ export class Conversation {
     // the conversation reattaches to it.
     abort(): void {
         // The turn is ending on someone's say-so, not its own — hold the queue back from the settle flush
-        // (a closed tab must not fire a turn; a stopped agent must not be immediately restarted).
+        // (a closed tab must not fire a turn; a stopped agent must not be immediately restarted), and drop a
+        // continuation already on the clock for the same reason: it would fire into a tab nobody has open.
         this.interrupted = true;
+        this.cancelAutoContinue();
         this.transcript.settle();
         this.probe?.abort();
         this.inflight?.abort();

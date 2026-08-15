@@ -323,6 +323,55 @@ test("a session error and a thrown runner become error events followed by done",
     ]);
 });
 
+/* A REFUSAL THAT IS ONLY ABOUT HOW MUCH HAS BEEN ASKED, coded as one. Uncoded it read as a crash — a red line,
+ * and the chat's offer to Continue, which on a spent weekly allowance re-fails the instant it is pressed. */
+test("a spent allowance is coded rate_limit, whatever wording the provider refuses in", async () => {
+    const refusal = (message: string): unknown[][] => [
+        [
+            { type: "session.error", properties: { sessionID: "s1", error: { name: "APICallError", data: { message } } } },
+            { type: "session.idle", properties: { sessionID: "s1" } },
+        ],
+    ];
+    // Google's own sentence, as CLIProxyAPI hands it back once its walk across the account fleet is spent...
+    const google = "429 RESOURCE_EXHAUSTED: You exceeded your current quota for gemini models";
+    expect(await collect(createGrokAgent(fakeRunner(...refusal(google)).runner), request)).toEqual([
+        { kind: "error", code: "rate_limit", message: google },
+        { kind: "done" },
+    ]);
+    // ...and a bare rate-limit sentence, which reaches this path only after OpenCode's own in-turn retries.
+    const bare = "Rate limit exceeded, please try again later";
+    expect(await collect(createGrokAgent(fakeRunner(...refusal(bare)).runner), request)).toEqual([
+        { kind: "error", code: "rate_limit", message: bare },
+        { kind: "done" },
+    ]);
+    // An ordinary failure is still uncoded — the code is what stops Continue being offered, so it has to be earned.
+    expect(await collect(createGrokAgent(fakeRunner(...refusal("connection reset")).runner), request)).toEqual([
+        { kind: "error", message: "connection reset" },
+        { kind: "done" },
+    ]);
+});
+
+/* THE WAIT THAT USED TO LOOK LIKE A HANG. OpenCode rides out a refused request inside the turn and says so
+ * once, with the instant it will try again — and emits nothing else meanwhile, so a chat with no frame for it
+ * sits on "Thinking…" for the whole backoff while the one move against an apparent hang throws the work away. */
+test("an in-turn retry surfaces as provider_retry, naming a rate limit when that is what it is", async () => {
+    const next = Date.now() + 42_000;
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s1" } } },
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 2, message: "429 quota exceeded", next } } },
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "retry", attempt: 3, message: "socket hang up", next } } },
+        // Every other status is liveness only — the watchdog counts it, the transcript says nothing about it.
+        { type: "session.status", properties: { sessionID: "s1", status: { type: "busy" } } },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    expect(await collect(createGrokAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "provider_retry", attempt: 2, nextAttemptAt: next, status: 429 },
+        { kind: "provider_retry", attempt: 3, nextAttemptAt: next },
+        { kind: "done" },
+    ]);
+});
+
 // A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription) — so
 // these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
 // GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
@@ -506,6 +555,34 @@ test("createGrokRunner aborts and throws when no event arrives within the inacti
     };
     await expect(drain()).rejects.toThrow(/timed out/);
     expect(aborted()).toBe(true);
+});
+
+/* A RETRY NAMES WHEN IT WILL SPEAK AGAIN, and the watchdog has to wait that long — OpenCode's backoff outgrows
+ * two minutes on a provider that keeps refusing, and a turn killed during a wait it announced would be the same
+ * false timeout as the one this file already fixed, dressed as a rate limit. */
+test("a retry's announced next attempt pushes the inactivity deadline past it", async () => {
+    const { openCode, aborted } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.status",
+            properties: { sessionID: "s1", status: { type: "retry", attempt: 1, message: "429", next: Date.now() + 150 } },
+        } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    const startedAt = Date.now();
+    // The stream goes quiet after the retry and never speaks again, so the turn does die here — the assertion is
+    // WHEN. With a 20ms window it would have been aborted almost immediately; the promised instant is 150ms out,
+    // so anything past that proves the wait was honoured rather than merely slow.
+    await expect(
+        (async () => {
+            for await (const event of createGrokRunner(openCode, 20)(runnerTurn)) {
+                seen.push(event.type);
+            }
+        })(),
+    ).rejects.toThrow(/timed out/);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(150);
+    expect(aborted()).toBe(true);
+    expect(seen).toEqual(["session.created", "session.status"]);
 });
 
 test("createGrokRunner self-heals a model-not-found rejection: records the named models and re-prompts once", async () => {
