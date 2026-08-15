@@ -153,6 +153,40 @@ describe(`markup that would render invisibly`, () => {
     });
 });
 
+/* Headings — ATX headers at every level the prose styles (h1–h4), plus h5/h6 which marked produces but
+ * prose.css does not style. A heading with text in it must come through as its element, not as escaped
+ * source, so the prose surface can style it and the outline can find it. */
+describe(`headings`, () => {
+    it(`renders ## as an h2`, () => {
+        expect(renderMarkdown(`## Section`)).toContain(`<h2>`);
+        expect(renderMarkdown(`## Section`)).toContain(`Section`);
+    });
+
+    it(`renders every ATX level`, () => {
+        expect(renderMarkdown(`# One`)).toContain(`<h1>`);
+        expect(renderMarkdown(`## Two`)).toContain(`<h2>`);
+        expect(renderMarkdown(`### Three`)).toContain(`<h3>`);
+        expect(renderMarkdown(`#### Four`)).toContain(`<h4>`);
+    });
+
+    it(`renders a setext h2 (underlined with dashes)`, () => {
+        expect(renderMarkdown(`Heading\n------`)).toContain(`<h2>`);
+    });
+
+    it(`preserves inline markup inside a heading`, () => {
+        const html = renderMarkdown(`## The **bold** part`);
+        expect(html).toContain(`<h2>`);
+        expect(html).toContain(`<strong>bold</strong>`);
+    });
+
+    it(`renders headings inside a full document with prose around them`, () => {
+        const html = renderMarkdown(`# Title\n\nIntro paragraph.\n\n## Section\n\nBody text.`);
+        expect(html).toContain(`<h1>`);
+        expect(html).toContain(`<h2>`);
+        expect(html).toContain(`Intro paragraph.`);
+    });
+});
+
 describe(`streaming split`, () => {
     const settledOf = (text: string): string => text.slice(0, settledEnd(text, 0));
 
