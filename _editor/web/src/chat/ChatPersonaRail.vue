@@ -206,13 +206,7 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
 
 <template>
     <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
-        <!-- Nothing set up is the ordinary state of a fresh workspace, not an error — so the empty rail says
-             what a persona IS in one line, and offers the one press that makes this mode mean something. -->
         <template v-if="empty">
-            <p class="px-1 pb-2 pt-3 text-2xs text-subtle">
-                No personas yet. A persona is a name you can send as — a group of your connected accounts, so a chat can act as one person instead of
-                reaching everything you own.
-            </p>
             <button type="button" :class="cmp.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
                 <Icon name="plus" class="text-2xs" />
                 Set up a persona
