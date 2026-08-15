@@ -83,8 +83,7 @@ const { default: SandboxPersonas } = await import("./SandboxPersonas.vue");
 const account = (id: string, platform: string): BrowserAccount => ({ id, platform, site: platform, logo: undefined, icon: `globe` });
 
 let app: App | undefined;
-// Icon and RouterLink are registered app-wide in the real app; stand-ins keep this off the whole UI plugin and
-// the router. RouterLink renders its slot so the "connect an account first" nudge is still readable as text.
+// Icon is registered app-wide in the real app; a stand-in keeps this off the whole UI plugin.
 const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -96,16 +95,6 @@ const mount = (): HTMLElement => {
         defineComponent({
             props: { name: String, spin: Boolean },
             setup: (props) => () => h(`i`, { "data-icon": props.name }),
-        }),
-    );
-    app.component(
-        `RouterLink`,
-        defineComponent({
-            props: { to: String },
-            setup:
-                (_props, { slots }) =>
-                () =>
-                    h(`a`, slots[`default`]?.()),
         }),
     );
     app.directive(`tooltip`, {});
@@ -202,6 +191,24 @@ it(`does not mark a persona that can reach at least one signed-in account`, () =
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
     connected.value = [`x-company`];
     expect(text(mount())).not.toContain(`Not signed in`);
+});
+
+/* A CARD HOLDING NO ACCOUNTS IS AN ORDINARY CARD, not a broken one: one that starts in a folder and bounds what
+ * an agent may touch is most of what a persona is for. The row used to write "No accounts — this persona can't
+ * post anywhere" in the warning colour, which painted the commonest card there is — including every card a
+ * minute old — as a defect, on the one page you come to to look at your personas. */
+it(`says nothing about a persona that holds no accounts`, () => {
+    personas.value = [{ id: `docs`, capabilities: [] }];
+    const rendered = text(mount());
+    expect(rendered).not.toContain(`No accounts`);
+    expect(rendered).not.toContain(`can't post`);
+});
+
+// ...and a sandbox that has connected nothing at all can still make one. The page used to open with a warning
+// and disable this button, which is the same claim enforced rather than merely written.
+it(`offers to add a persona when this sandbox has no accounts at all`, () => {
+    accounts.value = [];
+    expect(buttonLabelled(mount(), `Add a persona`)?.disabled).toBe(false);
 });
 
 // The claim the whole layer rests on: a persona spans platforms, so the card it saves carries both accounts.

@@ -261,17 +261,11 @@ const confirmRemove = async (): Promise<void> => {
         </template>
 
         <template v-else>
-            <!-- Nothing to name a persona after yet. Said once, up front, because every card below would
-                 otherwise be built out of accounts that do not exist. -->
-            <RouterLink
-                v-if="accounts.length === 0"
-                to="/capabilities"
-                :class="cmp.alertWarning('mb-4 flex items-center gap-2 no-underline transition-colors hover:border-warning')"
-            >
-                <Icon name="exclamation-triangle" class="shrink-0" />
-                <span>No accounts connected yet — a persona needs at least one to speak through.</span>
-                <span class="ml-auto inline-flex items-center gap-1 font-medium">Connect <Icon name="arrow-right" class="text-2xs" /></span>
-            </RouterLink>
+            <!-- NO ACCOUNTS CONNECTED IS NOT A PROBLEM WITH THIS PAGE. It used to open with a warning saying a
+                 persona needs one to speak through, which is not true: a card that names a folder and bounds
+                 what an agent may touch is a whole persona on its own, and most cards start that way. The way
+                 to connect an account is on the Capabilities page, where somebody who wants one is already
+                 headed; it does not have to be shouted from here. -->
 
             <!-- NO PERSONAS AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line
                  of apology in it. It says what is true right now — automations are mute, chats are unrestricted
@@ -284,7 +278,9 @@ const confirmRemove = async (): Promise<void> => {
                         Until there is one, an automation you schedule can't post anywhere — and a chat reaches every account you've connected.
                     </span>
                 </div>
-                <Button label="Add a persona" size="small" :disabled="accounts.length === 0" @click="startAdd">
+                <!-- Never disabled on "you have no accounts". A card with none is a card that bounds where an
+                     agent works and what it may do, which is most of what a persona is for. -->
+                <Button label="Add a persona" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -361,12 +357,14 @@ const confirmRemove = async (): Promise<void> => {
                     <!-- THE ACCOUNTS BY NAME, under the persona's own. The marks on the right say which
                          platforms at a glance, but a mark cannot tell `reddit-work` from `reddit-personal` — those
                          two being different is the entire problem this feature exists to solve, so the names
-                         are not something the row can leave to a tooltip. -->
+                         are not something the row can leave to a tooltip.
+
+                         A CARD HOLDING NONE LEAVES THE SLOT EMPTY rather than filling it with a warning. This
+                         wrote "No accounts — this persona can't post anywhere" there, which painted the most
+                         ordinary card there is — one made to work in a folder, one made a minute ago — as a
+                         defect, in the warning colour, on the very page you come to to look at your personas. -->
                     <template #description>
                         <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
-                        <span v-else-if="persona.capabilities.length === 0" class="text-warning">
-                            No accounts — this persona can't post anywhere
-                        </span>
                         <!-- Separated, because two account names running together read as one. A signed-out
                              account is dimmed rather than struck through: a line through it says REMOVED, and
                              what is true is that it is listed and cannot act yet — which the badge names. -->

@@ -31,8 +31,9 @@
      the same card wore two different faces depending on where you met it, and the commonest case of all, a
      persona somebody made a minute ago, met you as a grey smudge on the very page that exists to show it off.
      A face is identity and identity does not have a disabled state: whether a card can post is a fact ABOUT it,
-     and it is already stated in words on every surface that knows it ("No accounts — this persona can't post
-     anywhere", "— not signed in yet", the Not signed in badge, the dimmed account marks beside it). -->
+     and where it is worth saying at all it is said in words ("— not signed in yet", the Not signed in badge,
+     the dimmed account marks beside it). Holding no accounts is not one of those facts — that is an ordinary
+     card, and no surface remarks on it. -->
 <script setup lang="ts">
 import * as adventurer from "@dicebear/adventurer";
 import { createAvatar } from "@dicebear/core";

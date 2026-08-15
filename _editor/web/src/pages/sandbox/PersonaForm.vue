@@ -172,7 +172,9 @@ const folderBound = computed(() => draft.folders.length > 0);
 
         <div class="ui-field">
             <span class="ui-field-label">Speaks through</span>
-            <p v-if="accounts.length === 0" class="text-xs text-subtle">Connect an account first — a persona needs one to speak through.</p>
+            <!-- Nothing to offer, said as a fact about this sandbox rather than as something missing from the
+                 card: a persona with no accounts is finished, not half-made. -->
+            <p v-if="accounts.length === 0" class="text-xs text-subtle">No accounts connected in this sandbox yet.</p>
             <template v-else>
                 <!-- WHAT IT SPEAKS THROUGH, AND THE WAY TO CHANGE IT, on one line. A chip here is a persona's
                      account and clicking it takes that account away, which is why it wears an × rather than the
@@ -197,8 +199,8 @@ const folderBound = computed(() => draft.folders.length > 0);
                         <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
                     </button>
                     <!-- A card that speaks nowhere is a perfectly good card — most personas that work in a
-                         folder are one — so this states the consequence instead of warning about it. -->
-                    <span v-if="pickedMarks.length === 0" class="text-xs text-subtle">Nobody yet — it can work, but not post as anyone.</span>
+                         folder are one — so the empty row says nothing at all about it. The button beside it is
+                         the whole state: nothing picked, and here is where you would pick some. -->
                     <button
                         type="button"
                         :class="cmp.linkButton('gap-1 text-xs text-muted hover:text-content')"
