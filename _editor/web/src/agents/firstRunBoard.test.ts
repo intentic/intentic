@@ -13,6 +13,7 @@ import { offerOnBoard } from "../composables/chat/connectOffer";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../composables/chat/providerAccounts";
 import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
+import { PANELS } from "../composables/queryKeys";
 import { router } from "../router";
 import AgentsView from "./AgentsView.vue";
 
@@ -49,6 +50,9 @@ afterEach(() => {
     for (const app of mounted.splice(0)) {
         app.unmount();
     }
+    // The workspace facts are seeded into the query cache by the test that needs them, so they are dropped
+    // here rather than left for whichever test mounts next to inherit.
+    queryClient.clear();
 });
 
 // The connection picture is the axis this screen turns on, so every test states it outright rather than
@@ -106,7 +110,7 @@ it(`waits for the daemon before claiming nothing is connected`, async () => {
     expect(offerOnBoard.value).toBe(true);
 });
 
-it(`suggests getting code in once something can send, and a starter fills the chat rather than sending`, async () => {
+it(`suggests nothing on an empty workspace — getting code in is the workspace pane's offer`, async () => {
     // A connected Claude subscription: the offer is answered, so the screen goes back to asking for the task.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
     const board = mount(AgentsView);
@@ -114,10 +118,23 @@ it(`suggests getting code in once something can send, and a starter fills the ch
 
     expect(board.textContent).not.toContain(`Try free with Google`);
     expect(offerOnBoard.value).toBe(false);
-    // No repos and no changes in this mount, so the suggestions are the get-your-code-in pair.
-    const starter = starterNamed(board, `Bring in my code`);
+    // No repos and no changes in this mount. Every suggestion this screen has points an agent at code, and
+    // there is none — the two chips that used to stand here proposed cloning and scaffolding, which is the
+    // workspace pane's offer, made properly there (WorkspaceEmptyState) and in an agent's words here.
+    expect(board.textContent).toContain(`Start your first agent`);
+    expect([...board.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).not.toContain(`Bring in my code`);
+    expect(starterNamed(board, `Explain this codebase`)).toBeUndefined();
+});
+
+it(`suggests work once the workspace has some, and a starter fills the chat rather than sending`, async () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
+    // One repository in the workspace, which is what makes "explain this codebase" a thing to press.
+    queryClient.setQueryData(PANELS.of(), { panels: [{ repo: `app` }] });
+    const board = mount(AgentsView);
+    await nextTick();
+
+    const starter = starterNamed(board, `Explain this codebase`);
     expect(starter).toBeDefined();
-    expect(starterNamed(board, `Start a new project`)).toBeDefined();
 
     const before = useChat().conversations.value.length;
     starter!.click();
@@ -125,7 +142,7 @@ it(`suggests getting code in once something can send, and a starter fills the ch
 
     // FILLED, NOT SENT: the prompt is in the chat's own composer, no agent was started, and no second tab was
     // opened to hold it.
-    expect(useChat().active.value.draft.value).toContain(`Clone my repository into this workspace`);
+    expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
     expect(useChat().active.value.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
     // Still the first-run screen — filling the composer is not starting anything.

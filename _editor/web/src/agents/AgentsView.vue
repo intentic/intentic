@@ -9,10 +9,8 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../composables/agents/agentActions";
-import { markAgentStarted } from "../composables/agents/firstRun";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useChanges } from "../composables/workspace/useChanges";
-import { useSandbox } from "../composables/sandbox/useSandbox";
 import { synthesizeSessions, synthesizing } from "../composables/agents/synthesizeSessions";
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
@@ -651,12 +649,10 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 const total = computed(
     () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
 );
-/* HAS ANYTHING EVER HAPPENED HERE — a different question from `total`, and the one the first-run screen and the
- * desktop's first landing both turn on. The docked chat always holds one conversation, and a conversation the
- * fleet has never heard of is a `draft` CARD on this board (useAgents.fleet): so a workspace where nobody has
- * done anything still counts one, `total` is never 0 on it, and both features built on that count would be dead
- * on exactly the workspace they exist for — the first-run screen never drawn, and the landing flag set by the
- * first page load rather than by the first agent.
+/* HAS ANYTHING EVER HAPPENED HERE — a different question from `total`, and the one the first-run screen turns
+ * on. The docked chat always holds one conversation, and a conversation the fleet has never heard of is a
+ * `draft` CARD on this board (useAgents.fleet): so a workspace where nobody has done anything still counts one,
+ * `total` is never 0 on it, and the first-run screen would be dead on exactly the workspace it exists for.
  *
  * An untouched draft is the empty composer one column over, not work. Anything else counts, the archive
  * included: agents that ran and were filed away are a history, and this board should show a person with one the
@@ -681,8 +677,8 @@ const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.v
 const clearable = computed(() => lanes.value.finished.length);
 
 /* --- The first run --------------------------------------------------------------------------------------
- * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. On a fresh workspace this is where the desktop lands
- * (router/index.ts), straight out of setup, so what stands here is somebody's whole first impression.
+ * A BARE BOARD IS THE ONE SCREEN THAT HAS TO TEACH. Mobile lands here (router/index.ts), and on desktop it is
+ * the first thing anyone curious about what "agents" are presses, so what stands here is a first impression.
  *
  * IT ASKS FOR A TASK, IT IS NOT A PLACE TO TYPE ONE. There was a composer in the middle of this screen — its
  * own box, its own send — and it was wrong twice over. There is exactly one composer in this product and it is
@@ -697,10 +693,13 @@ const clearable = computed(() => lanes.value.finished.length);
  * different offers. Once something can send, it goes back to asking for the task, and the suggestions write
  * themselves into the real composer one column over.
  *
- * A chip FILLS that composer, it does not send. One rule for all of them, because they are not all complete:
- * "bring in my code" ends mid-sentence waiting for a repository, and a chip that sometimes dispatches an agent
- * and sometimes doesn't is a control nobody can predict. It also leaves the text there to be edited, which is
- * the point of suggesting it rather than doing it. */
+ * A chip FILLS that composer, it does not send: it leaves the text there to be edited, which is the point of
+ * suggesting it rather than doing it.
+ *
+ * THEY ARE ABOUT WORK THAT IS ALREADY HERE, and there are none when there isn't any. Getting code into an
+ * empty workspace is the workspace pane's job — it is where setup lands and it offers all three doors
+ * (WorkspaceEmptyState); a pair of chips here proposing the same thing in a sentence an agent has to interpret
+ * was the second, worse answer to a question already answered one tab over. */
 // The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -712,16 +711,9 @@ const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChang
  * understand it, then a small safe change with a stop before anything is written. Concrete sentences rather
  * than feature names — "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
 const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
+    // Nothing to work on, nothing to suggest: every one of these points an agent at code that has to exist.
     if (!hasWork.value) {
-        return [
-            // Left deliberately unfinished: the repository is the one thing only the user can supply, and a
-            // chip that guessed at it would send an agent after something that does not exist.
-            { label: `Bring in my code`, prompt: `Clone my repository into this workspace: ` },
-            {
-                label: `Start a new project`,
-                prompt: `Start a new project in this workspace. Ask me what I want to build before you scaffold anything.`,
-            },
-        ];
+        return [];
     }
     return [
         // Uncommitted work is the most urgent thing on a workspace that has any, so it leads when it exists.
@@ -748,20 +740,6 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
 const offering = computed(() => !started.value && !archiveOpen.value && !connected.value);
 watch(offering, (on) => (offerOnBoard.value = on), { immediate: true });
 onUnmounted(() => (offerOnBoard.value = false));
-/* AGENTS ON THE BOARD MEAN THIS IS NOT A FIRST RUN, whatever this browser's storage says — a workspace driven
- * from another machine, or from before the flag existed, has already been delegated to, and the desktop should
- * go back to opening on the workspace for it. startAgent records the same fact on the press; this is the other
- * end, for the runs it never saw. Keyed on `started`, so the docked chat's untouched draft does not record it. */
-const { activeSandboxId } = useSandbox();
-watch(
-    started,
-    (ever) => {
-        if (ever) {
-            markAgentStarted(activeSandboxId.value);
-        }
-    },
-    { immediate: true },
-);
 // Card click FOCUSES, it does not navigate: on desktop it only points the chat surface — this window's docked
 // panel and, through the summons channel, every other window's, the popped-out chat included — at this agent
 // and highlights the card. Cheap and reversible, so the user can click down a lane to skim. The view-change to
@@ -1119,16 +1097,15 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </p>
             </template>
             <template v-if="!started">
-                <!-- THE WAY IN, on the screen a fresh sandbox actually lands on: the chat's own card, in the
-                     middle of the board rather than tucked into a side panel, because until it is answered
-                     nothing else on this screen can happen. The chat drops its copy while this stands — the
-                     wait in front of it included, which is why the spinner is inside this branch and not
-                     beside it. -->
+                <!-- THE WAY IN, on the screen that asks for a first agent: the chat's own card, in the middle
+                     of the board rather than tucked into a side panel, because until it is answered nothing
+                     else on this screen can happen. The chat drops its copy while this stands — the wait in
+                     front of it included, which is why the spinner is inside this branch and not beside it. -->
                 <!-- `prominent`, and wider than the card it used to be: on this screen the offer is not one
                      thing among several, it is the only thing that can happen, and it was drawn as the
-                     smallest — a `small` button on a 24rem card, outweighed by the two starter chips beneath
-                     it. The sign-in also runs inside this card now rather than pushing the router at the
-                     settings tab, so it has a flow's worth of room to grow into. -->
+                     smallest — a `small` button on a 24rem card. The sign-in also runs inside this card now
+                     rather than pushing the router at the settings tab, so it has a flow's worth of room to
+                     grow into. -->
                 <div v-if="offering" class="w-full max-w-md rounded-xl border border-line bg-card px-5 py-6">
                     <p v-if="!accountsLoaded" class="flex items-center justify-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin />Checking your AI accounts…
@@ -1136,9 +1113,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <ConnectOffer v-else :view="chat" prominent />
                 </div>
                 <!-- Tasks worth pressing, read off what is actually in the workspace (see `starters`). They fill
-                     the chat's composer rather than dispatching, so the user sends their own first turn — and
-                     the caret lands where the sentence stops, which for "bring in my code" is mid-sentence. -->
-                <div v-else class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+                     the chat's composer rather than dispatching, so the user sends their own first turn. An
+                     empty workspace has none, and the row goes with them rather than leaving its gap behind. -->
+                <div v-else-if="starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
                     <button
                         v-for="starter in starters"
                         :key="starter.label"

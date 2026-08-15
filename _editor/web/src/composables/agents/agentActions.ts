@@ -8,9 +8,7 @@ import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
-import { useSandbox } from "../sandbox/useSandbox";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
-import { markAgentStarted } from "./firstRun";
 import { useAgents } from "./useAgents";
 import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 
@@ -52,10 +50,6 @@ import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
 // Returns the conversation it summoned, so a caller that has to keep pointing at the new chat (the persona
 // rail rings the one it opened) does not have to guess which one that was.
 export const startAgent = (prompt?: string, actsAs?: string): string => {
-    // This workspace has now been delegated to, which is what the desktop's first landing waits for: from here
-    // on, opening the app lands on the workspace rather than the board (firstRun.ts). Recorded on the press
-    // rather than on the turn completing — the user has seen what the board is for either way.
-    markAgentStarted(useSandbox().activeSandboxId.value);
     const conversation = draftConversation();
     // Before the summons, so every window that receives this tab receives it already pinned.
     conversation.actsAs.value = actsAs;
@@ -68,13 +62,9 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
 };
 
 /* THE SAME PRESS WITH THE TURN WRITTEN BUT NOT SENT — what a surface offering a SUGGESTION does (the empty
- * board's starters). Every step of `startAgent` except the send, and that difference is the whole point: the
- * suggestions are not all complete sentences ("bring in my code" stops where the repository goes), and one that
- * sometimes dispatched an agent and sometimes didn't would be a control nobody can predict. Leaving the text in
- * the composer is also what makes it editable, which is the point of suggesting rather than doing.
- *
- * Nothing is marked started, because nothing has been delegated: the first-run screen stays up until a turn is
- * actually sent, which is the fact it exists to track (firstRun.ts).
+ * board's starters). Every step of `startAgent` except the send, and that difference is the whole point: a
+ * suggestion the user has not read yet is not a task they asked for, and leaving the text in the composer is
+ * what makes it editable, which is the point of suggesting rather than doing.
  *
  * The composer it writes into is the focused chat when nothing has been sent there yet, so trying a second
  * suggestion REPLACES the first rather than opening a second tab (composingConversation). */

@@ -7,7 +7,6 @@ import {
     type RouteLocationRaw,
     type RouteRecordRaw,
 } from "vue-router";
-import { agentStarted } from "../composables/agents/firstRun";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -107,18 +106,11 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            /* Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
-             * keeps the workspace (its chat is docked).
-             *
-             * EXCEPT ON A WORKSPACE NOBODY HAS DELEGATED ANYTHING IN YET, where the desktop lands on the fleet
-             * too. Setup ends at the highest-motivation moment this product has, and spending it on an empty
-             * file tree shows the user the one screen that cannot explain why they signed up; the board can,
-             * and its first-run state asks them for a task outright. It reverts to the workspace the moment
-             * they start their first agent — see agents/firstRun.ts. */
-            {
-                path: ``,
-                redirect: () => (useDevice().mobile.value || !agentStarted(useSandbox().activeSandboxId.value) ? `/agents` : `/workspace`),
-            },
+            // Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
+            // keeps the workspace (its chat is docked), on the first session out of setup as much as on any
+            // later one: the workspace is where the code is, where getting code IN is offered, and where the
+            // docked chat is already sitting to be typed at.
+            { path: ``, redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`) },
             // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
             // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter

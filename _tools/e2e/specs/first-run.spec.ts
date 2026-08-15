@@ -1,20 +1,27 @@
 import { expect, test } from "@playwright/test";
 
 /* THE FIRST SESSION, in the browser: what somebody sees the moment setup finishes and the shell opens for the
- * first time. Both halves of it are decided by real state rather than by a flag a spec can set — the landing
- * reads whether this workspace has ever been delegated to, and the workspace pane reads whether the tree is
- * empty — so this drives the app the way a new user meets it and reads what it actually put on screen.
+ * first time. What each screen shows is decided by real state rather than by a flag a spec can set — the
+ * workspace pane reads whether the tree is empty, the board reads whether anything is connected — so this
+ * drives the app the way a new user meets it and reads what it actually put on screen.
  *
- * Serial and first: `workers: 1` means these specs share one seeded world, and both facts under test here are
+ * Serial and first: `workers: 1` means these specs share one seeded world, and every fact under test here is
  * "nothing has happened yet". A spec that started an agent or uploaded a file before this one would be
  * asserting against a workspace that is no longer new. */
 test.describe.configure({ mode: `serial` });
 
-test(`the desktop's first landing is the agent board, offering the way in`, async ({ page }) => {
-    // The shell's own entry, not /agents directly: the redirect IS what is under test.
+test(`the desktop's first landing is the workspace`, async ({ page }) => {
+    // The shell's own entry, not /workspace directly: the redirect IS what is under test. Setup ends here on
+    // every session, first or hundredth — the workspace is where the code is, and on a sandbox with none it is
+    // the pane that offers getting some in (the spec below).
     await page.goto(`/`);
 
-    await expect(page).toHaveURL(/\/agents$/);
+    await expect(page).toHaveURL(/\/workspace$/);
+});
+
+test(`the agent board offers the way in rather than a box it cannot send from`, async ({ page }) => {
+    await page.goto(`/agents`);
+
     await expect(page.getByRole(`heading`, { name: `Start your first agent` })).toBeVisible();
 
     /* NOTHING IS CONNECTED ON A FRESH SANDBOX, so the first screen is the way in rather than a task box that
