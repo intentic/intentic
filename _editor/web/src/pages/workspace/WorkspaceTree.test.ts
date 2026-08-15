@@ -94,6 +94,17 @@ const TEST_TREE: WorkspaceTreeEntry[] = [
 
 let app: App | undefined;
 
+// The tooltip directive, recorded rather than stubbed away: on a link row the tooltip IS the affordance —
+// where it points is the whole reason to look at one — so a test that could not read it would be asserting
+// the icon and not the row.
+const recordTooltip = {
+    mounted(el: HTMLElement, binding: { value?: unknown }): void {
+        if (binding.value !== undefined) {
+            el.setAttribute(`data-tooltip`, String(binding.value));
+        }
+    },
+};
+
 // Rebuild the module-level open-folder set from storage — what a page load does, and what a sandbox switch does.
 const restoreFrom = (expanded: readonly string[]): void => {
     sessionStorage.setItem(`intentic.workspaceTree.${SANDBOX}`, JSON.stringify(expanded));
@@ -119,7 +130,7 @@ const mount = async (props: {
             },
         }),
     );
-    app.directive(`tooltip`, {});
+    app.directive(`tooltip`, recordTooltip);
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
     await nextTick();
@@ -179,7 +190,7 @@ describe(`the explorer after a reload`, () => {
         document.body.append(el);
         app = createApp({ render: () => h(WorkspaceTree, { tree: tree.value, selectedPath: `src/api/routes.ts` }) });
         app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
-        app.directive(`tooltip`, {});
+        app.directive(`tooltip`, recordTooltip);
         app.use(VueQueryPlugin, { queryClient });
         app.mount(el);
         await nextTick();
@@ -509,5 +520,67 @@ describe(`empty folders (barren branches)`, () => {
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
         expect(useReceipts().receipt.value?.message).toBe(`web / demo / assets removed`);
+    });
+});
+
+/* SYMLINK ROWS. A link used to be filtered out of the daemon's listing entirely, so a folder holding only
+ * links — `.claude/skills`, one per skill the sandbox loaded — drew as an empty folder. Now it is listed as
+ * what it POINTS AT: the row wears the target's icon, expands if the target is a folder, and carries a small
+ * marker saying the name is a pointer. Where it points is on the marker, which is the part VSCode's explorer
+ * leaves out and the part that answers the only question a link raises. */
+describe(`symlink rows`, () => {
+    const link = (path: string, to: string, state?: `broken` | `outside`): WorkspaceTreeEntry => ({
+        ...(state === `broken` ? file(path) : dir(path, [file(`${path}/SKILL.md`)])),
+        link: { to, ...(state !== undefined ? { state } : {}) },
+    });
+    const LINK_TREE: WorkspaceTreeEntry[] = [
+        dir(`.claude`, [
+            dir(`.claude/skills`, [
+                link(`.claude/skills/github`, `../../.agents/skills/github`),
+                link(`.claude/skills/gone`, `../../.agents/skills/gone`, `broken`),
+                link(`.claude/skills/away`, `/etc`, `outside`),
+            ]),
+        ]),
+        file(`README.md`),
+    ];
+    const markerOf = (el: HTMLElement, name: string): Element | undefined =>
+        [...el.querySelectorAll(`[role="treeitem"]`)]
+            .find((row) => row.textContent?.trim().startsWith(name))
+            ?.querySelector(`[data-icon="link"], [data-icon="link-broken"]`) ?? undefined;
+
+    it(`marks a link and says where it points`, async () => {
+        // The link folder itself is left open, so what a walked-through link holds is on screen.
+        restoreFrom([`.claude`, `.claude/skills`, `.claude/skills/github`]);
+        const el = await mount({ tree: LINK_TREE });
+
+        expect(markerOf(el, `github`)?.getAttribute(`data-icon`)).toBe(`link`);
+        expect(markerOf(el, `github`)?.getAttribute(`data-tooltip`)).toBe(`Link to ../../.agents/skills/github`);
+        // A working link is an ordinary row otherwise — it expands, and its contents are there.
+        expect(rows(el)).toContain(`SKILL.md`);
+        // A plain row wears no marker at all.
+        expect(markerOf(el, `README.md`)).toBeUndefined();
+    });
+
+    it(`names the two refusals rather than just doing nothing`, async () => {
+        restoreFrom([`.claude`, `.claude/skills`]);
+        const el = await mount({ tree: LINK_TREE });
+
+        expect(markerOf(el, `gone`)?.getAttribute(`data-icon`)).toBe(`link-broken`);
+        expect(markerOf(el, `gone`)?.getAttribute(`data-tooltip`)).toBe(`Link to ../../.agents/skills/gone — there is nothing there`);
+        expect(markerOf(el, `away`)?.getAttribute(`data-tooltip`)).toBe(`Link to /etc — outside the workspace, so the sandbox won't open it`);
+    });
+
+    it(`offers no chevron on a link with nothing reachable behind it`, async () => {
+        restoreFrom([`.claude`, `.claude/skills`]);
+        const el = await mount({ tree: LINK_TREE });
+
+        const chevronOf = (name: string): boolean =>
+            [...el.querySelectorAll(`[role="treeitem"]`)]
+                .find((row) => row.textContent?.trim().startsWith(name))
+                ?.querySelector(`[data-icon^="chevron"]`) !== null;
+        expect(chevronOf(`github`)).toBe(true);
+        // A link out of the workspace resolves to a DIRECTORY, so without this it would offer to expand into
+        // a listing the daemon refuses to produce.
+        expect(chevronOf(`away`)).toBe(false);
     });
 });

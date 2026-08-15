@@ -39,7 +39,7 @@ export const createWorkspaceRoutes = (services: Services) => {
     const i = implement(workspaceContract).$context<OrpcContext>();
     // A write's target: always the shared tree, guarded (see workspace-scope for why no write route can name a
     // conversation's checkout in the first place).
-    const contained = (relPath: string): string => containedIn(services.workspace.root, relPath);
+    const contained = async (relPath: string): Promise<string> => containedIn(services.workspace.root, relPath);
     // Whose copy a READ means — composed once (see Services.workspaceScope), because the byte routes in app.ts
     // answer the same question and two resolvers that disagreed would make a file's contents depend on which
     // route the browser happened to use for it.
@@ -199,22 +199,22 @@ export const createWorkspaceRoutes = (services: Services) => {
         // control plane. Every mutation pings history so it lands as a user-authored snapshot (debounced per
         // gesture).
         mkdir: i.mkdir.handler(async ({ input }) => {
-            await services.files.mkdir(contained(input.path));
+            await services.files.mkdir(await contained(input.path));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
         delete: i.delete.handler(async ({ input }) => {
-            await services.files.remove(contained(input.path));
+            await services.files.remove(await contained(input.path));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
         move: i.move.handler(async ({ input }) => {
-            await services.files.move(contained(input.from), contained(input.to));
+            await services.files.move(await contained(input.from), await contained(input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
         copy: i.copy.handler(async ({ input }) => {
-            await services.files.copy(contained(input.from), contained(input.to));
+            await services.files.copy(await contained(input.from), await contained(input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),

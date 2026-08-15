@@ -209,6 +209,10 @@ const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHid
 // switches repaint the listing behind it, so the answer to "did that do what I wanted" is already on screen.
 const filterSheet = ref(false);
 
+// A symlink that goes nowhere, or that leaves the workspace: dimmed, and it offers no drill-in — there is
+// nothing behind it the sandbox will list.
+const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== undefined;
+
 // --- Long-press row actions (the ContextMenu equivalents) --------------------------------------
 // This view's root — the element a clipboard write is reached through, so it lands in the window the user is
 // looking at rather than the opener's (see clipboardOf).
@@ -523,7 +527,11 @@ const onPick = (event: Event): void => {
                                 type="button"
                                 class="flex h-11 w-full items-center gap-3 px-3 text-left transition-colors active:bg-overlay"
                                 v-longpress="() => (sheetEntry = node)"
-                                @click="node.type === 'dir' && !isLockedWorkspacePath(node.path) ? openDir(node.path) : openFile(node.path)"
+                                @click="
+                                    node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)
+                                        ? openDir(node.path)
+                                        : openFile(node.path)
+                                "
                             >
                                 <!-- A row the sandbox keeps to itself: padlock, dimmed, and a tap opens the tab
                                      that explains it rather than walking into a folder with nothing in it. -->
@@ -534,9 +542,18 @@ const onPick = (event: Event): void => {
                                 />
                                 <span
                                     class="min-w-0 flex-1 truncate text-sm"
-                                    :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) }"
+                                    :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined }"
                                     >{{ node.name }}</span
                                 >
+                                <!-- A symlink. The row wears its TARGET's icon, so this marker is what says the
+                                     name is a pointer. No hover on touch, so where it points can't be shown
+                                     here — the long-press sheet is where a row explains itself. -->
+                                <Icon
+                                    v-if="node.link !== undefined"
+                                    :name="node.link.state === undefined ? 'link' : 'link-broken'"
+                                    class="shrink-0 text-xs"
+                                    :class="node.link.state === undefined ? 'text-subtle' : 'text-warning'"
+                                />
                                 <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
                                 <span
                                     v-if="node.path === REFERENCE_DIR"
@@ -550,7 +567,7 @@ const onPick = (event: Event): void => {
                                     >public</span
                                 >
                                 <Icon
-                                    v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path)"
+                                    v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)"
                                     name="chevron-right"
                                     class="shrink-0 text-xs text-subtle"
                                 />
@@ -624,6 +641,15 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="copy" class="text-base text-muted" /> Copy path
                 </button>
+                <!-- Where a link points. There is no hover on a phone, so this sheet is the only place the row
+                     can say it — and it is the whole reason to tap a link in the first place. -->
+                <p v-if="sheetEntry.link" class="flex min-h-12 items-start gap-3 px-3 py-3 text-sm text-muted">
+                    <Icon :name="sheetEntry.link.state === undefined ? 'link' : 'link-broken'" class="mt-0.5 shrink-0 text-base text-subtle" />
+                    <span class="min-w-0 break-all"
+                        >Link to {{ sheetEntry.link.to }}<template v-if="sheetEntry.link.state === 'broken'"> — there is nothing there</template
+                        ><template v-else-if="sheetEntry.link.state === 'outside'"> — outside the workspace, so the sandbox won't open it</template>
+                    </span>
+                </p>
                 <!-- Everything below Copy path is something the sandbox refuses on a locked entry, so a locked
                      one is offered the explanation instead of four actions that would each fail. -->
                 <p v-if="isLockedWorkspacePath(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-muted">

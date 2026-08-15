@@ -203,6 +203,14 @@ export type LogRead = z.infer<typeof LogReadSchema>;
 // Workspace tree / file / children. The daemon's Zod schema infers `children` loosely (Record<string, unknown>[]
 // — a z.lazy recursion limit), but the web renders a recursive tree, so the platform keeps the PRECISE recursive
 // interface here. The daemon WorkspaceTree*Schema stay re-exported above for runtime parsing.
+/* A symlink entry: `to` is the link's own text (what hover shows), and `type` on the entry beside it is the
+ * type of what it POINTS AT — so a link to a folder expands and a link to a file opens. `state` is absent when
+ * the link resolves inside the workspace; "broken" means nothing is at the other end, "outside" means it
+ * leaves the workspace and the daemon refuses to follow it. */
+export interface WorkspaceLink {
+    readonly to: string;
+    readonly state?: "broken" | "outside";
+}
 export interface WorkspaceTreeEntry {
     readonly name: string;
     // Root-relative path (forward slashes), fed straight back to the file route.
@@ -211,6 +219,8 @@ export interface WorkspaceTreeEntry {
     readonly size?: number;
     // Ignored-by-tooling (node_modules, .git, .gitignore'd, browser profiles): the row is grayed.
     readonly ignored?: boolean;
+    // Present when the entry is a symlink — `type` above is then its target's type.
+    readonly link?: WorkspaceLink;
     // Absent on a DIR that was listed but not descended into (ignored, or below the walk's breadth-first
     // budget) — the client lazy-loads it on expand. An empty dir has `children: []`, not `undefined`.
     readonly children?: readonly WorkspaceTreeEntry[];

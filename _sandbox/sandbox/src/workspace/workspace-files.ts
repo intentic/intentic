@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { cp, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { cp, mkdir, open, readFile, realpath, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -19,6 +19,53 @@ export const resolveWithin = (dir: string, relPath: string): string | undefined 
     }
     return target;
 };
+
+/* THE SAME QUESTION, ASKED OF THE DISK — where a path's bytes actually live once symlinks are followed.
+ *
+ * resolveWithin above is a string operation, and a string cannot see a link: `/work/x` is inside /work by every
+ * lexical measure even when it is `ln -s` to somewhere else entirely. That was harmless while the explorer
+ * filtered symlinks out of every listing and nothing in the UI could name one. It stops being harmless the
+ * moment the tree LISTS them — a link is then something a person clicks — and there is real state one directory
+ * up: the capability secret vault and every agent-provider login live under AGENT_AUTH_DIR, off /work
+ * specifically so the file routes, the tree walk and the search index cannot reach them (composition.ts).
+ *
+ * So reads, listings and writes resolve for real and re-check. Same guard the public outbox already applies to
+ * every request it serves (public-files.ts rule 1), for the same reason and by the same means.
+ *
+ * A path that does not exist yet resolves through its deepest existing ANCESTOR — a write creating a new file
+ * must still be checked, and the segments below that ancestor cannot be links precisely because they are not
+ * there. And the ROOT is resolved too: on the hosted VM /work is itself a symlink onto the persistent volume,
+ * so comparing a real path against a symlinked root would refuse every legitimate path under it. */
+export const realPathOf = async (absPath: string): Promise<string> => {
+    const missing: string[] = [];
+    let head = absPath;
+    for (;;) {
+        const real = await realpath(head).catch(() => undefined);
+        if (real !== undefined) {
+            return missing.length === 0 ? real : join(real, ...missing.toReversed());
+        }
+        const parent = dirname(head);
+        if (parent === head) {
+            // Nothing on this path exists, not even a root — the lexical answer is all there is to compare.
+            return absPath;
+        }
+        missing.push(basename(head));
+        head = parent;
+    }
+};
+
+// Where `absPath` really is, or undefined when that turns out to be outside `root`. Callers that need the
+// resolved path (the tree's cycle guard) get it; callers that only need the verdict test for undefined.
+export const realWithin = async (root: string, absPath: string): Promise<string | undefined> => {
+    const realRoot = await realPathOf(resolve(root));
+    return isUnder(realRoot, await realPathOf(absPath));
+};
+
+// Whether a REAL path (both sides already resolved) is the root or under it. Split out because a caller
+// listing a directory resolves the root once and then asks this of every entry — realpath'ing the root per
+// entry would be a syscall storm on a folder full of links, which pnpm's node_modules is.
+export const isUnder = (realRoot: string, real: string): string | undefined =>
+    real === realRoot || real.startsWith(realRoot + sep) ? real : undefined;
 
 // Whether an absolute path lands in the daemon's control plane — its credential, authorization and private
 // runtime state, all of it directly under the WORKSPACE ROOT's .intentic/. Which entries those are is declared

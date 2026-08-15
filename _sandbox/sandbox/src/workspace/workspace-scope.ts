@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { ConversationIdSchema } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import { isIsolated, type PersistedAgent } from "../agents/agents-store.js";
-import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
+import { isControlPlanePath, realWithin, resolveWithin } from "./workspace-files.js";
 
 /* WHOSE COPY OF THE WORKSPACE A READ MEANS — resolved once, here, for every route that serves a file.
  *
@@ -39,18 +39,26 @@ const present = async (path: string): Promise<boolean> => {
     }
 };
 
-/* Resolve a root-relative path to an absolute one inside `root`, applying the read routes' two guards: a
+/* Resolve a root-relative path to an absolute one inside `root`, applying the read routes' guards: a
  * `../`/absolute path that climbs out is BAD_REQUEST, and the daemon's own private state is not reachable
  * through the generic file API — read, write, move or delete. NOT_FOUND rather than FORBIDDEN for
  * the second: the file API simply has nothing there, and a distinct code would confirm what it holds.
+ *
+ * The escape guard is asked TWICE, of two different things: once of the path as a string (resolveWithin), and
+ * once of the disk, which is the only one of the two that can see a symlink pointing out of the workspace
+ * (realWithin). Both answer BAD_REQUEST — from the caller's side they are one rule, "that path is not in this
+ * workspace", and which of the two noticed is not the caller's business.
  */
-export const containedIn = (root: string, relPath: string): string => {
+export const containedIn = async (root: string, relPath: string): Promise<string> => {
     const target = resolveWithin(root, relPath);
     if (target === undefined) {
         throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
     }
     if (isControlPlanePath(root, target)) {
         throw new ORPCError("NOT_FOUND", { message: "not found" });
+    }
+    if ((await realWithin(root, target)) === undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
     }
     return target;
 };
@@ -110,9 +118,9 @@ export const scopedTarget = async (
     relPath: string,
 ): Promise<{ readonly target: string; readonly shared: boolean }> => {
     const root = await workspaceRootFor(deps, agent);
-    const scoped = containedIn(root, relPath);
+    const scoped = await containedIn(root, relPath);
     if (root === deps.main || (await present(scoped))) {
         return { target: scoped, shared: root === deps.main };
     }
-    return { target: containedIn(deps.main, relPath), shared: true };
+    return { target: await containedIn(deps.main, relPath), shared: true };
 };

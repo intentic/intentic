@@ -76,6 +76,7 @@ export type IconName =
     | "key"
     | "layout-left"
     | "link"
+    | "link-broken"
     | "list-check"
     | "lock"
     | "microphone"
@@ -202,6 +203,8 @@ export const ICONS: Record<IconName, string> = {
     // column). Not `expand`: that glyph promises fullscreen, and the action is a docking, not a maximise.
     "layout-left": "ri:layout-left-line",
     link: "ri:link",
+    // A symlink whose target isn't there (or isn't reachable) — the chain, drawn snapped.
+    "link-broken": "ri:link-unlink",
     "list-check": "ri:list-check",
     lock: "ri:lock-2-line",
     microphone: "ri:mic-line",

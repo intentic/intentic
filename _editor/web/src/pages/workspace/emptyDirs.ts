@@ -44,7 +44,16 @@ const knownChildren = (
 export const barrenDirs = (tree: readonly WorkspaceTreeEntry[], lazy: ReadonlyMap<string, readonly WorkspaceTreeEntry[]>): ReadonlySet<string> => {
     const barren = new Set<string>();
     const visit = (entry: WorkspaceTreeEntry): boolean => {
-        if (entry.type !== `dir` || entry.ignored === true || isLockedWorkspacePath(entry.path) || isFixturePath(entry.path)) {
+        // A LINK is never debris, whatever is on the other end of it. Sweeping one deletes the link (never the
+        // target — that is what `rm` on a symlink does), so the offer would be to tidy away something somebody
+        // deliberately made, on the strength of a fact about a different directory entirely.
+        if (
+            entry.type !== `dir` ||
+            entry.link !== undefined ||
+            entry.ignored === true ||
+            isLockedWorkspacePath(entry.path) ||
+            isFixturePath(entry.path)
+        ) {
             // Still descend a non-barren dir: barren branches deeper down are their own units.
             if (entry.type === `dir`) {
                 for (const child of knownChildren(entry, lazy) ?? []) {

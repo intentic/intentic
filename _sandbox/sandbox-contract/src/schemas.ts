@@ -2663,6 +2663,28 @@ export type WorkspaceScope = z.infer<typeof WorkspaceScopeSchema>;
  * read on both sides of the wire, and the tree walker's own suite was reading a `hidden` field off entries
  * that has never existed there without the compiler minding. The interface is the contract; the schema
  * validates against it, and z.ZodType makes a divergence between the two an error here. */
+/* A SYMLINK, as the tree reports one. Present only on entries that are links; `type` beside it is the type of
+ * whatever the link POINTS AT, so a link to a directory expands and a link to a file opens, exactly like the
+ * real thing (the model VSCode uses — its FileType carries SymbolicLink as a bit alongside File/Directory,
+ * precisely so every consumer can keep asking "file or folder?").
+ *
+ * `to` is the link's own text, verbatim — `../../.agents/skills/discord`, not the resolved path. That is what
+ * the row shows on hover, because it is what the person who made the link wrote and what they would edit.
+ *
+ * `state` is absent for the ordinary case: it resolves, and it resolves to somewhere inside the workspace.
+ *   - "broken" — nothing at the other end. Listed anyway, because a dangling link is a fact about the
+ *     workspace worth seeing rather than an entry to hide.
+ *   - "outside" — it resolves to bytes outside the workspace. The daemon will not read, list or descend
+ *     through it (workspace-files.ts realWithin), so the row is shown and refused, like a locked one. */
+export interface WorkspaceLink {
+    readonly to: string;
+    readonly state?: "broken" | "outside" | undefined;
+}
+export const WorkspaceLinkSchema = z.object({
+    to: z.string(),
+    state: z.enum(["broken", "outside"]).optional(),
+});
+
 export interface WorkspaceTreeEntry {
     readonly name: string;
     readonly path: string;
@@ -2670,6 +2692,8 @@ export interface WorkspaceTreeEntry {
     readonly size?: number | undefined;
     // Ignored-by-tooling (node_modules, .git, .gitignore'd paths, browser profiles): the client grays the row.
     readonly ignored?: boolean | undefined;
+    // Set when this entry is a symlink — `type` above is then its TARGET's type. See WorkspaceLink.
+    readonly link?: WorkspaceLink | undefined;
     // A DIR without `children` was listed but not descended into — because it's ignored, or because the walk's
     // breadth-first budget stopped above it. Either way the client lazy-loads it via /workspace/children on
     // expand, so "not loaded yet" and "empty directory" (`children: []`) stay distinguishable.
@@ -2681,6 +2705,7 @@ export const WorkspaceTreeEntrySchema: z.ZodType<WorkspaceTreeEntry> = z.object(
     type: z.enum(["file", "dir"]),
     size: z.number().optional(),
     ignored: z.boolean().optional(),
+    link: WorkspaceLinkSchema.optional(),
     get children() {
         return z.array(WorkspaceTreeEntrySchema).optional();
     },

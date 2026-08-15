@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ORPCError } from "@orpc/server";
@@ -118,5 +118,38 @@ describe("scopedTarget", () => {
         const { deps, worktrees } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
         expect(await codeOf(() => scopedTarget(deps, "isolated", ".intentic/owner.json"))).toBe("NOT_FOUND");
+    });
+
+    /* A SYMLINK OUT OF THE WORKSPACE. `../` is a string the guard can see; a link is not — `work/escape` is
+     * inside /work by every lexical measure while its bytes are somewhere else entirely. That was academic
+     * while the explorer filtered links out of every listing and nothing could name one; it stops being
+     * academic now that the tree lists them, and there is real state one directory up (the capability secret
+     * vault and every agent-provider login live off /work precisely so the file routes cannot reach them). */
+    it("refuses a path whose bytes are outside the workspace because a symlink leaves it", async () => {
+        const { main, deps } = await setup();
+        const elsewhere = await mkdtemp(join(tmpdir(), "scope-elsewhere-"));
+        await writeFile(join(elsewhere, "token.json"), '{"token":"secret"}');
+        await symlink(elsewhere, join(main, "escape"));
+        await symlink(join(elsewhere, "token.json"), join(main, "direct.json"));
+
+        expect(await codeOf(() => scopedTarget(deps, undefined, "escape/token.json"))).toBe("BAD_REQUEST");
+        expect(await codeOf(() => scopedTarget(deps, undefined, "direct.json"))).toBe("BAD_REQUEST");
+    });
+
+    it("still serves a symlink that stays inside the workspace", async () => {
+        const { main, deps } = await setup();
+        await mkdir(join(main, "real"), { recursive: true });
+        await writeFile(join(main, "real", "a.ts"), "export const a = 1;");
+        await symlink(join(main, "real"), join(main, "linked"));
+
+        // Resolved through the LINK's path, not the target's — the same file is reachable by both names.
+        const { target } = await scopedTarget(deps, undefined, "linked/a.ts");
+        expect(target).toBe(join(main, "linked", "a.ts"));
+    });
+
+    it("does not refuse a path that does not exist yet — a write creates one", async () => {
+        const { main, deps } = await setup();
+        const { target } = await scopedTarget(deps, undefined, "new/nested/file.ts");
+        expect(target).toBe(join(main, "new", "nested", "file.ts"));
     });
 });

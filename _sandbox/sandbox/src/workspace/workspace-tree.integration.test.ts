@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -262,4 +262,99 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     // The state dir's ORDINARY contents are untouched by any of this.
     expect(all).toContain(".intentic/settings.json");
     expect(all).toContain(".intentic/drafts/post-1.json");
+});
+
+/* SYMLINKS. They were filtered out of every listing, which is how `.claude/skills` — a folder holding thirty
+ * links to the skills the sandbox loaded and nothing else — came to draw as an empty folder in the explorer. */
+
+test("walkWorkspaceTree lists a symlink as what it points AT, carrying the link's own text", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-link-"));
+    await mkdir(join(root, "real", "nested"), { recursive: true });
+    await writeFile(join(root, "real", "a.ts"), "export const a = 1;");
+    await writeFile(join(root, "real", "nested", "b.ts"), "export const b = 2;");
+    await mkdir(join(root, "links"), { recursive: true });
+    await symlink("../real", join(root, "links", "to-dir"));
+    await symlink("../real/a.ts", join(root, "links", "to-file"));
+
+    const result = await walkWorkspaceTree(root);
+    const links = result.tree.find((entry) => entry.name === "links")?.children ?? [];
+    const dirLink = links.find((entry) => entry.name === "to-dir");
+    const fileLink = links.find((entry) => entry.name === "to-file");
+
+    // The TARGET's kind, so everything downstream — expanding, opening, the icon — needs no new branch.
+    expect(dirLink?.type).toBe("dir");
+    expect(fileLink?.type).toBe("file");
+    // The link's own text, not the resolved path: it is what whoever made the link wrote.
+    expect(dirLink?.link).toEqual({ to: "../real" });
+    expect(fileLink?.link).toEqual({ to: "../real/a.ts" });
+    // A linked directory is walked through, and its children are addressed through the LINK — the same file is
+    // reachable by both paths and both open, exactly as VSCode's explorer does it.
+    expect(paths(result.tree)).toContain("links/to-dir/nested/b.ts");
+    expect(paths(result.tree)).toContain("real/nested/b.ts");
+    // Dirs still sort first, and a link to a dir sorts as the dir it is.
+    expect(links.map((entry) => entry.name)).toEqual(["to-dir", "to-file"]);
+    // A plain entry carries no `link` at all.
+    expect(result.tree.find((entry) => entry.name === "real")?.link).toBeUndefined();
+});
+
+test("walkWorkspaceTree lists a dangling symlink rather than hiding it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-dangling-"));
+    await symlink("./gone", join(root, "broken"));
+
+    const entry = (await walkWorkspaceTree(root)).tree.find((candidate) => candidate.name === "broken");
+
+    // Listed — a link that goes nowhere is a fact about the workspace, and one worth seeing.
+    expect(entry?.link).toEqual({ to: "./gone", state: "broken" });
+    // Nothing to expand into, so it reports as a file and the client draws no chevron.
+    expect(entry?.type).toBe("file");
+});
+
+test("walkWorkspaceTree marks a symlink that leaves the workspace and never follows it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-escape-"));
+    const elsewhere = await mkdtemp(join(tmpdir(), "ws-tree-elsewhere-"));
+    await writeFile(join(elsewhere, "token.json"), '{"token":"secret"}');
+    await symlink(elsewhere, join(root, "escape"));
+
+    const result = await walkWorkspaceTree(root);
+    const entry = result.tree.find((candidate) => candidate.name === "escape");
+
+    expect(entry?.link).toEqual({ to: elsewhere, state: "outside" });
+    // Shown, so the row can explain itself — but the walk stops dead at it, and so does a later expand.
+    expect(paths(result.tree)).not.toContain("escape/token.json");
+    expect(await listWorkspaceChildren(root, "escape")).toEqual({ entries: [], hidden: 0 });
+});
+
+test("walkWorkspaceTree does not loop on a symlink pointing back at an ancestor", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-cycle-"));
+    await mkdir(join(root, "a", "b"), { recursive: true });
+    await writeFile(join(root, "a", "b", "leaf.txt"), "x");
+    await symlink("../..", join(root, "a", "b", "up")); // a/b/up -> root/a … and round again
+
+    const result = await walkWorkspaceTree(root);
+    const all = paths(result.tree);
+
+    expect(all).toContain("a/b/leaf.txt");
+    expect(all).toContain("a/b/up");
+    // The link is listed and left unlisted-into: descending it would walk a/b/up/b/up/b… forever, and the
+    // entry budget would be spent on one branch of nonsense.
+    expect(all).not.toContain("a/b/up/b");
+    expect(result.hidden).toBe(0);
+});
+
+test("listWorkspaceChildren follows symlinks the same way the eager walk does", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-children-link-"));
+    await mkdir(join(root, "node_modules", "pkg"), { recursive: true }); // ignored ⇒ lazy-loaded
+    await mkdir(join(root, "real"), { recursive: true });
+    await writeFile(join(root, "real", "a.ts"), "export const a = 1;");
+    await symlink("../real", join(root, "node_modules", "linked"));
+    await symlink("../nowhere", join(root, "node_modules", "dead"));
+
+    const { entries } = await listWorkspaceChildren(root, "node_modules");
+    const linked = entries.find((entry) => entry.name === "linked");
+
+    expect(linked?.type).toBe("dir");
+    expect(linked?.link).toEqual({ to: "../real" });
+    expect(entries.find((entry) => entry.name === "dead")?.link).toEqual({ to: "../nowhere", state: "broken" });
+    // …and expanding the link lists the target's contents, under the link's path.
+    expect((await listWorkspaceChildren(root, "node_modules/linked")).entries.map((entry) => entry.path)).toEqual(["node_modules/linked/a.ts"]);
 });

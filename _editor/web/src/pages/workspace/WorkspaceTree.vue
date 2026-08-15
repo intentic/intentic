@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
+import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle } from "@intentic/ui";
 import Button from "primevue/button";
@@ -356,11 +356,26 @@ const treat = (row: Row): ReturnType<typeof treatEntry> => {
     return locked(row.entry.path) ? { ...treatment, icon: `lock` satisfies IconName, colorClass: `text-subtle` } : treatment;
 };
 
+/* WHAT A LINK ROW SAYS ON HOVER. Where it points is the useful half, in the words whoever made the link wrote
+ * (the daemon sends the link's own text, not the resolved path). The two refusals are named outright: a row
+ * that simply does nothing when clicked is indistinguishable from a broken app, and both of these are the
+ * sandbox declining on purpose. */
+const linkTooltip = (link: WorkspaceLink): string =>
+    link.state === `broken`
+        ? `Link to ${link.to} — there is nothing there`
+        : link.state === `outside`
+          ? `Link to ${link.to} — outside the workspace, so the sandbox won't open it`
+          : `Link to ${link.to}`;
+// A link that goes nowhere or leaves the workspace: dimmed like an ignored row, and never expandable.
+const deadLink = (entry: WorkspaceTreeEntry): boolean => entry.link?.state !== undefined;
+
 // Whether a row has anything to expand into. A barren chain expands from its TAIL, and a chain whose tail is
-// the empty leaf gets no chevron — the gesture would be a promise the row can't keep (same as a locked dir).
+// the empty leaf gets no chevron — the gesture would be a promise the row can't keep (same as a locked dir,
+// and same as a link with nothing reachable behind it).
 const expandable = (row: Row): boolean =>
     (row.entry.type === `dir` || row.nest === true) &&
     !locked(row.entry.path) &&
+    !deadLink(row.entry) &&
     (row.barren !== true || childrenOf(row.chainTail ?? row.entry).length > 0);
 
 // Expansion is the whole gesture: a dir the walk never listed (ignored, or below its entry budget) fetches its
@@ -1173,7 +1188,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             v-else
                             class="min-w-0 flex-1 truncate"
                             :class="[
-                                row.entry.ignored || row.barren || locked(row.entry.path) ? 'text-subtle' : 'text-content/90',
+                                row.entry.ignored || row.barren || locked(row.entry.path) || deadLink(row.entry) ? 'text-subtle' : 'text-content/90',
                                 // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
                                 // Opacity rather than a colour, so it stacks on whatever the row already was —
                                 // an ignored row outside the fence should read as both, not as one of the two.
@@ -1181,6 +1196,21 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             ]"
                             >{{ row.chain !== undefined ? row.chain.join(" / ") : row.entry.name }}</span
                         >
+                        <!-- A SYMLINK. The row already wears its TARGET's icon — a link to a folder looks like a
+                         folder, because that is what opening it gets you — so this marker is the one thing that
+                         says the name is a pointer rather than the thing. Small and after the name, the way
+                         VSCode hangs a ⤷ badge off the row rather than swapping the icon out. Hover names where
+                         it goes, which VSCode's explorer does NOT do and which is most of the value: the whole
+                         reason to look at a link is to find out what is on the other end. Colored only when
+                         there is nothing on the other end. -->
+                        <Icon
+                            v-if="row.entry.link !== undefined"
+                            :name="deadLink(row.entry) ? 'link-broken' : 'link'"
+                            aria-hidden="true"
+                            class="shrink-0 text-2xs"
+                            :class="deadLink(row.entry) ? 'text-warning' : 'text-subtle'"
+                            v-tooltip.right="linkTooltip(row.entry.link)"
+                        />
                         <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
                          the badge names what it is. What the shelf is FOR was a 29-word paragraph hanging off a
                          tree row, which is neither where anyone reads documentation nor anywhere a touch device

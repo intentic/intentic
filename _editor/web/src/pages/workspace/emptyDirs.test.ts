@@ -35,6 +35,13 @@ describe(`barrenDirs`, () => {
         expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set());
     });
 
+    it(`never counts a symlink as debris — the sweep would delete something someone made on purpose`, () => {
+        // Deleting a link removes the LINK, never what it points at, so an "empty folder" offer here would be
+        // made on the strength of a fact about an entirely different directory.
+        const link: WorkspaceTreeEntry = { ...dir(`a/linked`, []), link: { to: `../elsewhere` } };
+        expect(barrenDirs([dir(`a`, [link])], NO_LAZY)).toEqual(new Set());
+    });
+
     it(`still finds a barren pocket under a non-barren parent`, () => {
         const tree = [dir(`src`, [file(`src/app.ts`), dir(`src/old`, [])])];
         expect(barrenDirs(tree, NO_LAZY)).toEqual(new Set([`src/old`]));
