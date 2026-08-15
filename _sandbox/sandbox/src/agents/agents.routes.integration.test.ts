@@ -360,8 +360,14 @@ test("a turn parked on a question lands without a force — it is waiting for th
         ),
     );
     await client.agent.run({ prompt: "ask me something", conversationId: "conv1", isolated: true });
-    // The park has to have been observed before the guard is asked — the frame travels the relay to get there.
-    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"));
+    /* The park has to have been observed before the guard is asked — the frame travels the relay to get there,
+     * behind the turn's own worktree setup. That is real machine work: ~0.4s idle, and several times that on a
+     * runner carrying the rest of the suite beside it. Budgeted explicitly for the same reason the integration
+     * suite has its own testTimeout (see _tools/testing/vitest.ts) — waitFor's 1s default is a hang detector,
+     * and held to it this poll went green on an idle box and red under load, taking the four tests after it
+     * down with it: a wait that expires here skips the release below, and the gated turn it leaves parked
+     * holds conv1's slot in the run map for the rest of the file. */
+    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"), { timeout: 10_000 });
     // No `force`, and no refusal: this is the state the old guard sent the user away to wait on, when the
     // thing being waited for could only end once they came back and answered.
     expect(await client.agents.land({ id: "conv1" })).toMatchObject({ landed: false });
