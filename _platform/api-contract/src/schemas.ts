@@ -518,6 +518,11 @@ export type SandboxCloud = z.infer<typeof SandboxCloudSchema>;
 // machine is a no-op), so the browser needs no second source of truth beside the daemon's own answer.
 export const SandboxHostedSchema = z.object({
     region: z.string(),
+    /* Whether this machine came WARM from the pool (image already on its host — boots in seconds) or was
+     * built to order (first boot pulls the image — minutes). The setup wait reads it to make the right
+     * promise: "under a minute" over a cold pull is the lie that made healthy first boots read as stuck.
+     * A fact about the machine's origin, so it is stable across polls and reloads mid-wait. */
+    warm: z.boolean(),
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 

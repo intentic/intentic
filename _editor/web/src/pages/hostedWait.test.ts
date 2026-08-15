@@ -8,6 +8,7 @@ const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
     boot: null,
     refusal: null,
     announced: false,
+    warm: undefined,
     waitedMs: 0,
     ...over,
 });
@@ -89,6 +90,49 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView({ ...silent, waitedMs: 60_000 }).failure).toBeUndefined();
         // …and never against a machine that has not finished starting.
         expect(hostedWaitView({ ...silent, machine: `starting` }).failure).toBeUndefined();
+    });
+
+    /* THE PROMISE MATCHES THE MACHINE'S ORIGIN. A pool machine really is seconds; a built-to-order one spends
+     * its first boot pulling the image, and "under a minute" over that pull is the lie that made healthy first
+     * boots read as stuck. Unknown origin (an older row) must keep the old promise exactly. */
+    it(`promises minutes for a built-to-order machine and seconds for a warm one`, () => {
+        expect(hostedWaitView(wait({ warm: false })).note).toContain(`3 to 5 minutes`);
+        expect(hostedWaitView(wait({ warm: true })).note).toContain(`under a minute`);
+        expect(hostedWaitView(wait()).note).toContain(`under a minute`);
+    });
+
+    it(`names the download on a built-to-order machine's first step, and only there`, () => {
+        const label = (input: HostedWaitInput): string | undefined =>
+            hostedWaitView(input).steps.find((step) => step.key === `machine`)?.label;
+        expect(label(wait({ warm: false }))).toContain(`downloading your sandbox`);
+        expect(label(wait({ warm: true }))).toBe(`Starting the machine`);
+        expect(label(wait())).toBe(`Starting the machine`);
+    });
+
+    /* THE CLOCK MAY COUNT, NEVER DIAGNOSE: minutes on the note prove the page is counting rather than frozen,
+     * and once an origin's own promise is spent the note switches to patience — still no failure invented. */
+    it(`counts the minutes and switches to reassurance once the promise is spent`, () => {
+        const midPull = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 2 * 60_000 }));
+        expect(midPull.failure).toBeUndefined();
+        expect(midPull.note).toContain(`2 min in`);
+        expect(midPull.note).toContain(`3 to 5 minutes`);
+        // Past its own estimate the estimate would be a lie in the other direction — patience instead.
+        const past = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 6 * 60_000 }));
+        expect(past.failure).toBeUndefined();
+        expect(past.note).toContain(`still going`);
+        // A warm machine's promise is spent far sooner.
+        expect(hostedWaitView(wait({ warm: true, machine: `starting`, waitedMs: 2 * 60_000 })).note).toContain(`longer than usual`);
+        expect(hostedWaitView(wait({ warm: true, machine: `starting`, waitedMs: 30_000 })).note).toContain(`under a minute`);
+    });
+
+    it(`offers a way out of a machine that never comes up, without calling the pull broken early`, () => {
+        // Ten minutes in `created` is not a pull any more — SILENT_MS deliberately never fires on
+        // `starting`/`created`, so without this ceiling the note would reassure forever with nothing to press.
+        const view = hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 11 * 60_000 }));
+        expect(view.failure?.problem).toContain(`far longer`);
+        expect(view.failure?.action).toBe(`reboot`);
+        // …but a pull inside its worst honest case stays narration, however impatient the reader.
+        expect(hostedWaitView(wait({ warm: false, machine: `created`, waitedMs: 9 * 60_000 })).failure).toBeUndefined();
     });
 
     /* THE HANDOVER GATE. `reachable` is the only thing the wizard is allowed to hold the door on, and

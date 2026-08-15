@@ -159,14 +159,19 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     }
 };
 
+/* One locked, error-swallowed reconcile — the interval's tick, and also the nudge a claim fires the moment it
+ * empties a slot. Without the nudge a claim's replacement waits out the rest of the five-minute tick BEFORE
+ * its minutes-long build even starts, so two sign-ups in a row from one region meant the second paid the cold
+ * path a warm pool exists to spare. Fire-and-forget by design: rebuilding stock is never the claimer's wait. */
+export const kickHostedPool = (prisma: PrismaClient, config: Config, logger: Logger): void => {
+    void runExclusive(config, JOB_HOSTED_POOL, () =>
+        reconcileHostedPool(prisma, config, logger).catch((error: unknown) => logger.error({ err: error }, `hosted pool reconcile failed`)),
+    ).catch((error: unknown) => logger.error({ err: error }, `hosted pool lock failed`));
+};
+
 // Boot wiring (main.ts): reconcile now and every five minutes, one replica at a time. Started even when the
 // pool is off — that is what makes turning it OFF drain it rather than strand it.
 export const startHostedPool = (prisma: PrismaClient, config: Config, logger: Logger): void => {
-    const tick = (): void => {
-        void runExclusive(config, JOB_HOSTED_POOL, () =>
-            reconcileHostedPool(prisma, config, logger).catch((error: unknown) => logger.error({ err: error }, `hosted pool reconcile failed`)),
-        ).catch((error: unknown) => logger.error({ err: error }, `hosted pool lock failed`));
-    };
-    tick();
-    setInterval(tick, TICK_MS);
+    kickHostedPool(prisma, config, logger);
+    setInterval(() => kickHostedPool(prisma, config, logger), TICK_MS);
 };

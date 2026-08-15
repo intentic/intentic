@@ -176,7 +176,7 @@ beforeEach(() => {
     refresh.mockReset().mockResolvedValue([]);
     hostedStatus.mockReset().mockResolvedValue({ machine: `unknown` });
     hostedRestart.mockReset().mockResolvedValue({ ok: true });
-    hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad` } }));
+    hostedProvision.mockReset().mockImplementation(async (id: string) => sandboxRow({ id, hosted: { region: `iad`, warm: true } }));
     hostedRelease.mockReset().mockImplementation(async (id: string) => sandboxRow({ id }));
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     addressOffer.mockReset().mockResolvedValue({ enabled: true });
@@ -285,7 +285,7 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
 // A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is —
 // the wait card, never a command to run for a machine nobody has to touch.
 it(`resumes a hosted sandbox onto the wait card, not the command lane`, async () => {
-    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
     list.mockResolvedValue([hosted]);
     const el = await mount();
@@ -302,7 +302,7 @@ it(`resumes a hosted sandbox onto the wait card, not the command lane`, async ()
  * The refused check-in is the shape a half-migrated sandbox takes: alive, talking, and turned away every time.
  * Waiting can never fix it, so the card has to say so and offer the one thing that can. */
 it(`names a refused check-in on the wait card, with a way out`, async () => {
-    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
     list.mockResolvedValue([hosted]);
     refresh.mockResolvedValue([{ ...hosted, announceRefusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } }]);
@@ -388,7 +388,7 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
  * that still counted the machine it had just handed back: the rung they had come off sat disabled under
  * "Already using yours", naming a machine that no longer existed, with no way back but a reload. */
 it(`offers the hosted rung again once its machine has been handed back`, async () => {
-    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad` } });
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
     list.mockResolvedValue([hosted]);
     // Spent on arrival — by this very sandbox — and free again the moment it is released.

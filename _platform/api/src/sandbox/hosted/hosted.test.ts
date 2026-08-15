@@ -410,12 +410,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: vi.fn().mockResolvedValue(ownedRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad` } }),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, appName: `intentic-sbx-pool-abc123` } }),
             },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }), count: vi.fn() },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: vi.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
-        expect(summary.hosted).toEqual({ region: `iad` });
+        // `warm` is read off the app name (a pool claim keeps its pool name) — the wait card's promise rides on it.
+        expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(fetchSpy).toHaveLength(0);
     });
 

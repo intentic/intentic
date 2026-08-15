@@ -21,6 +21,7 @@ import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, stopMachine } from "./hosted/fly.js";
 import { destroyHosted, hostedEnabled, provisionHosted, refreshHosted, wakeHosted } from "./hosted/hosted.js";
+import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -65,7 +66,7 @@ const toSummary = (
         // rename or an announce can never silently strip the hosted badge from the browser's row. Optional
         // (not just nullable) as the same shield the report parse below gives rows from before a schema
         // existed: a caller that skipped the include reads as "not hosted", never as a crash.
-        hosted?: { region: string } | null;
+        hosted?: { region: string; appName: string } | null;
         token: string;
     },
     role: MemberRole,
@@ -95,7 +96,16 @@ const toSummary = (
         bootReport: boot.success ? boot.data : null,
         announceRefusal: refusal.success ? refusal.data : null,
         cloud: cloud.success ? cloud.data : null,
-        hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region },
+        hosted:
+            sandbox.hosted === null || sandbox.hosted === undefined
+                ? null
+                : {
+                      region: sandbox.hosted.region,
+                      // The app name already records the machine's origin (`<prefix>-pool-<hex>` for a pool
+                      // claim, `<prefix>-<sandbox id>` built to order — the HostedMachine model documents
+                      // this), so "warm" is read off it rather than stored twice.
+                      warm: sandbox.hosted.appName.includes(`-pool-`),
+                  },
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
@@ -360,6 +370,9 @@ export const sandboxRoutes = {
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
         }
+        // The provision just spent (or found empty) a pool slot — start rebuilding stock now rather than
+        // letting the replacement wait out the five-minute tick. Fire-and-forget: never this caller's wait.
+        kickHostedPool(context.prisma, context.config, context.logger);
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
     }),

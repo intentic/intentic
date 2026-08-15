@@ -665,6 +665,9 @@ const hostedWait = computed(() =>
         boot: bootReport.value,
         refusal: announceRefusal.value,
         announced: announced.value,
+        // The machine's origin off the row's hosted stamp: a pool machine boots in seconds, a built-to-order
+        // one spends its first boot downloading — which of the two promises the card makes hangs on this.
+        warm: hostedRow.value?.warm,
         waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
     }),
 );
@@ -2173,9 +2176,10 @@ watch(commandReady, (ready) => {
                                             <span>{{ step.label }}</span>
                                         </li>
                                     </ul>
-                                    <p class="text-xs text-muted">
-                                        Usually under a minute. Nothing to install, nothing to paste — you'll be taken in as soon as it's ready.
-                                    </p>
+                                    <!-- The promise under the list is the view's (hostedWait.ts): the estimate
+                                         this machine's origin earns, then — once minutes are on the clock —
+                                         how many, so a long download reads as counted work, never as a hang. -->
+                                    <p class="text-xs text-muted">{{ hostedWait.note }}</p>
                                 </template>
                             </template>
                             <p v-else-if="hostedBusy" class="flex items-center gap-2 text-xs text-content">

@@ -38,6 +38,12 @@ const STEPS: readonly { key: WaitStep; label: string }[] = [
     { key: `ready`, label: `Ready` },
 ];
 
+// A machine built to order spends its first boot pulling the sandbox image — the honest multi-minute stage
+// (setupReport.ts names the same one on the command lane) — so its first step SAYS so. "Starting the machine"
+// over a download reads as a hang; the same minutes with the download named read as work.
+const coldSteps = (steps: readonly { key: WaitStep; label: string }[]): readonly { key: WaitStep; label: string }[] =>
+    steps.map((step) => (step.key === `machine` ? { ...step, label: `Starting the machine — downloading your sandbox` } : step));
+
 /* What went wrong, in the words the card renders. `problem` is the state of the world; `remedy` is what
  * happens next — always present, because a failure with no next move is the spinner with extra steps.
  *
@@ -57,6 +63,10 @@ export interface HostedWaitView {
     // Set once something has genuinely gone wrong. The card shows this INSTEAD of the step list: a list still
     // ticking beside "here is what broke" is the page contradicting itself (setupReport.ts's rule, same reason).
     readonly failure: WaitFailure | undefined;
+    // The line under the healthy step list: the estimate this machine's ORIGIN earns (warm pool: seconds;
+    // built to order: minutes of image pull), plus — once a minute is on the clock — how long it has been.
+    // The one sentence the clock is allowed to shape, and only ever toward patience, never toward diagnosis.
+    readonly note: string;
     // Whether the sandbox is confirmed usable from outside — the ONLY thing the handover is allowed to turn
     // on. Undefined means the sandbox has not said (an image older than the report, or a lane that never
     // probes), and undefined must behave exactly as this page behaved before any of this existed.
@@ -73,17 +83,49 @@ export interface HostedWaitInput {
     // Whether the daemon has ever checked in (a `lastSeenAt` exists). Distinguishes a silent box from one that
     // is talking to us, which is the difference between "it never started" and "it started and can't be seen".
     readonly announced: boolean;
+    // Where the machine came from (the summary's hosted stamp): warm pool — seconds; built to order — its
+    // first boot pulls the image, minutes. Decides which estimate the card promises, because "under a minute"
+    // over a cold pull is the lie that made healthy first boots read as stuck. Undefined (the stamp not read
+    // yet) keeps the old promise.
+    readonly warm: boolean | undefined;
     // How long this wait has been running. Only ever used to escalate a wait that is otherwise progressing —
     // never to invent a diagnosis, which is the trap the old stopwatch fell into.
     readonly waitedMs: number;
 }
 
+const MINUTE_MS = 60_000;
 // Long enough that a cold machine pulling a first boot is not accused of being broken; short enough to catch
 // someone who has settled in to watch. Only applies where nothing better is known.
-const SILENT_MS = 3 * 60_000;
+const SILENT_MS = 3 * MINUTE_MS;
 // A box that has been telling us for this long that its own address does not answer is not mid-boot any more.
 // Matches the daemon's own give-up window (reach-report.ts REACH_GIVE_UP_MS) — past it nothing is still trying.
-const UNREACHABLE_MS = 5 * 60_000;
+const UNREACHABLE_MS = 5 * MINUTE_MS;
+// When each origin's promise counts as SPENT and the note switches from estimate to reassurance: a warm
+// machine past "under a minute" with margin, a cold one past the top of its own stated range.
+const WARM_SPENT_MS = 90_000;
+const COLD_SPENT_MS = 5 * MINUTE_MS;
+// A machine still not running after this long — double a cold pull's worst honest case — has left narration
+// territory: SILENT_MS deliberately never fires while the provider says `starting`/`created` (that is a pull
+// going fine), so without this ceiling a wedged pull would reassure forever with no way out on screen.
+const MACHINE_STUCK_MS = 10 * MINUTE_MS;
+
+// What the sandbox's absence would read as, said under the whole step list. The estimate comes from the
+// machine's ORIGIN, never the clock; the clock only says how much of the promise is spent and — once a minute
+// is up — how long it has been, which is the difference between a page that is counting and one that froze.
+const noteFor = (warm: boolean | undefined, waitedMs: number): string => {
+    const minutes = Math.floor(waitedMs / MINUTE_MS);
+    const inFor = minutes >= 1 ? `${minutes} min in — ` : ``;
+    if (warm === false) {
+        return waitedMs > COLD_SPENT_MS
+            ? `${inFor}longer than usual, but still going. You'll be taken in as soon as it's ready.`
+            : `${inFor}building a fresh machine: the first start downloads your sandbox, usually 3 to 5 minutes. You'll be taken in as soon as it's ready.`;
+    }
+    // Warm and unknown share the old promise — a pool machine really is seconds, and a stamp not read yet
+    // must behave exactly as this page behaved before origins existed.
+    return waitedMs > WARM_SPENT_MS
+        ? `${inFor}taking longer than usual, but still going. You'll be taken in as soon as it's ready.`
+        : `Usually under a minute. Nothing to install, nothing to paste — you'll be taken in as soon as it's ready.`;
+};
 
 // Machine states that mean the box is not coming up on its own. `failed` is Fly saying so outright; a machine
 // sitting in `stopped` or `destroyed` while somebody waits on it will not start itself.
@@ -99,6 +141,9 @@ const at = (steps: readonly { key: WaitStep; label: string }[], active: WaitStep
 
 export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
+    // The step labels this origin earns, and the caption under them — both origin-first, clock-second.
+    const steps = input.warm === false ? coldSteps(STEPS) : STEPS;
+    const note = noteFor(input.warm, input.waitedMs);
 
     /* THE REFUSAL FIRST, because it outranks every other reading: a sandbox we are turning away is talking to
      * us perfectly and will never be accepted, so no amount of waiting helps and every other signal (a running
@@ -106,7 +151,8 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
      * sandbox takes, and it is the one failure that is genuinely ours rather than the machine's. */
     if (input.refusal !== null) {
         return {
-            steps: at(STEPS, `connecting`),
+            steps: at(steps, `connecting`),
+            note,
             failure: {
                 problem: `Your sandbox is running, but it's checking in from ${input.refusal.announced} — we expect it at ${input.refusal.expected}.`,
                 remedy: `We won't hand you an address we can't vouch for. Start it over below — a fresh machine comes up on the right one.`,
@@ -121,7 +167,8 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     // box could ever fix it.
     if (input.machine !== undefined && DEAD_MACHINE.has(input.machine)) {
         return {
-            steps: at(STEPS, `machine`),
+            steps: at(steps, `machine`),
+            note,
             failure: {
                 problem: `The machine we started for you isn't running.`,
                 remedy: `Start it over below. If it stops again, that's ours to fix — nothing on your side causes this.`,
@@ -142,7 +189,8 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
      * state to the left. */
     if ((input.boot?.reach === `unreachable` || input.boot?.reach === `checking`) && input.waitedMs > UNREACHABLE_MS) {
         return {
-            steps: at(STEPS, `connecting`),
+            steps: at(steps, `connecting`),
+            note,
             failure: {
                 problem: input.boot.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
                 remedy: `The sandbox itself is fine — it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
@@ -157,7 +205,8 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     // failure: it may still arrive, and the machine keeps trying either way.
     if (!input.announced && input.boot === null && input.waitedMs > SILENT_MS && input.machine !== `starting` && input.machine !== `created`) {
         return {
-            steps: at(STEPS, `booting`),
+            steps: at(steps, `booting`),
+            note,
             failure: {
                 problem: `The machine is running, but your sandbox hasn't checked in yet.`,
                 remedy: `It keeps trying on its own — leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
@@ -167,16 +216,33 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
         };
     }
 
+    /* The ceiling the exclusion above needs: `starting`/`created` are exempt from SILENT_MS because a pull in
+     * flight is the ordinary shape of a cold first boot — but a machine STILL in them at double a pull's worst
+     * honest case is not pulling any more, and without this the note would reassure forever with nothing on
+     * screen to press. Same soft shape as the silence above: not called broken, and the reboot loses nothing. */
+    if (!input.announced && input.boot === null && input.waitedMs > MACHINE_STUCK_MS) {
+        return {
+            steps: at(steps, `machine`),
+            note,
+            failure: {
+                problem: `The machine is taking far longer to come up than it should.`,
+                remedy: `It keeps trying on its own — leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
+                action: `reboot`,
+            },
+            reachable,
+        };
+    }
+
     // …and the healthy readings, in order. Each is a fact somebody established, never elapsed time.
     if (reachable === true) {
-        return { steps: at(STEPS, `ready`), failure: undefined, reachable };
+        return { steps: at(steps, `ready`), note, failure: undefined, reachable };
     }
     if (input.boot !== null || input.announced) {
         // The daemon exists and is either testing its address or waiting for the tunnel to bind.
-        return { steps: at(STEPS, `connecting`), failure: undefined, reachable };
+        return { steps: at(steps, `connecting`), note, failure: undefined, reachable };
     }
     if (input.machine === `started`) {
-        return { steps: at(STEPS, `booting`), failure: undefined, reachable };
+        return { steps: at(steps, `booting`), note, failure: undefined, reachable };
     }
-    return { steps: at(STEPS, `machine`), failure: undefined, reachable };
+    return { steps: at(steps, `machine`), note, failure: undefined, reachable };
 };

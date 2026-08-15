@@ -156,8 +156,11 @@ const configSchema = z.object({
              * claiming the free sandbox costs the seconds of a machine start instead of the minutes of an
              * image pull. A pool machine holds no identity and no running compute — its standing cost is its
              * volume — and the reconcile job keeps the pool at this size, rebuilding it when the image moves.
-             * 0 (the default) disables the pool and drains anything left in it. HOSTED_POOL_SIZE. */
-            poolSize: z.coerce.number().int().nonnegative().default(0),
+             * ON by default (a couple of volumes per region is cheap; every cold first boot reported as
+             * "stuck" is not), and only where the lane itself is on — a platform without hosted credentials
+             * builds nothing regardless. 0 disables the pool and drains anything left in it.
+             * HOSTED_POOL_SIZE. */
+            poolSize: z.coerce.number().int().nonnegative().default(2),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL — intentic's OWN model keys, and the SECOND documented exception to the secret-free
