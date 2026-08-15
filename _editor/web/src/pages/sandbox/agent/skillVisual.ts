@@ -128,6 +128,9 @@ const GLYPHS: Readonly<Record<string, string>> = {
  * else to say, a loose file nobody claims. */
 const ORIGIN_ICONS = {
     own: `pencil`,
+    // The same glyph the persona rows and the composer's chip wear, so a kit skill reads as belonging to the
+    // card it came from rather than as another thing the owner wrote.
+    persona: `user`,
     builtin: `box`,
     capability: `link`,
     extension: `sliders-h`,

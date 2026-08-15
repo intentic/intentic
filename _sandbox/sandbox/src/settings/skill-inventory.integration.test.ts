@@ -2,12 +2,13 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Capability, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
+import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { readSkillText, skillInventory } from "./skill-inventory.js";
+import { writePersonaSkill } from "../personas/persona-kit.js";
 import { reconcileSkills, writeOwnSkill } from "./skills.js";
 
 /* THE ATTRIBUTION IS THE FEATURE. A row's origin decides whether it gets a switch, whether it can be edited and
@@ -18,7 +19,7 @@ import { reconcileSkills, writeOwnSkill } from "./skills.js";
  * checkout and an extension checkout — on a temp root, and assert what each one becomes. The extension half goes
  * through the git-installed path (an `extension`-kind capability whose checkout holds a manifest), because that is
  * the one an integration test can create without an image to bake into. */
-const stubServices = (root: string, capabilities: readonly Capability[], settings: SandboxSettings): Services =>
+const stubServices = (root: string, capabilities: readonly Capability[], settings: SandboxSettings, personas: readonly Persona[] = []): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", {
@@ -31,6 +32,9 @@ const stubServices = (root: string, capabilities: readonly Capability[], setting
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
         config: unstubbed<Services["config"]>("config", { extensionsDir: "" }),
+        // Read on every listing, because a persona's kit skills are part of what the agent knows — see the
+        // `persona` origin. No cards is the ordinary shape here and the one most of these cases want.
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [...personas] }),
     });
 
 const settingsWith = (skills: readonly string[]): SandboxSettings => SandboxSettingsSchema.parse({ skills: [...skills] });
@@ -184,9 +188,11 @@ test("a skill already accounted for is not listed a second time from the loaded 
 test("every id the list mints reads back the right skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
-    const services = stubServices(root, [plugin], settingsWith([]));
+    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const services = stubServices(root, [plugin], settingsWith([]), [studio]);
     await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
     await writeSkill(join(root, ".intentic", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
+    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
 
     for (const row of await skillInventory(services)) {
         const found = await readSkillText(services, row.id);
@@ -196,6 +202,26 @@ test("every id the list mints reads back the right skill", async () => {
     expect((await readSkillText(services, "notes"))?.text).toContain("Stored body.");
     expect((await readSkillText(services, "lsp"))?.text).toContain("Rename a TypeScript");
     expect((await readSkillText(services, "plugin:my-pack:review"))?.text).toContain("Plugin body.");
+    // A kit skill's id carries the persona ID; its row shows the LABEL, which is not a key.
+    expect((await readSkillText(services, "persona:studio:voice"))?.text).toContain("Kit body.");
+});
+
+/* A KIT SKILL IS LISTED, AND LISTED AS THE NARROW THING IT IS. The promise of this surface is that it shows
+ * everything the agent knows — but a skill only some turns reach must not read as one every chat has, and it
+ * must offer no switch, because nothing here can turn it off: it is on exactly when its persona is worn. */
+test("a persona's own skill lists under its card, with no switch", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
+    const services = stubServices(root, [], settingsWith([]), [studio]);
+    await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
+
+    const row = rowFor(await skillInventory(services), "persona:studio:voice");
+
+    expect(row).toMatchObject({ name: "voice", description: "How we write.", origin: "persona", owner: "Studio", enabled: true });
+    expect(row.switchable).toBe(false);
+    // Edited on the card, like a plugin's skill is edited where it lives — not from this list.
+    expect(row.editable).toBe(false);
+    expect(row.removable).toBe(false);
 });
 
 test("an id naming nothing reads as absent rather than as an empty skill", async () => {

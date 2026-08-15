@@ -24,7 +24,7 @@ export interface CodexThreadOptions {
     readonly modelReasoningEffort?: CodexReasoningEffort;
 }
 
-type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export interface CodexTurn {
     readonly prompt: string;

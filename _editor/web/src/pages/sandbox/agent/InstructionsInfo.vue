@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
+import { promptReach, spokenList } from "./promptReach";
 
 /* The (i) beside the Agent tab's "Instructions" group — what the assistant is told before you type anything.
  * Two settings, and they are not peers in weight: terse is a preference, the system prompt is a decision.
@@ -36,6 +37,14 @@ const PROMPT_KEPT = [
     [`Every tool`, `Nothing is removed — only what the model has been TOLD changes`],
     [`CLAUDE.md and your skills`, `Still loaded from the workspace exactly as before`],
     [`Cross-provider delegation`, `Moves into the first message instead of the prompt`],
+];
+
+// Grouped from the runtime records rather than listed by hand, so a provider added later cannot go unmentioned
+// — which is precisely how this setting spent its life looking like it applied to everything.
+const reach = promptReach();
+const REACH_ROWS = [
+    [spokenList(reach.replaces), `Your prompt replaces theirs`],
+    ...(reach.adds.length > 0 ? [[spokenList(reach.adds), `Keeps its own prompt; yours is added to it`]] : []),
 ];
 </script>
 
@@ -97,7 +106,8 @@ const PROMPT_KEPT = [
             Intentic and Claude are peers — a different prompt, everything else identical, one click apart. Writing your own is the different one: it
             <span class="font-medium text-content">replaces</span> them. Not adds to them — replaces them. That is real power (an agent that is a
             release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the assistant
-            through that same prompt.
+            through that same prompt. If you want that power for one job rather than for the whole sandbox, a persona can carry its own prompt — and
+            its own skills — without changing anything else here.
         </p>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-warning/40">
@@ -125,10 +135,20 @@ const PROMPT_KEPT = [
             the dialog shows the version it came from. Switching back to Intentic or Claude is one click and loses nothing: your text stays in the box
             for the next time you pick Custom.
         </p>
+        <!-- ③ Who it reaches. This used to be one buried sentence saying "the Claude Code harness" — true, and
+             the reason a Grok or Codex chat quietly ran without the prompt somebody had written. The table is
+             derived from the same record the daemon composes against, so it cannot go stale when a provider is
+             added or a runtime grows a seam it did not have. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Where it applies</h3>
+        <p class="mt-1.5 text-2xs text-muted">
+            Every chat in this sandbox, automated wake-ups and web-chat visitors included — but what each model does with it depends on what that
+            model lets us set.
+        </p>
+        <InfoTable class="mt-2" :headers="[`Model`, `What happens`]" :rows="REACH_ROWS" />
         <p class="mt-1.5 text-2xs text-subtle">
-            It applies to every model running on the Claude Code harness — including ChatGPT and Grok when you run them there — and to every chat in
-            this sandbox, automated wake-ups and web-chat visitors included. A chat on a provider's own runtime uses that provider's prompt instead.
-            Ordinary preferences ("answer in Polish") do not need this: put them in CLAUDE.md, which is read alongside whichever prompt is in force.
+            An agent you install yourself brings its own prompt and offers no way to set one, so it keeps it — the model picker says so on the chat it
+            would affect. Ordinary preferences ("answer in Polish") do not need this: put them in CLAUDE.md, which is read alongside whichever prompt
+            is in force. A single persona can run on a prompt of its own — see Personas.
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
             Editing it costs one turn's worth of the reuse that keeps long conversations cheap, then settles back. Write it and leave it — it isn't a

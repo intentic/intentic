@@ -279,6 +279,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/extension-update-policy.json`,
             `.intentic/loop-designs.json`,
             `.intentic/personas.json`,
+            // A persona's own kit — the prompt it runs on and the skills only its turns reach. Tracked for the
+            // reason its card is, one step further: this is the text that decides how that persona behaves.
+            `.intentic/personas/`,
             `.intentic/settings.json`,
             // The skills the owner wrote. Tracked for the reason the rules in settings.json are: text that
             // changes how the agent behaves is worth a diff and a line in `git log`.

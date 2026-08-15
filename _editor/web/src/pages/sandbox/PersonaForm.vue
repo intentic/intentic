@@ -1,22 +1,25 @@
 <script setup lang="ts">
+import type { SystemPromptMode } from "@intentic/sandbox-contract";
 import { BrandMark, cmp, Notice, type NoticeModel } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import FolderPicker from "./FolderPicker.vue";
+import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../composables/extensions/useBrowserAccounts";
 import PersonaFace from "../../components/PersonaFace.vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../composables/sandbox/personaCard";
 
 /* The card editor, used in both places a card is written: opened inside an existing row, and standing alone at
- * the tail of the group for a new one. One component because the two are the same three questions — the only
+ * the tail of the group for a new one. One component because the two are the same four questions — the only
  * difference is the verb on the button — and a second copy is how the edit form and the add form drift into
  * disagreeing about what a persona has.
  *
- * THREE QUESTIONS, AND IT USED TO ASK SIX. A paragraph on how the persona writes, a publish-or-draft switch and
- * a three-way choice of which workspace tree to work in are all gone (see PersonaSchema for why the card no
- * longer carries them). What is left is a name, who it speaks as, what it may do and where — which is short
- * enough that someone finishes it, and every field of which changes what a session can actually reach.
+ * FOUR QUESTIONS: a name, who it speaks as, what it may do and where, and what it is told. It used to ask six of
+ * a different kind — a paragraph on how the persona writes, a publish-or-draft switch and a three-way choice of
+ * workspace tree, all gone (see PersonaSchema). The fourth question here is not that paragraph returning: it is
+ * the system prompt itself, plus the skills only this card's turns reach, which is the difference between a
+ * label and a working posture. Every field still changes what a session can actually reach or is actually told.
  *
  * IT SHOWS YOU WHO YOU ARE MAKING. The avatar at the head is not decoration: it takes the name as it is typed
  * and wears the colour that persona will wear in every list it appears in afterwards, so the form reads as
@@ -50,6 +53,13 @@ export interface PersonaDraft extends PersonaPowersDraft {
     // models either way, so a single-folder question needs no second control and no parsing on the way back.
     startIn: string[];
     folders: string[];
+    /* Which system prompt a session wearing this card runs on. `undefined` is the fourth answer and the default —
+     * follow the sandbox — which is what almost every card means; the picker's first option writes it.
+     *
+     * The TEXT is not here, and that is not an oversight: it lives in the card's own kit folder, edited through
+     * its own route (usePersonaKit). Carrying it in this draft would put a system prompt inside the debounced
+     * whole-card autosave, so every keystroke would rewrite the committed personas file. */
+    systemPromptMode: SystemPromptMode | undefined;
 }
 
 const {
@@ -331,6 +341,15 @@ const folderBound = computed(() => draft.folders.length > 0);
                 </template>
             </PersonaPowersFields>
         </div>
+
+        <!-- LAST, and below the bounds rather than above them, because it is the only section whose answer is
+             prose: everything above is a decision you make in a click, and putting a textarea in front of them
+             would make the form look like something to write rather than something to set. -->
+        <PersonaKitFields
+            :persona-id="draft.original"
+            :mode="draft.systemPromptMode"
+            @update:mode="(next: SystemPromptMode | undefined) => (draft.systemPromptMode = next)"
+        />
 
         <Notice v-if="error !== undefined" :of="error" />
         <div v-if="submitLabel !== undefined" class="flex items-center gap-3">

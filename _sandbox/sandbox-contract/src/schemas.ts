@@ -1598,19 +1598,25 @@ export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 
 /* WHERE A SKILL CAME FROM — the fact that decides everything else about its row.
  *
- * A skill is inert text the agent reads, and this sandbox grows them from six directions at once: the daemon
+ * A skill is inert text the agent reads, and this sandbox grows them from seven directions at once: the daemon
  * writes one per baked tool and one per core feature that has a cheatsheet, connecting a tool or a machine
- * writes one for that connection, the owner writes their own, an installed extension ships some inside its
- * checkout, and a plugin capability clones a repo full of them. Nothing used to LIST the result, which is the
- * whole gap this vocabulary closes — "what does my agent know right now" had no answer on screen, and a skill
- * spends the agent's attention whether or not anyone remembers adding it.
+ * writes one for that connection, the owner writes their own, a persona carries its own in its kit, an
+ * installed extension ships some inside its checkout, and a plugin capability clones a repo full of them.
+ * Nothing used to LIST the result, which is the whole gap this vocabulary closes — "what does my agent know
+ * right now" had no answer on screen, and a skill spends the agent's attention whether or not anyone remembers
+ * adding it.
  *
  *   builtin      this image ships it — a baked tool's cheatsheet, or a core feature's
  *   own          the owner wrote it (.intentic/skills/), and only these are editable here
  *   capability   something connected brought it: a CLI tool, a machine, a browser account, a VPN
  *   extension    an installed extension ships it inside its checkout
  *   plugin       a plugin capability cloned a repo that holds it
+ *   persona      one card's own kit carries it, and only turns wearing that card ever see it
  *   dropped      it is simply sitting in the loaded folder — put there by hand, or by the agent itself
+ *
+ * `persona` is the one origin that is not on for everybody, which is why it needs its own word rather than
+ * being filed under `own`: it says "the agent knows this when it is wearing that card", and a list that showed
+ * it as an ordinary skill of the owner's would be claiming it applies to every chat.
  *
  * `dropped` is the honest bottom of the list rather than a category anything creates on purpose: the promise
  * this surface makes is that it shows EVERYTHING the agent knows, so a file nothing else claims has to list as
@@ -1618,7 +1624,7 @@ export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
  *
  * Deliberately NOT a capability kind. A capability holds a credential, can be broken right now, and wants a
  * status light; a skill either exists or it does not. See _sandbox/sandbox/src/settings/skill-inventory.ts. */
-export const SkillOriginSchema = z.enum(["builtin", "own", "capability", "extension", "plugin", "dropped"]);
+export const SkillOriginSchema = z.enum(["builtin", "own", "capability", "extension", "plugin", "persona", "dropped"]);
 export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 
 /* A skill's own name — the directory it lives in and the word the agent invokes it by. Same slug shape the SDK's
@@ -3600,18 +3606,21 @@ export type Capability = z.infer<typeof CapabilitySchema>;
 /* A NAMED PERSONA THE SANDBOX SHOWS THE OUTSIDE WORLD — "work-reddit", "the studio account" — and the layer
  * that decides which connected accounts a given turn may act through.
  *
- * IT ANSWERS THREE QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works. Making one is then
- * a name, a few accounts and some switches — which is the whole of what an owner is deciding, and short enough
- * that they finish. Two fields that used to sit here are gone on purpose:
- *
- *   NO AUTHORED WORDING. A paragraph on how a persona writes was a fourth question on the form, optional,
- *   answered by almost nobody, and shaped nothing a person could see afterwards. Prose that steers a turn
- *   belongs where every turn already reads it — the workspace's own instructions — not on a card whose other
- *   fields all bound something.
+ * IT ANSWERS FOUR QUESTIONS AND NO MORE: who it speaks as, what it may do, where it works, and what it is told.
+ * Making one is then a name, a few accounts, some switches and — only if you want one — a prompt. That is the
+ * whole of what an owner is deciding, and short enough that they finish.
  *
  *   NO PUBLISH-OR-DRAFT SWITCH. It read as a lock and was a sentence: it asked the turn to route outward things
  *   through the approvals queue and could not stop it posting. The queue is the mechanism, and a control whose
  *   label promises more than it delivers is worse than no control — it is the one an owner trusts.
+ *
+ *   THE FOURTH QUESTION IS THE SYSTEM PROMPT, NOT A TONE NOTE, and the difference is why the field that used to
+ *   sit here was removed and this one is not it. What was removed was a paragraph on how a persona WRITES:
+ *   optional, answered by almost nobody, and shaping nothing a person could see afterwards. `systemPromptMode`
+ *   is the same setting the sandbox has, asked per card — it replaces the whole prompt, and with the kit folder
+ *   beside it (persona-kit.ts) a card can carry its own skills and tools too. That is a persona being a working
+ *   posture rather than a label, and it shows: a release-notes writer and a code reviewer are two prompts, not
+ *   two adjectives.
  *
  * THE CARD AND THE KEYS ARE DELIBERATELY SEPARATE. This is the card: a name, the accounts it speaks for, what a
  * session wearing it may do, where it works. It carries NO credential, which is what lets it be the one thing under
@@ -3717,6 +3726,23 @@ export const PersonaSchema = z.object({
     // workspace, so a card written before these existed keeps behaving exactly as it did.
     powers: PersonaPowersSchema.optional(),
     workspace: PersonaWorkspaceSchema.optional(),
+    /* WHICH SYSTEM PROMPT A SESSION WEARING THIS CARD RUNS ON — the same three bases the sandbox chooses
+     * between, asked per card. ABSENT is the fourth answer and the default: follow the sandbox, which is what
+     * every card meant before this field existed and what almost every card will go on meaning.
+     *
+     * Absent rather than a fifth enum value spelling the same thing. "inherit" and "not set" would be two
+     * spellings of one answer, and the surface that offers four options maps its first to leaving this off.
+     *
+     * THE TEXT IS NOT HERE. Under "custom" it is `PROMPT.md` in the card's own kit folder
+     * (personas/persona-kit.ts), for two reasons that point the same way: a system prompt is prose, and prose
+     * belongs in a file where it diffs line by line rather than as one escaped string inside a record nobody
+     * writes by hand — and the kit is already where that persona's skills and tools live, so there is one folder
+     * to look in rather than a field here and a directory there.
+     *
+     * "custom" with no PROMPT.md written yet falls back to the sandbox's answer rather than running the turn on
+     * an empty prompt: the card is half-made, and a half-made card should behave like the one it was before
+     * somebody started editing it. */
+    systemPromptMode: SystemPromptModeSchema.optional(),
 });
 export type Persona = z.infer<typeof PersonaSchema>;
 
@@ -3780,6 +3806,28 @@ export const PersonasListSchema = z.object({
     personas: z.array(PersonaSchema),
     connected: z.array(z.string()),
 });
+
+/* A PERSONA'S KIT, as one read — the prompt it runs on and the skills it carries.
+ *
+ * ONE ROUTE FOR BOTH because they are one folder and one screen: the card's editor draws them together, and two
+ * requests to render one section is two chances for it to arrive half-drawn. The skills come back as name and
+ * description only, for the same reason the sandbox's own skill list does — a body runs to thousands of words
+ * and a group of one-line rows should not cost a hundred kilobytes to draw.
+ *
+ * An empty prompt is a card with no PROMPT.md, which is every card until somebody writes one. It is "" rather
+ * than absent because the field behind it is a textarea, and a textarea's empty value is "". */
+export const PersonaKitSchema = z.object({
+    prompt: z.string(),
+    skills: z.array(z.object({ name: z.string(), description: z.string() })),
+});
+export type PersonaKit = z.infer<typeof PersonaKitSchema>;
+
+export const PersonaPromptSchema = PersonaIdParamSchema.extend({ prompt: z.string().max(20000) });
+export const PersonaSkillSchema = PersonaIdParamSchema.extend(SkillDraftSchema.shape);
+export const PersonaSkillNameSchema = PersonaIdParamSchema.extend({ name: SkillNameSchema });
+// One kit skill's instructions, for editing it — the same split the sandbox's own skills make between a listing
+// and a body, and for the same reason.
+export const PersonaSkillBodySchema = z.object({ name: z.string(), description: z.string(), body: z.string() });
 
 /* `code` is a credential the owner has to TYPE SOMEWHERE ELSE to finish this connection — WhatsApp's
  * link-a-device code, typed into the phone. It is not part of `detail` because the card does not merely print

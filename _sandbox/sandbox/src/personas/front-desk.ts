@@ -50,6 +50,10 @@ const FRONT_DESK_CARD: Persona = {
         computers: [],
         mcp: [],
     },
+    /* No `systemPromptMode`, so the desk runs on the sandbox's own prompt whatever that is. The desk's MANNER is
+     * the constant above rather than a prompt of its own, and for the same reason: what a Doorbell is belongs to
+     * the product, while which base the agent runs on is the owner's to set for their whole sandbox. An owner
+     * who wants the desk on a different prompt writes one on the card like any other persona. */
 };
 
 // Written only when absent, so an owner who has widened the card keeps their version — this repairs a MISSING

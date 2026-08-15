@@ -43,6 +43,7 @@ describe("every provider/harness pair declares what it can do", () => {
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "http", "none"]).toContain(capabilities.mcp);
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
+        expect(["replace", "append", "none"]).toContain(capabilities.instructions);
         // The permission modes offered must include the mode a clamp falls back to — a floor that isn't in the
         // list would leave the composer showing a posture the runtime can't hold.
         expect(modesFor(capabilities)).toContain(clampMode("default", capabilities));
@@ -164,14 +165,29 @@ test("every axis a record can lack has words for it", () => {
         commands: false,
         terminals: false,
         recovery: false,
+        instructions: "none",
     };
 
-    // Nine DISCLOSABLE axes, nine sentences: an axis added to the interface without one would silently never be
-    // disclosed. fastMode is the deliberate tenth — a record alone can't tell the truth about it (a translator-
-    // routed turn reads true here and still can't go fast), so it is answered by fastAllowed instead. Anything
-    // else added to the interface has to move this number.
-    expect(limitationsOf(nothing)).toHaveLength(9);
+    // Ten DISCLOSABLE axes, ten sentences: an axis added to the interface without one would silently never be
+    // disclosed. fastMode is the deliberate eleventh — a record alone can't tell the truth about it (a
+    // translator-routed turn reads true here and still can't go fast), so it is answered by fastAllowed
+    // instead. Anything else added to the interface has to move this number.
+    expect(limitationsOf(nothing)).toHaveLength(10);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
+});
+
+/* The instruction axis has THREE values and only two of them are worth a sentence, which is the one shape the
+ * count above cannot check: a middle value that discloses the same words as the floor would tell a Grok user
+ * their prompt is ignored when it is in fact being sent. */
+test("the instruction axis discloses its two weaker answers, differently", () => {
+    const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
+    const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native")).join(" ");
+
+    expect(grok).toContain("added to theirs");
+    expect(grok).not.toContain("isn't applied");
+    expect(acp).toContain("isn't applied");
+    // Codex on its own runtime replaces, like the Claude Code loop — so it has nothing to disclose here.
+    expect(limitationsOf(capabilitiesOf("codex", "native")).join(" ")).not.toContain("system prompt");
 });
 
 // The mode vocabulary is the contract's own PermissionMode, so a mode added to the wire can't be quietly absent

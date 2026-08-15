@@ -37,6 +37,16 @@ export interface GrokTurn {
     readonly provider?: string;
     // The built-in OpenCode agent: "plan" is read-only (proposes), "build" executes.
     readonly agent: "plan" | "build";
+    /* THIS SANDBOX'S STANDING INSTRUCTIONS, as much of them as OpenCode will take — the whole of what makes
+     * this runtime `instructions: "append"` rather than one that drops the setting silently.
+     *
+     * It rides `system` on the prompt body, which OpenCode ADDS to its own prompt: there is no seam for
+     * replacing that base, so a custom system prompt arrives here as extra instructions and the settings page
+     * says exactly that instead of promising a replacement two providers cannot perform.
+     *
+     * PER MESSAGE, not per session, because that is the only place the field exists — and it is why this is a
+     * property of the turn like the model rather than of the runner. */
+    readonly system?: string;
     readonly signal: AbortSignal;
 }
 export type GrokRunner = (turn: GrokTurn) => AsyncIterable<Event>;
@@ -128,6 +138,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 body: {
                     agent: turn.agent,
                     ...(modelId !== undefined && modelId !== "" ? { model: { providerID: turn.provider ?? XAI, modelID: modelId } } : {}),
+                    ...(turn.system !== undefined ? { system: turn.system } : {}),
                     parts: [{ type: "text", text: turn.prompt }],
                 },
             });
@@ -471,6 +482,10 @@ async function* streamTurn(
 // clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
 // runtime's capability row, which is what the composer says out loud.
 async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provider: string): AsyncGenerator<AgentEvent> {
+    // Both phases of the emulation carry the same standing instructions: they are two messages of ONE turn, and
+    // a plan proposed under the owner's prompt that is then executed without it would be a different agent
+    // doing the work than the one that agreed to it.
+    const system = request.systemAppend;
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture = yield* streamTurn(
             runner({
@@ -480,6 +495,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 provider,
                 agent: "plan",
+                ...(system !== undefined ? { system } : {}),
                 signal: request.signal,
             }),
             request.cwd,
@@ -497,6 +513,7 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner, provi
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 provider,
                 agent: "build",
+                ...(system !== undefined ? { system } : {}),
                 signal: request.signal,
             }),
             request.cwd,
@@ -523,6 +540,7 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
                           ...(request.model !== undefined ? { model: request.model } : {}),
                           provider,
                           agent: "build",
+                          ...(request.systemAppend !== undefined ? { system: request.systemAppend } : {}),
                           signal: request.signal,
                       }),
                       request.cwd,

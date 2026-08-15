@@ -30,11 +30,14 @@ export const isTunable = (skill: SkillSummary): boolean => skill.switchable || s
  * a list that opens on twenty of them buries the two extensions among them. */
 const ORIGIN_ORDER = {
     own: 0,
-    dropped: 1,
-    builtin: 2,
-    extension: 3,
-    plugin: 4,
-    capability: 5,
+    // A persona's own, directly under the reader's: it is text they wrote, and the only difference is that it
+    // applies to one card's turns rather than to every chat — which the chip says.
+    persona: 1,
+    dropped: 2,
+    builtin: 3,
+    extension: 4,
+    plugin: 5,
+    capability: 6,
     // `satisfies`, so an origin added to the daemon's enum is a build error here rather than a row that sorts
     // to the front of the list by accident.
 } satisfies Record<SkillOrigin, number>;

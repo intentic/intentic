@@ -47,6 +47,13 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // turn-plan.ts tells a "cwd" turn where its worktree is, because an absolute /work path still reaches the
     // shared checkout there. Under "namespace" the mount does it and the note would be noise.
     isolation: "enforced",
+    /* system-prompt.ts composes a turn's standing instructions AGAINST this value — a replacement where one may
+     * be sent, an addition where only that is possible, and the user-message door for the persona note where
+     * there is no system seam at all — and each adapter reads the field the composition set (codex-agent.ts's
+     * two config keys, grok-agent.ts's per-message `system`). It is also the one axis whose absence was the bug
+     * that produced it: before the field existed, every runtime was composed for as though it were the Claude
+     * Code loop, and five of the six silently dropped the owner's prompt. */
+    instructions: "enforced",
 
     /* DESCRIPTIVE — true of the runtime, and nothing consults them. Each describes behaviour that is emergent
      * rather than gated: an agent that never emits `question` frames simply never asks, one that publishes no

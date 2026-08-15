@@ -2151,16 +2151,16 @@
           "what": "the full route table."
         }
       ],
-      "behind": 41,
+      "behind": 42,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 868,
+      "files": 873,
       "hasTests": true,
-      "loc": 143125,
+      "loc": 143824,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "2e02ba1198f9b45168793ff66b2135e66172ee3d",
-      "reason": "41 commits have touched this package since its README was written",
+      "reason": "42 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786746201000
     },
@@ -2251,16 +2251,16 @@
           "what": "activation, off the public capability facts."
         }
       ],
-      "behind": 10,
+      "behind": 11,
       "component": "extensions",
       "dir": "_extensions/activity",
       "files": 12,
       "hasTests": true,
-      "loc": 1144,
+      "loc": 1151,
       "name": "@intentic/ext-activity",
       "oneLiner": "The audit feed: what happened across the systems this sandbox is connected to, as one timeline.",
       "readmeRev": "c9cd343575c3d70b62c859c20056b07b853b94df",
-      "reason": "10 commits have touched this package since its README was written",
+      "reason": "11 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786125100000
     },
@@ -2347,9 +2347,9 @@
       "loc": 0,
       "name": "@intentic/ext-connectors",
       "oneLiner": "The systems an agent can be wired to — GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz, Komodo, Cloudflare, Firecrawl, Postgres, MySQL.",
-      "readmeRev": "799902191b4923f862a65f4ba8625b8cd651b21c",
+      "readmeRev": "b645e48f0cf1bd9ffc0cf584e655341326f40364",
       "stale": false,
-      "updatedAt": 1786825544000
+      "updatedAt": 1786826190000
     },
     {
       "anchors": [
@@ -3050,7 +3050,7 @@
         },
         {
           "path": "_extensions/whatsapp/src/gateway.ts",
-          "what": "what WhatsApp plugs into the shared connector runtime, its pairing-code status, and the control surface. Also why the reply is deliberately NOT streamed (sent once, complete — in src/listener.ts)."
+          "what": "what WhatsApp plugs into the shared connector runtime, its pairing status, and the control surface. Also why the reply is deliberately NOT streamed (sent once, complete — in src/listener.ts)."
         },
         {
           "path": "_extensions/whatsapp/bin/whatsapp",
@@ -3061,18 +3061,17 @@
           "what": "the structural message shapes everything except client.ts works on."
         }
       ],
-      "behind": 8,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/whatsapp",
       "files": 5,
       "hasTests": true,
-      "loc": 1115,
+      "loc": 1168,
       "name": "@intentic/ext-whatsapp",
       "oneLiner": "WhatsApp as a place the agent works: paired to a dedicated number as a linked device, it reads chats and groups, replies in them, and wakes when it is addressed.",
-      "readmeRev": "d46612136a4d2c923a2e1e44e1d1415bb5d8fc0c",
-      "reason": "8 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1786207605000
+      "readmeRev": "a83d5d983474f0edd5b9a3f118752478c79057ab",
+      "stale": false,
+      "updatedAt": 1786828430000
     },
     {
       "anchors": [
@@ -3271,7 +3270,7 @@
           "what": "what a connector's own modules get from the process (daemon, log,"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "dir": "_sandbox/connector-runtime",
       "files": 7,
       "hasTests": true,
@@ -3279,7 +3278,8 @@
       "name": "@intentic/connector-runtime",
       "oneLiner": "The shared gateway runtime for the messaging connectors — the process shell, daemon client and reply painters that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to each carry…",
       "readmeRev": "2736488ae7f42b46455fe9521c8fff6196885b33",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1786818343000
     },
     {
@@ -3545,6 +3545,10 @@
           "what": "who a turn is and what it may do, resolved in one"
         },
         {
+          "path": "_sandbox/sandbox/src/agent/system-prompt.ts",
+          "what": "what the model is told before the conversation"
+        },
+        {
           "path": "_sandbox/sandbox/src/auth/role-floor.ts",
           "what": "the minimum trust tier per route, in one table. src/auth/auth.ts resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches."
         },
@@ -3553,16 +3557,17 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 802,
+      "files": 807,
       "hasTests": true,
-      "loc": 137885,
+      "loc": 139006,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "a24d629002ded981c76e43a8eea7afeb9a710860",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1786823338000
     },
     {
@@ -3582,6 +3587,10 @@
         {
           "path": "_sandbox/sandbox-contract/src/workspace-state.ts",
           "what": "and src/runtime-state.ts — which"
+        },
+        {
+          "path": "_sandbox/sandbox-contract/src/agent-catalog.ts",
+          "what": "what each (provider, harness) pair can actually DO, as one"
         },
         {
           "path": "_sandbox/sandbox-contract/src/chores",
@@ -3604,16 +3613,17 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 103,
       "hasTests": true,
-      "loc": 18681,
+      "loc": 18876,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "a24d629002ded981c76e43a8eea7afeb9a710860",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1786823338000
     },
     {
@@ -4518,7 +4528,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1786825883713,
+  "generatedAt": 1786832611838,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

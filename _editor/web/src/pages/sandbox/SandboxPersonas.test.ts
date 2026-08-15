@@ -57,6 +57,27 @@ vi.mock(`../../composables/extensions/useBrowserAccounts`, () => ({
 const capabilities = ref<{ id: string; kind: string }[]>([]);
 vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
+/* The open card's kit — its own prompt and its own skills, which live in files rather than on the card and are
+ * read through their own routes. Stubbed like the other composables here rather than left to the query stub
+ * below: that one answers every query with a workspace TREE, which is the right shortcut for the folder pickers
+ * and the wrong shape for anything else that asks. What this suite is about is the CARD, so the kit answers
+ * empty and says so. */
+vi.mock(`../../composables/sandbox/usePersonaKit`, async () => {
+    const { computed, ref: shallow } = await import(`vue`);
+    const idle = { mutateAsync: vi.fn().mockResolvedValue({ ok: true }), isPending: shallow(false) };
+    return {
+        usePersonaKit: () => ({
+            kit: computed(() => ({ prompt: ``, skills: [] })),
+            readSkill: vi.fn(),
+            error: shallow(undefined),
+            isLoading: shallow(false),
+            savePrompt: idle,
+            saveSkill: idle,
+            removeSkill: idle,
+        }),
+    };
+});
+
 /* The workspace the folder pickers offer. Both of them read the tree straight off the daemon, and both modules
  * on that road (the client, and the query wrapper that gates on the daemon being reachable) touch
  * environment.ts's `window.env` at module-eval — the same edge useAgents.test.ts cuts, for the same reason.
@@ -529,4 +550,43 @@ it(`narrows the chooser by name or site`, async () => {
     await type(el.querySelector<HTMLInputElement>(`input[aria-label="Filter accounts"]`)!, `x-comp`);
     expect(text(el)).toContain(`x-company`);
     expect(text(el)).not.toContain(`reddit-personal`);
+});
+
+/* ── What the persona is TOLD ────────────────────────────────────────────────────────────────────────────────
+ *
+ * The fourth question the card answers. Two properties are worth pinning here and both are about the FILE: that
+ * a card following the sandbox stores nothing (the default, and what almost every card means — a stored
+ * "inherit" would put a decision nobody made into a tracked file), and that a card given its own base stores
+ * exactly that. The TEXT is not the card's and is not asserted here: it lives in the kit, behind its own routes,
+ * stubbed above. */
+it(`stores nothing about the prompt for a card that follows the sandbox`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    await openCard(el, `work`);
+    toggleSwitch(el, `Run commands`);
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].systemPromptMode).toBeUndefined();
+});
+
+it(`stores the base a card was given one of its own`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    await openCard(el, `work`);
+
+    // The picker is the sandbox's own three words plus the one only a card can give.
+    buttonLabelled(el, `Claude`)!.click();
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].systemPromptMode).toBe(`claude`);
+});
+
+// A card being created cannot carry files yet: the kit routes refuse a persona that does not exist, so nothing
+// can mint one by writing at it. The form has to say so rather than offer an editor whose save would fail.
+it(`tells you the prompt and skills come after the persona exists`, async () => {
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+
+    expect(el.textContent).toContain(`Create this persona first`);
 });

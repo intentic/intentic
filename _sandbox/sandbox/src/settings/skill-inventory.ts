@@ -4,8 +4,9 @@ import type { Capability, SkillSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { enabledExtensions, type InstalledExtension } from "../extensions/installed-extensions.js";
 import { pluginDir } from "../capabilities/plugin-dirs.js";
+import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
 import { loadedSkillsRoot } from "./loaded-skills.js";
-import { parseSkillFile } from "./skill-file.js";
+import { parseSkillFile, skillDocument } from "./skill-file.js";
 import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir } from "./skills.js";
 
 /* EVERYTHING THE AGENT KNOWS RIGHT NOW, joined from the six places a skill can come from.
@@ -104,11 +105,12 @@ const summary = (fields: Omit<SkillSummary, "switchable" | "editable" | "removab
  * row that reaches here at all is loaded. */
 export const skillInventory = async (services: Services): Promise<SkillSummary[]> => {
     const root = services.workspace.root;
-    const [settings, own, capabilities, extensions] = await Promise.all([
+    const [settings, own, capabilities, extensions, personas] = await Promise.all([
         services.sandboxSettings.get(),
         listOwnSkills(services),
         services.capabilities.list(),
         enabledExtensions(services),
+        services.personas.list(),
     ]);
     const enabled = (name: string): boolean => settings.skills.includes(name);
     const rows: SkillSummary[] = [];
@@ -146,6 +148,25 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
                     description: skill.description,
                     origin: "plugin",
                     owner: capability.id,
+                    enabled: true,
+                }),
+            );
+        }
+    }
+
+    /* THE PERSONA KITS. Listed here because this surface promises to show everything the agent knows, and a
+     * skill that only some turns can reach is still something it knows — the row says whose card carries it, and
+     * offers no switch, because a kit skill is on exactly when its persona is worn (personas/persona-kit.ts).
+     * Edited on the card rather than here, for the same reason a plugin's skill is edited where it lives. */
+    for (const persona of personas) {
+        for (const skill of await listPersonaSkills(root, persona.id)) {
+            rows.push(
+                summary({
+                    id: `persona:${persona.id}:${skill.name}`,
+                    name: skill.name,
+                    description: skill.description,
+                    origin: "persona",
+                    owner: persona.label ?? persona.id,
                     enabled: true,
                 }),
             );
@@ -211,12 +232,13 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
 // from disk because a switched-off baked tool has no file, and its row still has to say what it would teach.
 const bakedDescription = (name: string): string => parseSkillFile(bakedSkillText(name) ?? "").description ?? "";
 
-/* ONE SKILL'S TEXT, from whichever of the six places its id names — what the read route answers with.
+/* ONE SKILL'S TEXT, from whichever of the seven places its id names — what the read route answers with.
  *
  * The id shapes are the list's own (SkillSummarySchema): a bare name for anything living in the loaded folder or
- * the owner's store, and `<origin>:<owner>:<name>` for a skill inside a plugin checkout or an extension. Reading
- * is a fresh resolution rather than a lookup against a cached list, because the file may have changed since the
- * list was drawn — an agent editing its own skill mid-session is the normal case, not the exotic one.
+ * the owner's store, and `<origin>:<owner>:<name>` for a skill inside a plugin checkout, an extension, or one
+ * persona's kit. Reading is a fresh resolution rather than a lookup against a cached list, because the file may
+ * have changed since the list was drawn — an agent editing its own skill mid-session is the normal case, not the
+ * exotic one.
  *
  * A bare name is tried in three places, in the order that answers with what the AGENT would read: the loaded copy
  * first, then the owner's store (a skill switched off still has text worth reading), then the baked registry (a
@@ -224,6 +246,12 @@ const bakedDescription = (name: string): string => parseSkillFile(bakedSkillText
 export const readSkillText = async (services: Services, id: string): Promise<{ readonly name: string; readonly text: string } | undefined> => {
     const root = services.workspace.root;
     const [scope, owner, name] = id.split(":");
+    // A kit skill answers from its card's own folder. Its `owner` is the persona id, which is what the list's id
+    // carries — the row's LABEL may be prettier, and is not a key.
+    if (name !== undefined && owner !== undefined && scope === "persona") {
+        const skill = await readPersonaSkill(root, owner, name);
+        return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body) };
+    }
     if (name !== undefined && owner !== undefined && (scope === "plugin" || scope === "extension")) {
         const dir = scope === "plugin" ? await pluginDirFor(services, owner) : await extensionDirFor(services, owner);
         if (dir === undefined) {

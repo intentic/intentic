@@ -17,6 +17,10 @@ import type { SkillOrigin, SkillSummary } from "@intentic-app/api-contract";
 
 const CHIPS = {
     own: `Yours`,
+    // Named for the CARD rather than for the owner, because that is the fact the reader needs: this one is not
+    // on for every chat, only for turns wearing that persona. The owner's name follows it, as it does for an
+    // extension — "Persona · Studio".
+    persona: `Persona`,
     builtin: `Built in`,
     capability: `Connection`,
     extension: `Extension`,

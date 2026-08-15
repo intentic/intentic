@@ -11,6 +11,7 @@ import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 import { useDraft } from "../../../composables/useDraft";
 import { asPercent, commitPercent } from "./numberInputs";
+import { promptReach, spokenList } from "./promptReach";
 import { verdictsOf } from "../savingsChart";
 import InstructionsInfo from "./InstructionsInfo.vue";
 
@@ -100,6 +101,12 @@ const terseHoldoutPercent = computed<number>(() => asPercent(settings.value?.ter
  * data is behind it is one a reader cannot weigh. */
 const terseVerdict = computed(() => verdictsOf(savings.value?.output).headline);
 const terseArms = computed(() => savings.value?.output?.metrics[0]);
+
+/* WHO THIS SETTING ACTUALLY REACHES, said on the control rather than only inside the (i). It was the one thing
+ * the row did not say and the one thing a reader cannot find out any other way: a turn on a provider's own
+ * runtime that ignored the prompt looked exactly like one that honoured it. Derived from the same record the
+ * daemon composes against (promptReach.ts), so the sentence cannot drift from the behaviour. */
+const reach = promptReach();
 </script>
 
 <template>
@@ -186,6 +193,16 @@ const terseArms = computed(() => savings.value?.output?.metrics[0]);
                 <Segmented :model-value="promptMode" :options="PROMPT_MODES" @update:model-value="setPromptMode" />
             </template>
             <template #below>
+                <!-- WHO IT REACHES, on the control. Two sentences because the two answers are genuinely
+                     different promises, and a reader on Grok who saw only "applies to Codex, Grok and Claude"
+                     would expect a replacement they are not getting. The third line names what gets nothing:
+                     an agent the owner installed brings its own prompt and has no seam for ours. -->
+                <p class="text-2xs text-subtle">
+                    Replaces the prompt on {{ spokenList(reach.replaces) }}.
+                    <template v-if="reach.adds.length > 0">Added to their own on {{ spokenList(reach.adds) }}.</template>
+                    Agents you install yourself keep theirs.
+                </p>
+
                 <!-- A base is read, not edited: the links are the whole surface. Forking is how you get from
                      "I like this but for one paragraph" to a custom prompt without retyping it. -->
                 <template v-if="promptMode !== `custom`">
@@ -226,9 +243,12 @@ const terseArms = computed(() => savings.value?.output?.metrics[0]);
                     <!-- What Custom actually costs, shown while they are in it rather than discovered later
                          when the chat's cards quietly stop appearing. -->
                     <p :class="cmp.alertWarning('mt-1.5 text-2xs')">
-                        Your text becomes the whole system prompt. Both built-in prompts are gone, and so is what this app tells the assistant about
-                        itself — the question and plan cards, the checklist panel, and the browser tools it would otherwise know to reach for. Terse
-                        responses stops applying too. Describe whatever you still want.
+                        Your text becomes the whole system prompt on {{ spokenList(reach.replaces) }}. Both built-in prompts are gone, and so is what
+                        this app tells the assistant about itself — the question and plan cards, the checklist panel, and the browser tools it would
+                        otherwise know to reach for. Terse responses stops applying too. Describe whatever you still want.
+                        <template v-if="reach.adds.length > 0">
+                            On {{ spokenList(reach.adds) }} there is no way to replace their prompt, so your text is added to it instead.
+                        </template>
                     </p>
 
                     <div class="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">

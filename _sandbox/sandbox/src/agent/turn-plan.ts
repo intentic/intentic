@@ -7,6 +7,7 @@ import {
     type IqContextOutcome,
     type Rule,
     type SandboxSettings,
+    type SystemPromptMode,
     PI_PROVIDER,
     SandboxSettingsSchema,
     capabilitiesOf,
@@ -20,7 +21,16 @@ import { fetchEmailCode } from "../browser/email-codes.js";
 import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
-import { type TurnPersona, personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, turnPersona } from "../personas/personas.js";
+import { personaKitPlugin, readPersonaPrompt } from "../personas/persona-kit.js";
+import {
+    type TurnPersona,
+    personaCapabilities,
+    personaCliEnv,
+    personaDisallowedTools,
+    personaNote,
+    personaPrompt,
+    turnPersona,
+} from "../personas/personas.js";
 import { personaScopeOf } from "../personas/persona-scope.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
@@ -129,6 +139,11 @@ export interface TurnContext {
      * Set only on the context the arms receive — the route builds this object before a card has been read, so
      * it is absent there and present everywhere it is used. */
     readonly persona?: TurnPersona;
+    /* Cross-provider delegation, resolved once by planTurn for the Claude Code loop alone (delegationEnv). Its
+     * NOTE is already folded into the turn's instructions by the time an arm sees this; what is left for the
+     * arm is the env — CODEX_HOME and the local bearer — which only that loop's Bash receives. Absent on every
+     * other runtime, and on a sandbox with nothing to delegate to. */
+    readonly delegation?: { readonly env: Record<string, string>; readonly note?: string };
     /* Re-take the pre-turn rebase while the turn is parked on a card (agent.routes.ts owns the git and the
      * bookkeeping; agent.ts picks the moments). Isolated turns only — a main-tree turn has no branch to move.
      *
@@ -165,7 +180,13 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    const [installed, setup, cast, settings] = await Promise.all([
+    /* SETTINGS FIRST AND ALONE, which costs one small local JSON read and buys the delegation lookup a place in
+     * the round below. That lookup needs `stableSystemPrompt` to decide how its note is worded, and the note is
+     * now an input to the one composition of this turn's instructions (honoured, below) rather than something
+     * the harness arm assembled for itself — so it has to be resolved before the arms are dispatched to. Reading
+     * it here rather than serialising the lookup after the round is what keeps that move free. */
+    const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
+    const [installed, setup, cast, delegation] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
         // the record above — these are what the OWNER installed, that is what the runtime can DO.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -192,7 +213,19 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
         // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
-        services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
+        /* CROSS-PROVIDER DELEGATION, for the one loop that wires it. The env it returns reaches the agent's
+         * Bash (planHarnessTurn), and its note is one of the pieces composed into this turn's instructions
+         * below — which is why it is resolved here, above the split, rather than in the arm that consumes it.
+         * A native Codex, Grok, Pi or ACP turn gets neither: nothing puts CODEX_HOME into its shell, so a note
+         * telling it to delegate would name a credential it has not got.
+         *
+         * The move costs it its place BEHIND the credential gate: a turn about to be refused for a missing
+         * subscription now pays this lookup. Same trade the settings read makes one line up, one size larger —
+         * and bounded, because the expensive half (booting the warm OpenCode server) is single-flight, warmed
+         * at boot, and only reached when an xAI account is connected at all. */
+        capabilities.runtime === "claude-code"
+            ? services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, settings.stableSystemPrompt))
+            : Promise.resolve(undefined),
     ]);
     /* WHO THIS TURN IS AND WHAT IT MAY DO — resolved ABOVE the provider split, which is the whole reason this
      * moved here from the harness arm.
@@ -232,6 +265,27 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
               })
             : undefined;
     const iqSearchNote = capabilities.runtime !== "claude-code" && iqSearchEnabled && conversationTurns === 0 ? teaching?.note : undefined;
+    /* WHICH PROMPT THIS TURN RUNS ON once the card has had its say — the sandbox's, or this persona's instead
+     * (personas.ts personaPrompt). The TEXT is read only where a card actually asked for its own, so an
+     * ordinary turn pays nothing: `inherit` is the default and every card written before the field existed
+     * means it. */
+    const prompt = personaPrompt(
+        persona.persona,
+        persona.persona?.systemPromptMode === "custom" ? await readPersonaPrompt(services.workspace.root, persona.persona.id) : undefined,
+        settings,
+    );
+    /* THE TERSE EXPERIMENT'S COIN FLIP, above the split with everything else about the instructions. The steer
+     * is eligible wherever the daemon still adds to the prompt — a custom prompt takes it away with everything
+     * else, and a runtime with no system seam never had it — and the holdout then runs its fraction of eligible
+     * turns WITHOUT it, so the savings report has two populations of the same command stream to compare instead
+     * of an assertion. A turn outside the experiment records no arm at all (see UsageTurn.terse): "the steer was
+     * off for everyone" is not a control group.
+     *
+     * It reads the RESOLVED mode rather than the setting, so a persona that writes its own prompt takes the
+     * steer away for its turns exactly as the sandbox-wide setting does — and a persona pinned to a built-in
+     * base gets it back even where the sandbox is on a custom prompt. */
+    const terseEligible = settings.terseOutput && prompt.mode !== "custom" && capabilities.instructions !== "none" && settings.terseHoldout > 0;
+    const terseArm = terseEligible ? Math.random() >= settings.terseHoldout : undefined;
     const shared: TurnContext = {
         ...context,
         settings,
@@ -239,17 +293,27 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         iqSearchEnabled,
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
+        ...(delegation !== undefined ? { delegation } : {}),
     };
     const planned: TurnContext = {
         ...shared,
-        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed),
+        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt),
         persona,
     };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).
     const plan = await adapterFor(provider, harness).preflight(services, input, planned, granted);
-    return plan.ok && searchArm !== undefined ? { ...plan, searchArm, ...(teaching !== undefined ? { searchCohort: teaching.cohort } : {}) } : plan;
+    if (!plan.ok) {
+        return plan;
+    }
+    return {
+        ...plan,
+        // Both arms are stamped HERE now, on the one path that flips them — the harness arm used to report the
+        // terse one because it was the only arm that ran the experiment, which was the bug rather than the design.
+        ...(terseArm !== undefined ? { terseArm } : {}),
+        ...(searchArm !== undefined ? { searchArm, ...(teaching !== undefined ? { searchCohort: teaching.cohort } : {}) } : {}),
+    };
 };
 
 /* THE REQUEST EVERY ARM BUILDS ON, with the controls this runtime does not honour already gone.
@@ -282,7 +346,14 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  * runtime and not on the other three is not a bound; this is the single point all of them pass through, so the
  * connectors whose credentials are withheld and the tools taken out of the turn are the same set whoever serves
  * it. What CANNOT be applied here is anything capability-shaped that an arm builds for itself — those are
- * filtered upstream, out of the manifest each arm is handed (personaCapabilities). */
+ * filtered upstream, out of the manifest each arm is handed (personaCapabilities).
+ *
+ * AND SO ARE THE TURN'S STANDING INSTRUCTIONS, which is the last thing that lived in one arm and read as
+ * everyone's. The owner's system prompt was a Claude Code setting wearing a sandbox setting's name — a turn on
+ * native Codex, Grok, Gemini, Pi or ACP ran without it and said so nowhere — and the persona note went with it,
+ * so the sentence naming which accounts a session may speak through reached exactly one of six runtimes. What
+ * each will accept is a declared axis now (AgentCapabilities.instructions) and system-prompt.ts composes to it;
+ * this is the point that hands it to all of them. */
 const honoured = (
     services: Services,
     context: TurnContext,
@@ -292,11 +363,37 @@ const honoured = (
     // The UNFILTERED manifest — this needs to know which connectors exist in order to know whose credentials to
     // withhold, which the already-filtered list by definition cannot say.
     installed: readonly Capability[],
+    // Which arm of the terse experiment this turn drew, when it is in the experiment at all. Undefined ⇒ no
+    // experiment, and the plain setting decides.
+    terseArm: boolean | undefined,
+    // Which system prompt this turn runs on, with the persona's answer already resolved against the sandbox's
+    // (personas.ts personaPrompt).
+    prompt: { readonly mode: SystemPromptMode; readonly systemPrompt: string },
 ): AgentRequest => {
     const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
     const isolated = context.localCwd !== services.workspace.root;
+    /* WHAT THIS TURN IS TOLD BEFORE THE USER SAYS ANYTHING, and where each piece of it can go on the runtime
+     * that is about to serve it (system-prompt.ts owns both halves, because they are one decision). Undefined
+     * settings is the focused caller that builds a plan without a route behind it (the bench); it gets the
+     * schema's own defaults rather than a second list of them here. */
+    const settings = context.settings ?? SETTINGS_DEFAULTS;
+    // Which persona the turn is wearing, said once in the instructions. Undefined when there is nothing to say —
+    // an ordinary attended turn that named no persona is the status quo and needs no narration.
+    const actingNote = personaNote(persona);
+    const placement = turnPromptPlacement({
+        capabilities,
+        ...prompt,
+        ...(context.delegation?.note !== undefined ? { note: context.delegation.note } : {}),
+        stableSystemPrompt: settings.stableSystemPrompt,
+        // The arm decides when the experiment is running; the plain setting decides when it isn't.
+        terseOutput: terseArm ?? settings.terseOutput,
+        ...(actingNote === undefined ? {} : { personaNote: actingNote }),
+    });
     const notes = [
+        // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
+        // ahead of anything about the files or the tools it is about to use.
+        ...(placement.userNotes ?? []),
         ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.
@@ -339,6 +436,13 @@ const honoured = (
     return {
         ...rest,
         prompt: withTurnPreamble(notes, context.base.prompt),
+        /* The composed instructions, carried on the request every runtime reads rather than on the one that
+         * used to. Which of the two fields is set is the runtime's own answer (AgentCapabilities.instructions):
+         * a replacement where one may be sent, an addition where only that is possible, neither where there is
+         * no system seam — and the adapters below hand whichever arrived to their own provider. */
+        systemPromptMode: prompt.mode,
+        ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
+        ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
         // Set HERE because this is the one point every runtime passes through, and because it is the only place
         // that can still tell the workspace root from the turn's cwd — below this, a persona's start folder and
         // an isolated worktree have already overwritten it.
@@ -548,34 +652,22 @@ export const planHarnessTurn = async (
     // external tool overrides, matching mcpServersOf's last-wins merge.
     const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
     const {
-        stableSystemPrompt,
         hashlineEdits,
         iqSearch,
         iqContext,
         iqContextHoldout,
         outputCleaners,
         outputHoldout,
-        terseOutput,
-        terseHoldout,
-        systemPromptMode,
         rules,
         subagentsAtOnce,
         subagentsPerTurn,
         subagentDepth,
         actionRules,
         commandRules,
-        systemPrompt: customPrompt,
     } = settings;
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
     const turnEndingRules = standing(rules, "turn.ending");
-    /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
-     * prompt — a custom prompt takes it away with everything else — and the holdout then runs its fraction of
-     * eligible turns WITHOUT it, so the savings report has two populations of the same command stream to
-     * compare instead of an assertion. A turn outside the experiment records no arm at all (see UsageTurn.terse):
-     * "the steer was off for everyone" is not a control group. */
-    const terseEligible = terseOutput && systemPromptMode !== "custom" && terseHoldout > 0;
-    const terseArm = terseEligible ? Math.random() >= terseHoldout : undefined;
     /* Retrieval starts HERE and is awaited at the prompt, so its (deadline-capped) latency runs underneath the
      * gates below — the dependency probe, the delegation lookup, the browser servers — instead of on top of
      * them. `input.prompt` is the user's own words: `context.base.prompt` may already carry a switched
@@ -646,7 +738,7 @@ export const planHarnessTurn = async (
     const browserAccountIds = granted
         .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
         .map((capability) => capability.id);
-    const [extensionAgentDirs, browser, delegation] = await Promise.all([
+    const [extensionAgentDirs, browser, personaKit] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
         // Each browser capability (account) grants the @playwright/mcp browser tools, bound to that account's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
@@ -655,7 +747,10 @@ export const planHarnessTurn = async (
         services.perf.track("turn.plan.browser", {}, () =>
             browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
         ),
-        services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, stableSystemPrompt)),
+        // The card's own folder, when it has one — its skills, its subagents, its tools. Read as a plugin dir
+        // below, which is what makes them native rather than something this daemon has to project anywhere
+        // (personas/persona-kit.ts). Undefined for an unpinned turn and for a card nobody has written a kit for.
+        persona.persona === undefined ? Promise.resolve(undefined) : personaKitPlugin(services.workspace.root, persona.persona.id),
     ]);
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
     // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle (opt-in,
@@ -665,6 +760,11 @@ export const planHarnessTurn = async (
         ...(services.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? iqSearch) ? [services.config.iqPluginDir] : []),
         ...pluginDirsOf(granted, services.workspace.root),
         ...extensionAgentDirs,
+        /* LAST, after the sandbox-wide plugins, because it is the most specific thing this turn carries — the
+         * card the session is actually wearing. The loader namespaces each plugin's skills by its plugin name,
+         * so this is an ordering rather than an override: a kit skill and a workspace skill of the same name
+         * are two skills, and the agent is told whose each one is. */
+        ...(personaKit === undefined ? [] : [personaKit]),
     ];
     // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated turn
     // edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path inputs, not edit
@@ -737,27 +837,13 @@ export const planHarnessTurn = async (
             },
         }),
     };
-    const shellEnv = { ...context.cliEnv, ...delegation.env };
-    // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
-    // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the
-    // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
+    // CODEX_HOME and the local bearer, for the one loop whose Bash can delegate. The NOTE that goes with them
+    // is already in this turn's instructions — both were resolved above the provider split (planTurn), because
+    // an agent told it may delegate and handed no credential is worse than one never told.
+    const shellEnv = { ...context.cliEnv, ...context.delegation?.env };
+    // The turn's user message: attachment note folded in as before.
     const promptWithAttachments =
         context.attachmentPaths.length > 0 ? withAttachmentNote(context.base.prompt, [...context.attachmentPaths]) : context.base.prompt;
-    // Where this turn's instructions go — the owner's own system prompt (or the preset), what may be appended to
-    // it, and whether the delegation note has to travel in the user message instead (system-prompt.ts owns all
-    // three, because they are one decision).
-    // Which persona the turn is wearing, said once in the instructions. Undefined when there is nothing to say —
-    // an ordinary attended turn that named no persona is the status quo and needs no narration.
-    const actingNote = personaNote(persona);
-    const placement = turnPromptPlacement({
-        mode: systemPromptMode,
-        systemPrompt: customPrompt,
-        ...(delegation.note !== undefined ? { note: delegation.note } : {}),
-        stableSystemPrompt,
-        // The arm decides when the experiment is running; the plain setting decides when it isn't.
-        terseOutput: terseArm ?? terseOutput,
-        ...(actingNote === undefined ? {} : { personaNote: actingNote }),
-    });
     // A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
     // "Unknown command" and discard — the note keeps the user's words in front of the model (agent-commands.ts
     // decides, turn-preamble.ts explains). Last of the notes, so it sits against the message it describes.
@@ -775,7 +861,6 @@ export const planHarnessTurn = async (
     const contextDurationMs = retrieved?.durationMs;
     const prompt = withTurnPreamble(
         [
-            ...(placement.userNote !== undefined ? [placement.userNote] : []),
             // After the standing protocol notes and before the slash note: those two are about how to read the
             // conversation, this is about the message itself, so it belongs against it.
             ...(retrieved !== undefined && "note" in retrieved ? [retrieved.note] : []),
@@ -794,7 +879,6 @@ export const planHarnessTurn = async (
         ok: true,
         run: services.agent,
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
-        ...(terseArm !== undefined ? { terseArm } : {}),
         ...(contextArm !== undefined ? { contextArm } : {}),
         ...(contextOutcome !== undefined ? { contextOutcome } : {}),
         ...(contextDurationMs !== undefined ? { contextDurationMs } : {}),
@@ -923,11 +1007,6 @@ export const planHarnessTurn = async (
              * floor draws (guard/actions.ts wakeSourceOf), read here for the taint the command gate consults.
              * The mid-turn half marks itself as results are wrapped. */
             ...(input.outsideWake !== undefined ? { outsideWake: input.outsideWake } : {}),
-            // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
-            // append to a built-in base — never both, which is what turnPromptPlacement decided above.
-            systemPromptMode,
-            ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
-            ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
             // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.
             ...(context.steering !== undefined ? { steering: context.steering } : {}),
             // The rebase the cards take back while the user is answering them — isolated turns only.

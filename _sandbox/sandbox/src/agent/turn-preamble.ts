@@ -1,6 +1,7 @@
 import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNote } from "@intentic/sandbox-contract";
 import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
+import { PERSONA_NOTE_HEADER } from "../personas/personas.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
@@ -84,6 +85,11 @@ export const worktreeNote = (worktree: string, root: string): string =>
  * text behind it is addressed to a model and reads like it. */
 const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
     { header: DELEGATION_NOTE_HEADER, title: "Delegating to other coding agents" },
+    // The persona note reaches the user message only where the runtime has no system prompt to hold it (Pi,
+    // ACP). It is listed here for the same three reasons every other note is, and for a fourth: it is the one
+    // note that says what the turn may NOT touch, so a reader who cannot see it cannot tell a refusal from a
+    // fault.
+    { header: PERSONA_NOTE_HEADER, title: "Who this turn is acting as" },
     { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },
     // The dependency notice has TWO openings, and only one of them was ever listed here. A workspace whose
     // projects are installed-but-behind emits the stale half alone, which begins with neither the header above

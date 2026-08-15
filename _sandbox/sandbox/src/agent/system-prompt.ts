@@ -1,5 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import type { SystemPromptMode } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, SystemPromptMode } from "@intentic/sandbox-contract";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 
 /* WHAT THE MODEL IS TOLD BEFORE THE CONVERSATION STARTS, and where each piece of it goes.
@@ -22,7 +22,27 @@ import { INTENTIC_PROMPT } from "./intentic-prompt.js";
  *
  * ORDER, wherever appends happen, is most-stable-first: the guidance never changes, the note changes with which
  * accounts are connected, the terse steer with one toggle. The cached system+tools prefix survives a session
- * that way, which is the whole point of stableSystemPrompt. */
+ * that way, which is the whole point of stableSystemPrompt.
+ *
+ * SIX RUNTIMES READ THIS, NOT ONE, and until recently only one of them did. The setting was composed inside the
+ * Claude Code arm, so a turn on native Codex, Grok, Gemini, Pi or an ACP agent ran with the owner's prompt
+ * silently absent — and so did the persona note, which is the sentence saying which accounts a session may
+ * speak through. What each runtime will take is now a declared axis (AgentCapabilities.instructions), and this
+ * module composes to it:
+ *
+ *   "replace" — everything below, exactly as described. The Claude Code loop and native Codex.
+ *   "append"  — the runtime's own base stands and cannot be swapped, so a custom prompt is ADDED rather than
+ *               substituted. OpenCode (Grok, Gemini). The settings page says so rather than letting "replaces
+ *               everything" mean something different on two providers.
+ *   "none"    — nothing reaches a system prompt. The persona note takes the user-message door the delegation
+ *               note already had; the owner's prompt is not applied at all, and the page says which runtimes
+ *               those are.
+ *
+ * WHICH GUIDANCE IS UNIVERSAL AND WHICH IS THIS LOOP'S is the second thing that split. The cards, the checklist
+ * tools, the browser servers, the secret references and the outside-content envelopes are all mechanisms wired
+ * in agent.ts and planHarnessTurn — describing them to a Codex turn would name tools it has not got. The
+ * reference shelf and the public outbox are facts about the FILESYSTEM and hold whoever is running, so those
+ * two travel to every runtime that will take an append. */
 
 // Told to the model every turn, in every mode. The chat renders AskUserQuestion as a clickable card and
 // ExitPlanMode as an approval card, but a model that doesn't know the widgets exist writes "A) … B) …" as
@@ -133,7 +153,17 @@ const browserGuidance = (outputDir: string): string =>
 const TERSE_NOTE =
     "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision. This governs your PROSE, not your work: never skip a step, a check or a tool call to make a turn shorter.";
 
+/* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Both describe a directory whose
+ * behaviour is enforced elsewhere — the scanners that exclude `refs/`, the server that publishes `public/` — so
+ * they are as true of a Codex turn as of a Claude one, and a runtime that has never been told is one that will
+ * eventually commit a clone or publish a log. Everything else in this file names a mechanism only the Claude
+ * Code loop is wired for; these two are why the split exists. */
+const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE];
+
 export interface TurnPromptInput {
+    // The record for the pair serving this turn: `instructions` decides what may be placed at all, and the
+    // runtime decides whether the harness guidance is already going to be composed around it (sdkSystemPrompt).
+    readonly capabilities: AgentCapabilities;
     // SandboxSettings.systemPromptMode: which base this turn runs on.
     readonly mode: SystemPromptMode;
     // SandboxSettings.systemPrompt: the owner's text, meaningful only under "custom".
@@ -145,27 +175,34 @@ export interface TurnPromptInput {
     readonly terseOutput: boolean;
     /* Which persona this turn is wearing, when it is wearing one (personas/personas.ts personaNote).
      *
-     * It rides the SYSTEM append rather than the user message, unlike the delegation note above, and it may do so
-     * even under stableSystemPrompt: a persona does not change from turn to turn within a session — changing it
-     * is a deliberate act that mints a different prefix anyway — so it costs the prompt cache nothing. A custom
-     * system prompt still drops it, like everything else the daemon would have appended; that is the owner
-     * saying they will do their own instructing, and the tool gate holds regardless of what any prose says. */
+     * It rides the SYSTEM append rather than the user message wherever there is one, unlike the delegation note
+     * above, and it may do so even under stableSystemPrompt: a persona does not change from turn to turn within
+     * a session — changing it is a deliberate act that mints a different prefix anyway — so it costs the prompt
+     * cache nothing. A custom system prompt still drops it, like everything else the daemon would have
+     * appended; that is the owner saying they will do their own instructing, and the tool gate holds regardless
+     * of what any prose says. A runtime with no system seam is the one case where it moves rather than
+     * disappears: there the sentence is either in the user message or nowhere. */
     readonly personaNote?: string;
 }
 
 export interface TurnPromptPlacement {
-    // The owner's replacement, under "custom" only. Undefined ⇒ the turn runs on a built-in base.
+    // The owner's replacement, under "custom" on a runtime that can take one. Undefined ⇒ the turn runs on
+    // whichever base it already had.
     readonly systemPrompt?: string;
-    // What the daemon appends to a built-in base. Undefined ⇒ nothing to append (or nothing may be appended).
+    // What the daemon adds to that base. Undefined ⇒ nothing to add (or nothing may be added).
     readonly systemAppend?: string;
-    // The delegation note when it cannot ride the system prompt, for the caller to prepend to the user message.
-    readonly userNote?: string;
+    /* The notes that could not ride a system prompt, for the caller to prepend to the user message — in the
+     * order they should be read. A LIST rather than the one delegation note this used to carry: a runtime with
+     * no system seam sends the persona note through the same door, and two notes with one field between them is
+     * how one of them silently wins. */
+    readonly userNotes?: readonly string[];
 }
 
-// Where each composed piece of this turn's instructions goes. One function because the three destinations are
-// one decision: a note that rides the user message must NOT also ride the append, and a custom prompt takes
-// both choices away at once.
+/* Where each composed piece of this turn's instructions goes. One function because the destinations are one
+ * decision: a note that rides the user message must NOT also ride the append, a custom prompt takes both
+ * choices away at once, and what the runtime will accept decides whether there is a choice at all. */
 export const turnPromptPlacement = ({
+    capabilities,
     mode,
     systemPrompt,
     note,
@@ -173,25 +210,46 @@ export const turnPromptPlacement = ({
     terseOutput,
     personaNote,
 }: TurnPromptInput): TurnPromptPlacement => {
-    // Only "custom" replaces. Intentic's prompt is a BASE like Claude's preset — the daemon still appends to it,
-    // which is what keeps the chat's cards working on the default setting.
-    const replacing = mode === "custom";
-    // The note goes to the user message when the system prompt is being kept byte-stable, and when there is no
-    // daemon-controlled system prompt left to put it in.
-    const noteInUserMessage = note !== undefined && (stableSystemPrompt || replacing);
-    const append = replacing
-        ? ""
-        : [
-              ...(noteInUserMessage || note === undefined ? [] : [note]),
-              ...(terseOutput ? [TERSE_NOTE] : []),
-              // Last, so it sits closest to the turn it governs — and after the terse steer, which must not be
-              // the final word when the turn is about to act as somebody in public.
-              ...(personaNote === undefined ? [] : [personaNote]),
-          ].join("\n\n");
+    const { instructions, runtime } = capabilities;
+
+    /* NO SYSTEM SEAM AT ALL (Pi, ACP). The owner's prompt is not applied — quietly softening that into a note
+     * pasted on the user's message would be a different feature wearing the setting's name, and the composer
+     * discloses the absence instead (limitationsOf). What still has to arrive is the persona note: a session
+     * that does not know which accounts it may speak through is the mistake the whole layer exists to stop, and
+     * here the user message is the only channel there is. */
+    if (instructions === "none") {
+        const userNotes = [personaNote, note].filter((entry): entry is string => entry !== undefined);
+        return userNotes.length === 0 ? {} : { userNotes };
+    }
+
+    /* "custom" — the owner's text, and nothing else of ours. On a runtime that can only ADD, it is added: its
+     * base cannot be dropped by anyone, so refusing to send the text at all would cost the owner their prompt
+     * to preserve a promise the seam was never able to keep. "" is a legal custom prompt on a runtime that
+     * replaces (the owner emptied the box) and means exactly that; there is nothing to add. */
+    if (mode === "custom") {
+        return {
+            ...(instructions === "replace" ? { systemPrompt } : systemPrompt === "" ? {} : { systemAppend: systemPrompt }),
+            ...(note === undefined ? {} : { userNotes: [note] }),
+        };
+    }
+
+    // The note goes to the user message when the system prompt is being kept byte-stable.
+    const noteInUserMessage = note !== undefined && stableSystemPrompt;
+    const append = [
+        ...(noteInUserMessage || note === undefined ? [] : [note]),
+        /* The Claude Code loop composes the workspace conventions itself, around whichever base is in force
+         * (sdkSystemPrompt) — it is the only caller that can put text around a PRESET it never sees. Repeating
+         * them here would say them twice on the one runtime that already has them, and every other runtime
+         * would hear them from nowhere at all. */
+        ...(runtime === "claude-code" ? [] : WORKSPACE_GUIDANCE),
+        ...(terseOutput ? [TERSE_NOTE] : []),
+        // Last, so it sits closest to the turn it governs — and after the terse steer, which must not be
+        // the final word when the turn is about to act as somebody in public.
+        ...(personaNote === undefined ? [] : [personaNote]),
+    ].join("\n\n");
     return {
-        ...(replacing ? { systemPrompt } : {}),
         ...(append === "" ? {} : { systemAppend: append }),
-        ...(noteInUserMessage ? { userNote: note } : {}),
+        ...(noteInUserMessage && note !== undefined ? { userNotes: [note] } : {}),
     };
 };
 
@@ -214,8 +272,7 @@ export interface SdkSystemPromptInput {
 const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
-    REFERENCE_GUIDANCE,
-    PUBLIC_GUIDANCE,
+    ...WORKSPACE_GUIDANCE,
     SECRETS_GUIDANCE,
     OUTSIDE_GUIDANCE,
     // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent —

@@ -471,6 +471,20 @@ const STATE_FILES = [
      * in the Changes review and a line in `git log` the same way a rule or a persona does. `carry` for the same
      * reason — it is text the owner wrote, with no credential in it and nothing about this machine. */
     { path: ".intentic/skills/", invalidates: ["skills"], portability: "carry", versioned: true },
+    /* ONE FOLDER PER PERSONA — what a session wearing that card is told, and the skills and tools only it gets.
+     * Laid out as a Claude Code plugin (`.claude-plugin/plugin.json`, `skills/`, `agents/`, `commands/`,
+     * `hooks/`, `.mcp.json`) so the runtime's own loader reads it and this daemon parses none of it, exactly as
+     * the plugin checkouts above are read (personas/persona-kit.ts).
+     *
+     * A SECOND ENTRY BESIDE `personas.json` RATHER THAN A FIELD INSIDE IT, because the two are different kinds
+     * of thing to review. The card is a name, some ids and some switches — a few lines that diff cleanly. This
+     * is prose and files: a system prompt, a skill, a subagent. Folding a 20k prompt into the JSON would make
+     * every persona edit an unreadable diff and put text somebody wrote inside a record nobody writes by hand.
+     *
+     * `versioned` and `carry` for the same reasons the card and the skills above are: it changes how the agent
+     * behaves, it holds no credential, and it belongs in a pull request — which is also what makes it
+     * searchable, since every versioned entry already is. */
+    { path: ".intentic/personas/", invalidates: ["personas"], portability: "carry", versioned: true },
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
@@ -505,8 +519,7 @@ export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.f
  * classified it. An extension that composes through this helper cannot land outside its own directory, so the
  * runtime/ entry's `derived` covers whatever it writes tomorrow. Extension ids are validated slugs already;
  * the replace is defence in depth against a path ever being built from something else. */
-export const extensionRuntimeDir = (extension: string): string =>
-    `${STATE_DIR}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
+export const extensionRuntimeDir = (extension: string): string => `${STATE_DIR}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
 
 /* The manifests whose problems the unreadable-manifest notice SHOWS — the handful a person hand-edits — and the
  * one fact that decides it is already in the table above.

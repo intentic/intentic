@@ -229,6 +229,28 @@ export interface AgentCapabilities {
     // Fails with the coded frames the daemon's auto-resume keys off (rate_limit, provider-outage), so a turn the
     // provider killed is re-run once the breaker says the provider is back (turn-resume.ts).
     readonly recovery: boolean;
+    /* HOW MUCH OF ITS STANDING INSTRUCTIONS THIS RUNTIME WILL TAKE FROM US — the axis behind the sandbox's
+     * system-prompt setting (SandboxSettings.systemPromptMode) and the persona's own override.
+     *
+     * It exists because that setting was silently a Claude Code setting. The composer offers Codex, Grok and
+     * Gemini on their own runtimes, and a turn on any of them ignored the prompt the owner had written without
+     * saying so anywhere — the one failure mode a settings page cannot recover from, because nothing on screen
+     * is wrong. Naming it here means every surface reads the same answer and the daemon composes to it
+     * (agent/system-prompt.ts), rather than each learning the exception separately.
+     *
+     *   "replace" — the whole base prompt can be swapped for the owner's text, and extra guidance appended on
+     *               top of whichever base is in force. The Claude Code loop (SDK `systemPrompt`) and native
+     *               Codex (`model_instructions_file` replaces its base; `developer_instructions` adds a
+     *               developer message — both verified on the wire against codex-cli 0.147).
+     *   "append"  — extra system text only; the runtime's own base prompt stands. OpenCode takes one per
+     *               message (`system` on the prompt body), and there is no seam for replacing its base.
+     *   "none"    — no system seam at all. What must still reach the model (the persona note) rides the user
+     *               message instead, which is the door the delegation note already uses.
+     *
+     * The BASE CHOICE — Intentic's prompt or Claude Code's — is a "replace" runtime's question and, of those,
+     * only the Claude Code loop's: Codex's own base describes Codex's own tools, so swapping it for a prompt
+     * written about another harness is the owner's deliberate act (their custom text), never ours. */
+    readonly instructions: "replace" | "append" | "none";
 }
 
 // The Claude Code Agent SDK loop — the ceiling every other runtime is measured against, and the only one that
@@ -246,11 +268,12 @@ const CLAUDE_CODE: AgentCapabilities = {
     commands: true,
     terminals: true,
     recovery: true,
+    instructions: "replace",
 };
 
 // Codex app-server: item-level events plus richer request/MCP channels. This client deliberately declines
 // server-initiated approvals and has not connected questions or MCP to Intentic's policy seams, so only the
-// item stream and reasoning effort are claimed here.
+// item stream, reasoning effort and the instruction seam are claimed here.
 const CODEX: AgentCapabilities = {
     runtime: "codex",
     steering: false,
@@ -263,10 +286,15 @@ const CODEX: AgentCapabilities = {
     commands: false,
     terminals: false,
     recovery: false,
+    /* Both halves, through the per-thread `config` block the adapter already sends: `model_instructions_file`
+     * takes the place of Codex's own base prompt, `developer_instructions` arrives as an extra developer
+     * message ahead of its skills and team blocks. Verified against codex-cli 0.147 by reading what actually
+     * reached the wire — the keys are undocumented, and a strings dump proves only that they parse. */
+    instructions: "replace",
 };
 
-// OpenCode (the Grok runtime): its own agentic loop, its own tools, allow-all permissions. It takes a model id
-// and a prompt — no effort scale, no tools of ours, no command list.
+// OpenCode (the Grok runtime): its own agentic loop, its own tools, allow-all permissions. It takes a model id,
+// a prompt and one system message of ours — no effort scale, no tools of ours, no command list.
 const OPENCODE: AgentCapabilities = {
     runtime: "opencode",
     steering: false,
@@ -279,6 +307,10 @@ const OPENCODE: AgentCapabilities = {
     commands: false,
     terminals: false,
     recovery: false,
+    // `system` on the prompt body, per message. It ADDS to OpenCode's own prompt — there is no seam for
+    // replacing that — so a custom prompt lands here as extra instructions, and the settings page says so
+    // rather than letting "replaces everything" quietly mean something else on two providers.
+    instructions: "append",
 };
 
 /* The same OpenCode loop, serving Gemini instead of xAI — identical abilities, which is the point of giving it
@@ -314,6 +346,9 @@ const ACP: AgentCapabilities = {
     commands: true,
     terminals: true,
     recovery: false,
+    // ACP's `session/new` and `session/prompt` carry no system field: the agent owns its own instructions the
+    // same way it owns its model and its permission posture. The persona note takes the user message instead.
+    instructions: "none",
 };
 
 /* THE PI CAPABILITY ID IS RESERVED, the same way the five native ids are: an `agent`-kind capability installed
@@ -340,6 +375,9 @@ const PI: AgentCapabilities = {
     commands: true,
     terminals: false,
     recovery: false,
+    // Pi's RPC opens a session with a prompt and steers it; nothing in that protocol sets standing
+    // instructions, so like ACP it hears the persona note through the user message.
+    instructions: "none",
 };
 
 // The pair → its record. An `endpoint/<id>` provider is a model API the user configured, driven BY the Claude
@@ -403,6 +441,11 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.terminals ? [] : ["no terminal panel"]),
     ...(capabilities.isolation === "namespace" ? [] : ["worktree by working directory only"]),
     ...(capabilities.recovery ? [] : ["no auto-resume after an outage"]),
+    /* The two weaker answers on the instruction axis, and only those: "replace" is the ceiling this list
+     * measures against, so it has nothing to disclose. Both phrasings name the OWNER'S prompt rather than the
+     * mechanism, because that is the thing they wrote and the thing that will or will not be in force. */
+    ...(capabilities.instructions === "append" ? ["your system prompt is added to theirs, not replacing it"] : []),
+    ...(capabilities.instructions === "none" ? ["your system prompt isn't applied"] : []),
 ];
 
 // Claude's compile-time model floor, shared by the daemon's catalog (claude-models.ts — its last rung, reached

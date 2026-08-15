@@ -72,14 +72,26 @@ reports the profile.
   to the real value only at the exits: spliced into a shell command as it runs (a Komodo config payload, a curl
   body) or typed into a focused browser field (`type_secret`). Files at rest keep the reference; every
   resolution lands on a use ledger the Secrets view shows as each entry's "last used".
-- Decide who a session IS and what it may do, once per turn and above the choice of runtime (src/personas). A
-  persona card names the connected accounts a session may speak through, which shelves of its toolbox are open
-  — files, shell, web, browser, connectors, computers, MCP connections, delegation, changing the sandbox — and
-  where in the workspace it works. Accounts, connectors, computers and MCP connections are enforced by ABSENCE:
-  the credential is never injected and the server never mounted, so nothing depends on the model cooperating.
-  The plain switches take their tools out of the turn, and the folder limit refuses file tool calls that point
-  outside. Naming no persona keeps the full toolbox and reaches no logged-in account; naming one that does not
-  exist gets neither.
+- Decide who a session IS, what it may do and what it is TOLD, once per turn and above the choice of runtime
+  (src/personas). A persona card names the connected accounts a session may speak through, which shelves of its
+  toolbox are open — files, shell, web, browser, connectors, computers, MCP connections, delegation, changing
+  the sandbox — where in the workspace it works, and which system prompt it runs on. Accounts, connectors,
+  computers and MCP connections are enforced by ABSENCE: the credential is never injected and the server never
+  mounted, so nothing depends on the model cooperating. The plain switches take their tools out of the turn,
+  and the folder limit refuses file tool calls that point outside. Naming no persona keeps the full toolbox and
+  reaches no logged-in account; naming one that does not exist gets neither.
+- Give one persona its own prompt, skills and tools (src/personas/persona-kit.ts). Each card may carry a kit
+  folder beside it, laid out as a Claude Code plugin — `PROMPT.md`, `skills/`, `agents/`, `.mcp.json` — so the
+  runtime's own loader reads it on the turns wearing that card and no others, with nothing copied into the
+  workspace and nothing to sweep back out when the persona changes. The card stores only which base it runs on;
+  a card that says nothing follows the sandbox, which is what almost every card means.
+- Tell every runtime what the owner wrote, and say plainly which ones cannot hear all of it. The system-prompt
+  setting used to be composed inside the Claude Code arm, so a turn on native Codex, Grok, Gemini, Pi or an ACP
+  agent ran without it — and without the persona note — while nothing on screen was wrong. What each runtime
+  will accept is a declared axis now (`AgentCapabilities.instructions`) and src/agent/system-prompt.ts composes
+  to it: a replacement where one may be sent (the Claude Code loop; native Codex, through
+  `model_instructions_file` and `developer_instructions`), an addition where only that is possible (OpenCode's
+  per-message `system`), and the user-message door for the persona note where there is no system seam at all.
 - Say what the agent actually KNOWS, and own the half of it the owner wrote (src/settings/skill-inventory.ts).
   Skills reach the agent from six directions — this image's baked tools, the owner's own, the cheatsheet every
   connection writes, an installed extension's checkout, a plugin capability's clone, and whatever is simply
@@ -215,6 +227,15 @@ reports the profile.
   card's own UI says so where it is set. Nothing is seeded: a fresh workspace has no personas, and
   [src/personas/front-desk.ts](src/personas/front-desk.ts) is the one card the daemon writes by itself — the
   read-only front desk a public web chat answers through, created when a Doorbell is saved rather than at boot.
+  [src/personas/persona-kit.ts](src/personas/persona-kit.ts) is the folder beside each card, shaped as a plugin
+  so the runtime's own loader reads that persona's prompt, skills and tools and this daemon parses none of it.
+- [src/agent/system-prompt.ts](src/agent/system-prompt.ts) — what the model is told before the conversation
+  starts, composed once per turn for whichever runtime is about to serve it. Its header carries the split that
+  makes the setting honest: which guidance is a fact about the WORKSPACE (the reference shelf, the public
+  outbox) and therefore travels to every runtime, and which names a mechanism only the Claude Code loop wires
+  (the question and plan cards, the checklist tools, the secret references, the outside-content envelopes, the
+  browser servers). [src/codex/codex-instructions.ts](src/codex/codex-instructions.ts) is the Codex half — two
+  undocumented config keys, verified by reading what reached the wire.
 - [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.

@@ -83,6 +83,7 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     // One folder or none, carried as a list because that is what the picker models either way.
     startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
     folders: [...(persona.workspace?.folders ?? [])],
+    systemPromptMode: persona.systemPromptMode,
 });
 
 /* Changing the draft without the autosave below reading it as an edit — installing one on open, and writing a
@@ -112,7 +113,9 @@ const toggleOpen = (persona: Persona): void => {
 const startAdd = (): void => {
     saveError.value = undefined;
     quietly(() => {
-        draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE };
+        // No prompt answer, which is "follow the sandbox" — the default a new card should open on, and the one
+        // that leaves the committed file saying nothing about a question nobody was asked.
+        draft.value = { original: undefined, label: ``, capabilities: [], ...FULL_POWERS, ...NO_SCOPE, systemPromptMode: undefined };
     });
 };
 const cancelAdd = (): void => {
@@ -150,6 +153,9 @@ const cardFrom = (state: PersonaDraft, id: string): Persona => {
         capabilities: [...state.capabilities],
         ...(storedPowers(state) !== undefined ? { powers: storedPowers(state) } : {}),
         ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
+        // Same rule as the two above: a card following the sandbox stores nothing, so the file says what was
+        // decided rather than restating a default nobody chose.
+        ...(state.systemPromptMode !== undefined ? { systemPromptMode: state.systemPromptMode } : {}),
     };
 };
 

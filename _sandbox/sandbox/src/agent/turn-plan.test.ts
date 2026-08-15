@@ -1,5 +1,5 @@
 import { HISTORY_ROOT } from "@intentic/constants";
-import { type AgentTurn, RESUME_NOTES, SandboxSettingsSchema, withResumeNote } from "@intentic/sandbox-contract";
+import { type AgentTurn, type SandboxSettings, RESUME_NOTES, SandboxSettingsSchema, withResumeNote } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -54,14 +54,19 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         /* The schema's own defaults, which is what a workspace that has never written a settings file reads.
          *
-         * Here rather than only in the harness fixture below, because the harness arm no longer reads settings
-         * BEHIND its gates: the read runs alongside the credential resolution, so a turn that is about to be
-         * refused reaches it too. That is the trade the arm's own comment describes — one cached read on a
-         * refusal, against every accepted turn no longer queueing three round-trips end to end. */
+         * Here rather than only in the harness fixture below, because settings are read ABOVE the provider
+         * split now: everything about a turn's instructions is composed once for every runtime, and that
+         * composition needs them. A turn that is about to be refused for its credential therefore reaches this
+         * read, and the delegation lookup below, before the arm ever gates it. */
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // No translator and no api key: the state both Codex gates refuse from, which most cases here start in.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
+        /* Nothing to delegate to, which is the default this fixture wants: the delegation note is one of the
+         * pieces composed into a Claude Code turn's instructions, so every such turn reaches this seam whether
+         * or not it goes on to run. Grok's own gate reads the same method and overrides it with the same
+         * answer — one seam, asked by two callers, which is why it belongs in the shared fixture. */
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         codexAgent: async function* () {},
         grokAgent: async function* () {},
         agent: async function* () {},
@@ -477,4 +482,53 @@ test("the holdout flips only for turns retrieval applies to", async () => {
         context,
     );
     expect(wake).not.toHaveProperty("contextArm");
+});
+
+// --- the turn's standing instructions, on every runtime that will take them --------------------------------
+
+/* THE SETTING WAS A CLAUDE CODE SETTING WEARING A SANDBOX SETTING'S NAME. The composer offers Codex, Grok and
+ * Gemini on their own runtimes, and a turn on any of them ran without the owner's system prompt — and without
+ * the persona note, which says which accounts a session may speak through — while nothing on screen said so.
+ * The failure is silent by construction: a dropped prompt errors nowhere.
+ *
+ * So the assertions here are about WHICH FIELD each runtime gets, per its declared answer (capabilitiesOf's
+ * `instructions`), rather than about the words: the composition itself is system-prompt.test.ts's subject. */
+const customSettings = (): SandboxSettings => SandboxSettingsSchema.parse({ systemPromptMode: "custom", systemPrompt: "You write release notes." });
+
+const withSettings = (services: Services, settings: SandboxSettings): Services => ({
+    ...services,
+    sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
+});
+
+test("a runtime that replaces is handed the owner's prompt; one that only adds is handed it to add", async () => {
+    const claude = await planTurn(withSettings(harnessServices(), customSettings()), turn(), context);
+    expect((claude as { request: AgentRequest }).request.systemPrompt).toBe("You write release notes.");
+
+    // Native Codex takes a replacement too, through its own config keys (codex-instructions.ts).
+    const codex = await planTurn(withSettings(codexServices(), customSettings()), turn({ agent: "codex" }), context);
+    expect((codex as { request: AgentRequest }).request.systemPrompt).toBe("You write release notes.");
+
+    /* OpenCode has no seam for replacing its own base, so the owner's text arrives as an addition — which the
+     * settings page says out loud rather than promising a replacement two providers cannot perform. */
+    const grokServices = servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+        }),
+    });
+    const grok = await planTurn(withSettings(grokServices, customSettings()), turn({ agent: "grok" }), context);
+    expect((grok as { request: AgentRequest }).request.systemPrompt).toBeUndefined();
+    expect((grok as { request: AgentRequest }).request.systemAppend).toBe("You write release notes.");
+});
+
+/* THE WORKSPACE CONVENTIONS TRAVEL TO THE RUNTIMES THAT HAVE NO OTHER WAY TO HEAR THEM. `refs/` and `public/`
+ * are facts about the filesystem — one is excluded from every scanner, the other is served on the open
+ * internet — so a Codex turn that has never been told is one that will eventually commit a clone or publish a
+ * log. The Claude Code loop composes them itself (sdkSystemPrompt), which is why it must NOT get them twice. */
+test("a native runtime is told the workspace conventions; the Claude Code loop is not told twice", async () => {
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), context);
+    expect((codex as { request: AgentRequest }).request.systemAppend).toContain("`refs/`");
+
+    const claude = await planTurn(harnessServices(), turn(), context);
+    expect((claude as { request: AgentRequest }).request.systemAppend).toBeUndefined();
 });

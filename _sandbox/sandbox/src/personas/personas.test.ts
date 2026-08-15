@@ -1,6 +1,6 @@
 import { type Capability, type Persona, type PersonaPowers, FRONT_DESK_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, turnPersona } from "./personas.js";
+import { personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, personaPrompt, turnPersona } from "./personas.js";
 
 const card = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
     id,
@@ -224,4 +224,43 @@ test("the note names the folders the persona works in", () => {
 test("no note for an open attended turn, nor for an unpinned wake", () => {
     expect(personaNote(turnPersona({ personas: CAST, actsAs: undefined, unattended: false }))).toBeUndefined();
     expect(personaNote(turnPersona({ personas: CAST, actsAs: undefined, unattended: true }))).toBeUndefined();
+});
+
+// ── The prompt: the fourth question the card answers ─────────────────────────────────────────────────────────
+
+/* THE SANDBOX'S ANSWER IS THE DEFAULT, and stays the answer for every card written before the field existed —
+ * which on a real workspace is all of them. The field is absent rather than spelling "inherit", so this is also
+ * the case that proves an untouched card changes nothing. */
+const SETTINGS = { systemPromptMode: "intentic", systemPrompt: "" } as const;
+
+test("a card that says nothing about the prompt runs on the sandbox's", () => {
+    expect(personaPrompt(card("work", []), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
+    // And so does a turn wearing no card at all.
+    expect(personaPrompt(undefined, undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox text." })).toEqual({
+        mode: "custom",
+        systemPrompt: "Sandbox text.",
+    });
+});
+
+test("a card with its own prompt replaces the sandbox's, text and all", () => {
+    const desk = card("desk", [], { systemPromptMode: "custom" });
+    expect(personaPrompt(desk, "You are a release-notes writer.", { systemPromptMode: "intentic", systemPrompt: "" })).toEqual({
+        mode: "custom",
+        systemPrompt: "You are a release-notes writer.",
+    });
+});
+
+/* A CARD PINNED TO A BUILT-IN BASE CARRIES NO TEXT, and must not inherit the sandbox's — a persona set to
+ * "claude" while the sandbox is on a custom prompt would otherwise run Claude's preset with the owner's
+ * unrelated replacement still sitting in the field the composer reads under "custom". */
+test("a card on a built-in base takes the base and none of the sandbox's text", () => {
+    expect(
+        personaPrompt(card("work", [], { systemPromptMode: "claude" }), undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox." }),
+    ).toEqual({ mode: "claude", systemPrompt: "" });
+});
+
+/* HALF-MADE IS NOT EMPTY. Picking "custom" and not yet writing anything is somebody mid-edit, and running that
+ * turn on a blank system prompt would be obeying a decision nobody finished making. */
+test("custom with nothing written yet falls back to the sandbox", () => {
+    expect(personaPrompt(card("desk", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
 });

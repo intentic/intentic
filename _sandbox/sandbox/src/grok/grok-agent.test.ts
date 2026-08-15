@@ -383,6 +383,7 @@ const fakeOpenCode = (
     aborted: () => boolean;
     recorded: string[][];
     prompts: (string | undefined)[];
+    systems: (string | undefined)[];
     // The directories the turn subscribed and registered a delegation watcher for. Both are scoped, and a
     // subscription that loses its scope does not fail — it goes silent — so the scope is asserted, not assumed.
     scopes: { subscribed: string[]; watched: string[] };
@@ -393,6 +394,9 @@ const fakeOpenCode = (
     let releaseHang: (() => void) | undefined;
     // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
     const prompts: (string | undefined)[] = [];
+    // The standing instructions each message carried, in order — the only proof this runtime is `instructions:
+    // "append"` rather than one that drops the setting on the floor.
+    const systems: (string | undefined)[] = [];
     const recorded: string[][] = [];
     /* Every real stream opens with `server.connected`, and the runner AWAITS it — that hello is how it knows the
      * subscription is live before it creates a session whose `session.created` it would otherwise miss. A double
@@ -427,9 +431,10 @@ const fakeOpenCode = (
                 order.push("create");
                 return { data: { id: "s1" } };
             },
-            promptAsync: async (options: { body?: { model?: { modelID?: string } } }) => {
+            promptAsync: async (options: { body?: { model?: { modelID?: string }; system?: string } }) => {
                 const modelID = options.body?.model?.modelID;
                 prompts.push(modelID);
+                systems.push(options.body?.system);
                 // Mimic OpenCode/xAI REJECTING an unknown model id (a thrown ProviderModelNotFoundError, the way
                 // the real server does) instead of emitting a session.error event — the initial-send path.
                 if (rejectModel !== undefined && modelID === rejectModel.id) {
@@ -456,7 +461,7 @@ const fakeOpenCode = (
         watch: async (directory: string) => void scopes.watched.push(directory),
         recordModels: async (ids: string[]) => void recorded.push(ids),
     };
-    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, scopes, order };
+    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, systems, scopes, order };
 };
 
 const runnerTurn: GrokTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
@@ -684,4 +689,49 @@ test("a thrown model-not-found with no named alternatives surfaces as a tagged g
     expect(events).toEqual([{ kind: "error", code: "grok-model-invalid", message: "Model not found: xai/grok-x." }, { kind: "done" }]);
     expect(recorded).toEqual([]);
     expect(prompts).toEqual(["grok-x"]);
+});
+
+/* THIS SANDBOX'S STANDING INSTRUCTIONS REACH THE MODEL, which for most of this runtime's life they did not: the
+ * system-prompt setting was composed inside the Claude Code arm, so a Grok or Gemini turn ran without it and
+ * nothing on screen said so. OpenCode takes one per MESSAGE (`system` on the prompt body), so the assertion
+ * that matters is per message rather than per session. */
+test("the turn's standing instructions ride the prompt body", async () => {
+    const { openCode, systems } = fakeOpenCode([{ type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event]);
+
+    await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, systemAppend: "House rules: be brief." });
+
+    expect(systems).toEqual(["House rules: be brief."]);
+});
+
+// A turn with nothing to say sends no system field at all, rather than an empty one: an empty system message is
+// not the same request as no system message, and OpenCode's own prompt is what should stand.
+test("nothing to say sends no system field", async () => {
+    const { openCode, systems } = fakeOpenCode([{ type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event]);
+
+    await collect(createGrokAgent(createGrokRunner(openCode)), request);
+
+    expect(systems).toEqual([undefined]);
+});
+
+/* BOTH PHASES OF THE PLAN EMULATION CARRY THEM, and that is the case with teeth: the plan is proposed in one
+ * message and executed in another, so instructions on only the first would let a turn agree to a plan under the
+ * owner's prompt and then carry it out without one. */
+test("a planned turn carries the same instructions into its execute phase", async () => {
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s9" } } },
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p1", sessionID: "s9", messageID: "m1", text: "Plan." } } },
+            { type: "session.idle", properties: { sessionID: "s9" } },
+        ],
+        [
+            { type: "message.part.updated", properties: { part: { type: "text", id: "p2", sessionID: "s9", messageID: "m2", text: "Done." } } },
+            { type: "session.idle", properties: { sessionID: "s9" } },
+        ],
+    );
+
+    await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const, systemAppend: "House rules: be brief." }, () => ({
+        approve: true,
+    }));
+
+    expect(calls.map((call) => call.system)).toEqual(["House rules: be brief.", "House rules: be brief."]);
 });

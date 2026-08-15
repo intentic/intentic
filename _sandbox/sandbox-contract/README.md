@@ -31,6 +31,11 @@ mismatch is a type error rather than a runtime surprise.
   their scratch home through `extensionRuntimeDir` rather than spelling the layout themselves. The daemon
   publishes the cause and the browser derives the consequence, so neither side keeps its own copy of the
   other's list.
+- [src/agent-catalog.ts](src/agent-catalog.ts) — what each (provider, harness) pair can actually DO, as one
+  record per runtime: its permission axis, its MCP reach, whether it steers, and how much of the owner's system
+  prompt it will take (`instructions` — replace, add, or nothing at all). Shared because both sides act on it —
+  the daemon composes a turn's instructions against it and the browser both discloses what a pair cannot do
+  (`limitationsOf`) and names which models the system-prompt setting reaches.
 - [src/chores](src/chores) — the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
 - [src/publish-drafts.ts](src/publish-drafts.ts) — the drafts publisher automation, shared for the chore book's

@@ -3,6 +3,7 @@ import {
     type Persona,
     type PersonaPowers,
     type PersonaWorkspace,
+    type SystemPromptMode,
     FRONT_DESK_PERSONA,
     PersonaPowersSchema,
 } from "@intentic/sandbox-contract";
@@ -11,9 +12,10 @@ import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
 /* WHO A TURN IS AND WHAT IT MAY DO — the whole persona layer in one function, so the rule lives in a single
  * place instead of being re-derived at each surface that needs it.
  *
- * The card answers three questions and this answers them together, because they are one decision at the moment
- * a session starts: which connected accounts it may act through, which shelves of its toolbox are open, and
- * where in the workspace it works.
+ * The card answers four questions and this answers them together, because they are one decision at the moment
+ * a session starts: which connected accounts it may act through, which shelves of its toolbox are open, where
+ * in the workspace it works, and which system prompt it runs on (personaPrompt, at the foot of this file — the
+ * text itself lives in the card's kit folder, persona-kit.ts).
  *
  * THE ACCOUNT RULE IS ASYMMETRIC ON PURPOSE, and the asymmetry is the design rather than an inconsistency:
  *
@@ -224,6 +226,38 @@ export const personaDisallowedTools = (persona: TurnPersona): string[] => {
     ];
 };
 
+/* The persona note's own heading, and the reason it has one at all: on a runtime with no system prompt to
+ * append to (Pi, ACP) the sentence rides the user message instead, and every note that does has to be
+ * recognisable there — the stripper anchors on the heading to take it back out of a restored transcript, and
+ * the chat draws a row from it so the reader can see what the turn was told. It costs one line in the system
+ * append where that is where it lands, which is one line of the same fact. */
+export const PERSONA_NOTE_HEADER = "## Who this turn is acting as";
+
+/* WHICH SYSTEM PROMPT THIS TURN RUNS ON, once the card has had its say — the sandbox's answer, or the card's
+ * instead of it.
+ *
+ * Two ways a card falls back to the sandbox and they are deliberately the same answer: a card that never chose
+ * (the field is absent, which is the default), and a card that chose "custom" and has no PROMPT.md yet. The second is a persona
+ * half-made — somebody picked the option and has not typed the prompt — and running that turn on an empty
+ * system prompt would be obeying a decision nobody finished making. `intentic` and `claude` need no text at
+ * all: they name a base the composer already has.
+ *
+ * It takes the two settings values rather than the whole settings object so the fallback is visible at the call
+ * site, and returns the pair the composer wants — there is no third thing to decide here. */
+export const personaPrompt = (
+    card: Persona | undefined,
+    prompt: string | undefined,
+    settings: { readonly systemPromptMode: SystemPromptMode; readonly systemPrompt: string },
+): { readonly mode: SystemPromptMode; readonly systemPrompt: string } => {
+    const mode = card?.systemPromptMode;
+    if (mode === undefined || (mode === "custom" && prompt === undefined)) {
+        return { mode: settings.systemPromptMode, systemPrompt: settings.systemPrompt };
+    }
+    // A card on a built-in base carries no text of its own — the base IS the answer — so the field the composer
+    // reads under "custom" is empty rather than the sandbox's prompt leaking in behind a different base.
+    return { mode, systemPrompt: mode === "custom" ? (prompt ?? "") : "" };
+};
+
 /* What to append to the turn's guidance when a persona is on. Kept SHORT: the model is already told, per
  * account, that its tools belong to exactly one account (see browser-skill.ts) — this says which of them the
  * owner meant for THIS turn, and where it is expected to work.
@@ -251,5 +285,8 @@ export const personaNote = (persona: TurnPersona): string | undefined => {
             ? ``
             : ` You work inside ${folders.join(", ")} — file tools pointed anywhere else in the workspace are refused, so if the task needs a file outside that, say so rather than working around it.`;
     const desk = card.id === FRONT_DESK_PERSONA ? `\n\n${FRONT_DESK_GUIDANCE}` : ``;
-    return `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${scope}${desk}`;
+    return (
+        `${PERSONA_NOTE_HEADER}\n\n` +
+        `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${scope}${desk}`
+    );
 };

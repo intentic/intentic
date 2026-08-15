@@ -12,8 +12,10 @@ import {
     type CodexThreadOptions,
     type CodexTurn,
     createCodexAppServerRunner,
+    type JsonValue,
 } from "./codex-app-server.js";
 import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
+import { codexInstructionConfig } from "./codex-instructions.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
 
 /* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
@@ -54,6 +56,13 @@ const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined)
 // env_key (never a rotating OAuth token, so nothing races the translator's own refresh loop).
 // supports_websockets=false is load-bearing: the translator's inbound is plain POST SSE, and without it Codex
 // burns five WebSocket connect retries per turn before falling back.
+// One turn's provider block with its instruction keys folded in. Kept here rather than inlined so the merge
+// order is stated once: the two sets never share a key, and if one ever does, this is the line that decides.
+const withInstructions = (
+    provider: Pick<CodexTurn, "modelProvider" | "config">,
+    instructions: Record<string, JsonValue>,
+): Pick<CodexTurn, "modelProvider" | "config"> => ({ ...provider, config: { ...instructions, ...provider.config } });
+
 const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | "config"> => ({
     modelProvider: "translator",
     config: {
@@ -376,13 +385,18 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         // carry is ignored by the custom provider.
         const activeCodexHome = request.codexHome ?? options.codexHome;
         const env = codexEnv(activeCodexHome, request.cliEnv);
+        /* The owner's system prompt and whatever the daemon adds to it, as the two config keys Codex reads them
+         * from (codex-instructions.ts). Merged UNDER the translator provider block rather than over it: the two
+         * touch different keys, and spelling the order out is what keeps a future key added to either from
+         * silently winning. */
+        const instructions = await codexInstructionConfig(request, activeCodexHome);
         const turnBase: Pick<CodexTurn, "env" | "modelProvider" | "config"> =
             request.codexEndpoint !== undefined
                 ? {
                       env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken },
-                      ...translatorProvider(request.codexEndpoint.baseUrl),
+                      ...withInstructions(translatorProvider(request.codexEndpoint.baseUrl), instructions),
                   }
-                : { env };
+                : { env, ...(Object.keys(instructions).length > 0 ? { config: instructions } : {}) };
         // request.cwd is the conversation's actual checkout for cwd-isolated Codex turns. Using the daemon's
         // shared workspace root here would put an isolated conversation's generated image in somebody else's
         // tree even though every source edit correctly landed in its worktree.
