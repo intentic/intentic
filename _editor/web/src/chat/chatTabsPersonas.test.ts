@@ -117,13 +117,12 @@ it("lists no Anyone row", async () => {
     expect(el.textContent).not.toContain(`Every account you've connected`);
 });
 
-/* A WORKSPACE WITH NO CARDS MUST EXPLAIN ITSELF. Showing a lone "Anyone" row is how this shipped the first
- * time, and it read as a mode that does nothing — so with nothing set up the rail says what a persona is and
- * offers the way to make one. */
+/* A WORKSPACE WITH NO CARDS MUST STILL OFFER THE WAY IN. Showing a lone "Anyone" row is how this shipped the
+ * first time, and it read as a mode that does nothing — so with nothing set up the rail offers the one press
+ * that makes one. Just the button now: the explanation paragraph it used to carry was removed as noise. */
 it("offers to set one up when the workspace has no personas", async () => {
     withPersonas([]);
     const el = await mountList();
-    expect(el.textContent).toContain(`No personas yet`);
     expect(el.textContent).toContain(`Set up a persona`);
     expect(rows(el)).toEqual([]);
 });

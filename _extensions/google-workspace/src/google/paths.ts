@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
+import { extensionRuntimeDir, STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 
 /* WHERE THIS EXTENSION KEEPS ITS SCRATCH STATE — one hour of cached access token per connection, and the
  * watcher's resume marks.
@@ -33,4 +33,4 @@ export const workspaceRoot = (env: NodeJS.ProcessEnv, cwd: string): string => {
 // A connection's own directory under the runtime tree. `name` is an env suffix lowercased, so it is already
 // slug-shaped; the replace is defence in depth against a path ever being built from something else.
 export const runtimeDir = (root: string, name: string): string =>
-    join(root, STATE_DIR, "runtime", "extensions", EXTENSION, name.replaceAll(/[^a-zA-Z0-9._-]/g, "_"));
+    join(root, extensionRuntimeDir(EXTENSION), name.replaceAll(/[^a-zA-Z0-9._-]/g, "_"));

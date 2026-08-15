@@ -1,4 +1,3 @@
-import { STATE_DIR } from "@intentic/constants";
 import {
     HISTORY_STATE_FILES,
     type Portability,
@@ -30,13 +29,12 @@ import {
  *   in a bundle, and the manifest is small enough that declaring is cheap.
  */
 
-// Connector gateways live in a separate package and are process-local discovery state, not a core store. They
-// are the sole active generated-tree exception to the core table; extension-contributed paths otherwise all
-// `carry`, which is the workspace default. Retired roots below are quarantine only: no producer reads them.
-const EXTERNAL_DERIVED = [`${STATE_DIR}/runtime/`];
+// Retired roots are quarantine only: no producer reads them. The runtime tree that used to be patched in here
+// as an out-of-table exception is now the table's own `.intentic/runtime/` entry — the longest-match below
+// answers for it like everything else.
 const retiredPrefixes = (dirs: readonly string[]): string[] => dirs.map((dir) => `.intentic/${dir}/`);
 const RETIRED_SECRET = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.secret);
-const DERIVED_PREFIXES = [...EXTERNAL_DERIVED, ...retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.derived)];
+const DERIVED_PREFIXES = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.derived);
 const hasPrefix = (relPath: string, prefixes: readonly string[]): boolean =>
     prefixes.some((prefix) => relPath === prefix.slice(0, -1) || relPath.startsWith(prefix));
 

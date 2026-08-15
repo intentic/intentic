@@ -151,7 +151,7 @@ test("a long unstructured response is handed on through a complete shared artifa
 
     const settled = await services.workflowRuns.get(run.runId);
     const reportPath = settled?.steps[0]?.reportPath;
-    expect(reportPath).toBe(`.intentic/workflow-runs/${run.runId}/write.md`);
+    expect(reportPath).toBe(`.intentic/artifacts/workflow-runs/${run.runId}/write.md`);
     expect(await readFile(join(root, reportPath ?? ""), "utf8")).toBe(full);
     expect(downstream).toContain(reportPath);
     expect(settled?.steps[0]?.report?.length).toBeLessThan(full.length);

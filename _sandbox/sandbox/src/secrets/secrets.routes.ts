@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
-import { STATE_DIR } from "@intentic/constants";
 import { envLine } from "@intentic/sandbox-run/quote";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
@@ -14,6 +13,7 @@ import { bearerFrom, ForbiddenError } from "../auth/auth.js";
 import { secretsContract } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { stateRelPath } from "../workspace/state-paths.js";
 
 // One connected provider account as an inventory entry (never a value — provider tokens are not revealable).
 const providerAccountEntry = (provider: string, providerName: string, id: string, label: string, storedAt: string): SecretInventoryEntry => ({
@@ -158,17 +158,17 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                     kind: "capability",
                     status: "connected",
                     requiredBy: [],
-                    storedAt: `${STATE_DIR}/capabilities.json`,
+                    storedAt: stateRelPath(".intentic/capabilities.json"),
                     revealable: true,
                 }));
             // One entry per connected account.
             const providerEntries: SecretInventoryEntry[] = [
-                ...claudeAccounts.map((a) => providerAccountEntry("claude", "Claude", a.id, a.label, `.intentic/auth/claude/${a.id}.json`)),
+                ...claudeAccounts.map((a) => providerAccountEntry("claude", "Claude", a.id, a.label, stateRelPath(".intentic/auth/", "claude", `${a.id}.json`))),
                 // Codex and Gemini authenticate through the translator on subscriptions — one auth file per
                 // connected account in the cliproxy auth-dir, its name doubling as the entry id.
-                ...translatorAccounts.codex.map((a) => providerAccountEntry("codex", "ChatGPT", a.name, a.label, `${STATE_DIR}/auth/cliproxy`)),
-                ...translatorAccounts.gemini.map((a) => providerAccountEntry("gemini", "Gemini", a.name, a.label, `${STATE_DIR}/auth/cliproxy`)),
-                ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", `${STATE_DIR}/auth/opencode`)] : []),
+                ...translatorAccounts.codex.map((a) => providerAccountEntry("codex", "ChatGPT", a.name, a.label, stateRelPath(".intentic/auth/", "cliproxy"))),
+                ...translatorAccounts.gemini.map((a) => providerAccountEntry("gemini", "Gemini", a.name, a.label, stateRelPath(".intentic/auth/", "cliproxy"))),
+                ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", stateRelPath(".intentic/auth/", "opencode"))] : []),
             ];
             // The use ledger's newest row per entry, joined in — the inventory is where "when did the agent
             // last spend this" is answered, so the ledger never needs its own surface.

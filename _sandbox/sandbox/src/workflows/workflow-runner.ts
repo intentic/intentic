@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { STATE_DIR } from "@intentic/constants";
 import type {
     Loop,
     LoopDocument,
@@ -20,6 +19,7 @@ import { stopTurn } from "../agent/agent-steering.js";
 import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { workflowProjection } from "./workflow-state.js";
+import { stateRelPath } from "../workspace/state-paths.js";
 
 /* THE SCHEDULER — run a graph of steps, each one a loop, in dependency order.
  *
@@ -51,7 +51,9 @@ const runIdOf = (): string => randomUUID().slice(0, 8);
 // How much of a step's closing text is kept inline on the record. The complete response is written under
 // shared .intentic state and downstream steps are handed that path, so this is a preview rather than data loss.
 const REPORT_KEPT = 4_000;
-const WORKFLOW_REPORTS_DIR = `${STATE_DIR}/workflow-runs`;
+// Under artifacts/ because that is what a step's full response is — a durable output owned by a run, exactly
+// the class the artifacts entry names. Its old top-level home (`.intentic/workflow-runs/`) is a retired dir.
+const WORKFLOW_REPORTS_DIR = stateRelPath(".intentic/artifacts/", "workflow-runs");
 
 const reportPreview = (report: string): string => {
     if (report.length <= REPORT_KEPT) {

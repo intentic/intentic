@@ -70,6 +70,20 @@ export interface WorkspaceStateFile extends StateFile {
      * `versioned` is therefore NARROWER than `carry`, and the two answer different questions: carry is "does it
      * move to a new sandbox", this is "should a human review it changing". */
     readonly versioned?: true;
+    /* AUTHORED but not configuration — the fourth question an entry can answer, and the narrowest: is this
+     * human- or agent-written TEXT that a workspace search should surface? Every `versioned` entry already is
+     * (a setting, a persona, a skill — things the agent is asked to find and edit), so this flag exists only
+     * for the entries that are authored content without being config: a draft awaiting approval, a staged
+     * README, an extension the agent wrote in place. Everything else under `.intentic` is machine state, and
+     * `SEARCHABLE_STATE_PATHS` below is what lets the search engine deny the rest BY DEFAULT instead of
+     * hand-keeping a deny list that goes stale the day a store is added (which is how a 98 kB loop ledger and
+     * whole third-party extension checkouts ended up ranking in code search). */
+    readonly authored?: true;
+    /* WHO BUILDS THIS TREE, when it is not the daemon — an extension, pnpm, another process entirely. Declared
+     * on the entry because the coverage guard's second direction ("every declared entry is built somewhere in
+     * the daemon") is only meaningful for entries the daemon owns: one it can never build must say who does, or
+     * the guard would read the entry as dead. Absent for everything the daemon writes itself. */
+    readonly outsideWriter?: string;
 }
 
 /* Declared `as const` so the paths survive as literal types (see WorkspaceStatePath below), then published under
@@ -146,8 +160,9 @@ const STATE_FILES = [
         note: "Stamps of when each rule last did something; the new sandbox starts its own record.",
     },
     // Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox — the one entry
-    // here whose whole point is that a change arrives from outside the browser that renders it.
-    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry" },
+    // here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
+    // a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.
+    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry", authored: true },
     // ---- declared by the extension that renders them (contributes.files), not here ----
     // The path is the DAEMON's (automations-store writes both), the query keys are the intentic.automations
     // extension's. It declares them in its own manifest and the browser unions the two lists, so uninstalling
@@ -190,6 +205,29 @@ const STATE_FILES = [
         why: "Which default automations this workspace has been offered (default-automations.ts); nothing renders it — it exists so deleting a seeded automation is final.",
         portability: "carry",
         versioned: true,
+    },
+    /* The maintenance ledger and probe evidence, written by the daemon's chores-store and rendered by the
+     * intentic.maintenance extension — the automations shape exactly: the path is the daemon's, the query keys
+     * (`maintenance-report`, `maintenance-runs`) are the extension's own contributes.files. Point-in-time
+     * evidence about this workspace, so `carry` like the run ledgers: an export that dropped it would arrive
+     * claiming no chore had ever been checked. */
+    {
+        path: ".intentic/chores/",
+        invalidates: [],
+        why: "Declared by the intentic.maintenance extension's contributes.files — `maintenance-report`/`maintenance-runs` are its query keys, not core's.",
+        portability: "carry",
+    },
+    /* The documentation STAGING tree (documentation extension's paths.ts): generation writes here, the owner
+     * reads and approves here, publishing copies into the repo. `authored` is the whole nature of the entry —
+     * these are draft READMEs, drafts-shaped in every way that matters, and "find the staged page about X" is
+     * as ordinary a search as finding a post draft. */
+    {
+        path: ".intentic/docs/",
+        invalidates: [],
+        why: "Declared by the intentic.documentation extension's contributes.files — `documentation`/`documentation-runs` are its query keys, not core's.",
+        portability: "carry",
+        authored: true,
+        outsideWriter: "the intentic.documentation extension's staging writes (its paths.ts)",
     },
     /* The workflow designs and their run ledger became CORE keys the day runs got cards on the fleet board and
      * a mode of the chat panel (web's useWorkflowRuns): those surfaces exist whether or not the workflows
@@ -256,8 +294,10 @@ const STATE_FILES = [
     /* Workspace extensions: one directory per extension, consumed straight from the workspace — no clone, no
      * install moment. Written like drafts, by the agent's own file tools (which is the point: an agent authors
      * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
-     * push is what makes one appearing or changing show up on the Extensions tab while the owner watches. */
-    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry" },
+     * push is what makes one appearing or changing show up on the Extensions tab while the owner watches.
+     * `authored` for the same reason as drafts: this is source the agent wrote and will be asked to find —
+     * unlike `.intentic/extensions/` below, which is CLONES of source that lives elsewhere. */
+    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry", authored: true },
     /* What the registry comparison found per installed extension (update available / advisory / post-update
      * health), written by the periodic check and by the update/revert transactions — pushed to the tab because
      * an advisory that auto-disabled something must not wait for a reload to be seen. */
@@ -312,14 +352,51 @@ const STATE_FILES = [
     {
         path: ".intentic/artifacts/",
         invalidates: [],
-        why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, and loop ledgers.",
+        why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, workflow step reports, voice transcripts, and loop ledgers.",
         portability: "carry",
     },
     {
         path: ".intentic/cache/",
         invalidates: [],
-        why: "Rebuildable indexes and caches; ignored by the watcher and recreated from carried workspace content.",
+        why: "Rebuildable indexes and caches — the iq index and its vector sidecar, the whisper model; ignored by the watcher and recreated from carried workspace content.",
         portability: "derived",
+    },
+    /* Connector and extension scratch, one directory per extension under runtime/extensions/<id>
+     * (extensionRuntimeDir below — the ONLY way an extension names a home here, so a new one lands under its
+     * own id by construction instead of minting a file at the .intentic root). Resume watermarks, cached
+     * hour-tokens, gateway discovery state: all of it either expires or re-establishes itself, and classifying
+     * the root once is what keeps a token an extension caches tomorrow out of bundles without a second edit. */
+    {
+        path: ".intentic/runtime/",
+        invalidates: [],
+        why: "Extension runtime scratch (watermarks, cached short-lived tokens); nothing renders it and gateways re-derive it.",
+        portability: "derived",
+        outsideWriter: "extensions, through extensionRuntimeDir below",
+    },
+    {
+        path: ".intentic/tmp/",
+        invalidates: [],
+        why: "Scratch that agents and tools leave behind (build logs, demo checkouts); nothing reads it after the turn that wrote it. The state janitor empties it at boot.",
+        portability: "derived",
+    },
+    /* Not written by the daemon at all: pnpm auto-creates its content-addressable store at the project's
+     * mountpoint, and `.intentic` is its own mount in an isolated turn — so an install run from under it mints
+     * this. Declared anyway, because the table's job is to say what everything under `.intentic` IS: hardlink
+     * sources a fresh install rebuilds, which an export must not ship (it reached 1.3 GB on the workspace this
+     * entry was written against). */
+    {
+        path: ".intentic/.pnpm-store/",
+        invalidates: [],
+        why: "pnpm's content-addressable store, auto-created by installs run from under .intentic; the next install rebuilds it.",
+        portability: "derived",
+        outsideWriter: "pnpm itself, when an install runs from under .intentic",
+    },
+    {
+        path: ".intentic/newest-run.json",
+        invalidates: [],
+        why: "The newest daemon version that ever ran this workspace (store/newest-run.ts) — a downgrade tripwire, about THIS sandbox the way rule-firings is.",
+        portability: "derived",
+        note: "The target stamps its own daemon version on first boot.",
     },
     {
         path: ".intentic/verify.json",
@@ -407,6 +484,30 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
  * the entire change — the exclude list follows on the next boot, in both places it is written. */
 export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 
+/* The `.intentic` slice a workspace SEARCH may surface: configuration a person reviews (`versioned`) plus the
+ * authored-content dirs (`authored`) — drafts, staged docs, workspace extensions. Everything else under
+ * `.intentic` is machine state, and the search engine (iq's floor) denies it BY DEFAULT off this list, the
+ * same default-deny the portability classes are built on and for the same reason: a deny list is a list a new
+ * ledger is forgotten from, and the forgetting is silent — it ranked loop iteration history and cloned
+ * third-party extension source against the user's own code for months before this derivation existed.
+ *
+ * Note what falls out without a special case: `capabilities.json` is `secret` and unversioned, so the index
+ * stops copying capability tokens into search text — the exact boundary the floor already drew for `auth/`. */
+export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned || file.authored).map(
+    (file) => file.path,
+);
+
+/* THE ONE WAY AN EXTENSION NAMES ITS SCRATCH HOME — `.intentic/runtime/extensions/<id>`, workspace-relative
+ * and forward-slash so the browser bundle can hold it too; callers join it onto whatever root is in force.
+ *
+ * It exists for the reason statePath does one table over: before it, every gateway spelled the layout itself
+ * and one extension (deployments) simply didn't, minting `komodo.json` at the `.intentic` root where nothing
+ * classified it. An extension that composes through this helper cannot land outside its own directory, so the
+ * runtime/ entry's `derived` covers whatever it writes tomorrow. Extension ids are validated slugs already;
+ * the replace is defence in depth against a path ever being built from something else. */
+export const extensionRuntimeDir = (extension: string): string =>
+    `${STATE_DIR}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
+
 /* The manifests whose problems the unreadable-manifest notice SHOWS — the handful a person hand-edits — and the
  * one fact that decides it is already in the table above.
  *
@@ -432,14 +533,17 @@ export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.
 // them relative at the last moment, and normalizing at each call site is the one that eventually gets forgotten.
 export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFEST_PATHS.includes(relPath.replaceAll("\\", "/"));
 
-/* Old directory names are never read or migrated, but persistent workspaces can retain them until an owner
- * removes them manually. Keep that finite set in one quarantine record so access, export, and search cannot
- * reinterpret abandoned machine state as ordinary workspace content after a rename. `artifacts` still carry;
- * the distinction here tells portability only which retired roots are secrets or derived. */
+/* Old directory names are never read or migrated. Keep that finite set in one quarantine record so access,
+ * export, and search cannot reinterpret abandoned machine state as ordinary workspace content after a rename.
+ * `artifacts` still carry; the distinction here tells portability only which retired roots are secrets or
+ * derived — and tells the state janitor which it may DELETE: a retired `derived` root is a rebuildable cache
+ * by its own classification, so leaving 466 MB of abandoned model where only a manual `rm` reaches it was
+ * quarantine doing half its job. Secret and artifact roots stay until an owner removes them by hand: deleting
+ * content is not the janitor's call, only deleting what the class already says is disposable. */
 export const RETIRED_WORKSPACE_STATE_DIRS = {
     secret: ["claude", "codex", "kimi", "opencode", "cliproxy"],
-    derived: ["iq", "extensions-runtime"],
-    artifacts: ["attachments", "acceptance", "loops"],
+    derived: ["iq", "extensions-runtime", "whisper", "browser/output"],
+    artifacts: ["attachments", "acceptance", "loops", "workflow-runs", "transcripts"],
 } as const;
 
 /* THE DAEMON'S OWN CONTROL PLANE — the entries directly under the workspace root's `.intentic/` that the file

@@ -4,8 +4,8 @@ import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
 import { type AsyncSubscription, subscribe } from "@parcel/watcher";
 import type { Logger } from "pino";
-import { IQ_DIR } from "@intentic/iq-engine";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR, toRelPath } from "@intentic/workspace-ignore";
+import { stateRelPath } from "./state-paths.js";
 
 // Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools — never the daemon's
 // HTTP routes), so nothing else can tell the browser its view went stale. A single filesystem watcher on the
@@ -14,17 +14,28 @@ import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePat
 // Refresh. The batch is debounced so a burst of agent edits is one frame, not hundreds.
 
 // The daemon's OWN machine state under .intentic/ — watching it is a feedback loop, not a change feed:
-// - the iq index is a SQLite db whose WAL is rewritten continuously for MINUTES whenever a rebuilt daemon
-//   re-parses (PARSER_VERSION) or re-embeds (MODEL_ID) the workspace. Every write used to come back as a
-//   change batch, which re-marked the engine dirty (main.ts) — a full /work sweep every couple of seconds —
-//   and cost every connected browser a tree refetch plus a manifest invalidation, four times a second, for as
-//   long as the rebuild took. The engine already excludes the dir from its own views (isIqDenied).
-// - agent sessions, provider homes, caches, and connector runtime are all daemon-owned and can rewrite at token
-//   or request cadence, so they are classified as roots rather than enumerated one store at a time.
+// - cache/ holds SQLite dbs whose WALs rewrite continuously for MINUTES whenever a rebuilt daemon re-parses
+//   (PARSER_VERSION) or re-embeds (MODEL_ID) the workspace, plus the 466 MB whisper model streaming down in
+//   chunks. Every iq write used to come back as a change batch, which re-marked the engine dirty (main.ts) —
+//   a full /work sweep every couple of seconds — and cost every connected browser a tree refetch plus a
+//   manifest invalidation, four times a second, for as long as the rebuild took. The engine already excludes
+//   its own dir from search views (isIqDenied); excluding cache/ WHOLE is what also covers the vector
+//   sidecar's WAL, which sat outside the old cache/iq spelling and pinged the watcher on every embed.
+// - agent sessions, provider homes, connector runtime, agent scratch (tmp — a build an agent runs there logs
+//   at write speed) and pnpm's store are all machine-written and can rewrite at token or request cadence, so
+//   they are classified as roots rather than enumerated one store at a time.
 // None of it is source and nothing derives from watching it. The .intentic/ MANIFESTS (capabilities,
 // automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
-// exactly how another member's write reaches this browser.
-const DAEMON_STATE_PATHS = [IQ_DIR, `${STATE_DIR}/auth`, `${STATE_DIR}/sessions`, `${STATE_DIR}/runtime`];
+// exactly how another member's write reaches this browser. Spelled through stateRelPath so each exclusion is
+// a path the state table declares, and a renamed store breaks this list at compile time.
+const DAEMON_STATE_PATHS = [
+    stateRelPath(".intentic/cache/"),
+    stateRelPath(".intentic/auth/"),
+    stateRelPath(".intentic/sessions/claude/"),
+    stateRelPath(".intentic/runtime/"),
+    stateRelPath(".intentic/tmp/"),
+    stateRelPath(".intentic/.pnpm-store/"),
+];
 const isDaemonStatePath = (relPath: string): boolean => {
     const segments = relPath.split(/[\\/]/);
     const index = segments.indexOf(STATE_DIR);
@@ -64,7 +75,7 @@ const WATCH_IGNORE_RULES: readonly WatchIgnoreRule[] = [
         matches: (relPath) => relPath.split(/[\\/]/).some((segment) => IGNORED_DIRS.has(segment)),
     },
     // A connected browser's profile churns constantly (Chromium rewrites Cookies etc.).
-    { globs: [`**/${STATE_DIR}/browser`], matches: isBrowserProfilePath },
+    { globs: [`**/${stateRelPath(".intentic/browser/")}`], matches: isBrowserProfilePath },
     // Agent worktrees are whole checkouts an agent edits at full speed; sibling .claude config still pushes.
     { globs: ["**/.claude/worktrees"], matches: isAgentWorktreePath },
     // A reference clone into the shelf writes thousands of files in one burst.

@@ -1,8 +1,12 @@
-import { STATE_DIR } from "@intentic/constants";
 import { DraftSchema, type DraftSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../settings/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
+import { stateRelPath } from "../workspace/state-paths.js";
+
+// The workspace-relative home the skill text below teaches the agent — the table's spelling, so the prompt
+// can never name a directory the drafts store stopped reading.
+const DRAFTS_DIR = stateRelPath(".intentic/drafts/");
 
 // The post-drafts queue (<workspace>/.intentic/drafts/<id>.json, one file per draft): the AGENT creates drafts
 // (taught by DRAFTS_SKILL below), the daemon edits/deletes them for the owner. Per-file — never a shared
@@ -41,13 +45,13 @@ export const fileDraftsStore = (dir: string): DraftsStore => {
 // any automation change.
 const DRAFTS_SKILL = `---
 name: drafts
-description: Create post drafts for owner approval by writing JSON files into ${STATE_DIR}/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
+description: Create post drafts for owner approval by writing JSON files into ${DRAFTS_DIR}/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
 ---
 
 # Post drafts (approval queue)
 
 Proposed or scheduled posts are NEVER posted directly — write a draft file instead; the owner approves it in
-the app and the daemon sends it when it comes due. One JSON file per draft: ${STATE_DIR}/drafts/<id>.json
+the app and the daemon sends it when it comes due. One JSON file per draft: ${DRAFTS_DIR}/<id>.json
 (id: letters, digits, dashes — it names the draft in the UI). Example:
 
 {
@@ -55,7 +59,7 @@ the app and the daemon sends it when it comes due. One JSON file per draft: ${ST
   "content": "exact post text",
   "title": "…",
   "target": "r/webdev",
-  "media": ["${STATE_DIR}/drafts/media/chart.png"],
+  "media": ["${DRAFTS_DIR}/media/chart.png"],
   "scheduledAt": 1767950400000,
   "status": "proposed",
   "createdAt": 1767800000000
@@ -70,7 +74,7 @@ Only "platform" and "content" are required; everything else is optional.
   and a comment's decides whether the reply nests under that person or arrives addressed to nobody.
 - A reply publishes no title on any platform, so "title" on one is your note to the OWNER about why this
   reply — the app shows it as a note under the post rather than as a headline.
-- media: workspace-relative files; put them under ${STATE_DIR}/drafts/media/.
+- media: workspace-relative files; put them under ${DRAFTS_DIR}/media/.
 - scheduledAt: your SUGGESTED post time in epoch ms — \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the date at approval.
 - status: defaults to "proposed" if omitted, and PROPOSED IS THE ONLY ONE YOU MAY WRITE. The owner approves in

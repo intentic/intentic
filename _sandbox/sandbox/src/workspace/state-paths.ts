@@ -16,4 +16,12 @@ import type { WorkspaceStatePath } from "@intentic/sandbox-contract";
  * `tail` is for the entries that are DIRECTORIES — the table declares the prefix (`.intentic/browser/`) and the
  * caller names what sits under it. It is checked the same way, since the prefix still has to come from the
  * table. Trailing slashes are dropped so the result is the path a store opens, not a directory spelling. */
-export const statePath = (root: string, path: WorkspaceStatePath, ...tail: readonly string[]): string => join(root, path.replace(/\/$/, ""), ...tail);
+export const statePath = (root: string, path: WorkspaceStatePath, ...tail: readonly string[]): string => join(root, stateRelPath(path, ...tail));
+
+/* The same spelling WITHOUT a root — for the sites that compare rather than open: a watcher prefix test, a
+ * git exclude line, a `storedAt` label, the layout named in an agent-facing prompt. Those sites used to build
+ * the path from `STATE_DIR` templates, which put them outside both guards (the literal-`.intentic` regex and
+ * statePath's union) — two more spellings of the layout with nothing tying them to the table. Forward-slash,
+ * like the space `workspaceChanged` paths arrive in; trailing slash dropped for the same reason as above. */
+export const stateRelPath = (path: WorkspaceStatePath, ...tail: readonly string[]): string =>
+    [path.replace(/\/$/, ""), ...tail].join("/");

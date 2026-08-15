@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { stateRelPath } from "./workspace/state-paths.js";
 
 import type { AgentEvent, Capability, Persona } from "@intentic/sandbox-contract";
 import { capabilitiesOf, SandboxSettingsSchema, sandboxContract } from "@intentic/sandbox-contract";
@@ -457,7 +458,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),
-        codexHome: `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`,
+        codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/auth/", "codex")}`,
         codexThreadExists: async () => true,
         providerCatalogs: testProviderCatalogs,
         // Held directly too, exactly as in composition — the native Codex turn's model resolution and its

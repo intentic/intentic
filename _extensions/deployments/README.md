@@ -19,7 +19,7 @@ What is actually running on the servers you own, read from a Komodo you already 
 - [src/server/komodo-client.ts](src/server/komodo-client.ts) — the Komodo Core API behind one client shape.
 - [src/server/komodo-overview.ts](src/server/komodo-overview.ts) — Komodo's vocabulary → the view's, pure and tested.
 - [src/server/komodo-repos.ts](src/server/komodo-repos.ts) — which workspace repo belongs to which stack.
-- [src/server/komodo-store.ts](src/server/komodo-store.ts) — seen-timestamps and repo→stack links (`.intentic/komodo.json`).
+- [src/server/komodo-store.ts](src/server/komodo-store.ts) — seen-timestamps and repo→stack links (its runtime home, `.intentic/runtime/extensions/deployments/komodo.json`).
 - [src/useDeploymentBoard.ts](src/useDeploymentBoard.ts) — the board's data: what is running, where, and how it is doing.
 - [src/incidents.ts](src/incidents.ts) — what counts as an incident rather than as noise.
 - [src/stateVisual.ts](src/stateVisual.ts) — one mapping from a state to how it reads, so nothing invents its own colour.

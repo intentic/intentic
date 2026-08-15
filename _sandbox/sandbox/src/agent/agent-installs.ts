@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { stateRelPath } from "../workspace/state-paths.js";
 
 /* Steering the image boundary: a runtime install toward the owner-approved overlay, and — from the opposite
  * direction — a tool that turned out not to be there toward the same place.
@@ -139,7 +140,9 @@ const BROWSER_ALREADY_BAKED =
 // The overlay is the only place an image-scoped tool can outlive the container, so both notices below end by
 // naming it — the same sentence, because they are the same instruction arrived at from opposite directions.
 const OVERLAY_DRAFT =
-    "write the install step to `${STATE_DIR}/environment.d/<tool>.Dockerfile` (RUN/ENV lines only, no FROM) — the " +
+    // Interpolated for real: as a plain string this notice told the agent to write under a literal
+    // dollar-brace STATE_DIR spelling, template syntax and all.
+    `write the install step to \`${stateRelPath(".intentic/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM) — the ` +
     "daemon composes those drafts into one proposal for the owner to approve, and the `environment` skill has " +
     "the details.";
 

@@ -2,7 +2,6 @@ import { mkdir, rm } from "node:fs/promises";
 import { createSecureServer } from "node:http2";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
-import { STATE_DIR } from "@intentic/constants";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { observeGitCommands } from "@intentic/scaffold";
@@ -17,7 +16,8 @@ import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { emitWorkspaceEvent } from "./automations/workspace-events.js";
-import { statePath } from "./workspace/state-paths.js";
+import { sweepAgedState, sweepStateAtBoot } from "./workspace/state-janitor.js";
+import { statePath, stateRelPath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
@@ -151,9 +151,9 @@ const requireAuthWhenReachable = (config: Config): void => {
 // A workspace-relative path that is extension SOURCE — the three places a backend extension's code or its
 // enablement can arrive from. Module scope so the watcher's callback doesn't rebuild it on every change batch.
 const extensionSource = (path: string): boolean =>
-    path.startsWith(`${STATE_DIR}/workspace-extensions/`) ||
-    path.startsWith(`${STATE_DIR}/extensions/`) ||
-    path === `${STATE_DIR}/extension-enablement.json`;
+    path.startsWith(`${stateRelPath(".intentic/workspace-extensions/")}/`) ||
+    path.startsWith(`${stateRelPath(".intentic/extensions/")}/`) ||
+    path === stateRelPath(".intentic/extension-enablement.json");
 
 const main = async (): Promise<void> => {
     const config = loadConfig();
@@ -796,6 +796,18 @@ const main = async (): Promise<void> => {
     if (role.roots) {
         void sweepArchive();
         setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
+        // The state dir's own garbage — scratch, retired derived roots, aged captures (state-janitor.ts).
+        // Same cadence and guard as the agent sweeps: only the daemon that owns the roots collects them.
+        void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) =>
+            logger.warn({ err: error }, "state janitor: boot sweep failed"),
+        );
+        setInterval(
+            () =>
+                void sweepAgedState(services.workspace.root, Date.now(), logger).catch((error: unknown) =>
+                    logger.warn({ err: error }, "state janitor: aged sweep failed"),
+                ),
+            60 * 60 * 1000,
+        ).unref();
     }
 
     // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,

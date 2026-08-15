@@ -47,12 +47,20 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
     return found.flat();
 };
 
-// `join(<root>, ".intentic", "a", "b")` — the raw spelling `statePath` replaced. A bare `join(root, ".intentic")`
-// (the AI-credential root, not a manifest) has no segments and is legitimately not a table entry.
-const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*"\.intentic"\s*((?:,\s*"[^"]+"\s*)+)(?=[,)])/g;
-// `statePath(<root>, ".intentic/…")` — the declared spelling. Only the table path matters; any `tail` after it is
-// a leaf beneath a declared directory prefix.
-const STATE_PATH = /statePath\(\s*[A-Za-z_.]+\s*,\s*"(\.intentic\/[^"]+)"/g;
+/* `join(<root>, ".intentic"|STATE_DIR, …)` — the raw spellings `statePath` replaced. STATE_DIR is in the
+ * pattern because it was the hole: the literal-only regex let `join(root, STATE_DIR, "whisper", …)` and a
+ * `${STATE_DIR}/chores` template mint undeclared trees for months while this test passed. Segments may be
+ * identifiers (`join(root, STATE_DIR, FILE)`), so the tail matches expressions, not just strings. A bare
+ * `join(root, ".intentic")` (the AI-credential root, not a manifest) has no segments and is legitimately not a
+ * table entry. */
+const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*(?:"\.intentic"|STATE_DIR)\s*((?:,\s*(?:"[^"]+"|[A-Za-z_][\w.]*)\s*)+)(?=[,)])/g;
+// The template spelling of the same bypass: `${STATE_DIR}/<segment>` composes a state path outside the union
+// wherever it appears — a module const later joined, a glob, a prompt. Bare `${STATE_DIR}` (git exclude lines,
+// segment lookups) composes nothing and stays legal.
+const RAW_TEMPLATE = /\$\{STATE_DIR\}\/[\w.-]/g;
+// `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")` — the declared spellings. Only the
+// table path matters; any `tail` after it is a leaf beneath a declared directory prefix.
+const STATE_PATH = /statePath\(\s*[A-Za-z_.]+\s*,\s*"(\.intentic\/[^"]+)"|stateRelPath\(\s*"(\.intentic\/[^"]+)"/g;
 
 const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[] }> => {
     const files = await sourceFiles(SOURCE_ROOT);
@@ -66,11 +74,14 @@ const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[]
             if (!ROOT_EXPRESSIONS.has(rootExpression)) {
                 continue;
             }
-            const segments = [...rest.matchAll(/"([^"]+)"/g)].map(([, segment]) => segment);
+            const segments = [...rest.matchAll(/"([^"]+)"|([A-Za-z_][\w.]*)/g)].map(([, segment, expr]) => segment ?? `<${expr}>`);
             rawJoins.push(`.intentic/${segments.join("/")} (${source})`);
         }
-        for (const [, path = ""] of text.matchAll(STATE_PATH)) {
-            statePaths.push(path);
+        for (const [template] of source === EXEMPT ? [] : text.matchAll(RAW_TEMPLATE)) {
+            rawJoins.push(`${template}… (${source})`);
+        }
+        for (const [, joined, relative] of text.matchAll(STATE_PATH)) {
+            statePaths.push(joined ?? relative ?? "");
         }
     }
     return { rawJoins, statePaths };
@@ -89,11 +100,13 @@ test("every workspace-root .intentic path goes through statePath, where the tabl
 
 test("every declared entry is actually built somewhere in the daemon", async () => {
     // The direction the compiler cannot see: an entry left behind after its store was deleted is a rule nothing
-    // exercises, and it would quietly keep invalidating a query for a file that can no longer change.
+    // exercises, and it would quietly keep invalidating a query for a file that can no longer change. Entries
+    // with an `outsideWriter` are exempt by their own declaration: the daemon can never build them, and the
+    // entry names who does.
     const { statePaths } = await scanSources();
-    const unused = WORKSPACE_STATE_FILES.filter((file) => !statePaths.some((path) => path === file.path || path.startsWith(file.path))).map(
-        (file) => file.path,
-    );
+    const unused = WORKSPACE_STATE_FILES.filter(
+        (file) => file.outsideWriter === undefined && !statePaths.some((path) => path === file.path || path.startsWith(file.path)),
+    ).map((file) => file.path);
 
     expect(unused.toSorted(), "These are declared but no daemon source builds them — drop them or fix the path.").toEqual([]);
 });

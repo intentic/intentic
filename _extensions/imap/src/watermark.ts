@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 
 // The per-account resume state: the highest UID already dispatched for one capability instance's watched
 // mailbox. Persisted as a small JSON file so mail that arrived while the gateway (or the whole sandbox) was
@@ -12,10 +12,11 @@ export interface Watermark {
     readonly lastUid: number;
 }
 
-// Plain node:fs under the workspace (extensions can't import daemon internals); the discord gateway already
-// writes this runtime/extensions tree. Capability ids are validated slugs, the replace is defense in depth.
+// Plain node:fs under the workspace (extensions can't import daemon internals), composed through the
+// contract's extensionRuntimeDir so the layout is spelled once. Capability ids are validated slugs, the
+// replace is defense in depth.
 export const watermarkPath = (workspaceRoot: string, capabilityId: string): string =>
-    join(workspaceRoot, STATE_DIR, "runtime", "extensions", "imap", `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+    join(workspaceRoot, extensionRuntimeDir("imap"), `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
 // Missing or corrupt file reads as "no watermark" — the caller re-baselines; a broken file must never crash
 // the gateway or replay history.

@@ -1,12 +1,12 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { join } from "node:path";
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
-/* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links
- * (<workspace>/.intentic/komodo.json) — the extension's own state file, moved here with the backend that
- * reads it. Backend-side rather than in a browser, on the same reasoning ci-store records its `seenAt`:
+/* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links — the
+ * extension's own state file in its runtime home (extensionRuntimeDir; it used to sit at the `.intentic` root,
+ * where nothing classified it) — moved here with the backend that reads it. Backend-side rather than in a browser, on the same reasoning ci-store records its `seenAt`:
  * whether a breakage has been seen is a fact about the work, so clearing site data or picking up the phone
  * must not resurrect a badge already dealt with.
  *
@@ -40,7 +40,7 @@ export interface KomodoStore {
     readonly link: (capability: string, repo: string, stack: string) => Promise<void>;
 }
 
-export const komodoStorePath = (workspaceRoot: string): string => join(workspaceRoot, `${STATE_DIR}/komodo.json`);
+export const komodoStorePath = (workspaceRoot: string): string => join(workspaceRoot, extensionRuntimeDir("deployments"), "komodo.json");
 
 export const fileKomodoStore = (path: string): KomodoStore => {
     const read = async (): Promise<KomodoState> => {

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import {
     closeWhatsAppConnection,
@@ -48,7 +48,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
     statusMs: 5_000,
     publishGatewayUrl: true,
     create: (ctx) => {
-        const runtimeDir = join(ctx.workspaceRoot, STATE_DIR, "runtime", "extensions", "whatsapp");
+        const runtimeDir = join(ctx.workspaceRoot, extensionRuntimeDir("whatsapp"));
         const sessionDirOf = (capabilityId: string): string => join(runtimeDir, `session-${capabilityId}`);
         const mediaDir = join(runtimeDir, "media");
         const listener = createWhatsAppListener(ctx, whatsappConnections);

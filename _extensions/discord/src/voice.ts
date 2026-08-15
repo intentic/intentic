@@ -42,7 +42,7 @@ const fileExists = async (path: string): Promise<boolean> =>
 const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfig): Promise<string> => {
     const model = config.voiceModel ?? "medium";
     const file = config.voiceLanguage === "en" && model !== "large-v3-turbo" ? `ggml-${model}.en.bin` : `ggml-${model}.bin`;
-    const path = join(ctx.workspaceRoot, STATE_DIR, "whisper", file);
+    const path = join(ctx.workspaceRoot, STATE_DIR, "cache", "whisper", file);
     if (await fileExists(path)) {
         return path;
     }
@@ -229,7 +229,8 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     const startedAt = Date.now();
     const stamp = new Date(startedAt).toISOString().replace(/[:.]/g, "-");
     const channelSlug = channel.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-");
-    const relPath = join(STATE_DIR, "transcripts", `${stamp}-${channelSlug}.md`);
+    // Under artifacts/ — a finished session's transcript is a durable output, the class that entry names.
+    const relPath = join(STATE_DIR, "artifacts", "voice", `${stamp}-${channelSlug}.md`);
     const participants = new Set<string>();
     // Runs inside the transcriber queue after each utterance: rewrite the live transcript, then dispatch a
     // voice_utterance event — the daemon's listener batcher debounces bursts into one automation wake.

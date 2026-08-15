@@ -74,7 +74,7 @@ const SPELLED_STATE = /(["'`])\.intentic(\/[^"'`${\n]*)?\1/;
  * literals into an ordinary string and throw that guarantee away, which is the opposite of what this check is
  * for: STATE_DIR exists for callers OUTSIDE the table, and the table's own members stay literal so the compiler
  * keeps its hold on them. The table's declaring files are exempt for the same reason — they ARE the union. */
-const TYPED_STATE_PATH = /statePath\(/;
+const TYPED_STATE_PATH = /state(?:Rel)?Path\(/;
 const STATE_TABLE_FILES = new Set([`_sandbox/sandbox-contract/src/workspace-state.ts`, `_sandbox/sandbox-contract/src/history-state.ts`]);
 // Counting up to a root from the running file's own location — the position claim, in each spelling that
 // reaches PAST the file's own directory (a single `..` inside a package is a sibling, not a root claim).

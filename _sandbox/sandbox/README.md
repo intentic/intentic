@@ -233,10 +233,13 @@ exact CLI-version anchor and the locator for a vendored development fallback, no
 ## Conventions & gotchas
 
 - Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/auth/`,
-  resumable Claude state is carried under `.intentic/sessions/claude/`, rebuildable search state is under
-  `.intentic/cache/`, durable attachments/browser captures/generated images/run evidence are under `.intentic/artifacts/`, and
-  connector discovery state is derived under `.intentic/runtime/`. Small owner-edited manifests remain directly
-  under `.intentic/` so their stable paths stay readable.
+  resumable Claude state is carried under `.intentic/sessions/claude/`, rebuildable caches (the iq index, the
+  whisper model) are under `.intentic/cache/`, durable attachments/browser captures/generated images/run
+  evidence/workflow reports are under `.intentic/artifacts/`, extension scratch is derived under
+  `.intentic/runtime/`, and agent scratch is derived under `.intentic/tmp/`. Small owner-edited manifests remain
+  directly under `.intentic/` so their stable paths stay readable. A janitor
+  (src/workspace/state-janitor.ts) collects what the classes call disposable: tmp/ at boot, retired derived
+  roots, unreferenced pnpm-store blobs, browser captures past thirty days.
 - The Claude credential lives in the sandbox's own `.intentic/auth/claude/` store (connected via the daemon's
   `/claude/*` flow), resolved + injected into the SDK per turn — never held by the platform. The generic file API
   protects the whole `auth/` parent, provider-native `sessions/`, and logged-in `browser/` profiles; purpose-built

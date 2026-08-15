@@ -9,6 +9,11 @@ The rebuildable index lives at `.intentic/cache/iq/`. Fresh databases use SQLite
 completed writer pass compacts when at least 25% of the file is freelist pages, so delete-heavy reindexes do not
 leave a gigabyte-scale sparse cache behind.
 
+The agent plane is out of search scope BY DEFAULT: [workspace/floor.ts](src/workspace/floor.ts) allows only the
+state table's own authored slice of `.intentic` (`SEARCHABLE_STATE_PATHS` from `@intentic/sandbox-contract` —
+reviewable config plus drafts, staged docs, workspace extensions) and denies every ledger, cache, profile and
+checkout, including ones added later, without this package changing.
+
 Chunk embeddings live in a `sqlite-vec` table beside the chunks, one signed byte per dimension, and the nearest
 ones to a query are found inside SQLite rather than by handing every vector to JavaScript. On this workspace —
 4,039 files, 67k embedded chunks — that is the difference between 286ms and 31ms a query, 451MB and 79MB of peak

@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { STATE_DIR } from "@intentic/constants";
+import { dirname } from "node:path";
 import { isNewer } from "@intentic/sandbox-contract";
 import { version } from "../version.js";
+import { statePath } from "../workspace/state-paths.js";
 
 /* THE NEWEST INTENTIC THAT EVER RAN THIS WORKSPACE — one small stamp, `.intentic/newest-run.json`, recorded at
  * boot and moved only FORWARD.
@@ -23,15 +23,13 @@ import { version } from "../version.js";
  * as a repair job — isReportedManifest excludes it), it is written once per boot at most, and the worst a torn
  * read can cost is one boot's worth of the better sentence. */
 
-const FILE = "newest-run.json";
-
 // The stamp as read at boot — undefined until recordNewestRun ran, and after it the newest version known.
 let newest: string | undefined;
 
 export const newestRunVersion = (): string | undefined => newest;
 
 export const recordNewestRun = async (workspaceRoot: string, running: string = version): Promise<void> => {
-    const path = join(workspaceRoot, STATE_DIR, FILE);
+    const path = statePath(workspaceRoot, ".intentic/newest-run.json");
     let recorded: string | undefined;
     try {
         const raw: unknown = JSON.parse(await readFile(path, "utf8"));

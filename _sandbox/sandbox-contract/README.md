@@ -26,8 +26,11 @@ mismatch is a type error rather than a runtime surprise.
   each daemon-owned path its export lifecycle (`carry`, `secret`, `identity`, or `derived`), including the
   auth/session/cache/artifact roots, and marks the configuration slice the root repo TRACKS (`versioned` — the
   allowlist the git exclude rules are derived from, so a store added later is untracked until someone says
-  otherwise). The daemon publishes the cause and the browser derives the consequence, so neither side keeps its
-  own copy of the other's list.
+  otherwise) and the authored-content slice a workspace SEARCH may surface (`versioned` + `authored` →
+  `SEARCHABLE_STATE_PATHS`, which iq's floor denies the rest of `.intentic` against by default). Extensions name
+  their scratch home through `extensionRuntimeDir` rather than spelling the layout themselves. The daemon
+  publishes the cause and the browser derives the consequence, so neither side keeps its own copy of the
+  other's list.
 - [src/chores](src/chores) — the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
 - [src/publish-drafts.ts](src/publish-drafts.ts) — the drafts publisher automation, shared for the chore book's
