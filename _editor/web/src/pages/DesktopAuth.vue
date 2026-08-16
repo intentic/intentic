@@ -7,6 +7,7 @@ import { useRoute } from "vue-router";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { signInThroughBrowser } from "../environments/desktop";
 
 /* SIGNING IN FOR THE DESKTOP APP — this page runs in the user's REAL BROWSER, never in the app's webview.
  *
@@ -85,12 +86,18 @@ const hand = async (): Promise<void> => {
 /* Google's own button, on screen from the first frame rather than after a timer decides the silent attempt
  * failed. It costs nothing when it goes unused, and it is the only thing that can end the wait when the
  * silent attempt is blocked — which is the ordinary case in a browser that suppresses the FedCM prompt.
- * Re-rendered whenever the container reappears (a retry) or the colour scheme flips. */
+ * Re-rendered whenever the container reappears (a retry) or the colour scheme flips.
+ *
+ * A refusal means this page is somewhere it cannot work — and the one place that is true is the desktop
+ * webview, which is exactly where this page's whole purpose says it should not be. So the answer is to send
+ * it where it belongs rather than to leave an empty card: the app opens the real browser at this same page. */
+const googleReady = ref(true);
+
 watch(
     [stage, scheme, googleButton],
-    () => {
+    async () => {
         if (stage.value === `signin` && googleButton.value) {
-            void renderButton(googleButton.value, scheme.value === `dark`);
+            googleReady.value = await renderButton(googleButton.value, scheme.value === `dark`);
         }
     },
     { flush: `post`, immediate: true },
@@ -130,8 +137,12 @@ onMounted(() => void hand());
                  color-scheme:light matches Google's light-scheme button iframe so the browser paints no opaque
                  (white) canvas behind it; the button stays dark via its theme param. -->
             <template v-else>
-                <p class="text-xs text-muted">Continue with Google to hand this sign-in to the app.</p>
-                <div ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
+                <p class="text-xs text-muted">
+                    <template v-if="googleReady">Continue with Google to hand this sign-in to the app.</template>
+                    <template v-else>This page has to run in your browser — Google won't sign you in inside an app window.</template>
+                </p>
+                <div v-show="googleReady" ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
+                <Button v-if="!googleReady" label="Open this in your browser" severity="secondary" class="self-start" @click="signInThroughBrowser" />
             </template>
 
             <Button

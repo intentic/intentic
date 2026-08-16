@@ -143,9 +143,15 @@ const rowFor = (el: HTMLElement, id: string): HTMLElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
     return byAriaLabel(el, `Rename ${persona.label ?? persona.id}`)!.closest(`.ui-row-select`) as HTMLElement;
 };
+/* WAIT FOR THE CARD, NOT FOR A NUMBER OF TICKS. Opening one settles over several of them and how many is not
+ * stable, so `click(); await nextTick()` was a coin flip: this file failed about half its runs, always as a
+ * helper's `!` finding nothing, and always in a different test. A suite that fails half the time is one every
+ * reader learns to re-run rather than believe, which is worse than not having it.
+ *
+ * Its three questions are tabs, so a card with no tabs in it is a card that has not opened yet. */
 const openCard = async (el: HTMLElement, id: string): Promise<void> => {
     rowFor(el, id).click();
-    await nextTick();
+    await vi.waitFor(() => expect(el.querySelector(`[role="tab"]`)).not.toBeNull());
 };
 
 // Flip one of the powers switches by the label beside it. PrimeVue's ToggleSwitch is a checkbox under its skin.
@@ -200,9 +206,15 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
 /* An open card shows one of its three questions at a time. The pills are <SegmentedControl>, which renders tabs — found
  * by role so this cannot be satisfied by a stray button whose label happens to match a heading in the body. */
 const openTab = async (el: HTMLElement, label: string): Promise<void> => {
-    [...el.querySelectorAll(`[role="tab"]`)]
-        .find((tab) => (tab.textContent ?? ``).trim() === label)!
-        .dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    const tab = await vi.waitFor(() => {
+        const found = [...el.querySelectorAll(`[role="tab"]`)].find((entry) => (entry.textContent ?? ``).trim() === label);
+        expect(found, `no tab labelled ${label}`).toBeDefined();
+        return found!;
+    });
+    tab.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    // A macrotask rather than a tick count, for the same reason openCard waits: the panel behind a pill swaps
+    // several awaits deep, and the tests that read its contents were finding the previous panel's.
+    await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
 };
 

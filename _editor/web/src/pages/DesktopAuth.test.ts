@@ -44,7 +44,9 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 // A mint that never settles: the silent attempt going quiet is exactly the case these tests are about, and it
 // is what leaves the first frame standing still to be read.
 const getIdToken = vi.fn<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
-const renderButton = vi.fn().mockResolvedValue(undefined);
+// True: an ordinary browser, where Google's button renders. The refusal case (the desktop webview) and what
+// every surface owes the reader there is signInSurfaces.test.ts's whole subject.
+const renderButton = vi.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
 vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const handoff = vi.fn();

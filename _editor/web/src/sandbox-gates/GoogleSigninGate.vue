@@ -6,7 +6,7 @@ import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { DESKTOP_SIGN_IN_LINK, desktopVersion, openDesktopLink } from "../environments/desktop";
+import { desktopVersion, signInThroughBrowser } from "../environments/desktop";
 
 /* The browser→sandbox sign-in surface. useGoogleIdentity raises `needsSignIn` whenever a Google ID token is
  * needed; this overlay then offers the way to mint one. A credential resolves the awaiting sandbox call
@@ -51,9 +51,7 @@ watch(
 /* Sign in the only way this window can. The app opens the platform's page in the default browser and returns
  * over its deep link, which reloads this SPA at the completion route — so the mint currently awaiting here
  * goes with the page rather than being resolved, and the adopted credential answers the call that follows. */
-const signInOutside = (): void => {
-    openDesktopLink(DESKTOP_SIGN_IN_LINK);
-};
+const signInOutside = (): void => signInThroughBrowser();
 
 // Instead of signing in: settle the awaiting mint and return to setup for the active sandbox (the registry
 // keeps its daemon-reported address — there is nothing to sever).

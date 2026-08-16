@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { desktopVersion } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { removeStoredValue, storedValue, storeValue } from "./browserStorage";
 import { idTokenClaims } from "./googleToken";
@@ -165,6 +166,13 @@ const trySilent = (gate: boolean): ReturnType<typeof setTimeout> | undefined => 
             needsSignIn.value = true;
         }
     };
+    /* The desktop webview has no silent attempt to make — Google will not talk to it at all — so the five
+     * seconds the guard exists to wait out are five seconds of certain failure. Raise the gate now; what it
+     * offers there is the hand-off to the real browser, which is the only sign-in this window can complete. */
+    if (desktopVersion() !== undefined) {
+        raiseGate();
+        return undefined;
+    }
     // No guard when the caller shows its own button: the timer exists only to raise the shared overlay, and a
     // caller that is ALREADY showing a Google button would be made to wait five seconds for a second one.
     const guard = gate ? setTimeout(raiseGate, SILENT_GUARD_MS) : undefined;
@@ -260,13 +268,24 @@ const clearCredential = (): void => {
     window.google?.accounts?.id?.disableAutoSelect?.();
 };
 
-// Render the real Google button into a container; a click fires the shared callback above, which caches the
-// credential and resolves the waiting getIdToken(). `dark` picks the filled-black theme so the button matches
-// the app's dark surfaces instead of showing as a white card. Awaits GIS itself, because the callers that
-// show a button UP FRONT (rather than behind the gate) reach here before any mint has initialized it.
-// Answers whether a button is actually standing there: a caller whose ONLY sign-in control this is (the login
-// page) has to offer something else when Google's script never arrived, and silence would leave a blank panel.
+/* Render the real Google button into a container; a click fires the shared callback above, which caches the
+ * credential and resolves the waiting getIdToken(). `dark` picks the filled-black theme so the button matches
+ * the app's dark surfaces instead of showing as a white card. Awaits GIS itself, because the callers that
+ * show a button UP FRONT (rather than behind the gate) reach here before any mint has initialized it.
+ *
+ * Answers whether a button is actually standing there. A caller whose only sign-in control this is has to
+ * offer something else when the answer is no, and silence would leave a blank panel.
+ *
+ * THE DESKTOP WEBVIEW IS ALWAYS NO, and that refusal lives here rather than in each of the three surfaces
+ * that render this button. Google refuses OAuth from an embedded webview and Identity Services is FedCM-based,
+ * which that webview does not implement — so the button renders, accepts clicks, and does nothing at all.
+ * Two surfaces remembered that and one did not, which is the argument for the mechanism knowing instead of
+ * the callers: a fourth one added later inherits the answer rather than the bug. What it should offer in
+ * exchange is `signInThroughBrowser` (environments/desktop.ts). */
 const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean> => {
+    if (desktopVersion() !== undefined) {
+        return false;
+    }
     try {
         await ensureInitialized();
     } catch {

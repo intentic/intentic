@@ -45,12 +45,13 @@ vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 vi.mock(`../composables/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined) }) }));
 
-const openDesktopLink = vi.fn();
+const signInThroughBrowser = vi.fn();
 const desktopVersion = vi.fn<() => string | undefined>();
 vi.mock(`../environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     desktopVersion: () => desktopVersion(),
-    openDesktopLink: (link: string) => openDesktopLink(link),
+    openDesktopLink: vi.fn(),
+    signInThroughBrowser: () => signInThroughBrowser(),
 }));
 
 const { default: GoogleSigninGate } = await import("./GoogleSigninGate.vue");
@@ -81,7 +82,7 @@ const buttonSaying = (text: string): HTMLButtonElement | undefined =>
 beforeEach(() => {
     needsSignIn.value = true;
     renderButton.mockClear().mockResolvedValue(true);
-    openDesktopLink.mockReset();
+    signInThroughBrowser.mockReset();
     desktopVersion.mockReset().mockReturnValue(undefined);
 });
 
@@ -97,7 +98,7 @@ it(`hands sign-in to the real browser inside the desktop app`, async () => {
     await mount();
     buttonSaying(`Continue with Google in your browser`)?.click();
 
-    expect(openDesktopLink).toHaveBeenCalledWith(`intentic://signin`);
+    expect(signInThroughBrowser).toHaveBeenCalled();
 });
 
 it(`never renders Google's own button inside the desktop app`, async () => {

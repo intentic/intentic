@@ -89,6 +89,16 @@ export const openDesktopLink = (link: string): void => {
     globalThis.location.href = link;
 };
 
+/* EVERY SIGN-IN SURFACE IN THIS APP ENDS UP HERE, which is the point of it being a function rather than the
+ * one line it wraps. There are three of them — the login screen, the workspace's sandbox gate, and the
+ * hand-off page itself — and each grew its own answer to "this webview cannot ask Google". Two got it right
+ * and one rendered Google's button, which appears, takes clicks, and does nothing: the exact shape of a
+ * broken product, on the screen between a fresh install and a working workspace.
+ *
+ * The mechanism enforces the rule now — useGoogleIdentity.renderButton refuses in this posture rather than
+ * trusting three callers to each remember — and this is what a surface reaches for once it has been refused. */
+export const signInThroughBrowser = (): void => openDesktopLink(DESKTOP_SIGN_IN_LINK);
+
 /* Download links, chosen by build like scriptCommand.ts:
  *   • deploy (production): the intentic.dev vanity URLs — the site worker serves a locally-staged installer
  *     when one exists in its assets, else redirects to the newest release's asset.

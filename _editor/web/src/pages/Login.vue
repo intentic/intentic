@@ -6,7 +6,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { DESKTOP_SIGN_IN_LINK, desktopVersion, openDesktopLink } from "../environments/desktop";
+import { desktopVersion, signInThroughBrowser } from "../environments/desktop";
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton } = useGoogleIdentity();
@@ -63,17 +63,16 @@ const features: readonly { icon: IconName; title: string; description: string }[
  * refuses the token. The fourth — a button that renders but cannot work, behind a blocked frame or a popup
  * policy — is invisible from here, which is why the escape link below it is unconditional. */
 const googleButton = ref<HTMLElement>();
-/* Whether Google's own button is standing there. It starts TRUE off the desktop so the container is in the
- * DOM for the very first render — the button cannot be rendered into an element that does not exist — and
- * flips to false the moment Google's script proves absent or the platform refuses what it signed. Inside the
- * desktop app it starts false: Google's script cannot run in that webview at all, which is why that window
- * has always had a single button that hands the whole sign-in to the real browser. */
-const googleReady = ref(!desktop.value);
+/* Whether Google's own button is standing there. Starts true so the container is in the DOM for the very
+ * first render — a button cannot be rendered into an element that does not exist — and flips to false when
+ * the render is refused (Google's script absent, or this being the desktop webview, where the mechanism
+ * refuses on every surface's behalf) or when the platform rejects what Google signed. */
+const googleReady = ref(true);
 const error = ref<NoticeModel | undefined>();
 
 const redirectSignIn = async (): Promise<void> => {
     if (desktop.value) {
-        openDesktopLink(DESKTOP_SIGN_IN_LINK);
+        signInThroughBrowser();
         return;
     }
     await signInWithGoogle();
@@ -84,6 +83,8 @@ const redirectSignIn = async (): Promise<void> => {
  * who has signed in this way here BEFORE, so a first-ever account still passes a visible Google surface and
  * the consent line under it. */
 const signInWithCredential = async (): Promise<void> => {
+    // The mechanism would refuse this window anyway; not starting is just not booting Google's script in a
+    // window that can never use it.
     if (desktop.value) {
         return;
     }
