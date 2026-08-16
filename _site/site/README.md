@@ -44,3 +44,7 @@ This package is layout and routing; a wording change should not need to touch it
   app boots, so it has to be served from this site's own origin rather than linked to somewhere else.
 - The demo opens as its own full page, never in an overlay: an IDE wants the whole viewport, and every link to
   it on the site — nav, hero, product and compare CTAs — is a plain `<a>` to `/demo/`.
+- **Some paths are the worker's, not Astro's** — `/desktop/*`, `/connect` and the other vanity routes are
+  answered by `worker.ts`, which does not run under `astro dev`. `/desktop/*` is stood in for by a dev-only
+  middleware reading the worker's own table, so download links work locally; the script routes are not, and a
+  new vanity path needs the same treatment or it will 404 on every developer's machine and nowhere else.

@@ -1,3 +1,5 @@
+import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
+
 // Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
 // redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
 // worker serves them as text/plain so `curl … | sh` gets the raw script. run_worker_first (wrangler.jsonc) sends
@@ -81,15 +83,9 @@ function canonicalForMarkdown(pathname: string): string | undefined {
  *
  * An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a deploy
  * normally ships none) is served directly under its plain staged name; otherwise this resolves the newest
- * release and redirects to that release's versioned asset. */
-const RELEASES = "https://github.com/intentic/intentic/releases";
-const DESKTOP_FILES: Record<string, { staged: string; asset: (version: string) => string }> = {
-    "/desktop": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
-    "/desktop/windows": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
-    "/desktop/linux": { staged: "Intentic.AppImage", asset: (v) => `Intentic-${v}-x86_64.AppImage` },
-    "/desktop/deb": { staged: "Intentic.deb", asset: (v) => `Intentic-${v}-amd64.deb` },
-    "/desktop/rpm": { staged: "Intentic.rpm", asset: (v) => `Intentic-${v}-x86_64.rpm` },
-};
+ * release and redirects to that release's versioned asset.
+ *
+ * The path table is shared with the dev server, which stands in for this worker locally (astro.config.mjs). */
 
 /* Where a download route actually sends someone, memoised per platform for an hour in the isolate. A worker
  * isolate serves many requests, so the common case costs no upstream request at all; a cold or recycled
@@ -118,12 +114,12 @@ async function resolveDownload(asset: (version: string) => string, key: string):
     if (cached !== undefined && Date.now() - cached.at < DOWNLOAD_TTL_MS) {
         return cached.url;
     }
-    let resolved = `${RELEASES}/latest`;
+    let resolved = `${RELEASES_URL}/latest`;
     try {
-        const latest = await fetch(`${RELEASES}/latest`, { redirect: "manual" });
+        const latest = await fetch(`${RELEASES_URL}/latest`, { redirect: "manual" });
         const version = /\/releases\/tag\/v(?<version>[^/?#]+)$/u.exec(latest.headers.get("location") ?? "")?.groups?.version;
         if (version !== undefined) {
-            const candidate = `${RELEASES}/download/v${version}/${asset(version)}`;
+            const candidate = `${RELEASES_URL}/download/v${version}/${asset(version)}`;
             // An asset that exists answers a HEAD with a redirect to storage; one that does not answers 404.
             const probe = await fetch(candidate, { method: "HEAD", redirect: "manual" });
             if (probe.status < 400) {
@@ -148,7 +144,7 @@ export default {
             return Response.redirect(new URL(`${moved}${url.search}`, url).href, 301);
         }
 
-        const download = DESKTOP_FILES[url.pathname.replace(/\/$/, "")];
+        const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];
         if (download !== undefined) {
             const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
             if (staged.ok) {

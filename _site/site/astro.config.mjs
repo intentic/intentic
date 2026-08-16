@@ -12,6 +12,8 @@ import tailwindcss from "@tailwindcss/vite";
 import indexNow from "astro-indexnow";
 import astroOpenGraphImages, { getImagePath } from "astro-opengraph-images";
 import { defineConfig } from "astro/config";
+import { createReadStream, existsSync } from "node:fs";
+import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { ogCard, ogFonts } from "./scripts/og-template.mjs";
 
 const isIndexNowDisabled = process.env.INDEXNOW_ENABLED === "0";
@@ -25,6 +27,42 @@ const site = new URL(SITE_URL);
 // stay slashed and hosting normalizes requests.
 const isDev = process.argv.includes("dev");
 
+/* THE DOWNLOAD PATHS, IN DEV. /desktop/windows and its siblings are the worker's (worker.ts), and the worker
+ * does not run under `astro dev` — so every download link on the site, including the button in the hero,
+ * answered with this site's own 404 page on a developer's machine. That is the worst possible place for a
+ * dead link to hide: it looks broken exactly where somebody is checking their work, and looks fine in the one
+ * place nobody tests by hand.
+ *
+ * The path table is the worker's own, so the two cannot drift. The behaviour is the worker's minus the part
+ * that needs the network: a locally staged installer is handed over as a real download, and everything else
+ * goes to the releases page — which is also the worker's fallback when it cannot resolve a named asset, so a
+ * developer sees a real destination rather than a stub. */
+const desktopDevRoutes = {
+    name: "intentic:desktop-dev-routes",
+    apply: "serve",
+    configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+            const pathname = new URL(request.url ?? "/", "http://localhost").pathname.replace(/\/$/u, "");
+            const route = DESKTOP_ROUTES[pathname];
+            if (route === undefined) return next();
+
+            const staged = new URL(`./public/desktop/${route.staged}`, import.meta.url);
+            if (existsSync(staged)) {
+                response.writeHead(200, {
+                    "content-type": "application/octet-stream",
+                    "content-disposition": `attachment; filename="${route.staged}"`,
+                });
+                createReadStream(staged).pipe(response);
+                return undefined;
+            }
+
+            response.writeHead(302, { location: `${RELEASES_URL}/latest` });
+            response.end();
+            return undefined;
+        });
+    },
+};
+
 export default defineConfig({
     site: SITE_URL,
     trailingSlash: isDev ? "ignore" : "always",
@@ -32,7 +70,7 @@ export default defineConfig({
         inlineStylesheets: "always",
     },
     vite: {
-        plugins: [tailwindcss()],
+        plugins: [tailwindcss(), desktopDevRoutes],
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },

@@ -34,6 +34,27 @@ export const desktopPlatforms = {
 /** Where the button points before it knows anything, and where a Mac or a phone keeps pointing. */
 export const DESKTOP_DOWNLOADS_PAGE = "/download/";
 
+/** Every asset this project has ever handed anybody, and the fallback when a named one cannot be resolved. */
+export const RELEASES_URL = "https://github.com/intentic/intentic/releases";
+
+export interface DesktopRoute {
+    /** The plain name an installer carries when it is staged into public/desktop/ for a local download test. */
+    staged: string;
+    /** The release asset the path hands over, named for the version it came from. */
+    asset: (version: string) => string;
+}
+
+/* What each vanity path resolves to. Read by the worker, which serves these paths in production, and by the
+ * dev server, which stands in for it (astro.config.mjs) — one table, because a path that works on the deployed
+ * site and 404s on a developer's machine is how a broken download link reaches production unnoticed. */
+export const DESKTOP_ROUTES: Record<string, DesktopRoute> = {
+    "/desktop": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
+    "/desktop/windows": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
+    "/desktop/linux": { staged: "Intentic.AppImage", asset: (v) => `Intentic-${v}-x86_64.AppImage` },
+    "/desktop/deb": { staged: "Intentic.deb", asset: (v) => `Intentic-${v}-amd64.deb` },
+    "/desktop/rpm": { staged: "Intentic.rpm", asset: (v) => `Intentic-${v}-x86_64.rpm` },
+};
+
 /** A tray with an arrow into it. The neutral stand-in, shown until a platform is recognised. */
 export const DESKTOP_GENERIC_ICON =
     "M12 2a1 1 0 0 1 1 1v9.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-5 5a1 1 0 0 1-1.414 0l-5-5a1 1 0 1 1 1.414-1.414L11 12.586V3a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z";
