@@ -35,20 +35,40 @@ set -euo pipefail
 
 ROOT="$(repo_root)"
 MIGRATIONS="_platform/prisma/migrations"
-BASE="${1:-origin/${GITHUB_BASE_REF:-main}}"
 cd "$ROOT"
+
+# WHAT THIS IS COMPARED AGAINST, and why it is not simply "main". Work lands on main by DIRECT PUSH here, not
+# only through pull requests — so a base of `origin/main` would, on the very push that matters, resolve to the
+# commit being pushed: merge-base(HEAD, HEAD) is HEAD, every file would be compared with itself, and the check
+# would pass by construction on the one event it exists to police. The caller passes the real predecessor —
+# the pull request's base, or the push's `before` — and only the local default falls back to origin/main,
+# where a developer comparing their branch to main is exactly right.
+BASE="${1:-origin/${GITHUB_BASE_REF:-main}}"
 
 failed=0
 
-echo "==> applied migrations are immutable (against $BASE)"
-if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
-    echo "error: cannot resolve base ref '$BASE'. In CI, check out with fetch-depth: 0." >&2
-    exit 1
+# A first push to a branch or a force-push has no predecessor to compare against. Say so and check what can
+# still be checked, rather than failing on the shape of the event or — worse — passing in silence.
+if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+    echo "==> applied migrations are immutable"
+    echo "  ↓ skipped — this push has no predecessor commit to compare against."
+    MERGE_BASE=""
+else
+    echo "==> applied migrations are immutable (against $BASE)"
+    if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
+        echo "error: cannot resolve base ref '$BASE'. In CI, check out with fetch-depth: 0." >&2
+        exit 1
+    fi
+    # The merge base, not the base tip: on a branch that is simply behind, the tip carries migrations this
+    # branch has never seen, and every one of them would read as "deleted here".
+    MERGE_BASE="$(git merge-base "$BASE" HEAD)"
+    if [ "$MERGE_BASE" = "$(git rev-parse HEAD)" ]; then
+        echo "error: the base resolves to HEAD itself, so this check would compare every migration with its own" >&2
+        echo "  copy and pass whatever the push contains. Pass the predecessor commit — on a push, the SHA the" >&2
+        echo "  branch pointed at before it." >&2
+        exit 1
+    fi
 fi
-
-# The merge base, not the base tip: on a branch that is simply behind, the tip carries migrations this branch
-# has never seen, and every one of them would read as "deleted here".
-MERGE_BASE="$(git merge-base "$BASE" HEAD)"
 
 # Keyed by migration NAME (the directory), never by repo path — the directory name is what Prisma records and
 # compares, so a tree-wide move that keeps the names is not the failure this check is for, and one that changes
@@ -57,6 +77,7 @@ name_of() { basename "$(dirname "$1")"; }
 
 while IFS= read -r path; do
     [ -n "$path" ] || continue
+    [ -n "$MERGE_BASE" ] || continue
     name="$(name_of "$path")"
     here="$MIGRATIONS/$name/migration.sql"
     if [ ! -f "$here" ]; then
@@ -72,9 +93,11 @@ while IFS= read -r path; do
         git show "$MERGE_BASE:$path" | diff -u - "$here" | sed 's/^/      /' >&2 || true
         failed=1
     fi
-done < <(git ls-tree -r --name-only "$MERGE_BASE" -- "$MIGRATIONS" | grep '/migration\.sql$' || true)
+done < <([ -n "$MERGE_BASE" ] && git ls-tree -r --name-only "$MERGE_BASE" -- "$MIGRATIONS" | grep '/migration\.sql$' || true)
 
-[ "$failed" -eq 0 ] && echo "  ✓ every migration on $BASE is unchanged here"
+if [ -n "$MERGE_BASE" ] && [ "$failed" -eq 0 ]; then
+    echo "  ✓ all $(git ls-tree -r --name-only "$MERGE_BASE" -- "$MIGRATIONS" | grep -c '/migration\.sql$') migrations on $BASE are unchanged here"
+fi
 
 echo "==> the migration history replays into schema.prisma"
 SHADOW="${MIGRATION_CHECK_DATABASE_URL:-${DATABASE_URL:-}}"
