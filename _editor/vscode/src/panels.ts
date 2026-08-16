@@ -45,7 +45,7 @@ const APP_DIR = "media/app";
 const html = (context: vscode.ExtensionContext, webview: vscode.Webview, env: AppEnvironment): string => {
     const distHtml = readFileSync(join(context.extensionPath, APP_DIR, "index.html"), "utf8");
     const assetBase = webview.asWebviewUri(vscode.Uri.file(join(context.extensionPath, APP_DIR))).toString();
-    return appHtml({ distHtml, assetBase, nonce: randomBytes(16).toString("base64url"), env });
+    return appHtml({ distHtml, assetBase, cspSource: webview.cspSource, nonce: randomBytes(16).toString("base64url"), env });
 };
 
 const workspaceLabel = (): string => {

@@ -100,10 +100,17 @@ export const startEngine = async (context: vscode.ExtensionContext, workspaceRoo
     });
     child.stdout?.on("data", (chunk: Buffer) => output.append(chunk.toString()));
     child.stderr?.on("data", (chunk: Buffer) => output.append(chunk.toString()));
-    const url = `http://127.0.0.1:${port}`;
-    await waitHealthy(url, child, output);
+    const internalUrl = `http://127.0.0.1:${port}`;
+    await waitHealthy(internalUrl, child, output);
+    // In a Remote SSH / WSL / Codespaces window the extension host and the webview do not share loopback.
+    // VS Code owns that boundary: asExternalUri returns the forwarded URI the renderer can actually reach,
+    // and is the identity operation for a local desktop window.
+    const externalUrl =
+        vscode.env.remoteName === undefined
+            ? vscode.Uri.parse(internalUrl)
+            : await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${port}`));
     return {
-        url,
+        url: externalUrl.toString(),
         dispose: () => {
             child.kill("SIGTERM");
         },

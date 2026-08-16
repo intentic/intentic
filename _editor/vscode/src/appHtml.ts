@@ -5,7 +5,7 @@
  * engine to talk to, which of the three areas this panel shows, and the host's initial theme document.
  *
  * The CSP is the panel's whole outbound surface, written explicitly rather than inherited: scripts and styles
- * only from the extension's own assets (plus the one nonce'd inline env script), connections only to the
+ * only from the extension's own assets (plus the nonce'd inline bootstraps), connections only to the
  * loopback engine — which must allow http: because the engine serves plain HTTP on 127.0.0.1, a spelling
  * webview roots never cover. */
 export interface AppEnvironment {
@@ -20,7 +20,10 @@ export interface AppHtmlParams {
     readonly distHtml: string;
     // What the webview turns the dist folder into (webview.asWebviewUri(...)), no trailing slash.
     readonly assetBase: string;
-    // Per-document random nonce for the inline env script (the host supplies randomness; this stays pure).
+    // VS Code's origin-wide source expression for extension resources. An asWebviewUri directory is a CSP
+    // path, not an origin: without a trailing slash it matches that one path exactly, not its children.
+    readonly cspSource: string;
+    // Per-document random nonce for the required inline bootstraps (the host supplies randomness; this stays pure).
     readonly nonce: string;
     readonly env: AppEnvironment;
 }
@@ -50,24 +53,44 @@ const envScript = (env: AppEnvironment, nonce: string): string => {
     return `<script nonce="${nonce}">window.env = ${json};\n${bridge}</script>`;
 };
 
-export const appHtml = ({ distHtml, assetBase, nonce, env }: AppHtmlParams): string => {
+const cspDirectorySource = (value: string): string => `${value.replace(/\/+$/u, "")}/`;
+
+const cspSocketSource = (value: string): string => value.replace(/^http:/u, "ws:").replace(/^https:/u, "wss:");
+
+// Vite preserves the app's import map. Its root-relative shim URLs need the same move as src/href attributes;
+// leaving them at the webview origin would only surface later, when an installed extension imports `vue`.
+const rewriteImportMap = (document: string, assetBase: string): string =>
+    document.replace(/<script\b([^>]*\btype=["']importmap["'][^>]*)>([\s\S]*?)<\/script>/giu, (_match, attributes: string, contents: string) => {
+        const rewritten = contents.replace(/(["'])\/(?!\/)/gu, (_value, quote: string) => `${quote}${assetBase}/`);
+        return `<script${attributes}>${rewritten}</script>`;
+    });
+
+// The source app also carries an import map and a tiny anti-flash bootstrap inline. Nonce only inline scripts:
+// giving the nonce to the deployment-only Google script would authorize that remote script in local posture.
+const nonceInlineScripts = (document: string, nonce: string): string =>
+    document.replace(/<script(?![^>]*\bsrc\s*=)(?![^>]*\bnonce\s*=)([^>]*)>/giu, `<script nonce="${nonce}"$1>`);
+
+export const appHtml = ({ distHtml, assetBase, cspSource, nonce, env }: AppHtmlParams): string => {
+    const engineSource = cspDirectorySource(env.engineUrl);
+    const engineSocketSource = cspSocketSource(engineSource);
     const csp = [
         `default-src 'none'`,
-        `img-src ${assetBase} ${env.engineUrl} data: blob:`,
-        `media-src ${assetBase} ${env.engineUrl} blob:`,
-        `script-src ${assetBase} 'nonce-${nonce}'`,
-        `style-src ${assetBase} 'unsafe-inline'`,
-        `font-src ${assetBase}`,
-        `connect-src ${env.engineUrl} ${assetBase}`,
+        `img-src ${cspSource} ${engineSource} data: blob:`,
+        `media-src ${cspSource} ${engineSource} blob:`,
+        `script-src ${cspSource} 'nonce-${nonce}'`,
+        `style-src ${cspSource} 'unsafe-inline'`,
+        `font-src ${cspSource}`,
+        `connect-src ${engineSource} ${engineSocketSource} ${cspSource}`,
         `worker-src blob:`,
     ].join("; ");
-    return (
-        distHtml
+    return nonceInlineScripts(
+        rewriteImportMap(distHtml, assetBase)
             // Root-absolute asset references (the app builds under base "/") move onto the webview scheme.
             .replaceAll(`src="/`, `src="${assetBase}/`)
             .replaceAll(`href="/`, `href="${assetBase}/`)
             // The deployment env script is REPLACED, not accompanied — two window.env writers would race.
             .replace(/<script[^>]*\/assets\/js\/env\.js[^>]*><\/script>/, envScript(env, nonce))
-            .replace(`<head>`, `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`)
+            .replace(`<head>`, `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`),
+        nonce,
     );
 };
