@@ -143,14 +143,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # EVERY CONTEXT VALUE ARRIVES THROUGH THE ENVIRONMENT, none interpolated into the script. `${{ }}` inside
+      # a `run:` block is textual substitution BEFORE the shell parses the line, so a value containing shell
+      # syntax becomes script rather than data — `github.ref` is the one below that a person can choose the
+      # text of, by naming a branch. The fork boundary means only this repository's own branches reach here, so
+      # this is hardening rather than a hole; the shape is what matters, because this block is the one people
+      # copy when they add a job that needs the base SHA.
       - id: filter
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_PUSH: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$BASE_PR"
           else
-            base="${{ github.event.before }}"
+            base="$BASE_PUSH"
           fi
           # A first push to a branch, a force-push, or a manual dispatch has no usable base — treat everything
           # as changed rather than silently skipping the jobs that decide whether anything is checked at all.
@@ -158,7 +170,7 @@ jobs:
             echo "no usable base ($base) — treating every path as changed"
             git ls-files > /tmp/changed.txt
           else
-            git diff --name-only "$base" "${{ github.sha }}" > /tmp/changed.txt
+            git diff --name-only "$base" "$HEAD_SHA" > /tmp/changed.txt
           fi
           echo "$(wc -l < /tmp/changed.txt) changed paths"
 
@@ -174,7 +186,7 @@ jobs:
           # Probed only on main. A pull request must not move these tags — the push step below is main-only —
           # so a missing image is not something a pull request could fix by building one it has to throw away.
           missing() {
-            if [ "${{ github.ref }}" != 'refs/heads/main' ]; then echo false; return; fi
+            if [ "$REF" != 'refs/heads/main' ]; then echo false; return; fi
             docker manifest inspect "$1" >/dev/null 2>&1 && echo false || echo true
           }
           any() { if [ "$1" = true ] || [ "$2" = true ]; then echo true; else echo false; fi; }
@@ -204,11 +216,17 @@ jobs:
   #
   # `prepass.mjs --checks-only` is the first half of the prepass the fleet runs before landing: every test file
   # sits in a type-check program, every machine-touching suite is named as one, and every package.json
-  # specifier is the one pnpm-lock.yaml recorded. No node_modules, no network, ~70ms of actual work.
+  # specifier is the one pnpm-lock.yaml recorded. No node_modules, ~70ms of actual work.
   #
   # The measurement that put it first: across 40 main pipelines, 22 verify jobs failed and 10 died on one of
   # these three invariants — and every one of those failed AFTER a 0.6-2.0 minute frozen-lockfile install, in
   # each of the six jobs that opens with one. ~70ms here replaces six of those.
+  #
+  # THE WORKFLOW LINT RUNS HERE TOO, and it is the one thing in this job that touches the network — two pinned
+  # binaries into /ci-cache, once per runner per version, ~1s warm. It sits in this job rather than in one of
+  # its own on purpose: the DAG's widest wave is five against six runner processes (docs/ci-runner.md), and a
+  # fourth root would spend the single slot of headroom on a check that takes a second. What it buys is the
+  # class of bug this pipeline keeps producing — a workflow that stops doing something and reports success.
   preflight:
     # The second DAG root — see the fork boundary on `changes`. The verify groups and `e2e-hermetic` hang off
     # this one, so it carries the same guard rather than inheriting one.
@@ -239,6 +257,12 @@ jobs:
       # `shell: bash` because the job's default is `sh`, where `source` and the array expansion are not syntax.
       - shell: bash
         run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
+      # actionlint + zizmor over .github/ — the workflows checked by tools that parse them, rather than by the
+      # line scanners prepass.mjs was growing to approximate a fraction of the same ground. The script says what
+      # each tool is for, why they are pinned by sha256 rather than baked into ci-base, and which findings this
+      # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
+      - shell: bash
+        run: bash _tools/scripts/lint-workflows.sh
 
   # THE ONE THING ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, and that
   # replaying it produces schema.prisma. check-migrations.sh carries the full account; the short version is
@@ -298,13 +322,18 @@ jobs:
       # would pass by construction on exactly the event it exists to police. Same two-sided answer the `changes`
       # job computes, and the same zero-SHA fallback for a first push or a force-push, which has nothing behind
       # it to compare with; the script says so and still runs the half that needs no history.
+      # Through the environment, for the reason the `changes` job's filter step spells out.
       - shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_PUSH: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$BASE_PR"
           else
-            base="${{ github.event.before }}"
+            base="$BASE_PUSH"
           fi
           bash _tools/scripts/check-migrations.sh "$base"
 
@@ -567,9 +596,18 @@ jobs:
   #
   # WINDOWS: the NSIS installer is also verified as an archive here (tier 1 reads it with 7z) — and EXECUTED by
   # the two jobs below, which is a thing no Linux runner can do.
+  #
+  # AND NOT WHEN THE RELEASE IS ABOUT TO DO IT PROPERLY. `release` builds this same tree at the REAL version —
+  # linux-build runs the identical build-desktop.sh + verify-desktop-install.sh pair, windows-build +
+  # windows-verify the identical Windows pair — and it does not need this job, so on a releasing push all of
+  # this was a second set of artifacts, at 0.0.0, in their own cargo target directories (no cache shared with
+  # the release's, by design), gating nothing. Four release-profile Tauri builds for one commit, and the two
+  # Windows halves serialized on the ONE Windows machine, with the redundant one ahead of the release's in the
+  # queue. The empty-version check is what keeps this job to the pushes where it is the only desktop coverage
+  # there is; the release's own jobs are the coverage on every other one.
   desktop-verify:
-    needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    needs: [changes, preflight, ci-base, ci-desktop, release]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -606,9 +644,14 @@ jobs:
   # would be verifying the last release's flow against this commit's installer — so ic is cross-built from this
   # same checkout and handed to the shim through IC_BIN, its own local-dev override. The Linux setup tier does
   # exactly this, for exactly this reason.
+  #
+  # Gated on an empty release version for the reason desktop-verify spells out: on a releasing push the
+  # release's own windows-build cross-builds this same installer at the real version and windows-verify runs
+  # it on the same single Windows machine, so this pair was a redundant cross-build plus a redundant
+  # install/uninstall cycle sitting AHEAD of the release's in that machine's queue.
   desktop-windows-build:
-    needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    needs: [changes, preflight, ci-base, ci-desktop, release]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
@@ -816,7 +859,14 @@ jobs:
       # merge job publishes the plain multi-arch tags; dind-host stays single-arch (publish-images.sh says why).
       - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
         shell: bash
-      - run: TAGS="latest sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+      # NO `latest` HERE, deliberately — the immutable SHA tag only. dind-host has no halves to stitch, so it
+      # used to get its moving tag written right here, in the same step that built it, while sandbox:latest
+      # waited for images-merge. That made the two images move at different times, and images-arm64 is the leg
+      # most likely to fail: when it did, the registry held a NEW dind-host:latest beside the PREVIOUS
+      # sandbox:latest — a pair nothing had tested together, and the pair nightly's tiers, verify-images-public
+      # and the shipped connect-host.ps1 all reference by name. images-merge promotes this tag once both
+      # sandbox halves are in, so the two images move together or neither does.
+      - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
         shell: bash
 
   # The sandbox image's arm64 half, natively built — GitHub's hosted arm runners rather than the x86 fleet,
@@ -869,6 +919,11 @@ jobs:
 
   # Stitch the two halves into the plain tags — two manifest calls per tag, no bytes moved. Until this runs,
   # `latest` still points at the previous merge, so a consumer mid-pipeline never sees a half-published tag.
+  #
+  # THE MOVING TAGS OF BOTH IMAGES ARE WRITTEN HERE AND NOWHERE ELSE. dind-host has no halves to stitch, so its
+  # `latest` used to be written by the `images` job directly — which meant the pair could skew whenever the
+  # arm64 half failed. Its promotion is a one-source manifest copy, gated by the same `needs` as the sandbox
+  # stitch, so the two images now move together or neither moves.
   images-merge:
     needs: [images, images-arm64]
     if: ${{ needs.images.result == 'success' && needs.images-arm64.result == 'success' }}
@@ -896,6 +951,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: bash _tools/scripts/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
+        shell: bash
+      # The single-arch half of the same promise: point dind-host's `latest` at the SHA tag the `images` job
+      # pushed. Last, so a failed sandbox stitch leaves both images on the previous pair rather than one of each.
+      - run: bash _tools/scripts/promote-image-tag.sh dind-host "sha-${GITHUB_SHA::8}" latest
         shell: bash
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then

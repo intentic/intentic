@@ -775,6 +775,54 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
     }
 }
 
+/* Invariant 10. NO WORKFLOW WAITS ON A TAG PUSH IT CAN NEVER SEE. semantic-release pushes this repository's
+ * `v*` tags with the built-in GITHUB_TOKEN, and GitHub deliberately starts NO workflow from an event that
+ * token created — the loop guard that stops a workflow triggering itself forever. `on: push: tags` here is
+ * therefore not a trigger that fires late or rarely; it is one that cannot fire at all, and a workflow behind
+ * it is dead code that reads exactly like a pipeline with nothing to do. Every release goes green and the
+ * artifact is simply never published.
+ *
+ * THREE FILES HAVE MADE THIS MISTAKE, and the third is why this check exists. npm-publish.yml fell ~30
+ * versions behind the tags; vscode-publish.yml went 200 releases without either marketplace seeing a build;
+ * action-publish.yml was written AFTER both were fixed, copied their shape, claimed their trigger in its own
+ * header — "the same trigger and shape as npm-publish.yml" — and kept the broken one, so the Marketplace
+ * action was built by a workflow that could not run and was never published once. Reading the diff caught none
+ * of the three, because the wrong line looks exactly like the right one and the comment above it agreed.
+ *
+ * workflow_dispatch is the documented exception to the loop guard, so the remedy is always the same and this
+ * check names it: dispatch the workflow from dispatch-publish.sh, at the tag.
+ *
+ * WHEN THIS INVARIANT SHOULD BE DELETED: if the release ever pushes its tag with a GitHub App installation
+ * token or a PAT instead of GITHUB_TOKEN, the loop guard stops applying and `on: push: tags` becomes the
+ * simpler correct answer for all three files. Delete this block together with that change — leaving it would
+ * forbid the very thing that fixed it.
+ *
+ * Line-scanned like invariants 4, 8 and 9, and for the same reason: `on:` sits at column 0, its events at 2,
+ * an event's own keys at 4. */
+const tagTriggered = [];
+for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml"))) {
+    const lines = readFileSync(join(WORKFLOWS, file), "utf8").split("\n");
+    const on = lines.findIndex((line) => /^on:\s*$/.test(line));
+    if (on === -1) {
+        continue;
+    }
+    // From `on:` to the next line that starts a top-level key. A blank line is inside the block; anything
+    // unindented ends it, comments at column 0 included — those sit between blocks here, never within one.
+    let inPush = false;
+    for (let i = on + 1; i < lines.length && !/^\S/.test(lines[i]); i++) {
+        if (/^ {2}\S/.test(lines[i])) {
+            inPush = /^ {2}push:\s*$/.test(lines[i]);
+        } else if (inPush && /^ {4}tags:/.test(lines[i])) {
+            tagTriggered.push(
+                `.github/workflows/${file}: \`on: push: tags\` is a trigger this repository can never fire — semantic-release ` +
+                    `pushes its tags with GITHUB_TOKEN, and GitHub starts no workflow from that token's events. Use ` +
+                    `\`on: workflow_dispatch\` and add this file to WORKFLOWS in _tools/scripts/dispatch-publish.sh, which ` +
+                    `dispatches it AT THE TAG so the checkout and \`GITHUB_REF_NAME\` are what a tag push would have given it`,
+            );
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
@@ -785,6 +833,7 @@ const reports = [
     ["Git hooks are disarmed on this checkout, so pushes skip these gates entirely", disarmed],
     ["A called workflow asks for more than its caller grants — Actions fails this before any job starts", overreach],
     ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
+    ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -802,6 +851,7 @@ console.log(
 console.log(`git hooks: every .githooks file is executable, so the pre-push gate actually runs`);
 console.log(`workflow permissions: every reusable-workflow call grants what the workflow it calls asks for`);
 console.log(`npm provenance: no job publishes an attested tarball from the self-hosted fleet`);
+console.log(`publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */

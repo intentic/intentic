@@ -2,6 +2,21 @@ name: Release
 
 on:
   workflow_call:
+    outputs:
+      # The version this push is releasing, or the empty string when it releases nothing. Published so the
+      # CALLER can stop duplicating what this workflow is about to do: ci.yml's `desktop-verify` and
+      # `desktop-windows-build` exist to prove the desktop tree on a main push, and this workflow's
+      # `linux-build` and `windows-build` + `windows-verify` prove the same tree, harder, at the real version.
+      # On a releasing push both used to run — four release-profile Tauri builds and two full Windows
+      # install/uninstall cycles for one commit, the Windows pair serialized on the single Windows machine —
+      # and the 0.0.0 half gated nothing, because `release` does not need it.
+      #
+      # A caller reading this output waits for the whole call before it can act on it, which is exactly right:
+      # on a releasing push its desktop jobs skip after the release has already built everything, and on a
+      # non-releasing one they start as soon as `plan` says there is nothing to release (the rest skips).
+      version:
+        description: The version being released, or empty when this push releases nothing.
+        value: ${{ jobs.plan.outputs.version }}
 
 # A floor, not a ceiling — the caller's grant is the ceiling, and every job below replaces this set outright
 # with the one it names. Declared read-only anyway so a job added later without a `permissions:` block starts

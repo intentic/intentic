@@ -64,7 +64,18 @@ jobs:
       # three groups pays it — the standing cost of the split, against a platform deploy that no longer waits
       # on the marketing site.
       - run: node _tools/scripts/prepass.mjs
-      - run: pnpm turbo run typecheck ${{ inputs.filters }} --continue=dependencies-successful
+      # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual
+      # substitution BEFORE the shell sees the line, so the value becomes script rather than an argument to it
+      # — the shape zizmor calls template-injection and the one every Actions exploit writeup starts from. The
+      # inputs here come from three literals in ci.yml and are not attacker-reachable today, but the fix costs
+      # a line and the shape is what gets copied into the next workflow.
+      #
+      # UNQUOTED ON PURPOSE below: this is a list of turbo flags, and the word splitting is the point — `"$X"`
+      # would hand turbo one argument spelled `--filter=a --filter=b`. That is the one case where quoting is
+      # wrong, so it is said out loud rather than left to look like an oversight.
+      - run: pnpm turbo run typecheck $FILTERS --continue=dependencies-successful
+        env:
+          FILTERS: ${{ inputs.filters }}
 
       # ONE turbo invocation for `build test`, not two: separate calls are a hard barrier — every package must
       # finish building before ANY test starts. A single graph lets each package's tests run the moment its own
@@ -73,4 +84,7 @@ jobs:
       # `--continue=dependencies-successful` on both: turbo otherwise stops at the first failing task, so a red
       # pipeline reports one broken package and the next push finds the next one. Continuing into everything
       # whose own dependencies are still green makes one run say everything that is wrong.
-      - run: pnpm turbo run build test ${{ inputs.filters }} --continue=dependencies-successful
+      # Through the environment, unquoted, for the two reasons the typecheck step above spells out.
+      - run: pnpm turbo run build test $FILTERS --continue=dependencies-successful
+        env:
+          FILTERS: ${{ inputs.filters }}

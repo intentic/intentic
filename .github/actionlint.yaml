@@ -1,0 +1,21 @@
+# actionlint's view of this repository's self-hosted fleet.
+#
+# actionlint checks `runs-on` against the labels GitHub itself offers, so without this file every job on the
+# fleet reports "label is unknown" — 40 findings across 10 workflows, all of them the same non-finding, which
+# is exactly how a linter gets ignored and then removed. Declaring the three real labels here turns that noise
+# off and turns the check back ON: a job that asks for a label the fleet does not carry now fails the lint
+# instead of queueing forever against a runner that will never pick it up.
+#
+# These are the labels docs/ci-runner.md registers on the Linux instances (`--labels intentic,desktop`) and
+# docs/ci-runner-windows.md on the one Windows box. `self-hosted`, `Linux` and `X64` are applied by the runner
+# itself and actionlint already knows them, so they are deliberately absent.
+self-hosted-runner:
+    labels:
+        # Every Linux runner process on the fleet.
+        - intentic
+        # A superset of `intentic` on the same hosts today — the desktop jobs' label, kept separate so the
+        # split is free the day those jobs move to their own machine.
+        - desktop
+        # The single interactive Windows machine, which carries NEITHER of the two above: `runs-on` is an AND
+        # over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
+        - windows-desktop

@@ -1,0 +1,62 @@
+# zizmor's view of this repository's deliberate exceptions.
+#
+# THIS FILE IS THE GATE'S CREDIBILITY. zizmor at `--min-confidence high` reports 30 findings against these
+# workflows and every one of them is a decision somebody made on purpose. Left unsuppressed the lint is noise,
+# and a noisy lint is one people stop reading and then delete — which is how the checks that would have caught
+# the three unfireable publish triggers were never there in the first place. Suppressed WITHOUT a reason it is
+# worse: a silent allowlist that grows.
+#
+# So each entry below names the trade and says what would have to change for it to go away. A new entry that
+# cannot write those two things is a finding to fix, not to add here.
+rules:
+    # `ghcr.io/intentic/ci-base:latest` and `ci-desktop:latest`, in 25 `container:` blocks.
+    #
+    # THE PIPELINE BUILDS AND MOVES THESE TAGS ITSELF. ci.yml's `ci-base` job rebuilds the image and pushes
+    # `latest` when _tools/ci-base changes, and every other job in every workflow pulls that tag on its next
+    # run — that is the whole mechanism by which a toolchain change reaches the fleet. A digest here would have
+    # to be rewritten by the job that just built the image, in a commit, before any job could use it: a
+    # two-commit dance on every base-image change, for a tag that only this repository can move and that the
+    # `missing()` probe in `changes` already checks the existence of.
+    #
+    # What this costs: a job pulls whatever `latest` points at when it starts, so a base-image change that
+    # lands mid-pipeline can be picked up by later jobs of an earlier commit. ci.yml's ci-desktop comment
+    # covers the version of this that actually bit (a ci-base that built but did not push).
+    #
+    # DELETE THIS SUPPRESSION IF: the CI images ever move to being built somewhere else, or get published by
+    # digest with a bot that opens the bump as a reviewable pull request. Then the pin is free and worth having.
+    unpinned-images:
+        ignore:
+            - action-publish.yml
+            - ci.yml
+            - nightly.yml
+            - release.yml
+            - rollback.yml
+            - verify.yml
+            - vscode-publish.yml
+
+    # `secrets: inherit` on ci.yml's three verify calls and its release call.
+    #
+    # The callees are `./.github/workflows/verify.yml` and `./.github/workflows/release.yml` — IN THIS
+    # REPOSITORY, on the same commit, reviewed in the same diff, and reachable only from a branch pushed here
+    # (the fork boundary, docs/ci-runner.md). zizmor's concern is a called workflow it cannot see; there is no
+    # such workflow here. Enumerating each secret per call would move the same set across the same boundary,
+    # while adding a list that goes stale the first time a job needs one more.
+    #
+    # DELETE THIS SUPPRESSION IF: a call ever targets a workflow outside this repository. Then the secrets have
+    # to be named one by one, because the callee stops being something this repository's review covers.
+    secrets-inherit:
+        ignore:
+            - ci.yml
+
+    # `npm install -g npm@latest` in npm-publish.yml.
+    #
+    # OIDC trusted publishing landed in npm 11.5.1 and Node 24 ships an older 11.x, so the job's own npm cannot
+    # perform the tokenless exchange the whole workflow is built around. The file says this at length. It is an
+    # unpinned fetch, which is a real remark and not a false positive — it is accepted because the alternative
+    # is a floor version pinned here that has to be bumped by hand to stay above whatever npm requires next.
+    #
+    # DELETE THIS SUPPRESSION IF: the pinned Node ships an npm new enough on its own — then the step goes away
+    # entirely rather than being suppressed.
+    adhoc-packages:
+        ignore:
+            - npm-publish.yml

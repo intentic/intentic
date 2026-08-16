@@ -31,7 +31,12 @@ TAG="v${VERSION}"
 
 # Every workflow whose artifacts belong to a release. A new publishing target joins the release by being added
 # here and nowhere else.
-WORKFLOWS=(npm-publish.yml vscode-publish.yml)
+#
+# action-publish.yml was written after the two above were moved off `on: push: tags`, in their shape, and kept
+# the trigger they had just been rescued from — so it was a publish workflow nothing could start, and the
+# Marketplace action was never published at all. Being in THIS LIST is what makes a publish workflow reachable;
+# prepass invariant 10 refuses any workflow that tries to reach itself with a tag push instead.
+WORKFLOWS=(npm-publish.yml vscode-publish.yml action-publish.yml)
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   if [ -n "${CI:-}" ]; then

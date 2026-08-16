@@ -1,6 +1,19 @@
-# Sync the Marketplace GitHub Action to its public repo (intentic/gate-action), from the tag semantic-release
-# pushes — the same trigger and shape as npm-publish.yml, for the same reason: a pushed `v*` tag is a complete,
-# version-stamped tree, so there is nothing to bump and nothing to check out beyond the tag itself.
+# Sync the Marketplace GitHub Action to its public repo (intentic/gate-action), at the tag semantic-release
+# pushes — the same trigger and shape as npm-publish.yml: a pushed `v*` tag is a complete, version-stamped
+# tree, so there is nothing to bump and nothing to check out beyond the tag itself.
+#
+# DISPATCHED, NOT TAG-TRIGGERED, and this file spent its whole life on the wrong side of that. It said
+# `on: push: tags: ["v*"]` and read as if the tag started it. It never did, not once: semantic-release pushes
+# its tag with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created — the
+# loop guard. npm-publish.yml and vscode-publish.yml were moved off that trigger for exactly this reason and
+# this file was written afterwards, in their shape, claiming their trigger, and keeping the broken one — so the
+# action was built by a workflow that could not run, and the Marketplace listing never saw a version. Third
+# occurrence of one bug; prepass invariant 10 is what makes it the last.
+#
+# workflow_dispatch is the ONE exception the loop guard makes, so it is the only trigger the release job's own
+# token can pull (dispatch-publish.sh, which names this file alongside the other two). The dispatch names THE
+# TAG as its ref, so the checkout is the released commit and `GITHUB_REF_NAME` is the version — exactly what a
+# tag push would have given it, which is why nothing below had to change.
 #
 # The action cannot ship from this repository: a Marketplace listing requires a public repo with action.yml at
 # its root, one action per repo. So this builds the self-contained bundle here — where its tests and the
@@ -12,9 +25,10 @@
 # Marketplace listing is a one-time manual step in the UI; releases after that surface on it by themselves.
 name: action publish
 
+# Run it by hand from a tag the same way the release job does: Actions ▸ action publish ▸ Run workflow, with
+# the tag selected as the ref.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read

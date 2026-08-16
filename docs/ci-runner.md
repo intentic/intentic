@@ -88,11 +88,17 @@ every package.
 
 **A Docker daemon.** The image, release and e2e jobs drive it.
 
-**Room for six concurrent jobs.** Verification is split by release group — `verify-core`, `verify-platform` and
-`verify-site` each gate only their own artifacts — and the widest wave of the Actions DAG is **five**:
-those three plus `ci-base` and `e2e-hermetic`. Six is that number plus one slot of headroom, because the waves
-overlap in practice: `images` starts the moment `verify-core` goes green while the other two groups are still
-running.
+**Room for six concurrent jobs — and that is now exactly the wave, not the wave plus headroom.** Verification is
+split by release group — `verify-core`, `verify-platform` and `verify-site` each gate only their own artifacts
+— and the widest wave of the Actions DAG is **six**: those three plus `migrations`, `ci-base` and
+`e2e-hermetic`. It was five when six instances were provisioned; `migrations` is the job that took the spare
+slot. The waves also overlap in practice — `images` starts the moment `verify-core` goes green while the other
+two groups are still running — so at six instances a pipeline can already be queueing against itself.
+
+Not every job in that wave runs in every pipeline (`migrations` needs a platform change, `ci-base` a Dockerfile
+change, `e2e-hermetic` a pull request), so the six collide only sometimes. **Treat the next job added to wave 1
+as needing a seventh runner process**, and re-derive rather than trust the number — the script below is why it
+is written down as a command instead of a sentence.
 
 Derive it rather than trust it — the graph is the source, and it changes. No dependency, because `yaml` is not
 hoisted to the workspace root and `require("yaml")` from there throws:
@@ -201,8 +207,24 @@ the pipeline.
 
 | `runs-on` | Jobs |
 | --- | --- |
-| `[self-hosted, intentic]` | changes, preflight, ci-base, ci-desktop, e2e-hermetic, images, images-platform, verify ×3, nightly e2e |
-| `[self-hosted, intentic, desktop]` | desktop-check, desktop-verify, release, nightly desktop-setup |
+| `[self-hosted, intentic]` (17) | ci: changes, preflight, migrations, ci-base, ci-desktop, e2e-hermetic, images, images-merge, images-platform · verify ×3 · release: plan, images-amd64 · nightly: e2e, images-public · action-publish, vscode-publish, rollback |
+| `[self-hosted, intentic, desktop]` (10) | ci: desktop-check, ic-check, desktop-verify, desktop-windows-build · release: windows-build, linux-build, publish · nightly: desktop-setup, desktop-windows-build, update-survival |
+| `[self-hosted, windows-desktop]` (3) | ci: desktop-verify-windows · release: windows-verify · nightly: desktop-windows |
+
+Regenerate rather than edit — this table went stale once already, and a stale one reads as a capacity claim:
+
+```sh
+node -e 'const fs=require("fs");const by={};
+for(const f of fs.readdirSync(".github/workflows").filter(f=>f.endsWith(".yml"))){
+  const s=fs.readFileSync(".github/workflows/"+f,"utf8").split("\n");let job=null;
+  for(let i=s.findIndex(l=>/^jobs:/.test(l))+1;i<s.length;i++){
+    const h=s[i].match(/^ {2}([A-Za-z_][\w-]*):\s*$/);if(h){job=h[1];continue}
+    const r=s[i].match(/^ {4}runs-on:\s*(.+?)\s*$/);if(r&&job)(by[r[1]]??=[]).push(f.replace(/\.yml$/,"")+"/"+job)}}
+for(const [k,v] of Object.entries(by).sort())console.log(`${k}\n   (${v.length}) ${v.join(", ")}\n`)'
+```
+
+The two GitHub-hosted sets are deliberate and documented where they are used: `ubuntu-24.04` for codeql,
+scorecard and the npm publish, `ubuntu-24.04-arm` for the two native arm64 sandbox builds.
 
 The npm publish is the one job that may **not** run here: npm's registry builds the provenance attestation's
 builder id out of the runner's environment and accepts only `github-hosted`, so `npm-publish.yml` runs on
