@@ -7,12 +7,10 @@ import type { AutomationsStore } from "./automations-store.js";
 
 /* SEEDING — the automations a workspace starts with, and the ledger that makes each a one-time offer.
  *
- * The chore book's rule is that nothing agentic runs enabled-and-hidden. The fix chore bends the first half
- * on purpose — it arrives enabled, because a broken tree costs every conversation that builds on it and the
- * moment it breaks is exactly when nobody is watching a shelf of suggestions — and keeps the second half
- * absolutely: it is an ordinary row on the Automations page, editable and deletable like anything the owner
- * made, and every fire is HELD with a visible countdown before it starts (holdForSeconds), which is the
- * per-run consent that replaces the arm-first click.
+ * The fix chore arrives as an ordinary disabled row on the Automations page, editable and deletable like
+ * anything the owner made. It cannot run until the owner enables it. Every fire is then also HELD with a
+ * visible countdown before it starts (holdForSeconds), so an enabled standing choice still has a cancellable
+ * per-run window.
  *
  * PUBLISHING IS NOT ONE OF THESE ANY MORE, and the reason is the argument that used to justify it. It was
  * seeded enabled so the Drafts page's approve button would not be wired to nothing — which conceded the real
@@ -37,7 +35,7 @@ const DEFAULT_AUTOMATIONS: readonly Automation[] = [
         guard: FIX_DEPS_AUTOMATION.guard,
         holdForSeconds: FIX_DEPS_AUTOMATION.holdForSeconds,
         chore: true,
-        enabled: true,
+        enabled: false,
     },
 ];
 

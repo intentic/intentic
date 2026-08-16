@@ -44,8 +44,9 @@ reports the profile.
 - Manage the app dev server and report preview status — including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
-  edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
-  the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
+  edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore once the owner enables it — every step in a
+  visible terminal panel and the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts →
+  src/automations).
 - Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/drafts/`, src/drafts),
   the owner approves them on the Drafts page, and the daemon itself sends each one the moment it comes due —
   sleeping on one timer until then rather than sweeping, since it is the process that wrote the deadline. A

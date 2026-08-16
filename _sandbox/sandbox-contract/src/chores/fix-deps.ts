@@ -16,10 +16,9 @@
  * Attempt 1 is the breakage, attempt 2 is one landed fix that still failed; past that the loop stops and the
  * standing red is the owner's to read (the activity feed has been narrating every step).
  *
- * THE HOLD IS THE CONSENT. This automation is seeded enabled — the one exception to "the owner started it",
- * made deliberately: a broken tree costs every conversation that builds on it, and the countdown is what
- * keeps the owner in charge — each fire is held, visibly, for this many seconds on the Automations page
- * before it starts, cancellable the whole way, and it never starts while another agent is mid-turn. */
+ * THE HOLD IS THE SECOND CHANCE. This automation is seeded disabled, so the owner must explicitly turn it on.
+ * Once enabled, each fire is also held, visibly, for this many seconds on the Automations page before it starts,
+ * cancellable the whole way, and it never starts while another agent is mid-turn. */
 export const FIX_DEPS_AUTOMATION = {
     id: "fix-dependency-breakage",
     title: "Fix what a dependency change broke",

@@ -14,12 +14,12 @@ const stores = (): { automations: ReturnType<typeof fileAutomationsStore>; ledge
     };
 };
 
-test("a fresh workspace is seeded the fix chore — enabled, held per fire, visible like any other row", async () => {
+test("a fresh workspace is offered the fix chore disabled, held per fire, and visible like any other row", async () => {
     const { automations, ledger } = stores();
     await seedDefaultAutomations(automations, ledger);
     const seeded = await automations.get(FIX_DEPS_AUTOMATION.id);
     expect(seeded).toMatchObject({
-        enabled: true,
+        enabled: false,
         chore: true,
         holdForSeconds: FIX_DEPS_AUTOMATION.holdForSeconds,
         trigger: { kind: "workspace", event: "deps.broken" },
