@@ -141,7 +141,7 @@ const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions:
 // Which files the user has already eyeballed, per agent id — a GitHub-style "viewed" pass, and the one piece of
 // review state the daemon has no opinion about. Module-level, so stepping out to the workspace and back does
 // not lose the pass; in-memory only, because a reload means a fresh look anyway.
-const viewedByAgent = ref<Record<string, ReadonlySet<string>>>({});
+const viewedByAgent = ref<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
 const NONE: ReadonlySet<string> = new Set();
 
 // The agents whose land conflict the user has handed back to them — see `asked` below for what retires it.
@@ -225,7 +225,7 @@ export function useAgentChanges(agentId: Ref<string>) {
     // opens without a round trip, and the +/− beside it is already counted.
     const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> => agentFileDiff(agentId.value, repo, path);
 
-    const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value[agentId.value] ?? NONE);
+    const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value.get(agentId.value) ?? NONE);
     // Counted over the CURRENT rows, so a file the agent has since reverted stops inflating the progress.
     const viewedCount = computed(() => files.value.filter((file) => viewed.value.has(file.key)).length);
     // A SET of keys, not one: the panel ticks whole headings off (a repo, a package), and a per-key setter made
@@ -239,7 +239,9 @@ export function useAgentChanges(agentId: Ref<string>) {
                 next.delete(key);
             }
         }
-        viewedByAgent.value = { ...viewedByAgent.value, [agentId.value]: next };
+        const byAgent = new Map(viewedByAgent.value);
+        byAgent.set(agentId.value, next);
+        viewedByAgent.value = byAgent;
     };
 
     const { busy: actionBusy, notice: actionError, run } = useAsyncAction();

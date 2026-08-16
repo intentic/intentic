@@ -774,20 +774,22 @@ const archivedFlash = ref(0);
 // as fast as they can click, so two calls overlap constantly, and a shared "the ids in flight" ref meant the
 // first one to finish cleared the second one's spinner — the card went quiet while its request was still open.
 // Each call now releases only what it claimed.
-const busyCounts = ref<Record<string, number>>({});
-const busyIds = computed(() => Object.keys(busyCounts.value));
+const busyCounts = ref<ReadonlyMap<string, number>>(new Map());
+const busyIds = computed(() => [...busyCounts.value.keys()]);
 const claimBusy = (ids: readonly string[]): (() => void) => {
+    const claimed = new Map(busyCounts.value);
     for (const id of ids) {
-        busyCounts.value = { ...busyCounts.value, [id]: (busyCounts.value[id] ?? 0) + 1 };
+        claimed.set(id, (claimed.get(id) ?? 0) + 1);
     }
+    busyCounts.value = claimed;
     return () => {
-        const next = { ...busyCounts.value };
+        const next = new Map(busyCounts.value);
         for (const id of ids) {
-            const held = (next[id] ?? 0) - 1;
+            const held = (next.get(id) ?? 0) - 1;
             if (held > 0) {
-                next[id] = held;
+                next.set(id, held);
             } else {
-                delete next[id];
+                next.delete(id);
             }
         }
         busyCounts.value = next;

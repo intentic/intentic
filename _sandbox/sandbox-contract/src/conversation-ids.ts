@@ -146,14 +146,27 @@ const NOUNS = [
 // collision far past the life of any workspace, and is still short enough to be ignored while reading.
 const TAIL_LENGTH = 4;
 
+// A Uint32Array draw has 2^32 possible values. Reject the short remainder above the last full bucket before
+// dividing it into `upperBound` equal ranges; folding that remainder back with `%` makes its first few answers
+// slightly more likely, which is exactly the bias a CSPRNG is meant to avoid.
+const UINT32_RANGE = 0x1_0000_0000;
+const randomBelow = (upperBound: number): number => {
+    const bucketSize = Math.floor(UINT32_RANGE / upperBound);
+    const limit = bucketSize * upperBound;
+    while (true) {
+        const value = crypto.getRandomValues(new Uint32Array(1))[0]!;
+        if (value < limit) {
+            return Math.floor(value / bucketSize);
+        }
+    }
+};
+
 // Uniform over the array, drawn from the platform CSPRNG — `Math.random()` is seeded per process, and two
 // browser tabs opened in the same instant are exactly the case this must not produce the same name for.
-const pick = <T>(values: readonly T[]): T => values[randomInts(1)[0]! % values.length]!;
+const pick = <T>(values: readonly T[]): T => values[randomBelow(values.length)]!;
 
-const randomInts = (count: number): Uint32Array => crypto.getRandomValues(new Uint32Array(count));
-
-// Lowercase base36, one character per drawn word — 0-9a-z, all of which the id guard accepts.
-const tail = (): string => Array.from(randomInts(TAIL_LENGTH), (value) => (value % 36).toString(36)).join("");
+// Lowercase base36, one character per draw — 0-9a-z, all of which the id guard accepts.
+const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => randomBelow(36).toString(36)).join("");
 
 /* A fresh conversation id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`. Sixteen characters or so
  * against a UUID's thirty-six, and the first eleven of them are the ones a person reads. */

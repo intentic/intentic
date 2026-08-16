@@ -897,6 +897,26 @@ describe("archive", () => {
             expect(busyIds.value).toEqual([]);
         });
 
+        it("treats object prototype names as ordinary ids across overlapping claims", async () => {
+            const { archive, busyIds } = useAgents();
+            setAgents([agent(`__proto__`), agent(`constructor`)], 1);
+            const first = deferred<unknown>();
+            const second = deferred<unknown>();
+            post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
+
+            const both = archive([`__proto__`, `constructor`]);
+            const constructorAgain = archive([`constructor`]);
+            expect(busyIds.value.toSorted()).toEqual([`__proto__`, `constructor`]);
+
+            first.resolve({ moved: [], rev: 7 });
+            await both;
+            expect(busyIds.value).toEqual([`constructor`]);
+
+            second.resolve({ moved: [], rev: 8 });
+            await constructorAgain;
+            expect(busyIds.value).toEqual([]);
+        });
+
         it("never lets the slower response put the faster one's card back", async () => {
             const { archive, lanes, archived } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
