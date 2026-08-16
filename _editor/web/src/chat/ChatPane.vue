@@ -2278,14 +2278,6 @@ watch(
                                 <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met — ends on
                                 {{ loopDesignLine(pickedLoop) }}.
                             </p>
-                            <!-- The armed voice's own sentence, and it says the consequential half out loud: not
-                                 just "no reply", but that the agent will treat these words as its own from its
-                                 next turn on. That is the feature — and exactly the thing worth one line of
-                                 reading before the press, because it steers everything the agent does after. -->
-                            <p v-else-if="voiceAgent" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="robot" class="shrink-0 text-2xs text-link" />Send places these words into the transcript as
-                                {{ providerName }}'s own — no reply runs, and from its next turn the agent reads them as something it said.
-                            </p>
                             <!-- A persona that CANNOT do what the pill implies, said where the message is being
                                  written rather than discovered when the turn comes back empty-handed. Only ever
                                  the states the pill itself can't show: a card that has gone missing, one with no
