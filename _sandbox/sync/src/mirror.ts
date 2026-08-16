@@ -28,6 +28,7 @@ import {
 } from "./mutagen.js";
 import { machineReport, scopedReport } from "./report.js";
 import { sshAlias } from "./ssh.js";
+import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
 // Port mirroring: every WORKSPACE port listening in a paired sandbox is bound to the SAME port on this machine's
 // localhost, over Mutagen TCP forward sessions riding the enrolled SSH transport. This is what makes remote
@@ -352,6 +353,12 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         log("no sandboxes are paired — nothing to mirror. Enable it from a sandbox's Desktop sync card.");
         return;
     }
+    /* THE TRANSPORT, BEFORE ANY SESSION — this process is what puts the sandbox's sshd on loopback (tunnel.ts),
+     * so Mutagen has nothing to connect to until these listeners are bound. Reconciled again on every tick
+     * below, for the same reason the pairing list is re-read: a sandbox paired or dropped while this is running
+     * must gain or lose its transport without a restart. */
+    const tunnels = createTunnelPool(log);
+    await tunnels.reconcile(tunnelTargets(initial.pairings));
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
     // syncs it INHERITED — Mutagen bakes a session's ignores at creation, so an install that swapped the binary
     // without re-pairing would otherwise keep syncing on whatever rules were current the day it first paired.
@@ -380,11 +387,16 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             if (state.pairings.length === 0) {
                 // Nothing left to serve: stop for good rather than polling an empty list at every login. A
                 // pairing that was revoked mid-loop lands here on the next tick.
+                await tunnels.stopAll();
                 await unregisterAutostart(MIRROR_AUTOSTART, log);
                 await rm(mirrorPidPath, { force: true });
                 log("no sandboxes are paired any more — watcher exiting. Re-enable from a sandbox's Desktop sync card.");
                 return;
             }
+            // Before the port reconcile, because that reconcile and the git bridge under it both ride this
+            // transport: a pairing added since the last tick needs its listener up before anything asks it to
+            // carry an ssh connection.
+            await tunnels.reconcile(tunnelTargets(state.pairings));
             // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
             const claimedBy = new Map<number, string>();
             for (const pairing of state.pairings) {

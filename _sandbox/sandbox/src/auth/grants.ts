@@ -101,9 +101,16 @@ const panelReach = (_method: string, path: string): boolean => !CONNECTION_READ.
  *
  * The write grants nothing back: the report is stored in memory, filed under the enrollment whose token presented
  * it rather than under any name the body claims, and read back only by this sandbox's own collaborators. It does
- * not widen what the agent can LEARN by a single route. */
+ * not widen what the agent can LEARN by a single route.
+ *
+ * It also opens ONE stream: the SSH transport desktop sync runs on (platform/sync-ssh.ts), which is a byte pipe
+ * to this container's sshd and nothing else — no host and no port travel with the request. What it reaches
+ * there is guarded a second time and independently, by sshd's public-key check against the key this same
+ * enrollment installed, so the grant widens the agent's reach by a transport rather than by a capability. */
 const syncReach = (method: string, path: string): boolean =>
-    (method === "GET" && path === "/ports") || (method === "POST" && path === "/system/sync/report");
+    (method === "GET" && path === "/ports") ||
+    (method === "GET" && path === "/system/sync/ssh") ||
+    (method === "POST" && path === "/system/sync/report");
 
 export interface GrantSources {
     readonly panelToken: string;

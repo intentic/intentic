@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { baseDir, knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import { syncSshPort } from "./tunnel.js";
 
 // Paths Mutagen must NOT two-way-sync. Its OWN purpose-built list (not the daemon's search-ignore set): it must
 // also exclude secret files + the daemon's .intentic state, which the search-ignore set deliberately keeps visible.
@@ -55,26 +56,36 @@ export const sshAlias = (sandboxId: string): string => `intentic-sync-${sanitize
 // verbatim, where a POSIX-only spelling (/c/… vs /cygdrive/c/…) differs per build.
 const slashPath = (path: string): string => path.replaceAll("\\", "/");
 
-// The ssh-config stanza Mutagen's `ssh` uses to reach the sandbox: routed through the Cloudflare tunnel via
-// cloudflared's ProxyCommand, authed by our dedicated key, with an isolated known_hosts so first-connect
-// auto-accept can't be poisoned by (or poison) the user's global hosts file.
+/* The ssh-config stanza Mutagen's `ssh` uses to reach the sandbox — now a plain loopback address, because the
+ * transport is a listener this agent runs (tunnel.ts) rather than a hostname somebody's fabric resolves.
+ *
+ * That deletes the ProxyCommand and the `cloudflared` download behind it. It was there because the SSH endpoint
+ * was a real public hostname reached through a Cloudflare tunnel, which stopped being true for every sandbox on
+ * the platform's own reachability path.
+ *
+ * The isolated known_hosts stays, and matters MORE here: every sandbox's transport is now `127.0.0.1` at a
+ * different port, so a shared hosts file would collect one entry per sandbox against the same address — and the
+ * user's own global file would see 127.0.0.1's key change under it every time they pair another. Ours is
+ * per-agent and keyed the same way, so accept-new can neither be poisoned by it nor poison it. */
 export const sshConfigBlock = (args: {
     readonly alias: string;
-    readonly hostname: string;
+    readonly port: number;
     readonly identityFile: string;
     readonly knownHostsFile: string;
-    readonly cloudflaredPath: string;
 }): string =>
     [
         `Host ${args.alias}`,
-        `    HostName ${args.hostname}`,
+        "    HostName 127.0.0.1",
+        `    Port ${args.port}`,
         "    User root",
+        // Paths are quoted: Windows profile paths often contain spaces (C:\Users\First Last\…).
         `    IdentityFile "${slashPath(args.identityFile)}"`,
         "    IdentitiesOnly yes",
         `    UserKnownHostsFile "${slashPath(args.knownHostsFile)}"`,
         "    StrictHostKeyChecking accept-new",
-        // Paths are quoted: Windows profile paths often contain spaces (C:\Users\First Last\…).
-        `    ProxyCommand "${slashPath(args.cloudflaredPath)}" access ssh --hostname %h`,
+        // Every pairing's transport answers on 127.0.0.1, so the host key must be remembered against the PORT
+        // too — without this, pairing a second sandbox looks to ssh like the first one's key changing.
+        "    HostKeyAlias %h",
         "",
     ].join("\n");
 
@@ -122,18 +133,14 @@ export const ensureSshKey = async (): Promise<string> => {
 // The whole fragment for a set of pairings: one Host block each, in pairing order. Regenerated from the pairing
 // list rather than appended to, so adding or dropping one sandbox can neither duplicate a block nor strip a
 // sibling's — which is what a single-block overwrite did to every other sandbox on the machine.
-export const pairingSshConfig = (
-    pairings: readonly { readonly sandboxId: string; readonly sshHostname: string }[],
-    cloudflaredPath: string,
-): string =>
+export const pairingSshConfig = (pairings: readonly { readonly sandboxId: string }[]): string =>
     pairings
         .map((pairing) =>
             sshConfigBlock({
                 alias: sshAlias(pairing.sandboxId),
-                hostname: pairing.sshHostname,
+                port: syncSshPort(pairing.sandboxId),
                 identityFile: sshKeyPath,
                 knownHostsFile: knownHostsPath,
-                cloudflaredPath,
             }),
         )
         .join("\n");
@@ -188,25 +195,35 @@ export const mutagenSshPath = (platform: NodeJS.Platform, override: string | und
     return dirs.map((dir) => join(dir, platform === "win32" ? "ssh.exe" : "ssh")).find((candidate) => existsSync(candidate)) ?? "ssh";
 };
 
-// The HostName `ssh -G <alias>` resolved to. `-G` prints the fully expanded configuration, so this is ground
-// truth for "did THAT client read our block": one that never saw the include echoes the alias straight back.
-export const resolvedHostname = (sshGOutput: string): string | undefined => /^hostname (.+)$/m.exec(sshGOutput)?.[1]?.trim();
+/* What `ssh -G <alias>` resolved the alias to. `-G` prints the fully expanded configuration, so this is ground
+ * truth for "did THAT client read our block": one that never saw the include echoes the alias straight back as
+ * the hostname, on the default port.
+ *
+ * The PORT is half the answer now, and the more specific half: every pairing's transport is on 127.0.0.1, so a
+ * hostname match alone would also be satisfied by a stale block, by another tool's `Host *` entry, or by the
+ * previous pairing's stanza — while the port is derived per sandbox and belongs to exactly one of them. */
+export const resolvedEndpoint = (sshGOutput: string): { hostname?: string; port?: number } => {
+    const host = /^hostname (.+)$/m.exec(sshGOutput)?.[1]?.trim();
+    const port = Number(/^port (\d+)$/m.exec(sshGOutput)?.[1]);
+    return { ...(host === undefined ? {} : { hostname: host }), ...(Number.isInteger(port) ? { port } : {}) };
+};
 
 // Fail here, where the cause is still knowable, rather than three layers down in Mutagen. An ssh that cannot
 // see our config dials the alias as a literal hostname and the whole story arrives as "unable to receive server
 // magic number: EOF (error output: ssh: Could not resolve hostname intentic-sync-…)".
-export const assertSshConfigVisible = (ssh: string, alias: string, expected: string): void => {
+export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort: number): void => {
     const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8" });
     if (result.error !== undefined) {
         throw new Error(`could not run "${ssh}", the SSH client Mutagen drives the sync transport with: ${result.error.message}`);
     }
-    const resolved = resolvedHostname(result.stdout);
-    if (resolved === expected) {
+    const resolved = resolvedEndpoint(result.stdout);
+    if (resolved.hostname === "127.0.0.1" && resolved.port === expectedPort) {
         return;
     }
+    const expected = `127.0.0.1:${expectedPort}`;
     throw new Error(
         [
-            `"${ssh}" — the SSH client Mutagen uses — resolves ${alias} to "${resolved ?? "nothing"}" instead of ${expected},`,
+            `"${ssh}" — the SSH client Mutagen uses — resolves ${alias} to "${resolved.hostname ?? "nothing"}:${resolved.port ?? "?"}" instead of ${expected},`,
             `so it is not reading ${sshConfigPath}, which ${userSshConfigPath} includes. Most often that client resolves`,
             `~ to a home directory other than ${homedir()}.`,
             ...(result.stderr.trim() === "" ? [] : [result.stderr.trim()]),

@@ -37,6 +37,35 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await agent.authorize("intruder", "GET", "/capabilities/npm/otp")).toBe("unauthorized");
 });
 
+/* The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a
+ * laptop, so what it can reach is what a stolen laptop can reach. Three things and nothing else — the port
+ * listing, the machine's own report, and the SSH byte pipe desktop sync runs on. The pipe is pinned to the GET
+ * that opens it: every other shape of that path, and every neighbouring sync route, must stay out of scope. */
+test("the sync grant reaches ports, its own report and the ssh transport, and nothing else", async () => {
+    const grants = grantsOf({
+        panelToken: "panel",
+        agentToken: "agent",
+        controlTokens: { scopeOf: async () => undefined } as unknown as ControlTokens,
+        verifySync: async (presented) => presented === "sync",
+        verifyExtension: () => undefined,
+    });
+    const sync = grants.find((grant) => grant.header === "x-intentic-sync");
+    if (sync === undefined) {
+        throw new Error("no sync grant in the table");
+    }
+    expect(await sync.authorize("sync", "GET", "/ports")).toBe("ok");
+    expect(await sync.authorize("sync", "POST", "/system/sync/report")).toBe("ok");
+    expect(await sync.authorize("sync", "GET", "/system/sync/ssh")).toBe("ok");
+    // The enrollment surface itself is never in reach of the credential it hands out — a machine cannot enroll
+    // another, nor read who else syncs, nor open the transport by any verb but the one that upgrades.
+    expect(await sync.authorize("sync", "POST", "/system/sync/ssh")).toBe("out-of-scope");
+    expect(await sync.authorize("sync", "GET", "/system/sync")).toBe("out-of-scope");
+    expect(await sync.authorize("sync", "POST", "/system/authorized-key")).toBe("out-of-scope");
+    expect(await sync.authorize("sync", "GET", "/secrets")).toBe("out-of-scope");
+    // A revoked or forged token on an in-scope route is 401, never a fall-through.
+    expect(await sync.authorize("intruder", "GET", "/system/sync/ssh")).toBe("unauthorized");
+});
+
 /* The panel grant is broad on purpose — a panel is an app somebody else wrote — with exactly one route carved
  * out of it. `/capabilities/<id>/connection` returns a capability's config SECRETS INCLUDED and gates only on
  * "no signed-in identity", which the panel token satisfies as surely as the extension token it was written

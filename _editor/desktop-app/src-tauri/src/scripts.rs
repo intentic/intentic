@@ -1,6 +1,10 @@
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::path::BaseDirectory;
@@ -159,6 +163,43 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
     Ok(command)
 }
 
+/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever.
+ *
+ * A run ends when the script exits. It does NOT end when the pipes close, because on Windows those are not the
+ * same event: setup installs resident background agents (the connected-computer loop, the sync mirror watcher),
+ * each spawned detached so it outlives the terminal that started it — and a detached process on Windows inherits
+ * the inheritable handles of the process that spawned it, this app's stdout/stderr pipes among them. The agent
+ * then holds the write end open for as long as it runs, which is forever by design.
+ *
+ * Joining the pump threads before reporting the exit therefore hung the whole screen: connect.ps1 had printed
+ * its last line and exited, the sandbox was up, the computer was connected — and the setup card span on
+ * "connecting this computer…" with no exit event, no error, and no way out but quitting the app.
+ *
+ * So the exit is emitted on the CHILD's exit and the pipes get a short window to hand over whatever is still
+ * buffered in them. Threads still blocked on a read after that are abandoned rather than joined; they are
+ * parked on a handle nobody will close, and the flag below is what stops a stray line from a background agent
+ * being drawn into a run that finished minutes ago. */
+const DRAIN_GRACE: Duration = Duration::from_millis(750);
+
+/// Wait for `pumps` pipe readers to report they reached the end of their stream, for at most `grace` in total.
+/// True when every one of them did — false when the window ran out with a reader still parked on a handle
+/// somebody else is holding open, which is the case [`DRAIN_GRACE`] exists for.
+///
+/// Split out from [`run`] because it is the whole of the fix and the only part of it that can be exercised
+/// without a window: what it must never do is block past the grace, no matter how many readers stay silent.
+fn await_drain(drains: &Receiver<()>, pumps: usize, grace: Duration) -> bool {
+    let deadline = Instant::now() + grace;
+    for _ in 0..pumps {
+        if drains
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .is_err()
+        {
+            return false;
+        }
+    }
+    true
+}
+
 /// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
 ///
@@ -176,40 +217,52 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let pump = |handle: Option<Box<dyn std::io::Read + Send>>, stream: Stream| {
-        let app = app.clone();
-        let id = id.to_string();
-        std::thread::spawn(move || {
-            let Some(handle) = handle else {
-                return;
-            };
-            for line in BufReader::new(handle).lines().map_while(Result::ok) {
-                let _ = app.emit(
-                    RUN_EVENT,
-                    RunEvent::Line {
-                        run: id.clone(),
-                        stream,
-                        text: line,
-                    },
-                );
-            }
-        })
-    };
-    let out = pump(
+    // Live for as long as this run is the one being drawn. A pump left parked on a pipe a background agent
+    // still holds checks this before it emits, so its next line goes nowhere instead of into a finished run.
+    let reporting = Arc::new(AtomicBool::new(true));
+    let (drained, drains) = channel::<()>();
+    let pump =
+        |handle: Option<Box<dyn std::io::Read + Send>>, stream: Stream, drained: Sender<()>| {
+            let app = app.clone();
+            let id = id.to_string();
+            let reporting = Arc::clone(&reporting);
+            std::thread::spawn(move || {
+                if let Some(handle) = handle {
+                    for line in BufReader::new(handle).lines().map_while(Result::ok) {
+                        if !reporting.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        let _ = app.emit(
+                            RUN_EVENT,
+                            RunEvent::Line {
+                                run: id.clone(),
+                                stream,
+                                text: line,
+                            },
+                        );
+                    }
+                }
+                let _ = drained.send(());
+            })
+        };
+    pump(
         stdout.map(|handle| Box::new(handle) as Box<dyn std::io::Read + Send>),
         Stream::Stdout,
+        drained.clone(),
     );
-    let err = pump(
+    pump(
         stderr.map(|handle| Box::new(handle) as Box<dyn std::io::Read + Send>),
         Stream::Stderr,
+        drained,
     );
 
     let status = child
         .wait()
         .map_err(|error| format!("{} did not finish: {error}", script.file))?;
-    // Join AFTER wait: the pumps end when their pipes close, which is when the child exits.
-    let _ = out.join();
-    let _ = err.join();
+    // The child is gone; give its pipes a moment to hand over the tail of their buffers, then stop listening
+    // whether or not they closed. See DRAIN_GRACE — on Windows they may never close at all.
+    await_drain(&drains, 2, DRAIN_GRACE);
+    reporting.store(false, Ordering::Relaxed);
 
     let _ = app.emit(
         RUN_EVENT,
@@ -346,6 +399,45 @@ mod tests {
         assert_eq!(
             Host::Windows.script("connect.sh", "connect.ps1"),
             "connect.ps1"
+        );
+    }
+
+    /* THE HANG THIS APP SHIPPED WITH, AS TWO ASSERTIONS.
+     *
+     * A setup run installs resident background agents, and on Windows a detached process inherits the pipes of
+     * whoever spawned it — so the app's stdout pipe stays open for as long as the connected-computer agent
+     * runs. Waiting on the readers before reporting the exit meant the setup card span forever on a machine
+     * whose sandbox was already up. The second test is the one that matters: a reader that never finishes must
+     * cost the grace and nothing more. */
+    #[test]
+    fn a_drain_that_completes_costs_nothing() {
+        let (drained, drains) = channel::<()>();
+        drained.send(()).expect("first pump reports");
+        drained.send(()).expect("second pump reports");
+
+        let started = Instant::now();
+        assert!(await_drain(&drains, 2, Duration::from_secs(30)));
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "two pumps that already reported must not wait on the grace at all"
+        );
+    }
+
+    #[test]
+    fn a_pump_that_never_finishes_costs_only_the_grace() {
+        let grace = Duration::from_millis(200);
+        let (drained, drains) = channel::<()>();
+        drained.send(()).expect("the one pump that ends reports");
+        // The other end stays alive and silent — a background agent holding the write handle open.
+        let _held_open = drained;
+
+        let started = Instant::now();
+        assert!(!await_drain(&drains, 2, grace));
+        let waited = started.elapsed();
+        assert!(waited >= grace, "the grace is a real window, not a poll");
+        assert!(
+            waited < grace * 10,
+            "waited {waited:?} — a silent pump must never hold a finished run open"
         );
     }
 

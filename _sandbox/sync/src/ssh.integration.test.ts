@@ -9,12 +9,13 @@ import {
     INCLUDE_MARKER,
     mutagenSshPath,
     pairingSshConfig,
-    resolvedHostname,
+    resolvedEndpoint,
     sanitizeId,
     sshAlias,
     sshConfigBlock,
     stripManagedIncludes,
 } from "./ssh.js";
+import { syncSshPort } from "./tunnel.js";
 
 describe("id sanitization", () => {
     it("keeps only alias-safe chars and trims stray dashes", () => {
@@ -30,30 +31,35 @@ describe("id sanitization", () => {
 describe("sshConfigBlock", () => {
     const block = sshConfigBlock({
         alias: "intentic-sync-x",
-        hostname: "ssh-abc123.example.dev",
+        port: 24567,
         identityFile: "/home/u/.intentic/sync/id_ed25519",
         knownHostsFile: "/home/u/.intentic/sync/known_hosts",
-        cloudflaredPath: "/home/u/.intentic/sync/bin/cloudflared",
     });
-    it("routes through cloudflared and pins our key + known_hosts", () => {
+    it("points at this machine's own transport port and pins our key + known_hosts", () => {
         expect(block).toContain("Host intentic-sync-x");
-        expect(block).toContain("HostName ssh-abc123.example.dev");
-        expect(block).toContain('ProxyCommand "/home/u/.intentic/sync/bin/cloudflared" access ssh --hostname %h');
+        expect(block).toContain("HostName 127.0.0.1");
+        expect(block).toContain("Port 24567");
         expect(block).toContain('IdentityFile "/home/u/.intentic/sync/id_ed25519"');
         expect(block).toContain("IdentitiesOnly yes");
         expect(block).toContain('UserKnownHostsFile "/home/u/.intentic/sync/known_hosts"');
     });
+    // Every sandbox's transport answers on 127.0.0.1, so without an alias the host key of the second sandbox
+    // paired reads as the first one's key having changed — which ssh refuses, loudly, in a log nobody reads.
+    it("keys known_hosts by the alias, so two sandboxes on one loopback address never collide", () => {
+        expect(block).toContain("HostKeyAlias %h");
+    });
+    it("no longer routes through a tunnel client — the transport is local", () => {
+        expect(block).not.toContain("ProxyCommand");
+    });
     it("quotes Windows paths with spaces and converts backslashes (OpenSSH globs paths POSIX-style)", () => {
         const win = sshConfigBlock({
             alias: "intentic-sync-x",
-            hostname: "ssh-abc123.example.dev",
+            port: 24567,
             identityFile: "C:\\Users\\First Last\\.intentic\\sync\\id_ed25519",
             knownHostsFile: "C:\\Users\\First Last\\.intentic\\sync\\known_hosts",
-            cloudflaredPath: "C:\\Users\\First Last\\.intentic\\sync\\bin\\cloudflared.exe",
         });
         expect(win).toContain('IdentityFile "C:/Users/First Last/.intentic/sync/id_ed25519"');
         expect(win).toContain('UserKnownHostsFile "C:/Users/First Last/.intentic/sync/known_hosts"');
-        expect(win).toContain('ProxyCommand "C:/Users/First Last/.intentic/sync/bin/cloudflared.exe" access ssh --hostname %h');
     });
 });
 
@@ -68,22 +74,25 @@ describe("sshConfigBlock", () => {
  * ssh then dialled the alias as a literal hostname — surfacing, if at all, as "unable to receive server magic
  * number: EOF" in a log nobody was reading. */
 describe("pairingSshConfig", () => {
-    const pairings = [
-        { sandboxId: "sandbox-0738cd6b5027.intentic.dev", sshHostname: "ssh-0738cd6b5027.intentic.dev" },
-        { sandboxId: "sandbox-bce57bb9fe3b.intentic.dev", sshHostname: "ssh-bce57bb9fe3b.intentic.dev" },
-    ];
+    const pairings = [{ sandboxId: "sandbox-0738cd6b5027.intentic.dev" }, { sandboxId: "sandbox-bce57bb9fe3b.intentic.dev" }];
 
-    it("emits a Host block for every paired sandbox, each on its own hostname", () => {
-        const fragment = pairingSshConfig(pairings, "/home/u/.intentic/sync/bin/cloudflared");
+    it("emits a Host block for every paired sandbox, each on its own transport port", () => {
+        const fragment = pairingSshConfig(pairings);
         expect(fragment).toContain(`Host ${sshAlias("sandbox-0738cd6b5027.intentic.dev")}`);
-        expect(fragment).toContain("HostName ssh-0738cd6b5027.intentic.dev");
+        expect(fragment).toContain(`Port ${syncSshPort("sandbox-0738cd6b5027.intentic.dev")}`);
         expect(fragment).toContain(`Host ${sshAlias("sandbox-bce57bb9fe3b.intentic.dev")}`);
-        expect(fragment).toContain("HostName ssh-bce57bb9fe3b.intentic.dev");
+        expect(fragment).toContain(`Port ${syncSshPort("sandbox-bce57bb9fe3b.intentic.dev")}`);
         expect(fragment.match(/^Host /gm)).toHaveLength(2);
     });
 
+    // Two sandboxes sharing one port would give each other's ssh the wrong sandbox — silently, since both ends
+    // authenticate fine. The derivation is per-id for exactly this reason.
+    it("gives two sandboxes two different ports", () => {
+        expect(syncSshPort("sandbox-0738cd6b5027.intentic.dev")).not.toBe(syncSshPort("sandbox-bce57bb9fe3b.intentic.dev"));
+    });
+
     it("is empty when nothing is paired, so unpairing the last sandbox leaves no dangling alias", () => {
-        expect(pairingSshConfig([], "/usr/bin/cloudflared")).toBe("");
+        expect(pairingSshConfig([])).toBe("");
     });
 });
 
@@ -126,17 +135,25 @@ describe("mutagenSshPath", () => {
 
 // `ssh -G` prints the fully expanded config, so it is ground truth for whether THAT client read our block —
 // one that never saw the include echoes the alias back as the hostname, which is the failure we now catch.
-describe("resolvedHostname", () => {
-    it("reads the resolved HostName out of `ssh -G`", () => {
-        expect(resolvedHostname("host intentic-sync-x\nuser root\nhostname ssh-abc123.example.dev\nport 22\n")).toBe("ssh-abc123.example.dev");
+describe("resolvedEndpoint", () => {
+    it("reads the resolved HostName and Port out of `ssh -G`", () => {
+        expect(resolvedEndpoint("host intentic-sync-x\nuser root\nhostname 127.0.0.1\nport 24567\n")).toEqual({
+            hostname: "127.0.0.1",
+            port: 24567,
+        });
     });
 
-    it("reads back the alias itself when the config was invisible", () => {
-        expect(resolvedHostname("host intentic-sync-x\nhostname intentic-sync-x\nport 22\n")).toBe("intentic-sync-x");
+    // The port is what makes the check specific: every pairing's transport is on 127.0.0.1, so a stale block or
+    // somebody's `Host *` entry could satisfy the hostname alone while pointing ssh at the wrong sandbox.
+    it("reads back the alias itself on the default port when the config was invisible", () => {
+        expect(resolvedEndpoint("host intentic-sync-x\nhostname intentic-sync-x\nport 22\n")).toEqual({
+            hostname: "intentic-sync-x",
+            port: 22,
+        });
     });
 
-    it("is undefined when ssh printed no hostname at all", () => {
-        expect(resolvedHostname("")).toBeUndefined();
+    it("is empty when ssh printed neither", () => {
+        expect(resolvedEndpoint("")).toEqual({});
     });
 });
 

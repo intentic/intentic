@@ -8,7 +8,6 @@ const WATCHER = { running: true, pid: 4242 };
 
 const pairing = (overrides: Partial<Pairing> & Pick<Pairing, "sandboxId">): Pairing => ({
     sandboxUrl: `https://${overrides.sandboxId}.example.dev`,
-    sshHostname: `ssh-${overrides.sandboxId}.example.dev`,
     mode: "sync",
     ...overrides,
 });

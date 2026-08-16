@@ -10,8 +10,9 @@ import { MIRROR_AUTOSTART } from "./autostart.js";
 import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
-import { ensureCloudflared, ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
+import { ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
 import { machineReport } from "./report.js";
+import { syncSshPort, tunnelReady } from "./tunnel.js";
 import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
 import { SYNC_VERSION } from "./version.js";
 import {
@@ -49,20 +50,20 @@ export const selectPairings = (state: SyncState, selector: string | undefined): 
     return matched;
 };
 
-// Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon returns the tunnel's
-// SSH hostname + the sync token `mirror` reads /ports with — the only HTTP surface the agent ever touches;
-// everything else is Mutagen over SSH.
-// This fires right after connect.sh starts the sandbox's cloudflared sidecar, so the public tunnel may still be
-// warming up: Cloudflare's edge answers before the origin is registered (transient 502/503/504), or the host
-// doesn't resolve yet (fetch throws). Retry through that. 401 (pairing expired) and other 4xx are the daemon's
-// own definitive answers — never retried.
+// Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon answers with the
+// sync token — the credential this agent presents for the port read, its own machine report, and the SSH
+// transport it serves on loopback (tunnel.ts). No address comes back: the sandbox is reached at the URL we
+// already hold, which is what makes every sandbox sync the same way.
+// This fires right after the sandbox's tunnel comes up, so it may still be warming: the edge answers before the
+// origin is registered (transient 502/503/504), or the host doesn't resolve yet (fetch throws). Retry through
+// that. 401 (pairing expired) and other 4xx are the daemon's own definitive answers — never retried.
 // ponytail: fixed ~30s window (10 × 3s); widen only if real tunnel warmups exceed it.
 export const enrollKey = async (
     sandboxUrl: string,
     pairToken: string,
     key: string,
     { attempts = 10, delayMs = 3000, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
-): Promise<{ sshHostname: string; syncToken?: string; mode: SyncMode }> => {
+): Promise<{ syncToken: string; mode: SyncMode }> => {
     const url = `${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`;
     for (let attempt = 1; ; attempt++) {
         let response: Response;
@@ -104,14 +105,17 @@ export const enrollKey = async (
         if (!response.ok) {
             throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
         }
-        const body = (await response.json()) as { sshHostname?: string; syncToken?: string; mode?: SyncMode };
-        if (body.sshHostname === undefined) {
-            throw new Error("this sandbox has no SSH tunnel configured for sync — reconnect it so its tunnel routes ssh-<id>.<zone>.");
+        const body = (await response.json()) as { syncToken?: string; mode?: SyncMode };
+        /* The sync token is the whole enrollment now: it authorizes the port read, the machine report AND the
+         * SSH transport this agent listens for locally (tunnel.ts). A daemon that answers without one has
+         * enrolled the key and handed back nothing to use it with, which is a broken sync rather than a partial
+         * one — so it fails here instead of ten minutes later as a Mutagen session that never connects. */
+        if (body.syncToken === undefined) {
+            throw new Error("the sandbox enrolled this machine but returned no sync credential — update the sandbox and enable sync again.");
         }
         // `mode` is what the daemon GRANTED (per the pairing's role): "sync" = file sync + mirroring, "mirror" =
-        // ports only. A daemon predating modes omits it → treat as "sync" (its historical behavior). syncToken
-        // stays optional: a daemon predating port mirroring still syncs files fine.
-        return { sshHostname: body.sshHostname, mode: body.mode ?? "sync", ...(body.syncToken === undefined ? {} : { syncToken: body.syncToken }) };
+        // ports only.
+        return { syncToken: body.syncToken, mode: body.mode ?? "sync" };
     }
 };
 
@@ -150,12 +154,11 @@ const setup = buildCommand<SetupFlags>({
         const publicKey = await ensureSshKey();
         // Enrollment can retry for ~30s while the sandbox tunnel warms — overlap it with the two binary
         // downloads (independent: distinct endpoints, distinct install paths).
-        const [{ sshHostname, syncToken, mode }, cloudflaredPath, mutagen] = await Promise.all([
+        const [{ syncToken, mode }, mutagen] = await Promise.all([
             enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
-            ensureCloudflared(),
             ensureMutagen(),
         ]);
-        out(`enrolled SSH key; sandbox reachable at ${sshHostname}`);
+        out(`enrolled SSH key with ${flags.url}`);
 
         const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
         const alias = sshAlias(sandboxId);
@@ -182,10 +185,9 @@ const setup = buildCommand<SetupFlags>({
         const pairing: Pairing = {
             sandboxUrl: flags.url,
             sandboxId,
-            sshHostname,
             mode,
+            syncToken,
             ...(localDir === undefined ? {} : { localDir }),
-            ...(syncToken === undefined ? {} : { syncToken }),
         };
 
         // Stop the resident watcher before touching state or sessions — and ONLY the watcher. It is running the
@@ -204,11 +206,29 @@ const setup = buildCommand<SetupFlags>({
         const pairings = (await readState()).pairings;
 
         // The ssh fragment is regenerated from the WHOLE pairing list, so every paired sandbox keeps its alias.
-        await writeManagedSshConfig(pairingSshConfig(pairings, cloudflaredPath));
+        await writeManagedSshConfig(pairingSshConfig(pairings));
+
+        /* THE TRANSPORT COMES UP BEFORE ANYTHING DIALS IT, and that reorders this command.
+         *
+         * The sandbox's sshd is reached through a listener on this machine (tunnel.ts) rather than a hostname
+         * somebody's fabric resolves, and the process that holds it is the mirror watcher — the resident half of
+         * this agent, restarted just above. So mirroring is started HERE, before the probe and before Mutagen,
+         * where it used to be the last thing setup did: every step under it now depends on the port being open.
+         *
+         * The wait is what makes that honest rather than racy — the watcher is a detached process, so the port
+         * appears some hundreds of milliseconds after it is asked to start. Not fatal on timeout: Mutagen retries
+         * a session forever, and the watcher keeps trying to bind, so a slow start costs a warning rather than a
+         * failed setup. */
+        await enableMirroring(out);
+        const port = syncSshPort(sandboxId);
+        if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
+            out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet — syncing starts as soon as it is.`);
+        }
+
         // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
         // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
         const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
-        assertSshConfigVisible(ssh, alias, sshHostname);
+        assertSshConfigVisible(ssh, alias, port);
         probeSshTransport(ssh, alias, out);
 
         // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
@@ -233,8 +253,8 @@ const setup = buildCommand<SetupFlags>({
         }
         out(
             mode === "sync"
-                ? `Sync started: ${localDir} ↔ ${sshHostname}:/work. Check it with \`intentic-sync status\`.`
-                : `Enrolled for port mirroring on ${sshHostname} (mirror-only — no file sync). Check it with \`intentic-sync status\`.`,
+                ? `Sync started: ${localDir} ↔ ${flags.url} /work. Check it with \`intentic-sync status\`.`
+                : `Enrolled for port mirroring on ${flags.url} (mirror-only — no file sync). Check it with \`intentic-sync status\`.`,
         );
         // Say the fleet out loud. Pairing a sandbox on a machine that already had one is the exact moment the
         // user needs to know the others are still syncing — the silence there is what made a lost pairing take
@@ -246,17 +266,12 @@ const setup = buildCommand<SetupFlags>({
             }
         }
 
-        // Auto-start port mirroring so the user never types a command: each sandbox's dev servers become
-        // localhost:<same-port> here, new ones appear as they start, and it resumes after a reboot.
-        //
-        // Gated on ANY pairing having a sync token, not just this one: the watcher stopped above was serving the
-        // whole fleet, so declining to restart it because THIS enrollment happens to lack a token (a daemon
-        // predating port mirroring) would leave every sibling's mirroring dead until the next login.
-        if (pairings.some((held) => held.syncToken !== undefined)) {
-            await enableMirroring(out);
-        }
     },
 });
+
+/* How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
+ * startup on a busy machine, not by any work the watcher does — it binds before its first poll. */
+const TUNNEL_READY_MS = 10_000;
 
 // Turn mirroring on: register it to resume at every login AND run it now. registerAutostart returns true when
 // the OS mechanism (macOS launchd) already launched this session's watcher, so we don't spawn a second one.
@@ -336,10 +351,14 @@ const printReport = (report: MachineReport, out: (message: string) => void): voi
             .join(", ");
         out(`  ${pairing.sandboxId}  ${where}${state === "" ? "" : `  [${state}]`}`);
     }
+    /* The watcher's liveness is now the whole of sync's liveness, not just mirroring's: it holds the SSH
+     * transport every session rides (tunnel.ts), so a dead watcher is a stalled file sync and stalled port
+     * forwards, not merely "new ports stop appearing". Said plainly, because the previous wording invited a
+     * reader to leave it stopped. */
     out(
         report.watcher.running
             ? `Mirror watcher: running (pid ${report.watcher.pid})`
-            : "Mirror watcher: NOT running — run `intentic-sync mirror` to restart it.",
+            : "Mirror watcher: NOT running — file syncing and port mirroring are both stopped. Run `intentic-sync mirror` to restart it.",
     );
     out(`Ports (${report.ports.length}):`);
     for (const port of report.ports) {
@@ -519,7 +538,7 @@ const uninstall = buildCommand<SandboxFlags>({
         if (remaining.length > 0) {
             // The agent stays: regenerate the ssh fragment for the pairings that are still live, restart the
             // watcher so it stops serving what just went, and leave Mutagen's daemon alone.
-            await writeManagedSshConfig(pairingSshConfig(remaining, await ensureCloudflared()));
+            await writeManagedSshConfig(pairingSshConfig(remaining));
             await stopWatcher();
             await startMirrorWatcher(cliLauncher("intentic-sync"), out);
             out(`Still syncing ${remaining.length} sandbox(es): ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);

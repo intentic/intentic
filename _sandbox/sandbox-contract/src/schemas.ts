@@ -5559,8 +5559,12 @@ export const ComputersListSchema = z.object({ computers: z.array(ComputerSchema)
 // routinely newer than the daemon it is pointed at during a rolling update.
 export const SyncStatusSchema = z.object({
     enrolled: z.boolean(),
-    // Absent when this sandbox has no SSH tunnel (loopback/preview) — which the card reads as "sync unavailable".
-    sshHostname: z.string().optional(),
+    /* Whether this sandbox can do desktop sync at all. It used to be the SSH hostname the laptop would dial, and
+     * its absence meant "this sandbox's reachability can't carry SSH" — true of every sandbox on the platform's
+     * own fabric, which is what made sync fail on the default path. The transport rides the daemon's own HTTPS
+     * surface now, so a sandbox that can answer this read can also sync. Kept as a field rather than assumed,
+     * because the card branches on it and a daemon too old to say is one that should not be offered sync. */
+    available: z.boolean().optional(),
     // The single machine holding file sync, and when its heartbeat last landed.
     syncingFrom: z.string().optional(),
     syncSeenAt: z.number().optional(),

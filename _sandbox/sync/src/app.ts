@@ -1,4 +1,5 @@
-import { buildApplication, buildRouteMap } from "@stricli/core";
+import { agentException } from "@intentic/local-agent";
+import { buildApplication, buildRouteMap, text_en } from "@stricli/core";
 import { commands } from "./commands.js";
 
 // The intentic-sync CLI: `setup` (one-time OAuth + SSH-key enrol + start Mutagen), `mirror` (workspace ports →
@@ -10,5 +11,10 @@ export const app = buildApplication(
         routes: commands,
         docs: { brief: "intentic-sync — mirror a remote sandbox to a local directory" },
     }),
-    { name: "intentic-sync", scanner: { caseStyle: "allow-kebab-for-camel" } },
+    {
+        name: "intentic-sync",
+        scanner: { caseStyle: "allow-kebab-for-camel" },
+        // A failure reads as the sentence the command threw, not as frames inside a compiled binary (agentException).
+        localization: { text: { ...text_en, formatException: agentException } },
+    },
 );

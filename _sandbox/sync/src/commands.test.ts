@@ -10,32 +10,44 @@ afterEach(() => {
 });
 
 describe("enrollKey", () => {
-    it("retries through transient tunnel-warmup 502s, then returns the ssh hostname + token + granted mode", async () => {
+    it("retries through transient tunnel-warmup 502s, then returns the sync token + granted mode", async () => {
         const fetchMock = vi
             .fn<typeof fetch>()
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
-            .mockResolvedValueOnce(jsonResponse(200, { ok: true, sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok", mode: "mirror" }));
+            .mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "mirror" }));
         vi.stubGlobal("fetch", fetchMock);
 
         const enrolled = await enrollKey("https://sandbox-abc.example.dev/", "pair-token", "ssh-ed25519 AAAA", { delayMs: 0 });
 
-        expect(enrolled).toEqual({ sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok", mode: "mirror" });
+        expect(enrolled).toEqual({ syncToken: "ist_tok", mode: "mirror" });
         expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
-    it("retries when fetch throws, and defaults mode to sync for a daemon that omits it (predates modes)", async () => {
+    it("retries when fetch throws, and defaults mode to sync for a daemon that omits it", async () => {
         const fetchMock = vi
             .fn<typeof fetch>()
             .mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND"))
-            .mockResolvedValueOnce(jsonResponse(200, { sshHostname: "ssh-abc.example.dev" }));
+            .mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok" }));
         vi.stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).resolves.toEqual({
-            sshHostname: "ssh-abc.example.dev",
+            syncToken: "ist_tok",
             mode: "sync",
         });
         expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    /* The sync token IS the enrollment: it authorizes the port read, the machine report and the SSH transport
+     * this agent listens for locally. A daemon that enrolls the key and hands back nothing to use it with has
+     * produced a pairing that can never connect, so that fails at setup rather than as a Mutagen session which
+     * silently never comes up. */
+    it("refuses an enrollment that comes back without a credential", async () => {
+        const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ok: true, mode: "sync" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/no sync credential/);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("fails fast on 401 without retrying", async () => {
@@ -64,7 +76,6 @@ describe("selectPairings", () => {
     const pairing = (sandboxId: string): Pairing => ({
         sandboxUrl: `https://${sandboxId}/`,
         sandboxId,
-        sshHostname: `ssh-${sandboxId}`,
         mode: "sync",
     });
     const state: SyncState = {

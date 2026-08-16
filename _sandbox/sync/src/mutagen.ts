@@ -6,9 +6,8 @@ import type { Log } from "@intentic/local-agent";
 import { binDir, type Pairing } from "./config.js";
 import { IGNORES, sanitizeId, sshAlias } from "./ssh.js";
 
-// Pinned tool versions. cloudflared matches the sandbox image's pin so both ends speak the same tunnel protocol.
+// The pinned Mutagen version this agent downloads when the machine has no install of its own.
 const MUTAGEN_VERSION = "0.18.1";
-const CLOUDFLARED_VERSION = "2026.7.3";
 
 // The prefix every session this agent creates carries, sync and forward alike — what makes them all findable
 // again later, whichever pairing created them (see ourSyncSessions / ourForwardSessions).
@@ -311,38 +310,13 @@ const extractTarball = (tarball: string): void => {
     }
 };
 
-// Resolve cloudflared: the user's own install if they have one, else our pinned copy in ~/.intentic/sync/bin,
-// downloaded only when what is there isn't already the pin. Asset shapes differ per OS: bare binary on linux,
-// .tgz on darwin, .exe on windows (amd64 only — no windows-arm64 build exists).
-export const ensureCloudflared = async (): Promise<string> => {
-    if (installedVersion("cloudflared", ["--version"]) !== undefined) {
-        return "cloudflared";
-    }
-    const dest = join(binDir, `cloudflared${exe}`);
-    if (installedVersion(dest, ["--version"]) === CLOUDFLARED_VERSION) {
-        return dest;
-    }
-    const os = osToken();
-    const base = `https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}`;
-    const assetUrl = (): string => {
-        if (os === "darwin") {
-            return `${base}/cloudflared-darwin-${archToken()}.tgz`;
-        }
-        if (os === "windows") {
-            if (archToken() !== "amd64") {
-                throw new Error("cloudflared has no windows-arm64 build — install cloudflared manually, then re-run.");
-            }
-            return `${base}/cloudflared-windows-amd64.exe`;
-        }
-        return `${base}/cloudflared-linux-${archToken()}`;
-    };
-    // The download lands BESIDE the target and only then takes its place: a half-download never becomes the
-    // binary, and the copy being replaced stays runnable until the new bytes are on disk.
-    const staged = join(binDir, os === "darwin" ? "cloudflared.tgz" : `cloudflared${exe}.new`);
-    await download(assetUrl(), staged);
-    await replaceBinary(dest, () => (os === "darwin" ? extractTarball(staged) : rename(staged, dest)));
-    return dest;
-};
+/* THE CLOUDFLARED DOWNLOAD THAT USED TO LIVE HERE is gone with the transport that needed it.
+ *
+ * Every paired machine downloaded a tunnel client so ssh could reach `ssh-<id>.<zone>` through a ProxyCommand.
+ * The SSH endpoint is now a listener this agent runs (tunnel.ts), reached over the sandbox's own HTTPS surface,
+ * so there is no second client to install, nothing to keep pinned against the sandbox image, and one less
+ * platform matrix to satisfy — cloudflared has no windows-arm64 build, which was a hard refusal on exactly the
+ * machines this agent is hardest to test on. */
 
 // Resolve mutagen: the user's own install if they have one (at whatever version they run it at), else our
 // pinned copy — downloaded and extracted (binary + agent bundle side by side, as Mutagen requires) only when

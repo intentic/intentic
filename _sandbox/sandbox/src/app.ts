@@ -43,9 +43,9 @@ import {
     revokeEnrollmentByToken,
     type SyncMode,
     syncHolder,
-    syncSshHostname,
     verifySyncToken,
 } from "./platform/sync.js";
+import { createSyncSshRoute } from "./platform/sync-ssh.js";
 import { soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
 import { relayServiceCatalog, relayServiceRun } from "./platform/pool-services.js";
 import { gatedServiceRun } from "./platform/service-offer.js";
@@ -711,6 +711,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // upgradeWebSocket drives it); registered before the oRPC catch-all so the upgrade matches here.
     app.get("/system/terminal", createTerminalRoute(services));
 
+    // Desktop sync's transport: this container's sshd, as a byte stream over the same HTTPS surface the
+    // workspace is served on (platform/sync-ssh.ts). Authorized by the enrolled machine's sync token through
+    // the ordinary grant table — a Node client can set a header, so this needs no query-string ticket.
+    app.get("/system/sync/ssh", createSyncSshRoute(services));
+
     // A `browser`-kind capability's own Chromium, in the owner's hands: a WebSocket that screencasts the
     // platform's persistent profile — to sign into, or to use the connected account by hand (see
     // createBrowserProfileRoute). Same shared `ws` server + query-string auth as the terminal.
@@ -1299,11 +1304,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (key === undefined || !isValidAuthorizedKey(key)) {
             return c.json({ error: "invalid key" }, 400);
         }
-        // The agent needs the tunnel's SSH host to point Mutagen at; without one, sync can't reach this sandbox.
-        const sshHostname = syncSshHostname(services.config);
-        if (sshHostname === undefined) {
-            return c.json({ error: "this sandbox has no SSH tunnel for desktop sync to ride" }, 409);
-        }
         // The mode comes from the pairing (minted per the requester's role), never from the agent — so a member's
         // pairing can only ever enroll "mirror". The owner-Google fallback path defaults to full "sync".
         const mode: SyncMode = viaPair ? (pairingMode(pair) ?? "mirror") : "sync";
@@ -1318,20 +1318,24 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (pair !== undefined) {
             await consumePairing(services.config.historyRoot, pair);
         }
-        return c.json({ ok: true, sshHostname, syncToken: result.syncToken, mode });
+        /* No address travels back any more, because there is no longer one to choose: the agent reaches sshd
+         * through THIS daemon (platform/sync-ssh.ts), at the public URL it is already talking to. That is what
+         * makes every sandbox sync the same way — the enroll used to answer 409 whenever the sandbox's
+         * reachability could not also carry TCP, which is every sandbox on the platform's own hub. */
+        return c.json({ ok: true, syncToken: result.syncToken, mode });
     });
     app.get("/system/sync", async (c) => {
         // Any collaborator (owner or member) may read enrollment state — the bearer middleware already blocked a
         // non-member — so a member's Desktop-sync card can render and mint its mirror-only pairing.
-        const sshHostname = syncSshHostname(services.config);
         const holder = await syncHolder(services.config.historyRoot);
         const mirrors = await mirrorMachines(services.config.historyRoot);
-        // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this
-        // sandbox has no SSH tunnel (loopback/preview), which the card treats as "sync unavailable". syncingFrom
-        // names the single machine holding file sync (takeover target) and when it was last heard from — an
-        // enrollment nobody has used for hours is a sync that has stopped, which the card must not report as
-        // healthy. mirroredBy lists every machine mirroring ports (unlimited — each collaborator on their own
-        // localhost).
+        // Always 200, and `available` is now always true: sync rides this daemon's own HTTPS surface, so every
+        // sandbox that can serve this response can also carry the transport (platform/sync-ssh.ts). It stays in
+        // the body because the card branches on it, and because a sandbox that CANNOT do sync is a state worth
+        // being able to express again rather than one to delete the vocabulary for. syncingFrom names the single
+        // machine holding file sync (takeover target) and when it was last heard from — an enrollment nobody has
+        // used for hours is a sync that has stopped, which the card must not report as healthy. mirroredBy lists
+        // every machine mirroring ports (unlimited — each collaborator on their own localhost).
         // `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher) — the half the
         // enrollment record above has never been able to answer. Empty until a machine's watcher posts one, which
         // is also what an old agent looks like, so the card must render without it.
@@ -1339,7 +1343,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             enrolled: await isKeyEnrolled(services.config.historyRoot),
             ...(holder !== undefined ? { syncingFrom: holder.machine, ...(holder.seenAt === undefined ? {} : { syncSeenAt: holder.seenAt }) } : {}),
             ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
-            ...(sshHostname !== undefined ? { sshHostname } : {}),
+            available: true,
             machines: (await machineReports(services.config.historyRoot)).map((entry) => entry.report),
         });
     });

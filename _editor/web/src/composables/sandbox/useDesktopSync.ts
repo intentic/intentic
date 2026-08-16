@@ -49,7 +49,10 @@ export function useDesktopSync() {
     // local cleanup — revoking stops the agent's ACCESS (its mirror watcher tears itself down within a few
     // polls), not its installation.
     const revokedFrom = ref<string | undefined>(undefined);
-    // Whether this sandbox even exposes an SSH tunnel for sync (false ⇒ loopback/preview: sync unavailable).
+    // Whether this sandbox can do desktop sync at all. The daemon carries the transport on its own HTTPS
+    // surface now, so a sandbox that answers this read can also sync — it used to depend on whether that
+    // sandbox's reachability could carry TCP, which the platform's own path cannot. Still read rather than
+    // assumed: it is the daemon's answer, and a daemon too old to give one is a card that should stay quiet.
     const available = ref(false);
     // The one-time pairing token from the last "Enable" click; undefined until minted (or after it's used up).
     const pairToken = ref<string | undefined>(undefined);
@@ -144,13 +147,13 @@ export function useDesktopSync() {
             }
             const body = (await response.json()) as {
                 enrolled?: boolean;
-                sshHostname?: string;
+                available?: boolean;
                 syncingFrom?: string;
                 syncSeenAt?: number;
                 mirroredBy?: string[];
             };
             enrolled.value = body.enrolled === true;
-            available.value = typeof body.sshHostname === `string`;
+            available.value = body.available === true;
             syncingFrom.value = body.syncingFrom;
             syncSeenAt.value = body.syncSeenAt;
             mirroredBy.value = body.mirroredBy ?? [];

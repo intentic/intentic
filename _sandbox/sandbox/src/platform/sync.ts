@@ -2,9 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { type MachineReport, sshHostname, zoneFromUrl } from "@intentic/sandbox-contract";
-import type { Config } from "../env.config.js";
+import type { MachineReport } from "@intentic/sandbox-contract";
 
 // Desktop enrollment for Mutagen: a machine lands its ed25519 public key here (redeeming a browser-minted
 // pairing token), then Mutagen rides SSH with that key for two things — bidirectional FILE sync of /work, and
@@ -332,23 +330,16 @@ export const clearAllEnrollments = async (historyRoot: string): Promise<void> =>
     await persist(historyRoot, []);
 };
 
-/* The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest
- * sandbox-tunnel.ts and hostnames.ts use), so the laptop can resolve it from the daemon without guessing.
- * Undefined when the tunnel isn't configured (no connect token / no zone) — e.g. loopback or preview-only.
+/* THE SSH HOSTNAME THAT USED TO LIVE HERE is gone, and the reason is worth keeping.
  *
- * Also undefined on the zrok fabric, which carries HTTP shares only: the box's own address resolves there, so
- * the derivation would happily return an `ssh-…` name of the same zone that answers nothing. Desktop sync over
- * a private tcpTunnel share is its own piece of work; until then the card says so rather than handing the
- * laptop a hostname Mutagen will hang on. A sandbox behind the user's OWN tunnel (ZONE set) is unaffected.
- */
-export const syncSshHostname = (config: Pick<Config, "connectToken" | "sandbox" | "zone" | "zrok">): string | undefined => {
-    if (config.zrok.token !== "") {
-        return undefined;
-    }
-    const resolvedZone = config.zone !== "" ? config.zone : zoneFromUrl(config.sandbox.publicUrl);
-    const id = sandboxIdFromToken(config.connectToken);
-    if (id === undefined || resolvedZone === undefined || resolvedZone === "") {
-        return undefined;
-    }
-    return sshHostname(id, resolvedZone);
-};
+ * Mutagen reached this container by resolving `ssh-<id>.<zone>` and dialling it through the reachability
+ * fabric, because a Cloudflare tunnel routes arbitrary TCP. When the fabric moved to a hub that shares HTTP and
+ * nothing else, that name became a hostname pointing at nothing — so this derivation started answering
+ * `undefined`, the enroll route turned that into a 409, and desktop sync was dead on the ONE path the setup
+ * wizard offers by default. It was offered anyway, on by default, failing every time.
+ *
+ * A second kind of route through the fabric would have fixed the symptom and left the shape: a transport that
+ * works or not depending on how a given sandbox happens to be reachable, with a matrix to keep straight. The
+ * transport is now this daemon's own HTTPS surface instead (platform/sync-ssh.ts) — the one way in that every
+ * sandbox has by definition, since it is how the workspace itself is served. Nothing to derive, nothing to
+ * provision, and no sandbox that can answer this request but cannot carry sync. */

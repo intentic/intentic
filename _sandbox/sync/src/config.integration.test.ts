@@ -14,7 +14,6 @@ const { agentHome } = await import("@intentic/local-agent");
 const pairing = (sandboxId: string, localDir: string) => ({
     sandboxUrl: `https://${sandboxId}/`,
     sandboxId,
-    sshHostname: `ssh-${sandboxId}`,
     mode: "sync" as const,
     localDir,
     syncToken: `ist_${sandboxId}`,

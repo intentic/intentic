@@ -52,7 +52,8 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     let overlayBuilt = false;
 
     beforeAll(async () => {
-        // CONNECT_TOKEN + ZONE make syncSshHostname derive, which /system/authorized-key requires (409 otherwise).
+        // A zone is not what makes sync work any more (the transport rides the daemon's own surface), but it is
+        // what the preview/outbox hostnames derive from, so the box still boots with one.
         container = await startSandboxContainer({ CONNECT_TOKEN, ZONE });
         base = daemonUrl(container);
         client = createORPCClient(new OpenAPILink(sandboxContract, { url: base }));
@@ -151,15 +152,15 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             body: JSON.stringify({ key: laptop.public }),
         });
         expect(enroll.status).toBe(200);
-        expect(((await enroll.json()) as { sshHostname: string }).sshHostname).toMatch(
-            new RegExp(`^ssh-[0-9a-f]{12}\\.${ZONE.replace(".", "\\.")}$`),
-        );
+        // The credential the agent presents for everything it does — including the SSH transport it serves on
+        // loopback. No address comes back: the sandbox is reached at the URL the agent already has.
+        expect(((await enroll.json()) as { syncToken?: string }).syncToken).toBeDefined();
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(laptop.public.trim());
 
-        const status = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean; syncingFrom?: string; sshHostname?: string };
+        const status = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean; syncingFrom?: string; available?: boolean };
         expect(status.enrolled).toBe(true);
         expect(status.syncingFrom).toBe("e2e-laptop");
-        expect(status.sshHostname).toBeDefined();
+        expect(status.available).toBe(true);
 
         // The enrolled key really opens the container's sshd — the transport Mutagen rides.
         await new Promise<void>((resolve, reject) => {

@@ -53,17 +53,21 @@ export interface SkippedPort {
 // holder), "mirror" = port mirroring only (unlimited collaborators). Decided by the pairing the enroll redeemed.
 export type SyncMode = "sync" | "mirror";
 
-// One paired sandbox. sshHostname is what the daemon returned on enrollment — the tunnel host Mutagen reaches;
-// sandboxId namespaces the ssh alias + Mutagen sessions, and is the KEY: it comes from the sandbox's own URL
-// host, so it identifies the sandbox across re-pairings. syncToken is the enrollment-minted credential for the
-// daemon's GET /ports (what `mirror` reconciles against) + self-revoke on uninstall. localDir is set only for
-// mode "sync" (mirror-only has no file sync). mirroredPorts is the set of Mutagen forward sessions the last
-// reconcile left alive — the baseline, so vanished ports get terminated; skippedPorts is its negative, the ports
-// that same reconcile wanted and could not have.
+/* One paired sandbox. sandboxId namespaces the ssh alias, the Mutagen sessions and the loopback port the SSH
+ * transport listens on, and is the KEY: it comes from the sandbox's own URL host, so it identifies the sandbox
+ * across re-pairings. syncToken is the enrollment-minted credential — for the daemon's GET /ports (what `mirror`
+ * reconciles against), for the self-revoke on uninstall, AND for the SSH transport itself (tunnel.ts), which is
+ * why a pairing without one can do nothing but exist. localDir is set only for mode "sync" (mirror-only has no
+ * file sync). mirroredPorts is the set of Mutagen forward sessions the last reconcile left alive — the baseline,
+ * so vanished ports get terminated; skippedPorts is its negative, the ports that same reconcile wanted and could
+ * not have.
+ *
+ * There is no sshHostname any more. The daemon used to answer enrollment with a tunnel host for Mutagen to dial;
+ * the transport now runs over the sandbox's own HTTPS surface, so the address is derived from sandboxUrl and the
+ * port from sandboxId, and there is nothing left for the daemon to tell us (see tunnel.ts). */
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
-    readonly sshHostname: string;
     readonly mode: SyncMode;
     readonly localDir?: string;
     readonly syncToken?: string;

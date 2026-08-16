@@ -314,10 +314,12 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
 
-test("a sandbox on intentic's tunnels offers no sync hostname — the enroll is refused instead of hanging Mutagen", async () => {
+/* A sandbox on the platform's own reachability fabric — the default, and the one that could not sync at all.
+ * Its shares are HTTP, so there was no `ssh-<id>` name to hand Mutagen and the enroll answered 409 on the ONE
+ * path the setup wizard offers. The transport is the daemon's own HTTPS surface now, so this sandbox enrolls
+ * like any other and the card reads `available`. */
+test("a sandbox on intentic's own fabric enrolls for sync like every other one", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-zrok-home-"));
-    /* The address resolves (that IS the fabric's hostname), so the ssh-<id> name of the same zone would derive
-     * happily and answer nothing — the shares are HTTP. The card reads the missing hostname as "no way in". */
     const app = createApp(
         services({
             config: {
@@ -329,13 +331,17 @@ test("a sandbox on intentic's tunnels offers no sync hostname — the enroll is 
             },
         }),
     );
-    expect(await (await app.request("/system/sync")).json()).not.toHaveProperty("sshHostname");
-    const refused = await app.request("/system/authorized-key", {
+    expect(await (await app.request("/system/sync")).json()).toMatchObject({ available: true });
+    const enrolled = await app.request("/system/authorized-key", {
         method: "POST",
         headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token },
         body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
     });
-    expect(refused.status).toBe(409);
+    expect(enrolled.status).toBe(200);
+    // The credential, and no address: the agent reaches this sandbox at the URL it already holds.
+    const body = (await enrolled.json()) as { syncToken?: string; mode?: string };
+    expect(body.syncToken).toBeDefined();
+    expect(body.mode).toBe("sync");
 });
 
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {

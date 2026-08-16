@@ -110,10 +110,11 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
     fi
 fi
 
-# sshd backs the local-sync path: the laptop's Mutagen connects over SSH (through a tunnel on the owner's own
-# domain — the hub's public shares carry HTTP, so this is the one lane it does not serve) and auto-injects its
-# agent, which reads/writes /work. Key-only auth; the owner's public key is
-# enrolled at runtime by the daemon's POST /system/authorized-key (authorized by the owner's Google token).
+# sshd backs the local-sync path: the laptop's Mutagen connects over SSH and auto-injects its agent, which
+# reads/writes /work. It is reached on 127.0.0.1 here — the daemon carries the stream in from its own HTTPS
+# surface (platform/sync-ssh.ts), so nothing about this listener depends on how the sandbox is reachable, and
+# no port of it is ever published. Key-only auth; the machine's public key is enrolled at runtime by the
+# daemon's POST /system/authorized-key (authorized by a browser-minted pairing, or the owner's Google token).
 
 # The host key is the sandbox's SSH IDENTITY, so it must outlive the container. Every runner recreates this
 # container — recreate.sh (any mode) and a provider update all `docker rm -f` + `docker run`,
