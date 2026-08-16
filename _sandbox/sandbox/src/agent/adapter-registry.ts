@@ -64,7 +64,7 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
 
 const CODEX_ADAPTER: AgentAdapter<"codex"> = {
     runtime: "codex",
-    preflight: (services, input, context) => planCodexTurn(services, input, context),
+    preflight: (services, input, context, granted) => planCodexTurn(services, input, context, granted),
     // The same question planCodexTurn refuses on, asked without building a turn — one resolver, so the tooltip
     // and the refusal can never name different reasons (codex/codex-readiness.ts).
     health: async (services) => {

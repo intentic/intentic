@@ -478,8 +478,15 @@ const honoured = (
 
 // Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT SUBSCRIPTION
 // (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a bare dev run with no
-// translator. Claude-only fields (plugins, MCP, thinking) don't apply here.
-export const planCodexTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+// translator. Its app-server accepts process-backed MCP servers in the per-thread config, so the browser servers
+// are built from the same persona-filtered manifest the Claude Code path reads. Daemon-side SDK servers and
+// plugins still belong to that richer harness and stay absent here.
+export const planCodexTurn = async (
+    services: Services,
+    input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): Promise<TurnPlan> => {
     // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only fallback
     // (a bare dev run with no translator baked).
     const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
@@ -497,7 +504,22 @@ export const planCodexTurn = async (services: Services, input: AgentTurn, contex
     // (gpt-5-codex), which the subscription can reject. An explicit selection rides through (a stale one
     // self-heals via codex-model-invalid); an empty one resolves the catalog default (discovery → persisted →
     // seed floor, never empty — see codex-catalog).
-    const model = input.model !== undefined && input.model !== "" ? input.model : (await services.codexModels.models()).default;
+    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const [model, browser] = await Promise.all([
+        input.model !== undefined && input.model !== ""
+            ? Promise.resolve(input.model)
+            : services.codexModels.models().then((catalog) => catalog.default),
+        /* Codex plan emulation closes its app-server while a person reviews the plan, then starts a fresh one
+         * for execution. The lazy browser mux treats that first bridge closing as the turn ending and expires
+         * after 15 seconds, so a normal human approval would leave the second process a dead socket. The eager
+         * specs are restartable and preserve the same profile across both phases. Ordinary turns keep the mux. */
+        browserServersOf(
+            granted,
+            services.workspace.root,
+            persona.powers.browser,
+            context.base.permissionMode === "plan" ? undefined : input.conversationId,
+        ),
+    ]);
     const withModel = { ...context.base, model };
     // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer (the
     // adapter builds the provider block); the dev api-key path uses Codex's own OPENAI_API_KEY default. The
@@ -506,12 +528,22 @@ export const planCodexTurn = async (services: Services, input: AgentTurn, contex
     const withAuth = translatorReady
         ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
         : withModel;
+    const withBrowser =
+        Object.keys(browser.servers).length === 0
+            ? withAuth
+            : {
+                  ...withAuth,
+                  sdkServers: browser.servers,
+                  browserOutputDir: browserOutputDir(services.workspace.root),
+                  browserPorts: browser.ports,
+                  browserPasskeys: browser.passkeys,
+              };
     return {
         ok: true,
         run: services.codexAgent,
         // Attribution key: the shared subscription serving all Codex turns, else undefined for the api-key fallback.
         ...(translatorReady ? { account: "codex-subscription" } : {}),
-        request: withAttachments(withAuth, context.attachmentPaths),
+        request: withAttachments(withBrowser, context.attachmentPaths),
     };
 };
 

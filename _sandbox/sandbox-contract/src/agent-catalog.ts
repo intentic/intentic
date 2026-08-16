@@ -211,9 +211,11 @@ export interface AgentCapabilities {
     // Can stop mid-turn and ask the user a multiple-choice question (`question` frames).
     readonly questions: boolean;
     // Which of the turn's tools reach the agent. "full" = http MCP tools + in-process SDK servers + plugin
-    // checkouts + the browser servers; "http" = the http MCP tools alone, and only if the agent advertises http
-    // MCP support; "none" = the runtime has no seam for them at all.
-    readonly mcp: "full" | "http" | "none";
+    // checkouts + the browser servers; "browser" = the process-backed browser servers alone; "http" = the http
+    // MCP tools alone, and only if the agent advertises http MCP support; "none" = the runtime has no seam for
+    // them at all. Keeping the partial answers distinct matters: a runtime that can drive a connected account
+    // must not be described as tool-less, and one that cannot host daemon-side SDK servers must not claim full.
+    readonly mcp: "full" | "browser" | "http" | "none";
     /* WHICH EXECUTION BACKENDS THE RUNTIME HOSTS — the ways a turn RUNS things, as opposed to the tools it is
      * handed. "shell" is the runtime's own command tool (Bash on the Claude Code loop, each foreign loop's
      * equivalent); "js" is the sandbox's JavaScript backend (execution/ in the daemon): the model writes a
@@ -291,15 +293,14 @@ const CLAUDE_CODE: AgentCapabilities = {
     instructions: "replace",
 };
 
-// Codex app-server: item-level events plus richer request/MCP channels. This client deliberately declines
-// server-initiated approvals and has not connected questions or MCP to Intentic's policy seams, so only the
-// item stream, reasoning effort and the instruction seam are claimed here.
+// Codex app-server: item-level events plus process-backed MCP servers. Browser servers ride its per-thread
+// config, while daemon-side SDK servers, plugins, questions and server-initiated approvals remain unwired.
 const CODEX: AgentCapabilities = {
     runtime: "codex",
     steering: false,
     permissions: "plan",
     questions: false,
-    mcp: "none",
+    mcp: "browser",
     execution: ["shell"],
     effort: true,
     fastMode: false,
@@ -459,7 +460,13 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.permissions === "plan" ? ["no per-tool approvals"] : []),
     ...(capabilities.questions ? [] : ["no clarifying questions"]),
     ...(capabilities.steering ? [] : ["no mid-turn steering"]),
-    ...(capabilities.mcp === "none" ? ["no MCP tools or plugins"] : capabilities.mcp === "http" ? ["MCP tools only — no plugins or browser"] : []),
+    ...(capabilities.mcp === "none"
+        ? ["no MCP tools or plugins"]
+        : capabilities.mcp === "http"
+          ? ["MCP tools only — no plugins or browser"]
+          : capabilities.mcp === "browser"
+            ? ["browser tools only — no plugins or other MCP tools"]
+            : []),
     ...(capabilities.execution.includes("js") ? [] : ["no code runs — its shell is the one way to execute"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),

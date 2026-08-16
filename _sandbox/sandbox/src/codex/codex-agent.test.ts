@@ -125,6 +125,33 @@ test("a native (account) turn carries no provider config — Codex uses its own 
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
+test("process-backed browser MCP servers ride Codex's per-thread config", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), {
+        ...request,
+        sdkServers: {
+            identity: {
+                type: "stdio",
+                command: "/usr/bin/socat",
+                args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
+                // PATH is inherited and must not be copied into thread config; DISPLAY is a real server delta.
+                env: { PATH: process.env["PATH"] ?? "", DISPLAY: ":99" },
+                timeout: 120_000,
+                alwaysLoad: true,
+            },
+        },
+    });
+
+    expect(calls[0]!.config).toEqual({
+        "mcp_servers.identity": {
+            command: "/usr/bin/socat",
+            args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
+            env: { DISPLAY: ":99" },
+            tool_timeout_sec: 120,
+        },
+    });
+});
+
 test("a failed command surfaces its output as a failed update", async () => {
     const { runner } = fakeCodexRunner([
         {

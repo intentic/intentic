@@ -27,6 +27,8 @@ import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-pl
 
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
 vi.mock("./harness-credentials.js", () => ({ resolveHarnessCredentials: () => credentials() }));
+const browserServers = vi.fn();
+vi.mock("../browser/browser-tools.js", () => ({ browserServersOf: (...args: unknown[]) => browserServers(...args) }));
 
 /* A workspace root that is not on disk, which is the whole point of it: planTurn probes the tree for
  * uninstalled dependencies before it dispatches (see honoured), and a root that exists would make every prompt
@@ -88,6 +90,8 @@ const turn = (overrides?: Partial<AgentTurn>): AgentTurn => ({ prompt: "do the t
 beforeEach(() => {
     credentials.mockReset();
     credentials.mockResolvedValue({ ok: true, credentials: { oauthToken: "sk-oauth", account: "acc-1" } });
+    browserServers.mockReset();
+    browserServers.mockResolvedValue({ servers: {}, ports: {}, passkeys: {} });
 });
 
 // --- the gates: each refuses for an ordinary state of a sandbox, and says which one -----------------------
@@ -160,6 +164,36 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
 
     expect(plan).toMatchObject({ ok: true, account: "codex-subscription" });
     expect((plan as { request: AgentRequest }).request.model).toBe("gpt-5.6-codex");
+});
+
+test("Codex receives the connected browser granted to its persona, and no other account", async () => {
+    const writer: Persona = {
+        id: "reddit-writer",
+        capabilities: ["reddit-radarsuspam"],
+        powers: PersonaPowersSchema.parse({}),
+    };
+    const reddit = { id: "reddit-radarsuspam", kind: "browser" as const, config: { platform: "reddit" } };
+    const other = { id: "reddit-other", kind: "browser" as const, config: { platform: "reddit" } };
+    browserServers.mockResolvedValue({
+        servers: { identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] } },
+        ports: { identity: 41_111 },
+        passkeys: { identity: "/state/identity/passkeys.json" },
+    });
+    const services = codexServices({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [reddit, other] }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [writer] }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+
+    const plan = await planTurn(services, turn({ agent: "codex", actsAs: "reddit-writer", conversationId: "reddit-conversation" }), context);
+    const request = (plan as { request: AgentRequest }).request;
+
+    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, true, "reddit-conversation");
+    expect(request.sdkServers).toEqual({
+        identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] },
+    });
+    expect(request.browserPorts).toEqual({ identity: 41_111 });
+    expect(request.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
 });
 
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {

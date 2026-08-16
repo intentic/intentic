@@ -41,7 +41,7 @@ describe("every provider/harness pair declares what it can do", () => {
         // is the drift this record exists to end.
         expect(["claude-code", "codex", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
-        expect(["full", "http", "none"]).toContain(capabilities.mcp);
+        expect(["full", "browser", "http", "none"]).toContain(capabilities.mcp);
         // Every runtime executes SOMETHING — a record listing no backend would hide the shell every loop has.
         expect(capabilities.execution).toContain("shell");
         for (const backend of capabilities.execution) {
@@ -155,6 +155,10 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(acp).toContain("MCP tools only — no plugins or browser");
     expect(acp).not.toContain("no slash commands");
     expect(acp).not.toContain("no terminal panel");
+
+    const codex = limitationsOf(capabilitiesOf("codex", "native"));
+    expect(codex).toContain("browser tools only — no plugins or other MCP tools");
+    expect(codex).not.toContain("no MCP tools or plugins");
 });
 
 test("every axis a record can lack has words for it", () => {

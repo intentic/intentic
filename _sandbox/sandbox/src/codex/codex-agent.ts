@@ -3,6 +3,7 @@ import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
+import { openBrowserSession } from "../browser/browser-sessions.js";
 import {
     type CodexEvent,
     type CodexItem,
@@ -56,12 +57,42 @@ const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined)
 // env_key (never a rotating OAuth token, so nothing races the translator's own refresh loop).
 // supports_websockets=false is load-bearing: the translator's inbound is plain POST SSE, and without it Codex
 // burns five WebSocket connect retries per turn before falling back.
-// One turn's provider block with its instruction keys folded in. Kept here rather than inlined so the merge
-// order is stated once: the two sets never share a key, and if one ever does, this is the line that decides.
-const withInstructions = (
+// One turn's provider block with its instruction and MCP keys folded in. Kept here rather than inlined so the
+// merge order is stated once: the two sets never share a key, and if one ever does, this is the line that decides.
+const withRuntimeConfig = (
     provider: Pick<CodexTurn, "modelProvider" | "config">,
     instructions: Record<string, JsonValue>,
 ): Pick<CodexTurn, "modelProvider" | "config"> => ({ ...provider, config: { ...instructions, ...provider.config } });
+
+/* App-server reads the same MCP tables as the Codex CLI. Intentic's browser layer already produces stdio
+ * server specs for the Claude Agent SDK, so project those process fields into Codex's per-thread config rather
+ * than starting a second browser stack. SDK-instance servers are deliberately skipped: they are live objects
+ * in this daemon, not processes app-server can spawn, which is why the Codex capability row claims browser MCP
+ * rather than the full harness ceiling.
+ *
+ * Only environment DELTAS ride the config. Browser specs carry a snapshot of process.env because the Claude
+ * SDK starts their children itself; app-server already inherits that same turn environment, and serialising it
+ * again would put every unrelated credential into the thread config. The one browser value that really differs
+ * (DISPLAY for a headed, eager server) remains. */
+const codexMcpConfig = (servers: AgentRequest["sdkServers"], inheritedEnv: Readonly<Record<string, string>>): Record<string, JsonValue> => {
+    const config: Record<string, JsonValue> = {};
+    for (const [name, server] of Object.entries(servers ?? {})) {
+        if (server.type !== undefined && server.type !== "stdio") {
+            continue;
+        }
+        const env =
+            server.env === undefined
+                ? undefined
+                : Object.fromEntries(Object.entries(server.env).filter(([key, value]) => inheritedEnv[key] !== value));
+        config[`mcp_servers.${name}`] = {
+            command: server.command,
+            ...(server.args === undefined ? {} : { args: server.args }),
+            ...(env === undefined || Object.keys(env).length === 0 ? {} : { env }),
+            ...(server.timeout === undefined ? {} : { tool_timeout_sec: Math.ceil(server.timeout / 1_000) }),
+        };
+    }
+    return config;
+};
 
 const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | "config"> => ({
     modelProvider: "translator",
@@ -158,6 +189,14 @@ interface ImageArtifactContext {
     readonly codexHome: string;
 }
 
+interface CodexBrowserContext {
+    readonly ports: Readonly<Record<string, number>>;
+    readonly passkeys: Readonly<Record<string, string>>;
+    readonly owner?: string;
+    // Present on a resumed invocation. A new thread learns its id from thread.started before it can call a tool.
+    readonly sessionId?: string;
+}
+
 // Normalize one Codex turn's provider event stream onto AgentEvents, RETURNING what the turn captured — the
 // plan phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary
 // turn discards it. `holdMessages` is the plan phase's one behavioural difference: agent messages are held back
@@ -168,6 +207,7 @@ async function* streamTurn(
     cwd: string,
     imageArtifacts: ImageArtifactContext,
     holdMessages = false,
+    browser?: CodexBrowserContext,
 ): AsyncGenerator<AgentEvent, TurnCapture> {
     const capture: TurnCapture = {};
     for await (const event of events) {
@@ -236,6 +276,17 @@ async function* streamTurn(
             } else if (item.type === "mcp_tool_call") {
                 const name = `${item.server}.${item.tool}`;
                 if (event.type === "item.started") {
+                    const port = browser?.ports[item.server];
+                    const sessionId = capture.threadId ?? browser?.sessionId;
+                    if (port !== undefined && sessionId !== undefined && item.tool.startsWith("browser_")) {
+                        openBrowserSession({
+                            sessionId,
+                            server: item.server,
+                            port,
+                            passkeyStore: browser?.passkeys[item.server],
+                            owner: browser?.owner,
+                        });
+                    }
                     yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
                 } else if (event.type === "item.completed") {
                     yield {
@@ -331,6 +382,7 @@ async function* runCodexPlanTurn(
     runner: CodexRunner,
     turnBase: Pick<CodexTurn, "env" | "modelProvider" | "config">,
     imageArtifacts: ImageArtifactContext,
+    browser: Omit<CodexBrowserContext, "sessionId"> | undefined,
 ): AsyncGenerator<AgentEvent> {
     const { images: firstTurnImages, others } = splitAttachments(request.attachments);
     // Images ride the first planning turn only — revision and execute turns resume the same thread, whose
@@ -349,6 +401,7 @@ async function* runCodexPlanTurn(
             request.cwd,
             imageArtifacts,
             true,
+            browser === undefined ? undefined : { ...browser, ...(sessionId === undefined ? {} : { sessionId }) },
         );
         images = [];
         return { sessionId: capture.threadId, planText: capture.heldMessage, errored: capture.errored === true };
@@ -364,6 +417,8 @@ async function* runCodexPlanTurn(
             }),
             request.cwd,
             imageArtifacts,
+            false,
+            browser === undefined ? undefined : { ...browser, ...(sessionId === undefined ? {} : { sessionId }) },
         );
     yield* runPlanEmulation(request.signal, CODEX_PLAN_PREAMBLE + withFileNote(request.prompt, others), request.sessionId, planPhase, executePhase);
 }
@@ -373,9 +428,9 @@ interface CodexAgentOptions {
     readonly runner?: CodexRunner;
 }
 
-// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. What this client does
-// not implement stays declared in the Codex capability row: app-server has MCP and interaction channels, but
-// enabling those requires wiring their server requests into Intentic's policy and question seams first.
+// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. Process-backed browser
+// MCP runs inside app-server; daemon-side SDK servers and interactive request channels stay declared as absent
+// in the Codex capability row until their policy and question seams are wired here.
 export const createCodexAgent = (options: CodexAgentOptions) => {
     const runner = options.runner ?? createCodexAppServerRunner();
     return async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
@@ -390,23 +445,32 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
          * touch different keys, and spelling the order out is what keeps a future key added to either from
          * silently winning. */
         const instructions = await codexInstructionConfig(request, activeCodexHome);
+        const runtimeConfig = { ...instructions, ...codexMcpConfig(request.sdkServers, env) };
         const turnBase: Pick<CodexTurn, "env" | "modelProvider" | "config"> =
             request.codexEndpoint !== undefined
                 ? {
                       env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken },
-                      ...withInstructions(translatorProvider(request.codexEndpoint.baseUrl), instructions),
+                      ...withRuntimeConfig(translatorProvider(request.codexEndpoint.baseUrl), runtimeConfig),
                   }
-                : { env, ...(Object.keys(instructions).length > 0 ? { config: instructions } : {}) };
+                : { env, ...(Object.keys(runtimeConfig).length > 0 ? { config: runtimeConfig } : {}) };
         // request.cwd is the conversation's actual checkout for cwd-isolated Codex turns. Using the daemon's
         // shared workspace root here would put an isolated conversation's generated image in somebody else's
         // tree even though every source edit correctly landed in its worktree.
         const imageArtifacts = { workspaceRoot: request.cwd, codexHome: activeCodexHome };
+        const browser =
+            request.browserPorts === undefined
+                ? undefined
+                : {
+                      ports: request.browserPorts,
+                      passkeys: request.browserPasskeys ?? {},
+                      ...(request.conversationId === undefined ? {} : { owner: request.conversationId }),
+                  };
         // If app-server reports a specific error and then its process also dies, keep the actionable frame and
         // suppress the generic process-exit wrapper.
         const { images, others } = splitAttachments(request.attachments);
         const turn =
             request.permissionMode === "plan"
-                ? runCodexPlanTurn(request, runner, turnBase, imageArtifacts)
+                ? runCodexPlanTurn(request, runner, turnBase, imageArtifacts, browser)
                 : streamTurn(
                       runner({
                           prompt: withFileNote(request.prompt, others),
@@ -418,6 +482,10 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                       }),
                       request.cwd,
                       imageArtifacts,
+                      false,
+                      browser === undefined
+                          ? undefined
+                          : { ...browser, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) },
                   );
         let surfacedError = false;
         try {
