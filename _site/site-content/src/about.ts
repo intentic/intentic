@@ -84,7 +84,7 @@ export const creatorBio = "I wanted a real workspace for my agents, on my own ha
 export const aboutHero = {
     eyebrow: "About the creator",
     headline: "Built in the open, by one engineer and his agents.",
-    lede: "No investors, no growth team, no telemetry to sell. One person with fifteen years of production systems behind him, a fleet of agents doing the typing, and a commit log where you can watch both of them work.",
+    lede: "intentic has no investors, growth team or usage data to sell. One engineer with fifteen years of production experience builds it with a fleet of agents. The public commit log shows their work.",
     portraitAlt: `${CREATOR_NAME}, the creator of intentic`,
 };
 
@@ -93,8 +93,8 @@ export const aboutHero = {
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "The platform holds only your identity and a URL. Run the sandbox yourself and it never receives your code, keys or sandbox; take the box we host and the workspace sits on our provider's disk, which we cannot read.",
-        href: productHref("delegate"),
+        body: "Run the sandbox on your own hardware and the platform stores only your identity and the sandbox's URL. It never receives your code or keys. If we host the sandbox, its files stay on the hosting provider's disk and are not exposed through the platform.",
+        href: productHref("host"),
         linkLabel: "What the platform actually holds",
     },
     {
@@ -111,8 +111,8 @@ export const trustCards: TrustCard[] = [
         linkLabel: "Read the commit log",
     },
     {
-        title: "We are transparent",
-        body: "As much as we possibly can.",
+        title: "It is new",
+        body: "There are no customer counts, testimonials or maturity claims yet.",
     },
 ];
 
@@ -164,8 +164,8 @@ export const openSource: OpenSourceProject[] = [
 ];
 
 export const whyIntentic = [
-    "Agents got good enough for real work; their environment did not.",
-    "We give agents tools to execute in space under your control.",
+    "Agents became capable of real work, but still lacked the tools and access to finish it.",
+    "intentic gives them real tools, useful context and access to your systems, all under your control.",
 ];
 
 export const aboutMeta = {

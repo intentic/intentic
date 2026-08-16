@@ -17,7 +17,7 @@ export const ORG_NAME = "intentic";
  * machine says "laptop, desktop or VPS". See docs/marketing/messaging.md for the rule. */
 export const ORG_TAGLINE = "You delegate. Agents work. You approve.";
 export const ORG_DESCRIPTION =
-    "A workspace for coding agents. You delegate. Agents work. You approve. Each one works in a sandbox on hardware you own, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read every diff before it lands. Free.";
+    "A workspace for coding agents. You delegate. Agents work. You approve. Each one works in a sandbox on hardware you own, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet and review every change before it is merged. Free.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 

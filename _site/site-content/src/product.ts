@@ -84,8 +84,8 @@ export const productPages: ProductPage[] = [
         slug: "run",
         navLabel: "Run",
         menuBlurb: "Run ten agents at once and see which one needs you",
-        heading: "Run the fleet. Get pulled in only when one needs you.",
-        sub: "One agent is a chat window. Ten need a board: who is running, who is blocked, what each one spent.",
+        heading: "Run many agents. See which one needs you.",
+        sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
             name: "fleet-board",
             alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -94,21 +94,21 @@ export const productPages: ProductPage[] = [
         },
         facts: [
             { value: "3 lanes", label: "Attention, Active, Finished. The board sorts itself" },
-            { value: "1 branch each", label: "every agent works on its own git worktree" },
+            { value: "1 branch each", label: "every agent gets an isolated checkout" },
             { value: "5 agents", label: "Claude Code, Codex, Grok, Kimi Code, Google" },
         ],
         blocks: [
             {
-                title: "Attention is a lane, not a notification",
-                body: "An agent that needs a decision stops and says so on its card. Ten agents read as a short list of things only you can do.",
+                title: "See what needs your attention first",
+                body: "An agent that needs a decision stops and moves to the Attention lane. You get one short list of the agents waiting for you.",
                 bullets: [
-                    "Question for you · Approval needed · Land conflict, each with the one action that clears it",
+                    "Question for you · Approval needed · Merge conflict, each with the one action that clears it",
                     "Everything else keeps running while you answer",
                 ],
             },
             {
-                title: "Every card carries the receipts",
-                body: "See the model, branch, turns, tokens, cost and current diff without opening a transcript.",
+                title: "See status and cost at a glance",
+                body: "Each card shows the model, branch, turns, tokens, cost and current diff. You do not need to open the full transcript.",
                 shot: {
                     name: "mobile-fleet",
                     alt: "The same fleet board on a phone: agent cards stacked in one column with model, branch, cost and diff stats.",
@@ -117,7 +117,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "Isolated by construction",
-                body: "Each agent works in its own git worktree, so they never collide and nothing lands unapproved.",
+                body: "Each agent works in its own git worktree, so they never collide and no change is merged without your approval.",
                 figure: "worktrees",
             },
         ],
@@ -132,7 +132,7 @@ export const productPages: ProductPage[] = [
         slug: "connect",
         navLabel: "Connect",
         menuBlurb: "Connect agents to the systems they need",
-        heading: "An agent is only as useful as what it can reach.",
+        heading: "Connect agents to the systems they need.",
         sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Every key stays in your sandbox.",
         hero: {
             name: "capabilities",
@@ -196,29 +196,29 @@ export const productPages: ProductPage[] = [
     {
         slug: "automate",
         navLabel: "Automate",
-        menuBlurb: "Agents that start themselves on an event, and act",
-        heading: "Agents that start on a schedule or event.",
-        sub: "A push, alert, payment, email, chat or cron wakes an agent. A guard you write vets every run.",
+        menuBlurb: "Start an agent automatically from a schedule or event",
+        heading: "Start an agent automatically.",
+        sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
         // Diagram-led: there is no captured automations screen, and a mockup would be the one lie on the
         // shelf. The triggers figure IS the hero; a real screen (the fleet board) carries a block below.
         heroFigure: "triggers",
         facts: [
             { value: "6 events", label: "push, alert, payment, email, chat or cron" },
-            { value: "1 guard", label: "a command you write vets every wake" },
-            { value: "Fresh session", label: "each run its own transcript and worktree" },
+            { value: "1 check", label: "an optional command approves or skips each run" },
+            { value: "Fresh session", label: "each run gets its own transcript and isolated checkout" },
         ],
         blocks: [
             {
-                title: "A persona with permissions, not a free-for-all",
-                body: "Each wake uses the persona, model and limits you set, and the guard can stop it before a token is spent.",
+                title: "Control what starts and what it can do",
+                body: "Each run uses the identity, model, permissions and limits you set. An optional check command can skip the run before it uses any tokens.",
                 bullets: [
                     "Wake on a GitHub push, a Sentry alert, a Stripe payment, inbound email, a Discord message, or cron",
-                    "The guard is your code: it decides, per event, whether this one is worth an agent",
+                    "The check is your own code. It decides whether a specific event needs an agent",
                 ],
             },
             {
-                title: "Watch every run land on the board",
-                body: "A woken agent lands on your board like any other: its own card, diff and review.",
+                title: "See every automated run on the board",
+                body: "An automatically started agent appears like any other, with its own card, diff and review.",
                 shot: {
                     name: "fleet-board",
                     alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
@@ -234,16 +234,16 @@ export const productPages: ProductPage[] = [
         meta: {
             title: "Automate · intentic",
             description:
-                "Wake an agent from a push, alert, payment, email, chat or cron. You set its permissions and guard command, and every run opens a session you can watch.",
+                "Start an agent from a push, alert, payment, email, chat or schedule. You set its permissions and optional check command, and every run opens a session you can watch.",
             datePublished: PUBLISHED,
         },
     },
     {
         slug: "review",
         navLabel: "Review",
-        menuBlurb: "It proposes, you approve, and nothing lands unread",
-        heading: "It proposes. You approve. Nothing lands until you've read the diff.",
-        sub: "Every agent plans first, then waits. Nothing lands until you have read every hunk.",
+        menuBlurb: "It proposes, you approve, and nothing is merged unread",
+        heading: "It proposes. You approve. Nothing is merged until you read the diff.",
+        sub: "Every agent plans first, then waits. Review each file before you accept the change.",
         hero: {
             name: "chat-plan",
             alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
@@ -252,7 +252,7 @@ export const productPages: ProductPage[] = [
         facts: [
             { value: "Plan first", label: "every agent reads, proposes, then waits for you" },
             { value: "Permission dial", label: "how much it may do unattended, per turn" },
-            { value: "Land or discard", label: "one button each; nothing lands by surprise" },
+            { value: "Accept or discard", label: "one button each; no change is accepted by surprise" },
         ],
         blocks: [
             {
@@ -280,7 +280,7 @@ export const productPages: ProductPage[] = [
             },
             {
                 title: "The review boundary is a real branch",
-                body: "Landing adds the agent's work as ordinary git changes you can stage, amend or revert.",
+                body: "Accepting the agent's work adds ordinary git changes you can stage, amend or revert.",
                 figure: "worktrees",
             },
             {
@@ -304,9 +304,9 @@ export const productPages: ProductPage[] = [
     {
         slug: "host",
         navLabel: "Host",
-        menuBlurb: "Give it a server of its own and hand off the job",
+        menuBlurb: "Run the sandbox on a server you control",
         heading: "Host the work. Keep control.",
-        sub: "A sandbox is a Docker container on your laptop, desktop or server. Hand off the running, keep the control.",
+        sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         hero: {
             name: "sandbox-overview",
             alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",
@@ -316,7 +316,7 @@ export const productPages: ProductPage[] = [
         facts: [
             { value: "No code", label: "the platform stores no source, prompts or credentials" },
             { value: "MIT", label: "all of intentic is open source, platform included" },
-            { value: "No ports", label: "nothing inbound is opened; the tunnel dials out" },
+            { value: "No open ports", label: "the sandbox makes a private outbound connection" },
         ],
         blocks: [
             {
@@ -325,8 +325,8 @@ export const productPages: ProductPage[] = [
                 figure: "ownership",
             },
             {
-                title: "The image is a file you approve",
-                body: "The image is a Dockerfile you own. The agent proposes a change and waits for your approval.",
+                title: "You control what is installed",
+                body: "A Dockerfile defines the sandbox's installed software. The agent can propose a change, but it waits for your approval before applying it.",
                 shot: {
                     name: "sandbox-environment",
                     alt: "The sandbox Environment tab: an overlay Dockerfile diff awaiting review, adding an imagemagick install, with Reject and Approve buttons.",
@@ -335,8 +335,8 @@ export const productPages: ProductPage[] = [
                 },
             },
             {
-                title: "The bill is measured where it is spent",
-                body: "Each turn's tokens and cost land in the sandbox's own ledger. It is your plan, so nobody meters it.",
+                title: "See usage where it happens",
+                body: "The sandbox records the tokens and cost of each turn. The usage stays in your own ledger because the AI account is yours.",
                 shot: {
                     name: "sandbox-spend",
                     alt: "The sandbox Usage tab: a stacked spend-per-day chart split by Claude Code and Codex, with cost broken down by model and by agent.",
@@ -353,9 +353,9 @@ export const productPages: ProductPage[] = [
                 title: "One sandbox, several people",
                 body: "The owner installs the tools; invited teammates share the sandbox, each signed in as themselves.",
                 bullets: [
-                    "Invite by email; grants are enforced by the daemon, fail-closed.",
-                    "Teammates chat, drive and review, and mirror the sandbox's ports.",
-                    "Revoking or leaving takes effect the moment you press it.",
+                    "Invite people by email. The sandbox enforces their access, not just the interface.",
+                    "Teammates can chat, work, review and open the web apps running in the sandbox.",
+                    "Removing someone's access takes effect immediately.",
                 ],
                 figure: "sharing",
             },
@@ -363,7 +363,7 @@ export const productPages: ProductPage[] = [
         meta: {
             title: "Host agent work · intentic",
             description:
-                "Run the sandbox on a server you own: an image you approve, a tunnel your browser dials, a spend ledger nobody else sees, and no platform on the path.",
+                "Run the sandbox on a server you own. You approve installed software, connect through a private tunnel and keep usage data in the sandbox.",
             datePublished: PUBLISHED,
         },
     },

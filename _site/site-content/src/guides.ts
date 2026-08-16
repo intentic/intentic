@@ -92,7 +92,7 @@ export interface GuidePage {
 export const guidesIndex = {
     eyebrow: "Guides",
     heading: "Straight answers about running AI coding agents",
-    sub: "The questions people ask before they go looking for a product, answered on their own terms. Every guide opens with the answer, names the approaches that have nothing to do with intentic, and says where each one stops working.",
+    sub: "Practical answers to five common questions. Each guide starts with a direct answer, compares the available approaches and explains the trade-offs.",
     meta: {
         title: "Guides · Running AI coding agents",
         description:
@@ -222,7 +222,7 @@ export const guidePages: GuidePage[] = [
         ],
         related: [
             { label: "Parallel agents, in the docs", href: docsHref("parallel-agents") },
-            { label: "Run a fleet", href: productHref("orchestrate") },
+            { label: "Run a fleet", href: productHref("run") },
             { label: "How intentic compares", href: compareHref("") },
         ],
         meta: {
@@ -331,7 +331,7 @@ export const guidePages: GuidePage[] = [
             },
         ],
         related: [
-            { label: "Host agent work", href: productHref("delegate") },
+            { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Automations", href: docsHref("automations") },
         ],
@@ -451,7 +451,7 @@ export const guidePages: GuidePage[] = [
             },
         ],
         related: [
-            { label: "Connect agents to your systems", href: productHref("empower") },
+            { label: "Connect agents to your systems", href: productHref("connect") },
             { label: "Capabilities, in the docs", href: docsHref("capabilities") },
             { label: "Access and permissions", href: docsHref("access") },
         ],
@@ -565,7 +565,7 @@ export const guidePages: GuidePage[] = [
             },
         ],
         related: [
-            { label: "Review agent work", href: productHref("supervise") },
+            { label: "Review agent work", href: productHref("review") },
             { label: "Capabilities and permissions", href: docsHref("access") },
             { label: "Quickstart", href: docsHref("quickstart") },
         ],
@@ -668,7 +668,7 @@ export const guidePages: GuidePage[] = [
             },
         ],
         related: [
-            { label: "Host agent work", href: productHref("delegate") },
+            { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Which models it uses", href: docsHref("models") },
         ],

@@ -71,22 +71,25 @@ const contentsOf = (label: string): string[] => {
 <DocsLayout
     pageId=""
     heading="Overview"
-    lead="intentic gives each agent its own sandbox on hardware you own. These docs take you from first run to a sandbox that runs itself."
+    lead="intentic runs coding agents in a sandbox on hardware you choose. These docs cover setup, connections and everyday use."
 >
     <h2>The mental model</h2>
     <p>
-        One idea holds the whole product together: <strong>a specialized agent is a purpose-built sandbox.</strong> Not a prompt or a markdown file. It is a real container with the libraries, dev-tools, system access and curated context a specific job needs. You drive it from any browser; it runs where you started it.
+        An intentic <strong>sandbox is a Docker container that runs on hardware you choose.</strong> It holds the agent, code, tools,
+        credentials and instructions needed for a job. You control it from a browser, but the work continues inside the container when the
+        browser closes.
     </p>
     {/* The whole product in one look, before the prose names its parts: a reader who scrolls past everything
         else should still leave knowing where their code sits and what the platform can reach. */}
     <div class="docs-embed my-8">
         <ArchitectureFigure />
     </div>
-    <p>Two tiers make that work, and only your sandbox holds your code:</p>
+    <p>intentic has two parts. Only the sandbox holds your code:</p>
     <ul>
-        <li><strong>The platform</strong>: a thin hub that stores your identity and your sandbox's URL. It sits off the command path and can't reach in.</li>
+        <li><strong>The platform</strong> stores your identity and the sandbox's URL. It does not receive your commands, code or credentials.</li>
         <li>
-            <strong>Your sandbox</strong>: one container per agent, reached by your browser over a private tunnel. The agent, repos, credentials and capabilities live here, along with any tool it runs: a database client, a headless browser, a deployment engine.
+            <strong>Your sandbox</strong> runs the agent and stores its repositories, credentials and tools. Your browser reaches it through a
+            private connection.
         </li>
     </ul>
     <p>
@@ -95,9 +98,8 @@ const contentsOf = (label: string): string[] => {
 
     <h2>Get one running</h2>
     <p>
-        Every route starts the same way: <a href="/docs/quickstart/#setup-code">sign in, and the setup screen hands you a finished command
-        with your setup code already in it</a>, and every route ends with the same two containers on your machine. They differ only in who
-        types the docker commands.
+        First, <a href="/docs/quickstart/#setup-code">sign in to get a setup command with your code already included</a>. Every setup method
+        creates the same two Docker containers. The only difference is whether the desktop app, Docker Compose or you run the commands.
     </p>
     <table>
         <thead>
@@ -122,9 +124,9 @@ const contentsOf = (label: string): string[] => {
         </tbody>
     </table>
     <p>
-        <a href="/docs/quickstart/">Quickstart</a> walks all four end to end with copy-pasteable commands.{" "}
-        <a href="/docs/docker/">Docker setup</a> is the anatomy they share: what gets created, where your data lives, and how to update or
-        remove it. If you'd like the installer without reading further, it's on the <a href="/download/">download page</a>.
+        <a href="/docs/quickstart/">Quickstart</a> explains all four methods with commands you can copy. <a href="/docs/docker/">Docker setup</a>
+        explains what each method creates, where your data lives and how to update or remove it. To use the installer now, go to the{" "}
+        <a href="/download/">download page</a>.
     </p>
 
     <h2>What's in a sandbox</h2>
@@ -133,13 +135,13 @@ const contentsOf = (label: string): string[] => {
         <li><strong>An agent</strong>: Claude Code, Codex, or Grok, on your own subscription, chosen per conversation.</li>
         <li><strong>A workspace</strong>: your repos, a file tree, editors, and terminals that survive reconnects.</li>
         <li><strong>Capabilities</strong>: GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, added in a click.</li>
-        <li><strong>An environment</strong>: libraries and dev-tools baked into the image, proposed by the agent and applied on your approval.</li>
+        <li><strong>An environment</strong>: libraries and development tools installed in the container. You approve any changes.</li>
         <li><strong>Automations</strong>: schedules, webhooks, and event listeners that wake the agent while you're away.</li>
     </ul>
 
     <h2>Find your way</h2>
     <p>
-        These docs are four shelves, sorted by what you came here to do. The list on the left is all of it; this is which part is yours.
+        These docs are grouped by four tasks. Use the list on the left for individual pages, or choose the group that matches your task below.
     </p>
     <div class="docs-embed mt-6 flex flex-col gap-3">
         {
@@ -169,8 +171,7 @@ const contentsOf = (label: string): string[] => {
                 <span class="text-sm text-muted">“I want to extend it, or drive it from my own code.”</span>
             </div>
             <p class="mt-2 text-xs leading-relaxed text-subtle">
-                A separate book, at /developers: the extension lifecycle end to end, the manifest reference, the host API and the sandbox's own
-                HTTP API.
+                Developer documentation for building and publishing extensions, writing a manifest and using the host or sandbox API.
             </p>
         </a>
     </div>

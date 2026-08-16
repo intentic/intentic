@@ -32,13 +32,13 @@ const groups = [
     {
         key: "verified",
         heading: "Verified",
-        blurb: "The deterministic scan and agent audit passed, and somebody here also read the source at the listed commit.",
+        blurb: "Automated checks and an AI agent's code review passed. Someone from intentic also read the source at the listed commit.",
         entries: verified,
     },
     {
         key: "listed",
         heading: "Everything the community has published",
-        blurb: "The exact source passed the deterministic scan and agent audit. No human source review is claimed.",
+        blurb: "Automated checks and an AI agent's code review passed for the listed commit. It has not been reviewed by a person at intentic.",
         entries: listed,
     },
 ].filter((group) => group.entries.length > 0);
@@ -116,7 +116,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
 
 <BaseLayout
     title="Extensions · intentic"
-    description="Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories; intentic hosts none of the code."
+    description="Browse published intentic extensions. Each listing shows what it adds, who wrote it and the exact source commit you would install."
 >
     <Nav />
     <main class="flex-1">
@@ -125,10 +125,10 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="eyebrow">Extensions</div>
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
-                    A small core. Everything else plugs in.
+                    Add tools and views to intentic.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    The core is what every sandbox always has; building blocks add the rest: even the features that ship built in.
+                    Extensions can add pages, panels, file viewers, connections and automations. Even built-in features use the same extension system.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
                     <a class="btn btn-primary" href={apiHref("build")}>Build one</a>
@@ -143,9 +143,8 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                     <section class="card px-6 py-12 text-center">
                         <h2 class="text-lg font-semibold tracking-tight text-content">Nothing listed yet.</h2>
                         <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">
-                            The registry is open and empty, which makes this a good moment to be the first. Add the{" "}
-                            <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository and a nightly job opens your pull request
-                            for you.
+                            Be the first to publish one. Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository, and
+                            the registry bot will open a listing pull request for you.
                         </p>
                         <a class="btn btn-primary mt-6" href={apiHref("build")}>
                             Build an extension

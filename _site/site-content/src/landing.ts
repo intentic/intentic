@@ -119,7 +119,7 @@ export const landingContent: LandingContent = {
         // the cut with the claim and the price still in it.
         title: "intentic · A workspace for coding agents",
         description:
-            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere, read every diff before it lands. Free.",
+            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free.",
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
@@ -171,7 +171,7 @@ export const landingContent: LandingContent = {
         items: [
             {
                 verb: "Run",
-                href: productHref("orchestrate"),
+                href: productHref("run"),
                 line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
                     name: "fleet-board",
@@ -181,7 +181,7 @@ export const landingContent: LandingContent = {
             },
             {
                 verb: "Connect",
-                href: productHref("empower"),
+                href: productHref("connect"),
                 line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
                     name: "capabilities",
@@ -193,11 +193,11 @@ export const landingContent: LandingContent = {
                 verb: "Automate",
                 href: productHref("automate"),
                 line: "Start an agent automatically on an event you pick. Every run is one you can open and watch.",
-                triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "plain cron"],
+                triggers: ["a push", "a Sentry alert", "a Stripe payment", "inbound email", "a chat message", "a schedule"],
             },
             {
                 verb: "Review",
-                href: productHref("supervise"),
+                href: productHref("review"),
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
                     name: "workspace-changes",
@@ -207,7 +207,7 @@ export const landingContent: LandingContent = {
             },
             {
                 verb: "Host",
-                href: productHref("delegate"),
+                href: productHref("host"),
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
                     name: "sandbox-overview",

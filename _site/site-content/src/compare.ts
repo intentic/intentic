@@ -418,7 +418,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "Running when nobody is watching",
-                body: "Automations wake an intentic agent from a push, alert, email, chat, CI result or schedule, and a guard you write can stop each run. Nimbalyst's agents work on shared documents while you are there.",
+                body: "Automations start an intentic agent from a push, alert, email, chat, CI result or schedule. An optional command you write can skip a run. Nimbalyst's agents work on shared documents while you are there.",
             },
         ],
         table: [
@@ -747,7 +747,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Reviewing what it did",
-                intentic: "a diff reader you tick through, then land or discard",
+                intentic: "a diff reader you tick through, then accept or discard",
                 them: "the reply in the thread, and git afterwards",
             },
             {
@@ -842,7 +842,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Reviewing changes",
-                intentic: "a diff reader over an isolated worktree, then land or discard",
+                intentic: "a diff reader over an isolated worktree, then accept or discard",
                 them: "git, in the terminal it ran in",
             },
             {
@@ -878,7 +878,7 @@ export const comparePages: ComparePage[] = [
             "A hosted agent you give a task and a repository to. It clones your repo into the vendor's cloud VM, works there, and hands you a pull request.",
         verdict: [
             "Cloud agents have a polished setup: connect a repo and go. During the run, your code, keys and production access live in the vendor's sandbox.",
-            "intentic keeps the same browser workflow with the sandbox on your own machine. The platform stays off the command path, and the full MIT source is in one public repo.",
+            "intentic keeps the same browser workflow with the sandbox on your own machine. The platform never handles commands or code, and the full MIT source is in one public repo.",
         ],
         overlap: {
             title: "Where you agree",
@@ -940,24 +940,24 @@ export const familyPages = (id: string): ComparePage[] => comparePages.filter((p
  * the ones that survived the field converging on parallel and cloud agents. */
 export const compareIndex = {
     eyebrow: "Compare",
-    heading: "Most of these are not competitors.",
-    sub: "Usually, “how does this compare to X?” has a simple answer: intentic runs X, or works alongside it.",
+    heading: "See where intentic fits.",
+    sub: "Some tools run inside intentic, others work alongside it, and a few replace part of what it does.",
     axes: {
-        heading: "Two questions sort the entire field",
+        heading: "Compare any agent product with two questions",
         items: [
             {
                 title: "Whose machine does the agent run on?",
-                body: "Whoever owns the machine can read your source and may hold your credentials. It is the clearest dividing line between agent products.",
+                body: "The owner of that machine may be able to read your source code and credentials. This is the clearest difference between local and cloud products.",
             },
             {
                 title: "How much of the agent's environment can you change?",
-                body: "A prompt is one layer. The image, the connected systems and the context decide whether an agent can finish a job.",
+                body: "Instructions are only one part. Installed tools, connected systems and available context also decide whether an agent can finish the job.",
             },
         ],
     },
     correction: {
         title: "Found something out of date?",
-        body: "These describe other people's products, and they ship as fast as we do. Every claim was re-checked against the vendor's own site on the date each page shows. Where we have it wrong, open an issue.",
+        body: "These products change quickly. We check every claim against the vendor's own site on the date shown. If something is wrong, please open an issue.",
         cta: "Report an inaccuracy",
     },
     meta: {

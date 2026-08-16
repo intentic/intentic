@@ -79,7 +79,7 @@ const VARIANTS: readonly Variant[] = [
         pad: 16,
         browser: { x: 58, y: 10, w: 300, h: 56 },
         chip: { x: 110, y: 84, w: 196, h: 26 },
-        chipText: `private tunnel · outbound only`,
+        chipText: `private tunnel · no open ports`,
         machine: { x: 12, y: 140, w: 392, h: 240 },
         sandbox: { x: 26, y: 178, w: 364, h: 188 },
         tile: { x: 42, y: 212, w: 160, h: 64, cols: 2, gapX: 12, gapY: 12 },
@@ -163,12 +163,10 @@ const tileBox = (v: Variant, i: number): Box => ({
 });
 
 const label =
-    `intentic in one picture. Your browser drives your sandbox directly, over a private tunnel that dials out from your own machine, ` +
-    `so there are no inbound ports to open. The sandbox is one container per agent, running on hardware you own, and it holds the agent ` +
-    `itself, your workspace, the capabilities it can operate and the automations that wake it. The intentic platform stands off to the ` +
-    `side of that path rather than on it: your browser signs in to it, and the sandbox announces its address when it boots. Nothing else ` +
-    `passes through it, and your code and credentials never leave your machine. The one exception is the starter sandbox we host for you, ` +
-    `where the container runs on a machine we rent instead of one you own — the command path is identical, but the disk is ours.`;
+    `intentic has two parts. Your browser connects directly to your sandbox through a private tunnel, with no ports to open. ` +
+    `The sandbox runs on hardware you choose and stores the agent, code, tools, credentials and automations. ` +
+    `The intentic platform stores only your identity and the sandbox address. It does not receive your code, commands or credentials. ` +
+    `If you use a hosted starter sandbox, its container and files run on a machine intentic rents instead of hardware you provide.`;
 ---
 
 {
@@ -250,7 +248,7 @@ const label =
                     style="fill: var(--color-content)"
                     dominant-baseline="central"
                 >
-                    Off the command path
+                    No code or commands
                 </text>
 
                 {/* ── what crosses to it, and nothing else ────────────────────────────────────────── */}

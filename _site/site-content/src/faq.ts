@@ -52,14 +52,14 @@ export const faqGroups: FaqGroup[] = [
                 id: "how-is-this-different",
                 question: "How is this different from a custom GPT or a .md instructions file?",
                 answer: [
-                    "Those are a prompt on a generic assistant: nothing installed, no reach into your code, a blank context every time. An agent here gets a container with real tools, credentials for your repos, and its skills loaded every run.",
+                    "A custom GPT or instructions file changes what an assistant is told. It does not install tools or connect to your code. In intentic, an agent works inside a container with the tools, repository access and instructions it needs for the job.",
                 ],
             },
             {
                 id: "how-does-it-compare",
                 question: "How does this compare to Conductor, Cursor, OpenCode or Nimbalyst?",
                 answer: [
-                    "Mostly it doesn't compete. Claude Code, Codex and OpenCode are agent harnesses, and intentic runs all of them. Against a cloud platform, the only real question is whose computer holds your source.",
+                    "Claude Code, Codex and OpenCode can run inside intentic. Cursor can work beside it. Local orchestrators such as Conductor and Nimbalyst are the closest comparisons because they also manage several agents. Cloud platforms differ most in where your source code runs.",
                 ],
                 more: { label: "Every comparison, with the case for the other product", href: compareHref("") },
             },
@@ -75,7 +75,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "sandbox-or-persona",
                 question: "Should I start a new sandbox or add a new persona?",
                 answer: [
-                    "A sandbox has its own tools, systems, budget and code: start one for a different job. A persona is who a sandbox speaks as when it posts outside intentic: add one when the work is the same but the identity changes, like a brand account beside your own.",
+                    "Create a sandbox when a job needs different code, tools, connected systems or its own budget. Add a persona when the job stays the same but the agent needs to speak as a different public identity, such as a brand account instead of your personal account.",
                 ],
                 more: { label: "Specialize a sandbox, then grow a team", href: docsHref("autonomous-employees") },
             },
@@ -97,14 +97,14 @@ export const faqGroups: FaqGroup[] = [
                 id: "what-do-i-need",
                 question: "What do I need to run a sandbox?",
                 answer: [
-                    "A machine with Docker and a Google account. No open inbound ports, nothing deployed. Docker installs itself if missing, with your confirmation.",
+                    "A computer with Docker and a Google account. You do not need a public IP address or any open inbound ports. If Docker is missing, the installer offers to install it after you confirm.",
                 ],
             },
             {
                 id: "do-i-need-cloudflare",
                 question: "Do I need a Cloudflare account?",
                 answer: [
-                    "No. The tunnel runs under intentic's own domain by default. Bring your own zone if you prefer; the token is used once and never stored.",
+                    "No. intentic provides the private connection by default. You can use your own Cloudflare domain instead; the setup token is used once to find the domain and is not stored.",
                 ],
             },
             {
@@ -118,15 +118,15 @@ export const faqGroups: FaqGroup[] = [
                 id: "can-the-agent-break-things",
                 question: "Can the agent break my stuff?",
                 answer: [
-                    "It starts in plan mode: it proposes, you approve. Every change is a diff you can discard, Dockerfile changes need explicit approval, and stricter or looser modes are one click away.",
+                    "An agent can make mistakes, so it starts by proposing a plan for you to approve. You can review or discard every file change, and changes to installed software need separate approval. You can change the agent's permissions at any time.",
                 ],
-                more: { label: "How to review what an agent wrote before it lands", href: guidesHref("review-ai-generated-code-changes") },
+                more: { label: "How to review what an agent wrote before you accept it", href: guidesHref("review-ai-generated-code-changes") },
             },
             {
                 id: "production-ready",
                 question: "Is it production-ready?",
                 answer: [
-                    "The app is new and says so, but it isn't a demo: what you get is a real, full sandbox. Every agent starts in plan mode and every change lands as a reviewable diff, so you build trust with the wheel in your hands.",
+                    "It is a working product, but it is new. Start with low-risk work and review the results. Every agent proposes a plan first, and every file change is shown as a diff before you accept it.",
                 ],
             },
         ],
@@ -140,7 +140,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "where-does-my-code-live",
                 question: "Where does my code live?",
                 answer: [
-                    "On your machine. The sandbox runs where you start it and your browser reaches it over a private tunnel. The platform stores your identity and the sandbox's URL, and never relays your files.",
+                    "On your machine. The sandbox runs where you start it, and your browser connects over a private tunnel. The platform stores your identity and the sandbox's URL. It never receives your files.",
                 ],
                 more: { label: "Where your code goes with any coding agent", href: guidesHref("where-your-code-goes-with-cloud-coding-agents") },
             },
@@ -148,7 +148,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "can-intentic-read-my-secrets",
                 question: "Can intentic read my secrets?",
                 answer: [
-                    "No. Your credentials stay inside the sandbox and never reach the platform, which holds only the connection secrets pairing a browser with a sandbox, encrypted with AES-256-GCM. Files like .env are blocked from the relay.",
+                    "No. Your credentials stay inside the sandbox and never reach the platform. The platform stores only encrypted tokens that connect your browser to the sandbox. Secret files such as .env are never sent through that connection.",
                 ],
                 more: {
                     label: "Giving an agent credentials without leaking them",
@@ -166,7 +166,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "my-data",
                 question: "Can I export or delete my data?",
                 answer: [
-                    "Settings → Export downloads everything the platform stores about you as JSON. Account deletion cascades sandboxes, sessions and grants.",
+                    "Settings → Export downloads everything the platform stores about you as JSON. Deleting your account also deletes its sandbox records, sessions and access permissions.",
                 ],
             },
         ],

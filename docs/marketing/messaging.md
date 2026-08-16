@@ -64,7 +64,7 @@ own Claude/Codex/Grok subscription. Run one, or ten in parallel.
 **The golden path is the story spine**, and every band ladders onto one of its steps: connect a
 machine with one command → give the work to agents, each in its own git worktree → walk
 away, the runs continue → reopen from any browser or phone onto the same runs → steer, answer,
-interrupt → read every diff before it lands.
+interrupt → review every change before it is merged.
 
 The claim is literal, not a metaphor, and that is what makes it defensible: the sandbox is a real
 daemon on the user's machine and the browser holds nothing a run depends on — closing every window

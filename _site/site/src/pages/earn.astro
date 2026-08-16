@@ -41,16 +41,16 @@ const spendCards = [
         tag: "One-time",
         kicker: "Premium extensions",
         heading: "Back an extension by installing it",
-        blurb: "The install is the whole transaction. Nothing after it is counted, reported or charged for: using the thing you installed is free forever.",
+        blurb: "Installing a premium extension sends a one-time credit donation to its creator. Using it after that costs no more credits.",
         figure: n(pool.donationCredits),
         unit: "credits, flat",
-        note: "Same number whatever you install, whoever made it. A price each listing could set would be the first thing anyone gamed.",
+        note: "Every premium extension donates the same number of credits, so creators cannot set or manipulate the price.",
         steps: [
             "You approve the install, exactly like any other extension.",
             `${n(pool.donationCredits)} credits go to the publisher named in the manifest.`,
             "It is yours from then on: open it a thousand times, it never costs another credit.",
         ],
-        guarantee: "If the donation cannot go through, the install stops. Nothing half-paid ever goes live.",
+        guarantee: "If the donation fails, the extension is not installed.",
         cadence: "Reinstalling charges nothing. An update can donate again, at most once a month.",
         meter: meterBars(installsPerDay, 2.5),
         meterLabel: `A day's credits: ${n(installsPerDay)} installs`,
@@ -59,17 +59,17 @@ const spendCards = [
         tag: "Per run",
         kicker: "Premium services",
         heading: "Pay for a run that costs real money",
-        blurb: "Some tools are not a prompt and some glue: they call paid data APIs or burn real compute every time. Those are services, and they are metered per run.",
+        blurb: "Some tools use a paid API, licensed data or significant computing power each time they run. These are services, and each run has a credit price.",
         figure: "Its own price",
         unit: "shown before you agree",
         note: `Each service publishes what a run costs. The demo research run is ${n(demoServiceCredits)} credits, so a day's allowance is ${n(demoRunsPerDay)} of them.`,
         steps: [
-            "Your agent finds one that fits and asks — a card in chat shows the price and what is left today.",
-            "You click Run. One click, one run — the agent cannot spend without it.",
-            "The platform makes the call for you: the provider never learns who you are, and you never hold its key.",
+            "Your agent suggests a service. A card in chat shows its price and your remaining credits.",
+            "You click Run. The agent cannot spend credits without that approval.",
+            "The platform calls the service. The provider does not receive your identity, and you do not need its API key.",
         ],
-        guarantee: "If the service does not answer, your credits come straight back. A failed run costs nothing.",
-        cadence: "Every repeat raises its own card. Nothing can loop without asking you again.",
+        guarantee: "If the service does not answer, your credits are returned. A failed run costs nothing.",
+        cadence: "Every repeat needs separate approval.",
         meter: meterBars(demoRunsPerDay, 0.45),
         meterLabel: `A day's credits: ${n(demoRunsPerDay)} demo runs`,
     },
@@ -81,15 +81,15 @@ const spendCards = [
 const spendRules = [
     {
         title: `${creatorSharePct}% reaches the creator`,
-        body: "The same published share of a spent credit's value, whichever way you spent it. The rest runs the platform.",
+        body: "The creator receives the same published share of each spent credit's value. The rest runs the platform.",
     },
     {
-        title: "Capped at what you paid",
-        body: `Both draw on a daily allowance of ${n(pool.dailyCredits)} credits that resets at midnight UTC. You cannot direct more to creators than your membership provides, which prevents farming.`,
+        title: "Spending has a daily limit",
+        body: `Both use your daily allowance of ${n(pool.dailyCredits)} credits, which resets at midnight UTC. You cannot direct more money than your membership provides.`,
     },
     {
-        title: "Nothing is metered",
-        body: "No usage counting anywhere, and none asked for. Installing is a choice you make; a run is one you approve. Credits you never spend pay nobody.",
+        title: "No background usage tracking",
+        body: "The platform records only the install or service run you approve. It does not measure how often you use an installed extension.",
     },
 ];
 
@@ -169,33 +169,33 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
  * same way the gallery draws its glyphs. */
 const rules = [
     {
-        title: "No telemetry, ever",
-        body: "The pool pays only on two deliberate acts: an install you approve and a run you approve. Your machine reports nothing.",
+        title: "No background tracking",
+        body: "The pool pays only for an install or service run you approve. Your machine does not report how you use an extension.",
         d: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m1 1 22 22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
     },
     {
         title: "The books are open",
-        body: "Every month, published: what came in, what payment fees cost, what the pool was, what reached creators, and what is still owed.",
+        body: "The public monthly ledger shows revenue, payment fees, the creator pool, creator payments and any amount still owed.",
         d: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
     },
     {
-        title: "Failures refund themselves",
-        body: "Credits return the moment a service fails to answer. Enforced in code before the call, not argued through a support queue.",
+        title: "Failed runs refund automatically",
+        body: "Credits return automatically when a service fails to answer. You do not need to contact support.",
         d: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     },
     {
         title: "The catalog is curated",
-        body: "The platform admits every service, and delists it if it goes bad. No form puts an endpoint in front of your agent.",
+        body: "intentic reviews every paid service before listing it and removes services that stop meeting the rules.",
         d: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
     },
     {
-        title: "Farming can't profit",
-        body: "Support is capped at each member's own membership, so at any scale fake spend costs more than it returns.",
+        title: "Fake spending loses money",
+        body: "A member can direct only the money their own membership provides, so fake spending always costs more than it returns.",
         d: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
     },
     {
-        title: "Paid on a date, not eventually",
-        body: "A month closes when it ends and pays mid-month. Claim your publisher name, connect a payout account, and the money comes to you.",
+        title: "Payments follow a schedule",
+        body: "Each month closes at month-end and pays in the middle of the next month. Connect a payout account to receive the money.",
         d: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
     },
 ];
@@ -203,7 +203,7 @@ const rules = [
 
 <BaseLayout
     title="Earn · intentic"
-    description="One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger."
+    description="Membership fees fund a monthly creator pool. Members spend credits on premium extension installs and paid service runs, with every payment shown on a public ledger."
 >
     <Nav />
     <main class="flex-1">
@@ -212,11 +212,11 @@ const rules = [
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="eyebrow">Earn</div>
                 <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
-                    One membership. A shared pool. {creatorSharePct}% to creators.
+                    Membership credits support creators.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    The whole economy on one page, for both of its sides: what a member's credits buy, and how extensions and services earn
-                    from the pool those credits split: with no telemetry anywhere, and a ledger anyone can read.
+                    Membership fees fund a monthly pool. Installing a premium extension or approving a paid service run sends credits to its
+                    creator. Creators receive {creatorSharePct}% of the credits' value, and every payment appears on a public ledger.
                 </p>
                 {/* THREE DOORS, because this page has three readers and the hero is where they sort
                     themselves: the extension creator, the service provider, and the member who just wants to
@@ -251,8 +251,8 @@ const rules = [
                             One membership. Two ways to spend it.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Almost everything in the gallery installs free, from anyone, with no cut taken from anybody. A membership adds
-                            credits, and a credit leaves your hands in exactly two places, both of which you trigger on purpose.
+                            Most extensions are free. A membership gives you daily credits, which you spend only when you install a premium
+                            extension or approve a paid service run.
                         </p>
                         <dl class="mt-6 flex flex-wrap gap-x-6 gap-y-3">
                             {
@@ -260,9 +260,9 @@ const rules = [
                                     { term: `$${pool.priceUsd}`, detail: "a month" },
                                     // The base the share is a share OF, stated beside the price rather than
                                     // left for a reader to derive from the credit value further along.
-                                    { term: `$${poolUsd}`, detail: "of it, the pool" },
+                                    { term: `$${poolUsd}`, detail: "funds the creator pool" },
                                     { term: n(pool.dailyCredits), detail: "credits a day" },
-                                    { term: n(creditsPerCent), detail: "credits to the cent" },
+                                    { term: n(creditsPerCent), detail: "credits equal one cent" },
                                 ].map((stat) => (
                                     <div>
                                         <dt class="font-mono text-xl font-semibold tracking-tight text-content">{stat.term}</dt>
@@ -373,11 +373,12 @@ const rules = [
                             What a run looks like in chat.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Services are not a store you browse. They arrive as an offer in the middle of real work — a card the product raises, with the price and today's balance on it straight from the platform, never retyped by the model. Your click is the only thing that releases the spend: the agent's own call sits parked until you press Run, one click covers one run, and a run that fails to answer refunds itself.
+                            During a conversation, an agent can suggest a paid service. The offer card shows the price and your remaining
+                            credits. Nothing runs until you click Run, and a failed run refunds your credits automatically.
                         </p>
                         <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
-                            The service here is invented. Each real one publishes its own price, shown like this before every run, and
-                            entered the catalog through a human review at the platform, not a signup form.
+                            This example service is fictional. Every real service publishes its own price, shows it before each run and is
+                            reviewed by intentic before it appears in the catalog.
                         </p>
                         {/* THE PROVIDER'S DOOR, and this is the only place on the page it belongs: a reader
                             who has just watched a run get priced and approved is the one reader who knows what
@@ -386,9 +387,8 @@ const rules = [
                             building a free extension, and a third CTA in the closing band would offer a
                             hand-onboarded catalog the same weight as the self-serve path most people want. */}
                         <p class="mt-6 max-w-copy text-sm leading-relaxed text-muted">
-                            On the other end of that exchange? A paid data API, heavy compute or a licensed corpus is a{" "}
-                            <strong class="font-medium text-content">service</strong> rather than an extension, because every run costs you
-                            real money.{" "}
+                            If your tool pays for an API, licensed data or computing power each time it runs, publish it as a{" "}
+                            <strong class="font-medium text-content">service</strong> rather than an extension.{" "}
                             <a class="font-medium text-link hover:underline" href="/developers/services/">Offer a paid service →</a>
                         </p>
                     </div>
@@ -402,7 +402,7 @@ const rules = [
                             ariaLabel="The product's chat, where the agent offers a paid service run and the owner has yet to approve it"
                         />
                         <figcaption class="mt-3 text-2xs leading-relaxed text-subtle">
-                            The platform makes the call; the provider never learns who you are. Fails to answer → credits come straight back.
+                            The platform makes the call, so the provider does not receive your identity. If it fails, your credits are returned.
                         </figcaption>
                     </figure>
                 </div>
@@ -450,7 +450,8 @@ const rules = [
                                 }
                             </svg>
                             <p class="mt-2 max-w-copy text-2xs leading-relaxed text-subtle">
-                                A public monthly pool split by the credits members spend on install donations and service runs. Usage is never metered, free extensions never enter it and premium is opt-in.
+                                A public monthly pool split by the credits members spend on extension installs and service runs. Free
+                                extensions are not part of the pool, and premium features are optional.
                             </p>
                         </div>
                     </div>
@@ -460,10 +461,9 @@ const rules = [
                             Split by what members choose. Renewed monthly.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Creators don't set prices and members don't open wallets per tool. Memberships fill one pool, the credits members
-                            spend decide its split, and {creatorSharePct}% of every spent credit's value reaches the creator it went to.{" "}
-                            <a class="text-link hover:underline" href="/developers/maintain/">Maintained work earns again</a>: an update can donate
-                            again, at most once a month per install.
+                            Membership fees fill one monthly pool. The credits members spend decide how it is divided, and creators receive{" "}
+                            {creatorSharePct}% of each spent credit's value. <a class="text-link hover:underline" href="/developers/maintain/">
+                                Maintained extensions can earn again</a>: an update can trigger another donation at most once a month per install.
                         </p>
                         {/* ONE BUTTON, and it is the provider's. This slot has now held three things and each
                             was wrong in the same way: "Maintain & grow" was a step three of a path the reader
@@ -516,7 +516,7 @@ const rules = [
             <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
                 <a class="btn btn-secondary" href="/earn/ledger/">See the ledger</a>
                 <a class="btn btn-secondary" href="/earn/fine-print/">Read the fine print</a>
-                <p class="text-xs text-subtle">The numbers themselves, live from the platform, and every tile above argued in full.</p>
+                <p class="text-xs text-subtle">See the live numbers or read the full rules behind each promise above.</p>
             </div>
         </section>
 
@@ -532,10 +532,10 @@ const rules = [
             cannot is told so in words instead of being left to infer it from a missing button. */}
         <section class="border-t border-line">
             <div class="mx-auto max-w-7xl px-6 py-14 text-center">
-                <h2 class="text-xl font-semibold tracking-tight text-content">Ship something worth backing.</h2>
+                <h2 class="text-xl font-semibold tracking-tight text-content">Choose what you want to publish.</h2>
                 <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">
-                    Two things earn from this pool, and they are not versions of each other: an extension anyone can install free, or a
-                    service the platform meters per run. Almost everyone wants the first.
+                    Build an extension unless every run has a real outside cost, such as a paid API or licensed data. In that case, offer a
+                    paid service instead.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-center gap-3">
                     <a class="btn btn-primary" href="/developers/build/">Build an extension</a>

@@ -50,7 +50,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:
-            "The Intentic desktop app runs your agent sandbox on your own computer without a terminal. It installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.",
+            "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox, handles updates and opens your workspace.",
         datePublished: "2026-08-02",
     },
     /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
@@ -67,7 +67,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/extensions/": {
         title: "Extensions · intentic",
         description:
-            "Every published intentic extension: what it adds, who wrote it, and the exact commit you'd install. A registry of pointers to other people's repositories; intentic hosts none of the code.",
+            "Browse published intentic extensions. Each listing shows what it adds, who wrote it and the exact source commit you would install.",
         datePublished: "2026-08-01",
     },
     /* The economy's own page, top-level because it serves members and creators alike. Its FIGURES come from
@@ -75,7 +75,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/earn/": {
         title: "Earn · intentic",
         description:
-            "One membership, one currency: credits. Installs donate them, service runs spend them, and every credit spent pays its creator a published share, on a public ledger.",
+            "Membership fees fund a monthly creator pool. Members spend credits on premium extension installs and paid service runs, with every payment shown on a public ledger.",
         datePublished: "2026-08-11",
     },
     /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the

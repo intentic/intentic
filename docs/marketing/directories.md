@@ -18,7 +18,7 @@ Reuse verbatim; do not re-invent per site. Voice rules are in [messaging.md](mes
 | --- | --- |
 | Name | `intentic` (always lowercase) |
 | Tagline, 39 chars | You delegate. Agents work. You approve. |
-| Short, 152 chars | A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere, read every diff before it lands. Free. |
+| Short | A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free. |
 | Website | https://intentic.dev |
 | Source | https://github.com/intentic/intentic (MIT) |
 | Demo | https://intentic.dev/demo/ |

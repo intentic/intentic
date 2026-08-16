@@ -11,12 +11,10 @@ import { DEMO_PATH } from "./site";
  * or illustrate. Each row now carries a line of scent, and the product rows carry the screenshot the page
  * opens on, which the mega-menu previews.
  *
- * Compare is NOT in the bar, and that is the deliberate omission here. The hub's own headline is "Most of
- * these are not competitors": a reframe, and a reframe only lands on somebody who already had the doubt.
- * A permanent tab announces the doubt to everyone else, naming a field of rivals to a visitor who had not
- * thought to look for one. The bar is also the site's scarcest space, spent best on what people RETURN to
- * (Features, Docs) or act on (Get started); a comparison is read once, by someone search already sent
- * straight to it.
+ * Compare is NOT in the bar, and that is the deliberate omission here. A visitor looks for a comparison
+ * after a specific doubt forms; a permanent tab would introduce a field of rivals before that question
+ * exists. The bar is also the site's scarcest space, spent best on what people RETURN to (Features, Docs) or
+ * act on (Get started). A comparison is usually read once, by someone search already sent straight to it.
  *
  * It stays reachable in the two places that matter: a full column in the footer, sitewide, which is what
  * keeps every comparison page linked; and the home page FAQ, where the row that asks the question links the

@@ -48,23 +48,23 @@ const boundary = {
 // about the sandbox, which is the thing all four rows are describing.
 const layers = {
     prompt: [
-        "Describes your tools. None are installed.",
-        "No reach into your codebase, data, or services.",
+        "Can describe tools, but cannot install them.",
+        "Cannot access your code, data or services.",
         "Starts from the same blank context every run.",
-        "Hands you generic output you finish by hand.",
+        "Produces output you must apply yourself.",
     ],
     environment: [
-        "Its dev-tools and libraries are really installed.",
-        "Wired to your repos, databases, and services.",
-        "Curated context loads every single run.",
-        "Does the job end to end, shows its work as diffs.",
+        "Development tools and libraries are installed.",
+        "Connects to your repositories, databases and services.",
+        "Loads the context you chose on every run.",
+        "Does the work and shows every file change as a diff.",
     ],
 };
 
 const people = [
     { name: "You", role: "Owner", access: "installs tools · connects systems · full control", owner: true },
-    { name: "Sam", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
-    { name: "Ada", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
+    { name: "Sam", role: "Teammate", access: "chats, works & reviews · opens sandbox apps" },
+    { name: "Ada", role: "Teammate", access: "chats, works & reviews · opens sandbox apps" },
 ];
 
 const thread = [
@@ -105,12 +105,12 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                 ))}
             </div>
             <div class="my-4 flex items-center gap-2 text-2xs text-subtle">
-                <span aria-hidden="true">↓</span>land, one at a time, after you have read the diff
+                <span aria-hidden="true">↓</span>accept one at a time, after you have read the diff
                 <span class="h-px flex-1 bg-line" />
             </div>
             <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4 text-center">
-                <div class="eyebrow text-link">Your working tree</div>
-                <p class="mt-1 text-xs text-muted">untouched until you land, and still yours to amend or revert afterwards</p>
+                <div class="eyebrow text-link">Your checkout</div>
+                <p class="mt-1 text-xs text-muted">Untouched until you accept the work, and still yours to change or revert afterwards</p>
             </div>
         </div>
     )
@@ -142,7 +142,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                 ))}
             </div>
             <p class="max-w-copy border-t border-line px-4 py-3 text-xs text-subtle">
-                One implementation per row. Nothing synchronises the two columns, because there is only one thing behind them.
+                You and the agent use the same search, terminal, files and network connection, so both always see the current state.
             </p>
         </div>
     )
@@ -162,7 +162,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                 </div>
                 <div class="flex items-center justify-center gap-2 text-2xs text-link sm:flex-col">
                     <Fragment set:html={boltGlyph} />
-                    <span class="whitespace-nowrap">guard, then run</span>
+                    <span class="whitespace-nowrap">Optional check, then run</span>
                 </div>
                 <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4">
                     <span class="flex items-center gap-2 text-link">
@@ -170,7 +170,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                         <span class="text-sm font-medium text-content">A fresh agent session</span>
                     </span>
                     <p class="mt-2 text-xs leading-relaxed text-muted">
-                        Its own session, reviewed before it lands.
+                        Its own session, reviewed before you accept its changes.
                     </p>
                 </div>
             </div>
@@ -188,7 +188,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                 <p class="mt-1.5 text-sm text-muted">Chat, files, editor, terminal</p>
             </div>
             <div class="flex items-center gap-2 px-1 text-xs font-medium text-link">
-                <span aria-hidden="true">↓</span>private tunnel, direct. Nothing in between
+                <span aria-hidden="true">↓</span>your browser connects directly through a private tunnel
                 <span class="h-px flex-1 bg-line" />
             </div>
             <div class="card border-primary-600/30 bg-primary-600/[0.03] p-5">
@@ -197,7 +197,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
             </div>
             <div class="rounded-2xl border border-dashed border-line p-5">
                 <div class="eyebrow">intentic platform</div>
-                <p class="mt-1.5 text-sm text-subtle">Identity + sandbox URL only. Off the command path.</p>
+                <p class="mt-1.5 text-sm text-subtle">Stores your identity and sandbox URL. Does not handle commands or files.</p>
             </div>
         </div>
     )
@@ -232,7 +232,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
                     ))}
                 </ul>
                 <p class="mt-4 border-t border-line pt-3 text-xs leading-relaxed text-subtle">
-                    What it stores is AES-256-GCM encrypted, with no decrypt path in the product.
+                    Stored records use AES-256-GCM encryption. The product has no feature that can decrypt them.
                 </p>
             </div>
         </div>

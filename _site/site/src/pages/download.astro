@@ -24,7 +24,7 @@ const release = await latestRelease();
 
 const title = "Download Intentic for Windows and Linux";
 const description =
-    "The Intentic desktop app runs your agent sandbox on your own computer without a terminal. It installs Docker if you need it, starts the sandbox, keeps it updated, and opens your workspace.";
+    "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox, handles updates and opens your workspace.";
 
 const downloads = [
     {
@@ -53,16 +53,16 @@ const alternatives = [
 // What the app does that a browser cannot. Each one is a place the browser has to hand out a command today.
 const does = [
     {
-        title: "Sets your sandbox up without a terminal",
-        body: "Installs Docker if the machine has none, starts the sandbox and its tunnel, and opens your workspace the moment it answers.",
+        title: "Installs and starts your sandbox",
+        body: "The app installs Docker if needed, starts the sandbox and its private connection, then opens your workspace.",
     },
     {
         title: "Updates it with a button",
-        body: "A sandbox cannot recreate its own container; that has to happen on the machine it runs on. The app is on that machine, so an update is a click instead of a command you paste there.",
+        body: "Updates must run on the same computer as the sandbox. The app handles them with a click instead of a terminal command.",
     },
     {
-        title: "Keeps it there after a reboot",
-        body: "The sandbox restarts with Docker, and the app sits in your tray to start, stop, and read its logs.",
+        title: "Starts again after a reboot",
+        body: "The sandbox restarts with Docker. Use the tray app to start it, stop it or read its logs.",
     },
 ];
 ---
@@ -75,10 +75,10 @@ const does = [
     <Nav />
     <main class="flex-1">
         <section class="mx-auto max-w-5xl px-6 pt-32 pb-16 max-sm:pt-28">
-            <h1 class="text-4xl font-semibold tracking-tight text-content max-sm:text-3xl">Intentic on your computer</h1>
+            <h1 class="text-4xl font-semibold tracking-tight text-content max-sm:text-3xl">Run intentic without a terminal</h1>
             <p class="mt-4 max-w-copy text-lg text-muted">
-                The same workspace, the same sandbox, the same everything, minus the terminal. Install it, sign in, and click
-                <strong class="text-content">Run on this computer</strong>.
+                Install the desktop app, sign in and click <strong class="text-content">Run on this computer</strong>. The app sets up the same
+                sandbox you can run from the command line.
             </p>
 
             <div class="mt-10 grid gap-4 sm:grid-cols-2">
@@ -150,22 +150,18 @@ const does = [
              to know they are the same thing, and that neither of them is a second product to learn. -->
         <section class="mx-auto max-w-5xl px-6 pb-24">
             <div class="rounded-2xl border border-line bg-surface p-6">
-                <h2 class="text-lg font-semibold text-content">It is the same install, with a window around it</h2>
+                <h2 class="text-lg font-semibold text-content">The app runs the standard setup for you</h2>
                 {/* Two columns rather than one capped paragraph and half a card of nothing: a readable line is
                     ~67 characters, this card is 976px wide, and the piece is exactly two paragraphs long. */}
                 <div class="mt-3 grid gap-x-10 gap-y-3 sm:grid-cols-2">
                     <p class="max-w-copy text-sm text-muted">
-                        The app runs the very same setup script the{" "}
-                        <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a> runs: same containers, same Docker,
-                        same tunnel, and shows you the same workspace you would get in a browser. Nothing is stored in the app that isn't
-                        stored in your browser, and you can sign in at{" "}
-                        <a href={APP_URL} class="text-link hover:underline">app.intentic.dev</a> and reach the very same sandbox from any
-                        device.
+                        The app runs the same script as the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>.
+                        It creates the same Docker containers and private connection. You can still sign in at{" "}
+                        <a href={APP_URL} class="text-link hover:underline">app.intentic.dev</a> from any device to reach the same sandbox.
                     </p>
                     <p class="max-w-copy text-sm text-muted">
-                        It updates itself, and removing it removes only the app: your sandbox, its files and its history stay in Docker
-                        until you remove them yourself. Every update keeps the same promises.
-                        <a href="/docs/updates/" class="text-link hover:underline">what we promise never breaks</a>.
+                        The app updates itself. Removing the app does not delete your sandbox, files or history; they stay in Docker until you
+                        remove them. Read <a href="/docs/updates/" class="text-link hover:underline">what every update promises to preserve</a>.
                     </p>
                 </div>
             </div>
