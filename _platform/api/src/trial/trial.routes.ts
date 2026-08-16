@@ -3,7 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
-import { callUpstream, type Fetcher, poolRefused, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
+import { callUpstream, type Fetcher, nativeModelsUrl, poolRefused, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
 import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
 
 /* THE FREE TRIAL, served as a model API — the one place the platform sits ON the command path, and the reason
@@ -28,6 +28,42 @@ import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usag
 // One row of an OpenAI-shaped catalog. `owned_by` names the trial rather than Google on purpose: what the user
 // is spending is intentic's allowance, and the surfaces that read this say so in those words.
 const modelEntry = (id: string) => ({ id, object: `model`, owned_by: `intentic-trial` });
+
+// Google addresses a model as `models/<id>` on both of its listing surfaces; the harness addresses the bare id.
+const bareId = (name: unknown): string | undefined => (typeof name === `string` ? name.replace(/^models\//, ``) : undefined);
+
+/* WHICH OF THE UPSTREAM'S MODELS CAN BE CHATTED WITH, straight from the upstream (trial-pool's nativeModelsUrl).
+ * `undefined` means it would not say — no such surface, unreachable, or a shape we do not recognise — which is
+ * NOT the same as "none of them" and is why the caller falls back to the floor instead of publishing the list
+ * unfiltered. Publishing it unfiltered is the bug this exists for: Imagen, Veo, Lyria, the embedding and TTS
+ * endpoints and the Interactions-only previews all sorted ABOVE the Gemini rows (nothing about their ids says
+ * "not a chat model"), so a fresh conversation defaulted to one and every first message failed. */
+const chatCapableIds = async (config: Config, fetchFn: Fetcher): Promise<Set<string> | undefined> => {
+    const url = nativeModelsUrl(config);
+    if (url === undefined) {
+        return undefined;
+    }
+    const attempt = await callUpstream(config, fetchFn, ``, { method: `GET`, url, auth: `goog` });
+    if (attempt?.response.ok !== true) {
+        return undefined;
+    }
+    const body = (await attempt.response.json().catch(() => undefined)) as
+        { models?: { name?: unknown; supportedGenerationMethods?: unknown }[] } | undefined;
+    if (!Array.isArray(body?.models)) {
+        return undefined;
+    }
+    const capable = new Set<string>();
+    for (const model of body.models) {
+        const id = bareId(model.name);
+        const methods = model.supportedGenerationMethods;
+        if (id !== undefined && Array.isArray(methods) && methods.includes(`generateContent`)) {
+            capable.add(id);
+        }
+    }
+    // An answer that named nothing chat-capable is as uninformative as no answer: it can only mean the shape
+    // moved under us, since a key that serves this trial demonstrably serves generateContent.
+    return capable.size > 0 ? capable : undefined;
+};
 
 export interface TrialDeps {
     readonly config: Config;
@@ -82,7 +118,17 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
      * Discovery still leads — a list written down here goes stale the day Google ships a model, and `trial.models`
      * narrows it for an operator keeping a free tier off the expensive end. Beneath it sits trialFloorModels,
      * which is never empty (trial-pool.ts). So there is no 502 rung left: an unreachable listing surface is not a
-     * reason to empty a picker when we already know what this trial serves. */
+     * reason to empty a picker when we already know what this trial serves.
+     *
+     * WHAT DISCOVERY IS NOT ALLOWED TO DO ANY MORE IS PUBLISH EVERYTHING IT FINDS. A picker offering rows that
+     * cannot answer is worse than a shorter picker, and it was worse in the way that costs the most: the ids the
+     * upstream serves are ranked by the id-derived order every unranked catalog uses (model-order.ts), a family
+     * it has never heard of leads on the reasoning that an unknown name is likelier to be a new flagship than a
+     * new budget tier — and against a raw Google list the leaders were `antigravity-…`, `deep-research-…`,
+     * `imagen-…`. So the FIRST row, which is the model a fresh conversation starts on, was one that answers
+     * "This model only supports Interactions API", and the whole trial read as broken to anyone who did not go
+     * looking through the picker for a Gemini row. Capability comes from the upstream itself; where it will not
+     * say, the floor is served rather than a list we cannot vouch for. */
     app.get(`/v1/models`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
@@ -91,15 +137,18 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
             return c.json({ error: `unknown sandbox` }, 404);
         }
         const narrowedTo = trialModels(config);
-        const attempt = await callUpstream(config, fetchFn, `/models`, { method: `GET` });
+        const [attempt, chatCapable] = await Promise.all([
+            callUpstream(config, fetchFn, `/models`, { method: `GET` }),
+            chatCapableIds(config, fetchFn),
+        ]);
         const body =
             attempt?.response.ok === true
                 ? ((await attempt.response.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined)
                 : undefined;
-        const discovered = (body?.data ?? []).flatMap((model) => {
-            // Google returns ids as `models/<id>` on this surface; the harness addresses the bare id.
-            const id = typeof model.id === `string` ? model.id.replace(/^models\//, ``) : undefined;
-            if (id === undefined || (narrowedTo.length > 0 && !narrowedTo.includes(id))) {
+        const servable = chatCapable ?? new Set<string>();
+        const discovered = (chatCapable === undefined ? [] : (body?.data ?? [])).flatMap((model) => {
+            const id = bareId(model.id);
+            if (id === undefined || !servable.has(id) || (narrowedTo.length > 0 && !narrowedTo.includes(id))) {
                 return [];
             }
             return [modelEntry(id)];
@@ -108,7 +157,10 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
             return c.json({ object: `list`, data: discovered });
         }
         const floor = trialFloorModels(config);
-        c.get(`logger`)?.info({ status: attempt?.response.status ?? 0, floor }, `trial: upstream offered no model, serving the floor`);
+        c.get(`logger`)?.info(
+            { status: attempt?.response.status ?? 0, capabilityKnown: chatCapable !== undefined, floor },
+            `trial: upstream offered no chat model, serving the floor`,
+        );
         return c.json({ object: `list`, data: floor.map(modelEntry) });
     });
 

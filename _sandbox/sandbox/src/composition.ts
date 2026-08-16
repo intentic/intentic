@@ -173,6 +173,7 @@ import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
+import { startPlatformTunnel } from "./platform/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -828,6 +829,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * therefore sees the trial as an ordinary endpoint and needs no knowledge of it, while the file on disk
      * stays exactly what the user put there. Availability is the platform's answer, probed on boot below. */
     const trial = createTrialService(config);
+    /* And the one thing between the trial and a platform running on the developer's own machine: the bundled
+     * translator opens the trial's connection itself and verifies the certificate, which a self-signed dev
+     * platform cannot satisfy. Opens nothing at all against a deployed platform (platform/local-tunnel.ts). */
+    const platformTunnel = startPlatformTunnel(config.platform.url, logger);
     const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
@@ -849,7 +854,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(
             `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
         );
-    const capabilities = withTrialEndpoint(withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable), config, trial);
+    const capabilities = withTrialEndpoint(
+        withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
+        config,
+        trial,
+        platformTunnel,
+    );
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}) — the rest are unaffected`),
     );

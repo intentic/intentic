@@ -3,6 +3,7 @@ import { TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Config } from "../env.config.js";
+import type { PlatformTunnel } from "../platform/local-tunnel.js";
 import { withTrialEndpoint } from "./trial-endpoint.js";
 import type { TrialService } from "./trial.js";
 
@@ -17,6 +18,9 @@ const trialService = (available: boolean): TrialService => ({
     status: () => undefined,
     refresh: async () => undefined,
 });
+
+// A deployed platform opens none; the dev case is its own test below.
+const noTunnel: PlatformTunnel = { url: () => undefined, close: () => undefined };
 
 const memoryStore = (seed: Capability[] = []): CapabilitiesStore => {
     let entries = [...seed];
@@ -39,7 +43,7 @@ const ollama: Capability = { id: `ollama`, kind: `endpoint`, config: { baseUrl: 
 
 describe("the free-trial endpoint", () => {
     it("appears in reads when the platform serves one, pointed at the platform with the connect token", async () => {
-        const store = withTrialEndpoint(memoryStore([ollama]), config, trialService(true));
+        const store = withTrialEndpoint(memoryStore([ollama]), config, trialService(true), noTunnel);
 
         const entries = await store.list();
         const trial = entries.find((entry) => entry.id === TRIAL_ENDPOINT_ID);
@@ -52,8 +56,26 @@ describe("the free-trial endpoint", () => {
         expect(await store.get(TRIAL_ENDPOINT_ID)).toBeDefined();
     });
 
+    /* THE TRANSLATOR IS THE CONSUMER OF THIS URL, and it is a Go binary that verifies certificates. A platform on
+     * the developer's own machine serves a self-signed one for `localhost`, so every trial turn died inside
+     * CLIProxyAPI as a 500 and reached the reader as "The model provider is not responding". The daemon
+     * terminates that TLS itself (platform/local-tunnel.ts) and the card points at the loopback end of it. */
+    it("points at the local tunnel when one is open, so the translator never has to verify a dev certificate", async () => {
+        const tunnel: PlatformTunnel = { url: () => `http://127.0.0.1:41234`, close: () => undefined };
+        const store = withTrialEndpoint(
+            memoryStore(),
+            { ...config, platform: { url: `https://host.docker.internal:6480` } } as Config,
+            trialService(true),
+            tunnel,
+        );
+
+        const trial = await store.get(TRIAL_ENDPOINT_ID);
+
+        expect(trial?.config).toMatchObject({ baseUrl: `http://127.0.0.1:41234/trial/v1`, protocol: `openai`, apiKey: `tok` });
+    });
+
     it("is absent when the platform serves none — the ordinary case", async () => {
-        const store = withTrialEndpoint(memoryStore([ollama]), config, trialService(false));
+        const store = withTrialEndpoint(memoryStore([ollama]), config, trialService(false), noTunnel);
 
         expect(await store.list()).toEqual([ollama]);
         expect(await store.get(TRIAL_ENDPOINT_ID)).toBeUndefined();
@@ -61,7 +83,7 @@ describe("the free-trial endpoint", () => {
 
     it("is never written to the manifest, and never removed from it", async () => {
         const file = memoryStore();
-        const store = withTrialEndpoint(file, config, trialService(true));
+        const store = withTrialEndpoint(file, config, trialService(true), noTunnel);
 
         await expect(
             store.upsert({ id: TRIAL_ENDPOINT_ID, kind: `endpoint`, config: { baseUrl: `http://evil.test/v1`, protocol: `openai` } }),
@@ -76,7 +98,7 @@ describe("the free-trial endpoint", () => {
         // Only reachable by hand-editing the manifest. Silently overriding what is on disk is how a file stops
         // explaining the system it describes, so the file wins and the synthetic entry stands down.
         const planted: Capability = { id: TRIAL_ENDPOINT_ID, kind: `endpoint`, config: { baseUrl: `http://mine.test/v1`, protocol: `openai` } };
-        const store = withTrialEndpoint(memoryStore([planted]), config, trialService(true));
+        const store = withTrialEndpoint(memoryStore([planted]), config, trialService(true), noTunnel);
 
         expect(await store.list()).toEqual([planted]);
         expect(await store.get(TRIAL_ENDPOINT_ID)).toEqual(planted);
@@ -84,7 +106,7 @@ describe("the free-trial endpoint", () => {
 
     it("passes every other capability straight through, reads and writes alike", async () => {
         const file = memoryStore();
-        const store = withTrialEndpoint(file, config, trialService(true));
+        const store = withTrialEndpoint(file, config, trialService(true), noTunnel);
 
         await store.upsert(ollama);
 

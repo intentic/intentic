@@ -29,7 +29,7 @@ const newChat = () => {
 };
 
 import { queryClient } from "../composables/queryPersistence";
-import { useLayout } from "../composables/useLayout";
+import { MIN_PANE_PX, useLayout } from "../composables/useLayout";
 import { router } from "../router";
 import ChatPanel from "./ChatPanel.vue";
 
@@ -138,6 +138,16 @@ beforeEach(async () => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
+});
+
+/* THE COLUMN MAY NOT BE DRAGGED NARROWER THAN THE PANE IN IT. The two floors were different numbers — 288 for
+ * the column, 352 for the pane — so the bottom 64px of the drag scrolled the panel sideways instead of
+ * narrowing it: the composer's right-hand controls and the send button sat past the edge behind a horizontal
+ * scrollbar. jsdom lays nothing out, so what is pinned here is the arithmetic that produced it. */
+it(`never lets the column stop narrower than one pane`, () => {
+    const layout = useLayout();
+    layout.setChatWidth(0);
+    expect(layout.chatWidth.value).toBe(MIN_PANE_PX);
 });
 
 it(`draws the chat that was picked`, async () => {

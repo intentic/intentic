@@ -60,6 +60,27 @@ export const trialEnabled = (config: Config): boolean => trialKeys(config).lengt
 // The ids an operator narrowed the trial to, or an empty list meaning "whatever the upstream publishes".
 export const trialModels = (config: Config): string[] => listed(config.trial.models);
 
+/* WHERE THE UPSTREAM SAYS WHAT EACH MODEL CAN DO — the one question its OpenAI-compatible surface cannot answer.
+ *
+ * `/v1beta/openai/models` publishes a bare list of ids: 54 of them on a fresh Google key, and only a third are
+ * things a chat can be had with. The rest are Imagen, Veo, Lyria, the embedding and TTS endpoints, the Live and
+ * computer-use previews, and models that answer "This model only supports Interactions API" — every one of them
+ * a picker row whose first message fails. That is not a list to filter by name: `nano-banana-pro-preview` draws
+ * pictures and `antigravity-preview-05-2026` reads like the flagship, and a regex over ids gets both wrong.
+ *
+ * Google's OWN listing carries `supportedGenerationMethods`, and `generateContent` is exactly the capability
+ * the trial spends. It sits one path segment up from the compatibility shim, so it is derived rather than
+ * configured — an upstream that is not Google has no such surface, answers nothing, and the catalog falls back
+ * to the floor below (trial.routes), which is the same thing the operator's own TRIAL_MODELS does better.
+ *
+ * `pageSize` is not a nicety: this surface pages at 50 by default where the shim beside it returns everything,
+ * and a key already listing 54 models would have had four of them silently read as "cannot chat". 1000 is the
+ * documented maximum and leaves no second page to forget about. */
+export const nativeModelsUrl = (config: Config): string | undefined => {
+    const compat = config.trial.baseUrl.replace(/\/+$/, ``);
+    return compat.endsWith(`/openai`) ? `${compat.slice(0, -`/openai`.length)}/models?pageSize=1000` : undefined;
+};
+
 /* THE FLOOR UNDER THE CATALOG, and the reason the trial is offerable at all.
  *
  * Every other catalog in this product ends in a seed list; this one ended in whatever Google felt like
@@ -98,6 +119,17 @@ const keyOrder = (keys: readonly string[]): string[] => {
 
 export type Fetcher = typeof fetch;
 
+/* HOW THE SAME KEY IS PRESENTED, and why it is a choice rather than a constant.
+ *
+ * The compatibility shim is OpenAI-shaped and reads an `Authorization: Bearer`. Google's OWN surface beside it
+ * does not: handed a bearer it stops looking for an API key at all and answers 401 "Expected OAuth 2 access
+ * token", which is the wrong answer to the right credential. Sending both headers does not paper over it — the
+ * bearer wins and the 401 stands — so each surface is asked in its own dialect. */
+export type UpstreamAuth = "bearer" | "goog";
+
+const authHeaders = (auth: UpstreamAuth, key: string): Record<string, string> =>
+    auth === `goog` ? { "x-goog-api-key": key } : { authorization: `Bearer ${key}` };
+
 export interface UpstreamAttempt {
     readonly response: Response;
     // How many keys were tried before this answer. Logged, never returned to the caller: it describes intentic's
@@ -115,7 +147,7 @@ export const callUpstream = async (
     config: Config,
     fetchFn: Fetcher,
     path: string,
-    init: { method: string; body?: string },
+    init: { method: string; body?: string; url?: string; auth?: UpstreamAuth },
 ): Promise<UpstreamAttempt | undefined> => {
     const keys = keyOrder(trialKeys(config));
     if (keys.length === 0) {
@@ -125,9 +157,9 @@ export const callUpstream = async (
     let tried = 0;
     for (const key of keys) {
         tried += 1;
-        const response = await fetchFn(`${config.trial.baseUrl}${path}`, {
+        const response = await fetchFn(init.url ?? `${config.trial.baseUrl}${path}`, {
             method: init.method,
-            headers: { authorization: `Bearer ${key}`, "content-type": `application/json` },
+            headers: { ...authHeaders(init.auth ?? `bearer`, key), "content-type": `application/json` },
             ...(init.body === undefined ? {} : { body: init.body }),
         }).catch(() => undefined);
         // A key whose request never completed is indistinguishable from a key that 503'd, and is treated the

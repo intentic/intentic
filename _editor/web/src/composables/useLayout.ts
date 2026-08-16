@@ -23,14 +23,28 @@ const CHAT_HOME_KEY = `ui-chat-home`;
 // fitting. uiScale.ts owns the conversion and names the two edges where it happens (the pointer, and the
 // pop-out window); nothing in between converts, and nothing here needs to know the current size.
 //
+/* HOW NARROW A CHAT PANE MAY BE SQUEEZED, and therefore how narrow the column holding one may be dragged.
+ *
+ * A terminal at 40 columns is still a terminal; a chat at 300px with tool cards in it is not — so the panel's
+ * panes share the room equally down to this and then the row scrolls sideways rather than shrinking on forever
+ * (ChatPanel's `.chat-panes`, which imports this rather than writing 22rem of its own).
+ *
+ * It is exported because the COLUMN'S FLOOR HAS TO BE THE SAME NUMBER. It was not: the column stopped at 288
+ * while a pane refused to go under 352, so the last 64px of the drag bought nothing but a horizontal scrollbar
+ * across the bottom of the panel — the pane kept its width and the column simply scrolled past it, clipping the
+ * composer's right-hand controls and the send button off the edge. A floor under the floor is not a narrower
+ * layout, it is the same layout behind a scrollbar, and every width in that gap is a width the panel cannot
+ * draw. So there is one minimum and both ends read it. */
+export const MIN_PANE_PX = 352;
+
 /* Chat panel width bounds. The max is effectively unlimited — capped only just shy of the viewport so a sliver
  * of workspace always remains.
  *
  * THE DEFAULT IS NOT THE FLOOR, and it used to be: the column shipped at 352, which is also the narrowest a
- * chat may ever be squeezed to (ChatPanel's MIN_PANE_PX). A default sitting on its own minimum has no slack for
- * anything the composer optionally wears — a persona, a run-through badge, the microphone — so the controls
- * under the message box ran out of room on the FIRST screen a new sandbox lands on, which is the one screen
- * where nobody has dragged anything yet.
+ * chat may ever be squeezed to. A default sitting on its own minimum has no slack for anything the composer
+ * optionally wears — a persona, a run-through badge, the microphone — so the controls under the message box ran
+ * out of room on the FIRST screen a new sandbox lands on, which is the one screen where nobody has dragged
+ * anything yet.
  *
  * What that overflow COST is fixed in ChatPane, where the control row wraps instead of running out past the
  * column's edge; this buys the room back, so the default spends it on one line rather than two. 432 is measured
@@ -39,10 +53,10 @@ const CHAT_HOME_KEY = `ui-chat-home`;
  * and the rest is slack. In app pixels like everything here, so at the default text size it draws ~475 of the
  * screen's; measuring it in the browser and storing THAT is how a column ends up scaled twice.
  *
- * The floor stays where it was: someone who deliberately drags the column narrow is asking for the two-line
+ * The floor is the pane's own: someone who deliberately drags the column narrow is asking for the two-line
  * composer, and should get it rather than a scrollbar. */
 const DEFAULT_CHAT_WIDTH = 432;
-const MIN_CHAT_WIDTH = 288;
+const MIN_CHAT_WIDTH = MIN_PANE_PX;
 const MAX_CHAT_WIDTH = 4000;
 
 // Workspace explorer sidebar — the file-tree column inside the /workspace view. Persisted like the chat width.

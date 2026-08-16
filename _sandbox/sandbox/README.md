@@ -300,6 +300,14 @@ exact CLI-version anchor and the locator for a vendored development fallback, no
   output for the window → the graceful exit, so the machine stops and the platform wakes it on the next visit). The corollary worth
   knowing: scheduled automations run only while the box is awake. Nested dockerd needs no privilege directive
   here — VM root already holds every capability, so the docker capability starts its engine without a rebuild.
+- **A platform on your own machine arrives as a self-signed certificate on `host.docker.internal`**, and every
+  sandbox→platform caller in this daemon is allowed not to verify it — one closed list of hosts, in
+  `src/platform/local-tls.ts`. One caller is not in this daemon: the bundled translator is a Go binary, it opens
+  the free trial's own connection, and it verifies. Against a dev platform that failed every trial turn as a 500,
+  which the harness reads as an outage — so the chat said "The model provider is not responding" about a
+  certificate name. `src/platform/local-tunnel.ts` terminates that TLS on its behalf: a loopback listener the
+  trial's base URL points at instead. Opened **only** for a platform on that same closed host list; a deployed
+  one gets none of it and the URL is unchanged.
 - Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
   purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
   Claude session files; provider-native state that still shares an auth home is never guessed at destructively.

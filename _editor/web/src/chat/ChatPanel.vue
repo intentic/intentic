@@ -11,8 +11,8 @@ import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
-import { useLayout } from "../composables/useLayout";
-import { toAppPx } from "../composables/uiScale";
+import { MIN_PANE_PX, useLayout } from "../composables/useLayout";
+import { toAppPx, uiLength } from "../composables/uiScale";
 import ChatPane from "./ChatPane.vue";
 import ChatRunGraph from "./ChatRunGraph.vue";
 import ChatTabs from "./ChatTabs.vue";
@@ -43,12 +43,13 @@ const panelWindow = (): Window & typeof globalThis => root.value?.ownerDocument.
 const resizing = ref(false);
 
 /* --- The panes ---------------------------------------------------------------------------------
- * How narrow a chat may be squeezed. A terminal at 40 columns is still a terminal; a chat at 300px with tool
- * cards in it is not — so panes share the room equally down to this and then the row scrolls, rather than
- * shrinking on forever. It is the docked column's own default width, which is the narrowest a chat has ever
- * been asked to be here.
+ * How narrow a chat may be squeezed (useLayout's MIN_PANE_PX) — imported rather than restated, because the
+ * docked column's own floor is the same number and the two drifting apart is what put a horizontal scrollbar
+ * under the panel. Written onto the row as a custom property so the stylesheet below measures in the same APP
+ * pixels the column's width is stored in: `22rem` would be the same number only until someone changed their
+ * browser's base font, and then the pane would outgrow a column that thought it was wide enough.
  */
-const MIN_PANE_PX = 352;
+const minPaneLength = uiLength(MIN_PANE_PX);
 // The chat list's rail beside them — the part of the window the panes never get. Its own default (chatRail.ts)
 // rather than a number copied here: a reader who has dragged it wider is asking the panes to scroll a little
 // sooner, which is their trade to make, but the width a fresh window opens at must not be guessed at twice.
@@ -357,7 +358,7 @@ const endResize = (event: PointerEvent): void => {
 
             <!-- The panes, sharing the room equally (the terminal panel's split cells, which this is the chat's
                  half of) until the floor, past which the row scrolls sideways rather than crushing them. -->
-            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto">
+            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :style="{ '--min-pane': minPaneLength }">
                 <!-- A pane may be closed from its own corner only in a SPLIT: with one column the × would be
                      a control that closes the panel it lives in, which is the pop-out's job and the strip's.
                      The panel answers the press, the way it answers `focus` — which chats are on screen is
@@ -387,7 +388,7 @@ const endResize = (event: PointerEvent): void => {
  * the panel says so by drawing them the same. */
 .chat-panes :deep(.chat-pane) {
     flex: 1 1 0;
-    min-width: 22rem;
+    min-width: var(--min-pane);
 }
 .chat-panes :deep(.chat-pane + .chat-pane) {
     border-left: 1px solid var(--color-line);

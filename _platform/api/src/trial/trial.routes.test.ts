@@ -169,21 +169,74 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
+    /* The two listing surfaces the catalog reads, stubbed apart: the compatibility shim's `/v1beta/openai/models`
+     * (ids only) and Google's own `/v1beta/models` beside it (ids plus what each can be asked to do). */
+    const listing = (served: readonly string[], generateContent: readonly string[]) =>
+        vi.fn(async (url: string) =>
+            url.includes(`/openai/`)
+                ? new Response(JSON.stringify({ data: served.map((id) => ({ id: `models/${id}` })) }), {
+                      status: 200,
+                      headers: { "content-type": `application/json` },
+                  })
+                : new Response(
+                      JSON.stringify({
+                          models: served.map((id) => ({
+                              name: `models/${id}`,
+                              supportedGenerationMethods: generateContent.includes(id) ? [`generateContent`, `countTokens`] : [`predict`],
+                          })),
+                      }),
+                      { status: 200, headers: { "content-type": `application/json` } },
+                  ),
+        );
+
     it("serves only the allowlisted models when one is configured", async () => {
         const { prisma } = fakePrisma();
-        const fetchFn = vi.fn(
-            async () =>
-                new Response(JSON.stringify({ data: [{ id: `models/keep-me` }, { id: `models/drop-me` }] }), {
-                    status: 200,
-                    headers: { "content-type": `application/json` },
-                }),
-        );
-        vi.stubGlobal(`fetch`, fetchFn);
+        vi.stubGlobal(`fetch`, listing([`keep-me`, `drop-me`], [`keep-me`, `drop-me`]));
 
         const response = await call(configWith({ models: `keep-me` }), prisma, `/trial/v1/models`);
 
         // The `models/` prefix Google puts on this surface is stripped — the harness addresses the bare id.
         expect(await response.json()).toEqual({ object: `list`, data: [{ id: `keep-me`, object: `model`, owned_by: `intentic-trial` }] });
+        vi.unstubAllGlobals();
+    });
+
+    /* THE WAY THE TRIAL READ AS BROKEN TO EVERY NEW ACCOUNT. A fresh Google key lists ~54 models and only a third
+     * of them can be chatted with; the rest are Imagen, Veo, Lyria, the embedding/TTS endpoints and previews that
+     * answer "This model only supports Interactions API". Nothing in those ids says so, so the picker's ordering
+     * put them at the head — and the head is what a fresh conversation sends its first message to. */
+    it("leaves out the models that cannot be chatted with", async () => {
+        const { prisma } = fakePrisma();
+        vi.stubGlobal(`fetch`, listing([`antigravity-preview-05-2026`, `imagen-4.0-generate-001`, `gemini-flash-latest`], [`gemini-flash-latest`]));
+
+        const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
+
+        expect(await response.json()).toEqual({
+            object: `list`,
+            data: [{ id: `gemini-flash-latest`, object: `model`, owned_by: `intentic-trial` }],
+        });
+        vi.unstubAllGlobals();
+    });
+
+    /* An upstream that lists ids but will not say what they do is an upstream we cannot vouch for — so the floor
+     * is served rather than the raw list. Publishing it unfiltered is the failure above; publishing nothing is the
+     * failure the floor exists for. */
+    it("falls back to the floor when the upstream will not say what its models can do", async () => {
+        const { prisma } = fakePrisma();
+        const fetchFn = vi.fn(async (url: string) =>
+            url.includes(`/openai/`)
+                ? new Response(JSON.stringify({ data: [{ id: `models/mystery-1` }] }), {
+                      status: 200,
+                      headers: { "content-type": `application/json` },
+                  })
+                : new Response(`nope`, { status: 404 }),
+        );
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
+
+        const body = (await response.json()) as { data: { id: string }[] };
+        expect(body.data.map((model) => model.id)).not.toContain(`mystery-1`);
+        expect(body.data.every((model) => model.id.endsWith(`-latest`))).toBe(true);
         vi.unstubAllGlobals();
     });
 
