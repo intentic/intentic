@@ -41,13 +41,28 @@ const agent = (id: string, running: boolean): Listed => ({ name: `agent-${id}`, 
 const panel = (initial: Listed[]) => {
     let listed = initial;
     let failOnce = false;
+    let holdOnce = false;
     const list = (): Promise<Listed[]> => {
         if (failOnce) {
             failOnce = false;
             return Promise.reject(new Error(`daemon unreachable`));
         }
+        if (holdOnce) {
+            holdOnce = false;
+            // The answer is decided NOW and delivered later — a list of what the sandbox held at the moment it
+            // was asked, arriving after the world has moved on.
+            const snapshot = listed;
+            return new Promise<Listed[]>((resolve) => {
+                held = () => resolve(snapshot);
+                if (releasedEarly) {
+                    held();
+                }
+            });
+        }
         return Promise.resolve(listed);
     };
+    let held: (() => void) | undefined;
+    let releasedEarly = false;
     const tabs = createTerminalTabs({ list, create: () => `web-new`, kill: () => Promise.resolve() }, `test`, () => undefined);
     return {
         tabs,
@@ -57,6 +72,14 @@ const panel = (initial: Listed[]) => {
         // The next list comes back as a rejection — the tunnel dropping one request under load.
         failNextList: () => {
             failOnce = true;
+        },
+        // Hold the next list on the wire; the returned function lets its (already decided) answer through.
+        holdNextList: () => {
+            holdOnce = true;
+            return () => {
+                releasedEarly = true;
+                held?.();
+            };
         },
         attach: (awaited?: string) => tabs.attach(document.createElement(`div`), awaited),
         names: () => tabs.order.value.map((tab) => tab.name),
@@ -157,6 +180,34 @@ test("a check that takes its time to reach tmux still surfaces whenever it gets 
     // Whenever it does land, the daemon's own `terminals` frame relists — and the tab is waiting for it.
     daemonLists([job(`checks`, true)]);
     await tabs.refresh();
+
+    expect(names()).toEqual([`job-checks`]);
+    expect(tabs.activeName.value).toBe(`job-checks`);
+    expect(tabs.pending.value).toBeUndefined();
+});
+
+/* THE PUSH BUG'S LAST FORM — the one that survived the standing wait. Everything asks for a list at once when a
+ * push starts (the panel mounting, the daemon's frame, the focus request itself), and the answers used to be
+ * written in whatever order they came back. A list taken before the session existed, landing after the one that
+ * carried it, put the strip back to empty and left the panel saying nothing runs under that name. */
+test("a list taken before the check existed cannot un-list it by arriving late", async () => {
+    const { tabs, daemonLists, attach, names, holdNextList } = panel([]);
+    await attach(`job-checks`);
+
+    // A relist that catches the sandbox a moment too early, and hangs on the way back (the tunnel under a suite).
+    const release = holdNextList();
+    const early = tabs.refresh();
+
+    // The session lands, and the focus request's own relist sees it.
+    daemonLists([job(`checks`, true)]);
+    const focusing = tabs.focus(`job-checks`);
+    // Let that request get as far as it can while the early one is still out — this is the window where the tab
+    // was mounted, and where the late answer used to land on top of it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    release();
+    await early;
+    await focusing;
 
     expect(names()).toEqual([`job-checks`]);
     expect(tabs.activeName.value).toBe(`job-checks`);

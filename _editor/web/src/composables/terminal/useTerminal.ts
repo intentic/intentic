@@ -301,7 +301,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // in flight when the panel tears down (a fast Ctrl+` off/on) can't write this dead instance's grouping back
     // to localStorage, and — via mount() — can't append a session's host into a detached container, which would
     // STEAL it from the instance that replaced us and leave the live panel a blank pane.
-    const refresh = async (): Promise<void> => {
+    const relist = async (): Promise<void> => {
         if (container === undefined) {
             return;
         }
@@ -349,6 +349,27 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             // the shrunken group so its host doesn't linger.
             mount(activeName.value);
         }
+    };
+
+    /* RELISTS RUN ONE AT A TIME, and this queue is why the push bug's last form is gone.
+     *
+     * Four things ask for a list, and they ask AT ONCE: the panel's mount, the daemon's `terminals` frame, the
+     * focus request a flow just made, and the strip's own refresh button. Each used to fetch and then write
+     * `order` whenever its own answer happened to arrive — so a list taken a moment BEFORE the check's session
+     * existed could land a moment AFTER the list that carried it, and overwrite the strip back to not having it.
+     * The tab was mounted and then un-listed in the same breath: an empty panel, no wait standing any more (the
+     * newer list had already spent it), and a push watching "Nothing runs under that name" while the suite ran.
+     *
+     * Chaining the whole read-and-apply — not just the apply — means every list is FETCHED after the previous one
+     * has been applied, so no answer can be older than the state it is written over. */
+    let listing: Promise<void> = Promise.resolve();
+    const refresh = (): Promise<void> => {
+        // Both arms run the relist: a rejected predecessor (a dropped tunnel request) is that caller's failure to
+        // report, never a reason to stop the next caller from asking.
+        const next = listing.then(relist, relist);
+        // The queue itself must stay resolvable, or one failed list would reject every relist after it forever.
+        listing = next.catch(() => undefined);
+        return next;
     };
 
     // Sandbox switch while mounted: the sessions are already disposed — drop the stale tab state and relist
