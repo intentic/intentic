@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { Card, MachineDetail, Notice } from "@intentic/ui";
+import {
+    Card,
+    MachineDetail,
+    MachineRunLog,
+    type MachineSandboxGroup,
+    type MachineSandboxRow,
+    Notice,
+    type SandboxVerb,
+    SandboxVerbs,
+    sandboxVerbPrompt,
+    VERB_LABEL,
+} from "@intentic/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import { initAnalytics, track } from "./analytics";
 import RunLog from "./components/RunLog.vue";
-import SandboxCard from "./components/SandboxCard.vue";
 import {
     desktopInfo,
     isStep,
@@ -17,6 +27,7 @@ import {
     onUpdateAvailable,
     pendingSetup,
     sandboxList,
+    sandboxLogs,
     sandboxPower,
     sandboxRecreate,
     sandboxRemove,
@@ -38,7 +49,7 @@ import {
  * an app release. What is left for this one is the two things a web page on another origin cannot do:
  *
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
- *   • manage the containers on THIS machine afterwards — start/stop, update, remove, read the logs
+ *   • manage the containers on THIS machine afterwards — the sandbox rows and their verbs
  *
  * They are two SCREENS rather than two sections, and a setup is the whole window while it is happening
  * (`setupMode`). It arrives in the frame the SPA was filling a moment ago (windows.rs), and the manager's
@@ -47,7 +58,16 @@ import {
  *
  * The archived version had three personas here (a wizard, an environment checklist, a manager) in 527 lines.
  * The checklist is gone because the scripts do the reconciling and narrate it as they go; the wizard is gone
- * because it was a second copy of the SPA's setup screen. */
+ * because it was a second copy of the SPA's setup screen.
+ *
+ * ONE LIST, AND IT IS THE WEB'S. This screen and the SPA's Computers tab manage the same containers on the same
+ * machine, and they had drifted into two answers: this one printed its sandboxes as cards with their own buttons
+ * and then printed the SAME sandboxes again underneath as folders and ports, under a second heading, with
+ * nothing on screen relating the two — the exact double-rendering the Computers tab was rebuilt to remove. It
+ * now hands its containers to <MachineDetail>, the way that tab does, so a sandbox is one row carrying its
+ * folder, its ports, its image and its verbs. The verbs are the kit's too (<SandboxVerbs>), so "which buttons
+ * exist here" is no longer a thing two apps can disagree about — this window had a log tail and no Restart, the
+ * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
 
 const info = ref<DesktopInfo | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
@@ -56,8 +76,20 @@ const listError = ref<string | undefined>(undefined);
 // not a failure; a string = the agent is installed but would not answer, which is.
 const report = ref<MachineReport | undefined>(undefined);
 const reportError = ref<string | undefined>(undefined);
-const busy = ref<{ slug: string; action: string } | undefined>(undefined);
+const busy = ref<{ slug: string; verb: SandboxVerb } | undefined>(undefined);
 const updateVersion = ref<string | undefined>(undefined);
+
+/* WHAT ONE ROW IS SHOWING BELOW ITSELF. The log tail is the only thing here that outlives its own run — every
+ * other verb's lines are progress, and a container's last two hundred lines are read after they arrive — so the
+ * open pane is remembered by slug rather than following whatever is busy. One at a time, because `activeRun`
+ * already allows exactly one operation on this machine at a time. */
+const openLog = ref<string | undefined>(undefined);
+const logLines = ref<Record<string, string[]>>({});
+// The machine's own words when a row's verb failed, kept beside that row rather than at the foot of the screen.
+const rowFailure = ref<{ slug: string; message: string } | undefined>(undefined);
+
+// How much of a container's tail to ask docker for — the same figure the machine agent uses for the same button.
+const LOG_TAIL_LINES = 200;
 
 // The setup the SPA handed over, and the run it turns into.
 const pending = ref<SetupArgs | undefined>(undefined);
@@ -101,19 +133,28 @@ const refresh = async (): Promise<void> => {
     }
 };
 
-/* One sandbox's line in the manager: the folder it syncs into here, and how many of its ports reached localhost.
- * This is the join the app could not make before — docker knows the container, the agent knows the pairing, and
- * the slug is not the agent's key, so they meet on the sandbox id the pairing carries ending in the slug's own
- * subdomain label. A sandbox with no pairing gets no line rather than a wrong one. */
-const syncLineFor = (sandbox: SandboxStatus): string | undefined => {
-    const pairing = report.value?.pairings.find((entry) => entry.sandboxId.split(`.`)[0] === sandbox.slug);
-    if (pairing === undefined) {
-        return undefined;
-    }
-    const ports = (report.value?.ports ?? []).filter((port) => port.sandboxId === pairing.sandboxId && port.state === `mirrored`).length;
-    const where = pairing.mode === `sync` ? (pairing.localDir ?? `no folder`) : `ports only`;
-    return ports === 0 ? where : `${where} · ${ports} port${ports === 1 ? `` : `s`} on localhost`;
-};
+/* THE CONTAINERS, IN THE SHAPE THE SHARED VIEW READS. Docker's own answer carries `null` for the two facts it
+ * may not have; the row type spells the same absence as an absent KEY, because absent and false are different
+ * things there (no tunnel sidecar at all, versus a sidecar that is down). The join between a container and the
+ * sync agent's pairing is <MachineDetail>'s own — this app used to make it here, by hand, into one line of text. */
+const sandboxRows = computed<MachineSandboxRow[]>(() =>
+    sandboxes.value.map((sandbox) => ({
+        slug: sandbox.slug,
+        running: sandbox.running,
+        image: sandbox.image,
+        ...(sandbox.name === null ? {} : { name: sandbox.name }),
+        ...(sandbox.tunnelRunning === null ? {} : { tunnelRunning: sandbox.tunnelRunning }),
+    })),
+);
+
+// The docker row behind one of the view's groups, which is what every verb below needs and the group carries.
+const slugOf = (group: MachineSandboxGroup): string | undefined => group.sandbox?.slug;
+
+/* Whether the shared view would draw anything at all. It groups containers, folders and ports, and a machine can
+ * have the last two and none of the first (a pairing whose container is stopped and pruned) — so "is there a row"
+ * is all three, not just docker's answer. Below this, the screen says so in its own words rather than letting the
+ * shared view fall through to a sentence written for the SPA's reader. */
+const hasRows = computed(() => sandboxes.value.length > 0 || (report.value?.pairings.length ?? 0) > 0 || (report.value?.ports.length ?? 0) > 0);
 
 /* HOW A FINISHED RUN IS REPORTED — the outcome, and where it stopped, and nothing else.
  *
@@ -190,59 +231,109 @@ const loadPending = async (): Promise<void> => {
     await runSetup();
 };
 
-const power = async (slug: string, startIt: boolean): Promise<void> => {
-    busy.value = { slug, action: `power` };
-    await start(`power:${slug}`, () => sandboxPower(slug, startIt));
-    busy.value = undefined;
+/* WHICH RUN A VERB IS. The ids predate the shared row and are kept as they are, because the analytics below
+ * report against them and one of them is also what an `intentic://recreate` handover produces. */
+const RUN_OF: Record<Exclude<SandboxVerb, `logs`>, (slug: string) => string> = {
+    start: (slug) => `power:${slug}`,
+    stop: (slug) => `power:${slug}`,
+    restart: (slug) => `power:${slug}`,
+    update: (slug) => `recreate:${slug}`,
+    rollback: (slug) => `recreate:${slug}`,
+    remove: (slug) => `remove:${slug}`,
 };
 
 /* `source` is the one thing the event cannot work out for itself: the same operation arrives either as a click
  * on this screen's own list, or as the SPA's Update/Environment card handing it over (`drainRecreate`). Which
  * of the two people actually use is the question the app's existence rests on. */
-const update = async (slug: string, hash?: string, source: `manager` | `link` = `manager`): Promise<void> => {
-    busy.value = { slug, action: `update` };
+const recreate = async (slug: string, hash: string | undefined, rollback: boolean, source: `manager` | `link`): Promise<void> => {
+    busy.value = { slug, verb: rollback ? `rollback` : `update` };
     const startedAt = Date.now();
     // The mode rides the argument shape here exactly as it does in the script (recreate.sh): a hash means the
-    // owner-approved overlay, no hash means the fresh :stable base.
-    const mode = hash === undefined ? `update` : `rebuild`;
+    // owner-approved overlay, `--rollback` means the image before the last update, neither means the fresh base.
+    const mode = rollback ? `rollback` : hash === undefined ? `update` : `rebuild`;
     track(`desktop_recreate_started`, { mode, source });
-    const failure = await start(`recreate:${slug}`, () => sandboxRecreate(slug, hash));
+    const failure = await start(`recreate:${slug}`, () => sandboxRecreate(slug, hash, rollback));
     track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
+    rowFailure.value = failure === undefined ? undefined : { slug, message: failure };
     busy.value = undefined;
 };
 
-/* The SPA's two "paste this on the machine that runs your sandbox" cards, arriving as a click instead: the
- * Update card sends a slug, the Environment card sends a slug and the approved overlay's digest. Taken rather
- * than read, so coming back to this screen later does not re-run an update that already ran. */
+/* The SPA's "paste this on the machine that runs your sandbox" cards, arriving as a click instead: the Update
+ * card sends a slug, the Environment card sends a slug and the approved overlay's digest, and the rollback on
+ * the same card sends the flag. Taken rather than read, so coming back to this screen later does not re-run an
+ * update that already ran. */
 const drainRecreate = async (): Promise<void> => {
     const requested = await takePendingRecreate();
     if (requested === null || running.value) {
         return;
     }
-    await update(requested.slug, requested.hash, `link`);
+    await recreate(requested.slug, requested.hash, requested.rollback, `link`);
 };
 
-// Removing a sandbox deletes its /work and /history volumes, which is not recoverable and not what the
-// neighbouring buttons do — so it asks, in the OS's own dialog rather than one this window draws.
-const remove = async (slug: string): Promise<void> => {
-    const sandbox = sandboxes.value.find((entry) => entry.slug === slug);
-    const confirmed = await confirm(
-        `This deletes ${sandbox?.name ?? slug} and everything in it — its files and its history. This cannot be undone.`,
-        {
-            title: `Remove this sandbox?`,
-            kind: `warning`,
-            okLabel: `Remove`,
-        },
-    );
-    if (!confirmed) {
+/* ONE CLICK ON ONE ROW, whichever of the shared verbs it was.
+ *
+ * The kit decides which buttons exist and what the destructive ones ask; this decides what each one DOES here,
+ * which is the whole of what differs between this window and the SPA's Computers tab — there, a verb is a
+ * message to a machine over a socket; here it is a script or a docker call on the machine this window is on.
+ *
+ * The question is asked in the OS's own dialog rather than one this window draws, and its words are the kit's,
+ * so the two apps warn about the same thing in the same sentence. */
+const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void> => {
+    const slug = slugOf(group);
+    if (slug === undefined || busy.value !== undefined || running.value) {
         return;
     }
-    busy.value = { slug, action: `remove` };
-    await start(`remove:${slug}`, () => sandboxRemove(slug));
+    if (verb === `logs`) {
+        // A toggle: a pane the reader opened is theirs to close, and re-reading is the same click again.
+        if (openLog.value === slug) {
+            openLog.value = undefined;
+            return;
+        }
+        // Opened before the lines arrive, so an empty pane says "reading" rather than the row looking like it
+        // ignored the click. This one does NOT go through `start`: nothing is spawned, so there is no run.
+        openLog.value = slug;
+        logLines.value = { ...logLines.value, [slug]: [] };
+        busy.value = { slug, verb };
+        const text = await sandboxLogs(slug, LOG_TAIL_LINES).catch((error: unknown) => String(error));
+        logLines.value = { ...logLines.value, [slug]: text.split(/\r?\n/).filter((line) => line !== ``) };
+        busy.value = undefined;
+        return;
+    }
+    const asked = sandboxVerbPrompt(verb, group.title);
+    if (asked !== undefined && !(await confirm(asked, { title: group.title, kind: `warning`, okLabel: VERB_LABEL[verb] }))) {
+        return;
+    }
+    // A pane holding the log this row printed a moment ago is about a container that is now being changed.
+    openLog.value = undefined;
+    rowFailure.value = undefined;
+    if (verb === `update` || verb === `rollback`) {
+        await recreate(slug, undefined, verb === `rollback`, `manager`);
+        return;
+    }
+    busy.value = { slug, verb };
+    const failure = await start(RUN_OF[verb](slug), verb === `remove` ? () => sandboxRemove(slug) : () => sandboxPower(slug, verb));
+    rowFailure.value = failure === undefined ? undefined : { slug, message: failure };
     busy.value = undefined;
 };
 
-const busyFor = (slug: string): string | null => (busy.value?.slug === slug ? busy.value.action : null);
+// Which of THIS row's buttons is the one spinning, and what its pane is showing. A run's lines are the script's
+// own output; a log tail's are the container's — one pane, because a row only ever has one thing to say.
+const busyVerb = (group: MachineSandboxGroup): SandboxVerb | undefined => {
+    const inFlight = busy.value;
+    return inFlight !== undefined && inFlight.slug === slugOf(group) ? inFlight.verb : undefined;
+};
+const logOpen = (group: MachineSandboxGroup): boolean => openLog.value !== undefined && openLog.value === slugOf(group);
+const paneLines = (group: MachineSandboxGroup): string[] => {
+    const slug = slugOf(group);
+    const verb = busyVerb(group);
+    if (slug === undefined) {
+        return [];
+    }
+    if (verb !== undefined && verb !== `logs`) {
+        return eventsOf(RUN_OF[verb](slug)).flatMap((event) => (event.kind === `line` ? [event.text] : []));
+    }
+    return logLines.value[slug] ?? [];
+};
 
 let stop: Array<() => void> = [];
 onMounted(async () => {
@@ -336,43 +427,53 @@ onUnmounted(() => stop.forEach((unlisten) => unlisten()));
                     <Icon name="box" class="mt-0.5 shrink-0" />
                     <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
                 </p>
-                <p v-else-if="sandboxes.length === 0" class="text-2xs text-muted">
+                <p v-else-if="!hasRows" class="text-2xs text-muted">
                     No sandboxes here yet. Set one up from your workspace — this screen is where you manage it afterwards.
                 </p>
 
-                <SandboxCard
-                    v-for="sandbox in sandboxes"
-                    :key="sandbox.slug"
-                    :sandbox="sandbox"
-                    :busy="busyFor(sandbox.slug)"
-                    :sync-line="syncLineFor(sandbox)"
-                    @power="power"
-                    @update="update"
-                    @remove="remove"
-                />
-
-                <!-- DESKTOP SYNC — the half of this computer this window has never shown.
+                <!-- WHAT THIS COMPUTER IS RUNNING — one row per sandbox, carrying its folder, its ports, its
+                     image and its verbs, exactly as the SPA's Computers tab draws the same machine.
                      `syncDir` rides the setup link into connect.sh and was never heard from again, so the app
                      whose whole premise is not needing a terminal could say a container was up and nothing about
-                     the sync the same setup had just configured. The only place these facts lived was
-                     `intentic-sync status`. Below the sandboxes because it is about all of them at once. -->
-                <section v-if="report || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
-                    <div class="flex items-center gap-2">
-                        <Icon name="sync" class="shrink-0 text-muted" />
-                        <h2 class="flex-1 text-sm font-semibold">Desktop sync</h2>
-                        <span v-if="report?.agents.sync" class="font-mono text-2xs text-subtle">agent v{{ report.agents.sync }}</span>
-                    </div>
+                     the sync the same setup had just configured — the folders and ports below are that half, and
+                     they belong ON the sandbox they are for rather than under a heading of their own. -->
+                <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                     <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                    <MachineDetail v-if="report" :pairings="report.pairings" :ports="report.ports" :watcher="report.watcher" />
+                    <MachineDetail :pairings="report?.pairings" :ports="report?.ports" :sandboxes="sandboxRows" :watcher="report?.watcher">
+                        <!-- What the list is, and the state of the agent behind it, on one line — the watcher is
+                             a fact about the MACHINE rather than about any row under it. -->
+                        <template #heading>
+                            <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
+                                Sandboxes on this computer
+                                <span v-if="report?.agents.sync" class="font-mono normal-case">agent v{{ report.agents.sync }}</span>
+                            </span>
+                        </template>
+                        <template #actions="{ group }">
+                            <SandboxVerbs
+                                v-if="group.sandbox"
+                                :running="group.sandbox.running"
+                                :busy="busyVerb(group)"
+                                :disabled="running || busy !== undefined"
+                                :logs-open="logOpen(group)"
+                                @act="(verb) => act(group, verb)"
+                            />
+                        </template>
+                        <!-- The machine's own output: while a row works, and afterwards for as long as a log tail
+                             is being read. -->
+                        <template #footer="{ group }">
+                            <MachineRunLog
+                                v-if="busyVerb(group) || logOpen(group)"
+                                :lines="paneLines(group)"
+                                :running="busyVerb(group) !== undefined"
+                                empty="Starting on this computer…"
+                                note="Running on this computer — it keeps going even if you close this window."
+                            />
+                            <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
+                                {{ rowFailure.message }}
+                            </Notice>
+                        </template>
+                    </MachineDetail>
                 </section>
-
-                <!-- One run at a time, so one log: whichever operation is in flight owns this. -->
-                <RunLog
-                    v-if="activeRun !== undefined"
-                    :events="eventsOf(activeRun)"
-                    :running="true"
-                    class="rounded-xl border border-line bg-canvas p-4"
-                />
 
                 <footer class="mt-auto flex items-center gap-2 pt-2">
                     <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">

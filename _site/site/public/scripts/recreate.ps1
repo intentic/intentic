@@ -1,20 +1,25 @@
 <#
 .SYNOPSIS
-  intentic recreate (Windows) - bootstrap shim. The flow itself (update/rebuild, env replay, overlay re-base,
-  the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only fetches the binary
-  and forwards the parameter shapes the platform's cards hand out: -Slug alone = update, -Slug + -Hash =
+  intentic recreate (Windows) - bootstrap shim. The flow itself (update/rebuild/rollback, env replay, overlay
+  re-base, the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only fetches the
+  binary and forwards the parameter shapes the platform's cards hand out: -Slug alone = update, -Slug + -Hash =
   rebuild (the SHA256 is the trust anchor - only overlay content that still hashes to what the owner
-  reviewed is ever built).
+  reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update.
 
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/rebuild))) -Slug abc123 -Hash <sha256>   # rebuild
+.EXAMPLE
+  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Rollback   # roll back
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Slug,
     # Present => rebuild (the approved overlay, pinned to this digest); absent => update (the fresh base).
-    [string]$Hash
+    [string]$Hash,
+    # The third way through the same shim, matching recreate.sh's --rollback: the image before the last update.
+    # A switch rather than a value, so it can never be confused with the digest above.
+    [switch]$Rollback
 )
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -52,7 +57,9 @@ if (-not $Ic) {
     }
 }
 
-if ($Hash) {
+if ($Rollback) {
+    & $Ic sandbox rollback $Slug
+} elseif ($Hash) {
     & $Ic sandbox rebuild $Slug $Hash
 } else {
     & $Ic sandbox update $Slug

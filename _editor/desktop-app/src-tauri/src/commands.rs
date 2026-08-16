@@ -260,32 +260,54 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
         .collect())
 }
 
-/// Start/stop the sandbox and its sidecar together — a workspace with a stopped tunnel is reachable from this
-/// machine's loopback and from nowhere else, which is not a state anyone asks for on purpose.
+/// Start, stop or restart the sandbox and its sidecar together — a workspace with a stopped tunnel is reachable
+/// from this machine's loopback and from nowhere else, which is not a state anyone asks for on purpose.
+///
+/// Three verbs rather than a boolean because the manager offers three: Restart is what the web's Computers tab
+/// has always had here and this window had not, and a bool cannot say it. Anything else is refused rather than
+/// forwarded — this argument reaches `docker` as its subcommand.
 #[tauri::command]
-pub async fn sandbox_power(slug: String, start: bool) -> CommandResult<()> {
+pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
+    if !matches!(action.as_str(), "start" | "stop" | "restart") {
+        return Err(format!("unknown sandbox action: {action}"));
+    }
     tauri::async_runtime::spawn_blocking(move || {
-        let verb = if start { "start" } else { "stop" };
-        scripts::docker_output(&[verb, &format!("{CONTAINER_PREFIX}{slug}")])?;
+        let container = format!("{CONTAINER_PREFIX}{slug}");
+        let sidecar = format!("{TUNNEL_PREFIX}{slug}");
+        // Stopping fells the tunnel first so nothing routes into a container on its way down; starting and
+        // restarting raise it last. The same order the machine agent uses for the same three verbs.
         // The sidecar is optional (a sandbox reached over the user's own proxy has none), so its absence is
         // not a failure of the operation the user asked for.
-        let _ = scripts::docker_output(&[verb, &format!("{TUNNEL_PREFIX}{slug}")]);
+        if action == "stop" {
+            let _ = scripts::docker_output(&[&action, &sidecar]);
+            scripts::docker_output(&[&action, &container])?;
+        } else {
+            scripts::docker_output(&[&action, &container])?;
+            let _ = scripts::docker_output(&[&action, &sidecar]);
+        }
         Ok(())
     })
     .await
     .map_err(|error| error.to_string())?
 }
 
-/// Recreate the sandbox on a different image — `recreate.sh <slug>` pulls the fresh :stable base, and
-/// `<slug> <sha256>` builds the owner-approved environment overlay. The SPA shows both of these as a command
-/// to paste on the host, because the daemon cannot recreate its own container; this is that button.
-pub fn recreate_script(slug: &str, hash: Option<&str>, host: Host) -> ScriptRun {
+/// Recreate the sandbox on a different image — one script, three ways through it, exactly as the shim itself
+/// takes them: `recreate.sh <slug>` pulls the fresh :stable base, `<slug> <sha256>` builds the owner-approved
+/// environment overlay, and `<slug> --rollback` returns it to the image it ran before its last update. The SPA
+/// shows all three as a command to paste on the host, because the daemon cannot recreate its own container;
+/// this is that button.
+///
+/// Rollback wins over a hash rather than combining with one: they name two different destination images, and a
+/// caller that asked for both has a bug that must not be resolved silently into a rebuild.
+pub fn recreate_script(slug: &str, hash: Option<&str>, rollback: bool, host: Host) -> ScriptRun {
     // Named on PowerShell, positional on sh — see setup_script for why the two are not interchangeable.
     let mut args = match host {
         Host::Windows => vec!["-Slug".into(), slug.to_string()],
         Host::Unix => vec![slug.to_string()],
     };
-    if let Some(hash) = hash.filter(|hash| !hash.is_empty()) {
+    if rollback {
+        args.push(host.script("--rollback", "-Rollback").to_string());
+    } else if let Some(hash) = hash.filter(|hash| !hash.is_empty()) {
         if host == Host::Windows {
             args.push("-Hash".into());
         }
@@ -305,8 +327,9 @@ pub async fn sandbox_recreate(
     app: AppHandle,
     slug: String,
     hash: Option<String>,
+    rollback: bool,
 ) -> CommandResult<()> {
-    let run = recreate_script(&slug, hash.as_deref(), Host::current());
+    let run = recreate_script(&slug, hash.as_deref(), rollback, Host::current());
     let id = format!("recreate:{slug}");
     tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
         .await
@@ -529,26 +552,56 @@ mod tests {
 
     #[test]
     fn recreate_passes_the_slug_and_the_optional_hash_per_host() {
-        assert_eq!(recreate_script("work", None, Host::Unix).args, vec!["work"]);
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), Host::Unix).args,
+            recreate_script("work", None, false, Host::Unix).args,
+            vec!["work"]
+        );
+        assert_eq!(
+            recreate_script("work", Some("deadbeef"), false, Host::Unix).args,
             vec!["work", "deadbeef"]
         );
         assert_eq!(
-            recreate_script("work", None, Host::Windows).args,
+            recreate_script("work", None, false, Host::Windows).args,
             vec!["-Slug", "work"]
         );
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), Host::Windows).args,
+            recreate_script("work", Some("deadbeef"), false, Host::Windows).args,
             vec!["-Slug", "work", "-Hash", "deadbeef"]
         );
         assert_eq!(
-            recreate_script("work", None, Host::Unix).file,
+            recreate_script("work", None, false, Host::Unix).file,
             "recreate.sh"
         );
         assert_eq!(
-            recreate_script("work", None, Host::Windows).file,
+            recreate_script("work", None, false, Host::Windows).file,
             "recreate.ps1"
+        );
+    }
+
+    /* The rollback spelling, per host — the flag the sh shim reads and the switch the ps1 declares are two
+     * different strings for one button, and the Windows one is cross-built and first runs on a user's PC. */
+    #[test]
+    fn rollback_is_a_flag_on_sh_and_a_switch_on_powershell() {
+        assert_eq!(
+            recreate_script("work", None, true, Host::Unix).args,
+            vec!["work", "--rollback"]
+        );
+        assert_eq!(
+            recreate_script("work", None, true, Host::Windows).args,
+            vec!["-Slug", "work", "-Rollback"]
+        );
+    }
+
+    #[test]
+    fn a_rollback_never_carries_a_digest() {
+        // Two different destination images; a caller asking for both is a bug, not a rebuild.
+        assert_eq!(
+            recreate_script("work", Some("deadbeef"), true, Host::Unix).args,
+            vec!["work", "--rollback"]
+        );
+        assert_eq!(
+            recreate_script("work", Some("deadbeef"), true, Host::Windows).args,
+            vec!["-Slug", "work", "-Rollback"]
         );
     }
 
@@ -556,11 +609,11 @@ mod tests {
     fn an_empty_hash_is_an_update_not_an_overlay_build() {
         // `recreate.sh <slug> ""` would build an overlay pinned to no digest; the update path passes no hash.
         assert_eq!(
-            recreate_script("work", Some(""), Host::Unix).args,
+            recreate_script("work", Some(""), false, Host::Unix).args,
             vec!["work"]
         );
         assert_eq!(
-            recreate_script("work", Some(""), Host::Windows).args,
+            recreate_script("work", Some(""), false, Host::Windows).args,
             vec!["-Slug", "work"]
         );
     }
@@ -578,7 +631,7 @@ mod tests {
 
     #[test]
     fn no_flow_but_setup_ever_elevates() {
-        assert!(!recreate_script("work", None, Host::Unix).elevate);
+        assert!(!recreate_script("work", None, false, Host::Unix).elevate);
         assert!(!remove_script("work", Host::Unix).elevate);
     }
 

@@ -66,11 +66,17 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
  * credentials come back over `intentic://auth` and the app reopens this SPA at /desktop-auth/complete. */
 export const DESKTOP_SIGN_IN_LINK = `intentic://signin`;
 
-// Swap a sandbox onto a different image: no hash updates to the fresh `:stable` base, a hash builds the
-// owner-approved overlay pinned to that digest. The same two argument shapes the pasted command carries.
-export const desktopRecreateLink = (slug: string, hash?: string): string => {
+/* Swap a sandbox onto a different image: no hash updates to the fresh `:stable` base, a hash builds the
+ * owner-approved overlay pinned to that digest, and `rollback` returns it to the image before the last update.
+ * The same three argument shapes the pasted command carries.
+ *
+ * A rollback sends no digest even if one is at hand: it names a different destination image, and the app drops
+ * the pair the same way rather than resolving it into a rebuild nobody asked for. */
+export const desktopRecreateLink = (slug: string, hash?: string, rollback = false): string => {
     const params = new URLSearchParams({ slug });
-    if (hash !== undefined && hash !== ``) {
+    if (rollback) {
+        params.set(`rollback`, `1`);
+    } else if (hash !== undefined && hash !== ``) {
         params.set(`hash`, hash);
     }
     return `intentic://recreate?${params.toString()}`;

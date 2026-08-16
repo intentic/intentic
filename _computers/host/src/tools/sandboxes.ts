@@ -110,14 +110,22 @@ export const asSandboxOp = (value: unknown): SandboxOp => {
     return value;
 };
 
-export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostScopes): Promise<string> => {
-    assertScope(scopes, "sandboxes");
+/* WHICH CONTAINER THE SLUG MEANS, or the machine's own answer that it means none — one lookup for every op,
+ * because a wrong slug deserves the same sentence whichever button sent it, and because a flow that will take
+ * minutes is owed the refusal NOW rather than after an image pull. */
+const find = async (slug: string): Promise<MachineSandbox> => {
     const boxes = await fleet();
     const target = boxes.find((box) => box.slug === slug);
-    if (target === undefined) {
-        const known = boxes.map((box) => box.slug).join(", ");
-        throw new Error(`No sandbox "${slug}" on this computer. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
+    if (target !== undefined) {
+        return target;
     }
+    const known = boxes.map((box) => box.slug).join(", ");
+    throw new Error(`No sandbox "${slug}" on this computer. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
+};
+
+export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostScopes): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    const target = await find(slug);
     // The tunnel sidecar goes wherever its sandbox goes — a "started" sandbox nobody can reach is not started.
     // Stopping fells the tunnel first so nothing routes into a container on its way down; starting raises it last.
     const sidecar = target.tunnelRunning === undefined ? [] : [`${TUNNEL_PREFIX}${slug}`];
@@ -218,17 +226,6 @@ const runIc = async (args: readonly string[], onLine: (line: string) => void): P
     throw new Error("no ic candidate was tried");
 };
 
-// The sandbox has to exist before a flow is started against it — `ic` would say so too, but several minutes and
-// an image pull later, and the reader is owed the answer now.
-const assertKnown = async (slug: string): Promise<void> => {
-    const boxes = await fleet();
-    if (boxes.some((box) => box.slug === slug)) {
-        return;
-    }
-    const known = boxes.map((box) => box.slug).join(", ");
-    throw new Error(`No sandbox "${slug}" on this computer. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
-};
-
 export const swapSandbox = async (
     swap: SandboxSwap,
     slug: string,
@@ -240,7 +237,7 @@ export const swapSandbox = async (
     // Built before the fleet is read, so a rebuild with no digest is refused instantly rather than after a docker
     // round trip — the argument was already wrong when it arrived.
     const args = icSwapArgs(swap, slug, hash);
-    await assertKnown(slug);
+    await find(slug);
     const { code, output } = await runIc(args, onLine);
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this computer.\n\n${output}`);
@@ -251,7 +248,7 @@ export const swapSandbox = async (
 
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxRemove");
-    await assertKnown(slug);
+    await find(slug);
     const { code, output } = await runIc(icRemoveArgs(slug), onLine);
     if (code !== 0) {
         throw new Error(`That removal failed on this computer.\n\n${output}`);
@@ -272,17 +269,39 @@ export const asLogLines = (value: unknown): number =>
  * shell on this machine could run `docker logs` itself — so either grant answers it.
  *
  * Both streams, because a container that died wrote its reason to stderr. `--timestamps` is deliberately off:
- * the daemon stamps its own lines, and docker's wall-clock prefix on every row is mostly noise in a tail. */
-export const sandboxLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
+ * the daemon stamps its own lines, and docker's wall-clock prefix on every row is mostly noise in a tail.
+ *
+ * Raw and possibly empty: the two readers phrase "it has said nothing" differently — a model wants a sentence,
+ * and the Computers view wants the count for its own — so neither is written into the reading itself. */
+const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
-    await assertKnown(slug);
+    await find(slug);
     const { stdout, stderr } = await exec("docker", ["logs", "--tail", String(lines), `${PREFIX}${slug}`], {
         timeout: DOCKER_TIMEOUT_MS,
         maxBuffer: 8 * 1024 * 1024,
         windowsHide: true,
     });
-    const text = [stdout, stderr].filter((part) => part !== "").join("\n");
+    return [stdout, stderr].filter((part) => part !== "").join("\n");
+};
+
+export const sandboxLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
+    const text = await readLogs(slug, lines, scopes);
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;
+};
+
+/* THE SAME READING, AS A FLOW — the Computers view's Logs button, which travels the machine door every other
+ * button on that row travels.
+ *
+ * It is the one op there that changes nothing, and it needs no separate route for exactly the reason the others
+ * share one: the stream's shape is already "many lines, then an outcome", which is what a log tail is. The lines
+ * arrive as the view's own run log, so a container too broken to answer anything else still gets read from the
+ * same button, on the same row, in both apps. */
+export const tailSandboxLogs = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+    const lines = (await readLogs(slug, DEFAULT_LOG_LINES, scopes)).split(/\r?\n/).filter((line) => line !== "");
+    for (const line of lines) {
+        onLine(line);
+    }
+    return lines.length === 0 ? `"${slug}" has logged nothing yet.` : `The last ${lines.length} lines from "${slug}".`;
 };

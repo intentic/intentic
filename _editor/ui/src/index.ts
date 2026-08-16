@@ -51,6 +51,9 @@ export { default as InfoTable } from "./components/InfoTable.vue";
 // One computer's desktop-sync detail — folders, localhost ports, watcher liveness. The BODY only: the desktop
 // app and the web's Computers tab frame it differently and state exactly the same facts inside.
 export { default as MachineDetail } from "./components/MachineDetail.vue";
+// The pane under a working row: the machine's own output, verbatim. Shared for the same reason the row above
+// it is — both apps drive the same containers and had grown their own.
+export { default as MachineRunLog } from "./components/MachineRunLog.vue";
 export {
     type MachineFolderRow,
     type MachinePortRow,
@@ -58,6 +61,10 @@ export {
     type MachineSandboxRow,
     type MachineWatcherState,
 } from "./components/machineDetail.js";
+// The verb row on one sandbox's line — which buttons exist, their order, their words, and which one is red.
+// Here because the desktop manager and the web Computers tab render the same row and had drifted apart.
+export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
+export { type SandboxVerb, sandboxVerbPrompt, sandboxVerbs, VERB_LABEL } from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported

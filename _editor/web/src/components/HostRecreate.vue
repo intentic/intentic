@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { ui, Code, commandLang, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
+import { ui, Code, commandLang, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import MachineRunLog from "../pages/sandbox/MachineRunLog.vue";
 import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
@@ -25,6 +24,9 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
  *
  * The first is preferred over the second even inside the app: the deep link hands the window over to the
  * launcher face, and staying on the page you were reading is worth more than that handoff.
+ *
+ * All three modes work on all four, which they did not: rollback had no deep link and no Windows command, so
+ * the one card that offers it was two renderings short of the two that do not.
  *
  * The mode rides the ARGUMENT SHAPE, not a flag, exactly as recreate.sh has always read it: a hash means
  * "build the approved overlay pinned to this digest", no hash means "pull the fresh :stable base". */
@@ -81,15 +83,22 @@ const runOnMachine = async (): Promise<void> => {
     }
 };
 
+/* Rollback rides the update script with a flag — one script, three ways in, exactly as rebuild does with its
+ * hash (see recreate.sh's argument-shape dispatch, and recreate.ps1's `-Rollback` switch beside its `-Hash`).
+ * Windows used to fall through to the plain update command here, which is the one spelling where "Roll back"
+ * printed a command that would have moved the sandbox the other way. */
 const command = computed(() => {
     const key = props.hash === undefined ? `update` : `rebuild`;
+    const rollback = props.action === `Roll back`;
     if (cmdOs.value === `windows`) {
-        const args = props.hash === undefined ? `-Slug ${props.slug}` : `-Slug ${props.slug} -Hash ${props.hash}`;
+        const args = rollback
+            ? `-Slug ${props.slug} -Rollback`
+            : props.hash === undefined
+              ? `-Slug ${props.slug}`
+              : `-Slug ${props.slug} -Hash ${props.hash}`;
         return psCommand(props.hash === undefined ? `updatePs1` : `rebuildPs1`, ``, args);
     }
-    // Rollback rides the update script with a flag — one script, three ways in, exactly as rebuild does with
-    // its hash (see recreate.sh's argument-shape dispatch).
-    if (props.action === `Roll back`) {
+    if (rollback) {
         return bashCommand(key, ``, `${props.slug} --rollback`);
     }
     return bashCommand(key, ``, props.hash === undefined ? props.slug : `${props.slug} ${props.hash}`);
@@ -99,8 +108,7 @@ const command = computed(() => {
 <template>
     <div class="flex flex-col gap-2">
         <!-- The machine is reachable from here, so this is a button wherever you are reading it — a phone on
-             another continent included. All three modes work: unlike the desktop deep link, a rollback has a
-             verb on this path. -->
+             another continent included. -->
         <template v-if="hostId">
             <Button :label="running ? `${action} running…` : `${action} now`" class="self-start" :loading="running" @click="runOnMachine">
                 <template #icon><Icon name="bolt" /></template>
@@ -109,15 +117,21 @@ const command = computed(() => {
                 Runs on the computer hosting this sandbox. It takes a few minutes and this page loses the sandbox while it restarts; your files (in
                 /work) are kept.
             </p>
-            <MachineRunLog v-if="running || lines.length > 0" :lines="lines" :running="running" />
+            <MachineRunLog
+                v-if="running || lines.length > 0"
+                :lines="lines"
+                :running="running"
+                empty="Starting on that computer…"
+                note="Running on that computer — it keeps going even if you leave this page."
+            />
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
         </template>
 
-        <!-- The desktop deep link carries update and rebuild only; a rollback has no verb there, so it falls
-             through to the command block rather than being wired to a link that would run the wrong swap. -->
-        <template v-else-if="desktop && action !== `Roll back`">
-            <Button :label="`${action} now`" class="self-start" @click="openDesktopLink(desktopRecreateLink(slug, hash))">
+        <!-- The desktop deep link carries all three swaps, rollback included: the app's own manager row offers
+             the verb now, so the link that hands one over no longer has a mode it cannot express. -->
+        <template v-else-if="desktop">
+            <Button :label="`${action} now`" class="self-start" @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="text-2xs text-subtle">Runs here, on this computer. It takes a few minutes; your files (in /work) are kept.</p>

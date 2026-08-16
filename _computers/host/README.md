@@ -70,6 +70,11 @@ So `hostContract` carries one **typed, streaming** procedure beside the opaque `
 which the browser's Computers view reads live. Both doors call the same functions in `src/tools/sandboxes.ts`,
 so what a person watches and what the agent is told can never describe one run differently.
 
+The log tail rides that same procedure (`op: "logs"`), which is the one op there that changes nothing. It is
+not a route of its own for the reason the other seven share one: it is a button in the same row, on a container
+that may be too broken to answer any other way, and the stream's shape is already "many lines, then an
+outcome" — which is what a log tail is. Same reading as the `sandbox_logs` tool, same gate.
+
 Typed, unlike `mcp`, because the reader is different: a model gains nothing from a line as it arrives and
 everything from this machine learning tools without a daemon release, while a person watching a progress log
 needs exactly the opposite.

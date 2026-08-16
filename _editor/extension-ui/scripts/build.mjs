@@ -1,5 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { closeSync, cpSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import {
+    closeSync,
+    cpSync,
+    existsSync,
+    ftruncateSync,
+    mkdirSync,
+    openSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+    writeSync,
+} from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { extensionUiNames } from "../names.mjs";
@@ -47,14 +59,29 @@ const DIST = join(PKG, "dist");
 
 const log = (message) => process.stdout.write(`${message}\n`);
 
+/* EMPTY A DIRECTORY WITHOUT REMOVING IT. `rmSync(dir, { recursive: true })` on `dist/` is what this used to do,
+ * and it fails with EBUSY wherever that path is a MOUNT POINT rather than an ordinary directory — which is the
+ * normal case in an agent sandbox, where build output is an overlay so it survives without entering the repo.
+ * The build then died before emitting anything, and the failure read as a broken package rather than as a
+ * directory that could not be unlinked. Clearing the contents is the same thing to every consumer and works
+ * either way. */
+const empty = (dir) => {
+    if (existsSync(dir)) {
+        for (const entry of readdirSync(dir)) {
+            rmSync(join(dir, entry), { recursive: true, force: true });
+        }
+        return;
+    }
+    mkdirSync(dir, { recursive: true });
+};
+
 // ── 1. Declarations for the kit AND the design system it re-exports ──────────────────────────────────────
 // Emitted together with `_editor` as the root so the two land as siblings and their relative imports keep
 // resolving. `include` is deliberately the whole of both: TypeScript emits only for files it was given as
 // roots, and step 3 is what narrows the result to the reachable ones.
 const tsconfig = join(STAGING, "tsconfig.json");
-rmSync(STAGING, { recursive: true, force: true });
-rmSync(DIST, { recursive: true, force: true });
-mkdirSync(STAGING, { recursive: true });
+empty(STAGING);
+empty(DIST);
 writeFileSync(
     tsconfig,
     JSON.stringify({

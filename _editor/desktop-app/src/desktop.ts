@@ -17,6 +17,8 @@ export interface SetupArgs {
 export interface RecreateArgs {
     slug: string;
     hash?: string;
+    // The third mode of the one recreate script: back to the image this sandbox ran before its last update.
+    rollback: boolean;
 }
 
 export interface SandboxStatus {
@@ -27,6 +29,10 @@ export interface SandboxStatus {
     image: string;
     tunnelRunning: boolean | null;
 }
+
+/* The three docker verbs this window offers. Named rather than a boolean because the row offers three — the
+ * same three the web's Computers tab offers, which is the point of them being one list. */
+export type PowerAction = `start` | `stop` | `restart`;
 
 export interface DesktopInfo {
     version: string;
@@ -74,10 +80,11 @@ export const pendingSetup = (): Promise<SetupArgs | null> => invoke(`pending_set
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
 export const setupRun = (args: SetupArgs): Promise<void> => invoke(`setup_run`, { args });
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
-export const sandboxPower = (slug: string, start: boolean): Promise<void> => invoke(`sandbox_power`, { slug, start });
-// One command for both recreate modes, exactly as the script takes them: no hash updates to the fresh
-// :stable base, a hash builds the owner-approved environment overlay pinned to that digest.
-export const sandboxRecreate = (slug: string, hash?: string): Promise<void> => invoke(`sandbox_recreate`, { slug, hash });
+export const sandboxPower = (slug: string, action: PowerAction): Promise<void> => invoke(`sandbox_power`, { slug, action });
+// One command for all three recreate modes, exactly as the script takes them: no hash updates to the fresh
+// :stable base, a hash builds the owner-approved environment overlay pinned to that digest, and `rollback`
+// returns it to the image before the last update.
+export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
 /* The sync agent's report, or undefined when this computer has no agent — an ordinary state (a machine set up

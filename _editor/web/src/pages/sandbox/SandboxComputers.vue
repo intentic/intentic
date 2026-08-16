@@ -3,23 +3,25 @@ import type { Computer, MachineSandboxOp } from "@intentic/sandbox-contract";
 import {
     InfoHint,
     MachineDetail,
+    MachineRunLog,
     type MachineSandboxGroup,
     Notice,
     type NoticeModel,
     RowGroup,
+    type SandboxVerb,
+    SandboxVerbs,
+    sandboxVerbPrompt,
     SkeletonRows,
     StatusBadge,
     type StatusVariant,
     timeAgo,
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
-import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import { computerDoors, lastSeenNote, machineFacts, osLabel, osTitle, syncAgentBehind } from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
-import MachineRunLog from "./MachineRunLog.vue";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -103,15 +105,6 @@ const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
  * no edge to add to the pile. */
 const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0.5 text-2xs text-muted`;
 
-/* The row of verbs on a sandbox row used to carry its own size here — `px-2 py-1 text-xs`, because a button left
- * at PrimeVue's defaults is a 14px label in a 38px control, which beside a 12px row is not an action on the row,
- * it is the loudest thing on the card, four times over. That is now what `size="small"` means everywhere (see the
- * button tokens in the design system's theme), so the buttons below say only their tone.
- *
- * They are all SECONDARY except the one that deletes. Stop and Restart were drawn in the same red as Remove, so
- * the three most alarming words on the page were also two of its most ordinary ones, and the eye went to them
- * before it went to the machine's own state. Red now means exactly one thing here. */
-
 const tone = (computer: Computer): StatusVariant => {
     if (computer.gap !== undefined) {
         return computer.gap === `offline` ? `neutral` : `warning`;
@@ -161,6 +154,19 @@ const actionDone = ref<{ key: string; message: string } | undefined>();
 // The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
 const runLines = ref<Record<string, string[]>>({});
 
+/* WHICH ROW'S PANE STAYS OPEN once nothing is running. Every other op is watched and then done with — its lines
+ * were progress — but `logs` is read AFTER it finishes, so the pane it filled has to survive its own run. One at a
+ * time, keyed by row, because that is already how many ops this view will run at once. */
+const openLog = ref<string | undefined>();
+const logShown = (computer: Computer, group: MachineSandboxGroup): boolean => openLog.value === rowKey(computer, group);
+
+// Which of this row's buttons is the one spinning. `busy` is one string for the whole tab (only one op runs at a
+// time, on one machine), so the row splits its own half back out rather than each button testing the pair.
+const runningVerb = (computer: Computer, group: MachineSandboxGroup): SandboxVerb | undefined => {
+    const prefix = `${rowKey(computer, group)}:`;
+    return busy.value?.startsWith(prefix) === true ? (busy.value.slice(prefix.length) as SandboxVerb) : undefined;
+};
+
 /* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
  * daemon's own hostname — the same derivation the sandbox switcher uses for its teardown command, and the same
  * one the setup CLI applies when it names the container.
@@ -171,34 +177,36 @@ const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
 
-// The ops that end this browser's own connection when they are aimed at the sandbox serving it. Everything but
-// `start`, which is the one that can only ever help.
+// The ops that end this browser's own connection when they are aimed at the sandbox serving it. Not `start`,
+// which can only ever help, and not `logs`, which changes nothing at all.
 const SEVERING = new Set<MachineSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
 
-const CONFIRM: Partial<Record<MachineSandboxOp, (name: string) => string>> = {
-    remove: (name) =>
-        `Remove ${name}?\n\nThis deletes it and everything in it — its files and its history — from that computer. This cannot be undone.`,
-    update: (name) => `Update ${name}?\n\nIt restarts onto the newest image and is unavailable for a few minutes. Its files are kept.`,
-    rollback: (name) => `Roll ${name} back?\n\nIt returns to the image it ran before its last update. Its files are kept.`,
-};
-
-const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSandboxOp): Promise<void> => {
+const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): Promise<void> => {
     if (computer.hostId === undefined || group.sandbox === undefined || busy.value !== undefined) {
         return;
     }
+    const key = rowKey(computer, group);
+    // The log button is a toggle: a pane the reader opened is theirs to close, and re-reading is the same click
+    // again rather than a second control beside it.
+    if (op === `logs` && openLog.value === key) {
+        openLog.value = undefined;
+        return;
+    }
     const slug = group.sandbox.slug;
-    const asked = CONFIRM[op]?.(group.title);
+    const asked = sandboxVerbPrompt(op, group.title);
     // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and "this also
     // closes the page you are on" are two different things to know, and the second never cancels the first.
     const severing = isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now — this page will lose it.` : ``;
     if ((asked !== undefined || severing !== ``) && !globalThis.confirm(`${asked ?? `${group.title}: ${op}?`}${severing}`)) {
         return;
     }
-    const key = rowKey(computer, group);
     busy.value = `${key}:${op}`;
     actionError.value = undefined;
     actionDone.value = undefined;
     runLines.value = { ...runLines.value, [key]: [] };
+    // Opened before the lines arrive, so an empty pane says "reading" rather than the row looking like it ignored
+    // the click. Every other op's pane closes when it ends; this one is the answer.
+    openLog.value = op === `logs` ? key : undefined;
     try {
         const message = await manageMachineSandbox(computer.hostId, slug, op, {
             onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
@@ -206,11 +214,17 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
         actionDone.value = { key, message };
     } catch (failure) {
         actionError.value = { key, notice: noticeFrom(failure, `That didn't work on this computer.`) };
+        if (op === `logs`) {
+            openLog.value = undefined;
+        }
     } finally {
         busy.value = undefined;
         // Always, including after a failure: a flow that stopped halfway still changed the machine, and the row
-        // must describe what is there now rather than what was there when it started.
-        refetch();
+        // must describe what is there now rather than what was there when it started. A log tail changed nothing,
+        // so it costs the list nothing either.
+        if (op !== `logs`) {
+            refetch();
+        }
     }
 };
 </script>
@@ -325,69 +339,29 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: MachineSa
                             <template #badges="{ group }">
                                 <StatusBadge v-if="isSelf(computer, group)" variant="info" size="xs" label="the one you're using" />
                             </template>
+                            <!-- The verbs themselves are the kit's, so this tab and the desktop app's manager
+                                 window offer the same row rather than two sets that drifted. What stays here is
+                                 which rows may act at all, and what a click does. -->
                             <template #actions="{ group }">
-                                <template v-if="manageable(computer, group)">
-                                    <Button
-                                        v-if="group.sandbox?.running === false"
-                                        label="Start"
-                                        size="small"
-                                        severity="secondary"
-                                        :text="true"
-                                        :loading="busy === `${rowKey(computer, group)}:start`"
-                                        :disabled="busy !== undefined"
-                                        @click="act(computer, group, `start`)"
-                                    />
-                                    <template v-else>
-                                        <Button
-                                            label="Restart"
-                                            size="small"
-                                            severity="secondary"
-                                            :text="true"
-                                            :loading="busy === `${rowKey(computer, group)}:restart`"
-                                            :disabled="busy !== undefined"
-                                            @click="act(computer, group, `restart`)"
-                                        />
-                                        <Button
-                                            label="Stop"
-                                            size="small"
-                                            severity="secondary"
-                                            :text="true"
-                                            :loading="busy === `${rowKey(computer, group)}:stop`"
-                                            :disabled="busy !== undefined"
-                                            @click="act(computer, group, `stop`)"
-                                        />
-                                    </template>
-                                    <!-- Update is offered whether or not it is running: a stopped sandbox is
-                                         exactly the one somebody wants on a newer image before starting it
-                                         again. -->
-                                    <Button
-                                        label="Update"
-                                        size="small"
-                                        severity="secondary"
-                                        :text="true"
-                                        :loading="busy === `${rowKey(computer, group)}:update`"
-                                        :disabled="busy !== undefined"
-                                        @click="act(computer, group, `update`)"
-                                    />
-                                    <Button
-                                        label="Remove"
-                                        size="small"
-                                        severity="danger"
-                                        :text="true"
-                                        :loading="busy === `${rowKey(computer, group)}:remove`"
-                                        :disabled="busy !== undefined"
-                                        @click="act(computer, group, `remove`)"
-                                    />
-                                </template>
+                                <SandboxVerbs
+                                    v-if="manageable(computer, group)"
+                                    :running="group.sandbox?.running === true"
+                                    :busy="runningVerb(computer, group)"
+                                    :disabled="busy !== undefined"
+                                    :logs-open="logShown(computer, group)"
+                                    @act="(verb) => act(computer, group, verb)"
+                                />
                             </template>
-                            <!-- The machine's own output while it works, and only while this row is the one
-                                 working: an operation that finished has said everything it had to say in its
-                                 result line. -->
+                            <!-- The machine's own output: while a row works, and afterwards for as long as a log
+                                 tail is being read. Every other operation has said all it had to say in its
+                                 result line by the time it ends. -->
                             <template #footer="{ group }">
                                 <MachineRunLog
-                                    v-if="busy?.startsWith(`${rowKey(computer, group)}:`)"
+                                    v-if="busy?.startsWith(`${rowKey(computer, group)}:`) || logShown(computer, group)"
                                     :lines="runLines[rowKey(computer, group)] ?? []"
-                                    :running="true"
+                                    :running="busy?.startsWith(`${rowKey(computer, group)}:`) === true"
+                                    empty="Starting on that computer…"
+                                    note="Running on that computer — it keeps going even if you leave this page."
                                 />
                                 <Notice v-if="actionError?.key === rowKey(computer, group)" :of="actionError.notice" />
                                 <p v-else-if="actionDone?.key === rowKey(computer, group)" class="text-xs text-muted">{{ actionDone.message }}</p>

@@ -50,16 +50,21 @@ pub struct SetupArgs {
     pub platform_url: Option<String>,
 }
 
-/// `intentic://recreate?slug=…[&hash=…]` — swap the sandbox onto a different image. This is what turns the
-/// SPA's two "paste this command on the machine that runs your sandbox" cards into buttons: the daemon holds
-/// no host Docker socket, so it can never recreate its own container, and this app is the thing on that
+/// `intentic://recreate?slug=…[&hash=…][&rollback=1]` — swap the sandbox onto a different image. This is what
+/// turns the SPA's "paste this command on the machine that runs your sandbox" cards into buttons: the daemon
+/// holds no host Docker socket, so it can never recreate its own container, and this app is the thing on that
 /// machine. No hash updates to the fresh `:stable` base; a hash builds the owner-approved overlay pinned to
-/// that digest — the same argument shape the pasted command has always carried.
+/// that digest — the same argument shapes the pasted command has always carried.
+///
+/// `rollback` is the third, and it carries no digest of its own: it names the image this sandbox ran BEFORE its
+/// last update, which the machine already knows. It exists here because the card that offers it had a button on
+/// every other path and a command block on this one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecreateArgs {
     pub slug: String,
     pub hash: Option<String>,
+    pub rollback: bool,
 }
 
 /// `intentic://auth?handoff=…&state=…` — the credential coming back from a sign-in that happened in the
@@ -110,10 +115,16 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             })))
         }
         "signin" => Some(Link::SignIn),
-        "recreate" => Some(Link::Recreate(RecreateArgs {
-            slug: get("slug")?,
-            hash: get("hash"),
-        })),
+        "recreate" => {
+            let rollback = get("rollback").is_some();
+            Some(Link::Recreate(RecreateArgs {
+                slug: get("slug")?,
+                // A rollback names its own destination, so a digest arriving beside it is dropped rather than
+                // silently turning the run into a rebuild — the same precedence recreate_script enforces.
+                hash: get("hash").filter(|_| !rollback),
+                rollback,
+            }))
+        }
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
@@ -158,12 +169,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_both_recreate_modes() {
+    fn parses_all_three_recreate_modes() {
         assert_eq!(
             parse_link("intentic://recreate?slug=sandbox-abc", Source::App),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
-                hash: None
+                hash: None,
+                rollback: false
             }))
         );
         assert_eq!(
@@ -173,7 +185,36 @@ mod tests {
             ),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
-                hash: Some("deadbeef".into())
+                hash: Some("deadbeef".into()),
+                rollback: false
+            }))
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://recreate?slug=sandbox-abc&rollback=1",
+                Source::App
+            ),
+            Some(Link::Recreate(RecreateArgs {
+                slug: "sandbox-abc".into(),
+                hash: None,
+                rollback: true
+            }))
+        );
+    }
+
+    /// Two destinations in one link is a caller's bug; the rollback wins and the digest is dropped, rather than
+    /// the run quietly becoming a rebuild of an overlay nobody asked for.
+    #[test]
+    fn a_rollback_link_drops_any_digest_riding_with_it() {
+        assert_eq!(
+            parse_link(
+                "intentic://recreate?slug=sandbox-abc&hash=deadbeef&rollback=1",
+                Source::App
+            ),
+            Some(Link::Recreate(RecreateArgs {
+                slug: "sandbox-abc".into(),
+                hash: None,
+                rollback: true
             }))
         );
     }

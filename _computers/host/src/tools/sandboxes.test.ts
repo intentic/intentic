@@ -15,6 +15,7 @@ import {
     sandboxesFrom,
     sandboxLogs,
     swapSandbox,
+    tailSandboxLogs,
 } from "./sandboxes.js";
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
@@ -136,4 +137,11 @@ test("a log tail is clamped to something that can cross the socket, and defaults
     expect(asLogLines("lots")).toBe(200);
     expect(asLogLines(-5)).toBe(200);
     expect(asLogLines(9_000)).toBe(2_000);
+});
+
+/* The Computers view's Logs button reaches the same reading through the flow door, so it is gated the same way
+ * — a grant that answers `sandbox_logs` for a model answers the button for its owner, and neither answers when
+ * both switches are off. Asserted because this one is a READ travelling a route whose other seven ops write. */
+test("the log flow is gated exactly like the log tool it shares a reading with", async () => {
+    await expect(tailSandboxLogs("work", scopes({ shell: "off", sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this computer/);
 });

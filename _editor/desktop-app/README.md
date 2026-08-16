@@ -31,15 +31,24 @@ from any device. The app adds no third plane. It is three thin native things aro
    its only channel into the app is an `intentic://` navigation the window intercepts in Rust.
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
    spawned as a child process with its output streamed into the app's own screen.
-3. **A lifecycle manager.** Setup progress, then status, logs, start/stop, update, rebuild, remove — plus what
-   **desktop sync** is doing here, read by spawning `intentic-sync status --json` exactly as the lifecycle
-   actions spawn their scripts, and rendered with `@intentic/ui`'s `MachineDetail` (the same component the web
-   app's Computers tab uses, so the two cannot describe one machine differently).
+3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
+   its image and its verbs — start, stop, restart, update, roll back, logs, remove. What **desktop sync** is
+   doing here is read by spawning `intentic-sync status --json` exactly as the lifecycle actions spawn their
+   scripts, and the whole row is `@intentic/ui`'s `MachineDetail` with `@intentic/ui`'s `SandboxVerbs` on it —
+   the same two components the web app's Computers tab uses, so the two cannot describe one machine
+   differently or offer different buttons for it.
 
    That third item was the app's largest blind spot: `SYNC_DIR` rides the setup link into `connect.sh` and was
    never heard from again, so the window that exists to be the no-terminal way to run a sandbox could show a
    container as up and say nothing whatsoever about the sync the same setup had just configured. The only
    rendering of those facts was `intentic-sync status`, in a terminal.
+
+   Sharing the *component* was not enough on its own, and the second half of that is newer: this window drew
+   its containers as cards with their own buttons and then drew the same sandboxes again underneath as folders
+   and ports, under a second heading, with nothing on screen relating the two — the exact double-rendering the
+   Computers tab had already been rebuilt to remove. It now hands its containers to the same view, so a
+   sandbox is one row here too. The verbs likewise: this window had a log tail and no Restart, the tab had a
+   Restart and no log tail, and neither offered the rollback both of their backends could already run.
 
 ## Two webviews, one window
 
@@ -112,9 +121,9 @@ needs, and say what it is doing to a window instead of a terminal
 | Action | What it spawns |
 | --- | --- |
 | A handed-over setup (runs on arrival) | `connect.sh` (through `pkexec` only when Docker is missing) / `connect.ps1` |
-| Update · Rebuild | `recreate.sh <slug> [<sha256>]` / `recreate.ps1 -Slug … [-Hash …]` |
+| Update · Rebuild · Roll back | `recreate.sh <slug> [<sha256>\|--rollback]` / `recreate.ps1 -Slug … [-Hash …\|-Rollback]` |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
-| Start · Stop · Logs | `docker` directly — there is no script that lists or tails |
+| Start · Stop · Restart · Logs | `docker` directly — there is no script that lists, cycles or tails |
 | The desktop-sync panel | `intentic-sync status --json` (its own install under `~/.intentic/sync/bin` first, then PATH) |
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:
@@ -160,7 +169,7 @@ Four actions, and it is the whole channel between the SPA and the app
 | Link | From | What it does |
 | --- | --- | --- |
 | `intentic://setup?code=…` | Setup step 3 | run this setup code's sandbox here |
-| `intentic://recreate?slug=…[&hash=…]` | the Update / Environment cards | update, or build the approved overlay |
+| `intentic://recreate?slug=…[&hash=…][&rollback=1]` | the Update / Environment cards | update, build the approved overlay, or roll back |
 | `intentic://signin` | the login screen | sign in, in the user's real browser |
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
 
@@ -240,8 +249,10 @@ report anything.
 ## Layout
 
 - `src/` — the app's own UI (Vue + `@intentic/ui`): the setup screen and the sandbox manager, switched on
-  whether a setup is in hand. Two components, one bridge module (`desktop.ts`) and one reporter
-  (`analytics.ts`); the archived three-persona wizard is not here.
+  whether a setup is in hand. One component of its own (`RunLog.vue`, the setup narration), one bridge module
+  (`desktop.ts`) and one reporter (`analytics.ts`); the sandbox rows, their verbs and their output pane all
+  come from the kit, so this app has no second opinion about them. The archived three-persona wizard is not
+  here.
 - `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the one-window swap + link interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
   `setup_link.rs`.

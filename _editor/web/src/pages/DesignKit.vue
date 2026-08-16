@@ -35,6 +35,11 @@ import {
     InfoDialog,
     InfoHint,
     InfoTable,
+    MachineDetail,
+    type MachineFolderRow,
+    MachineRunLog,
+    type MachinePortRow,
+    type MachineSandboxRow,
     Modal,
     Notice,
     Page,
@@ -47,6 +52,7 @@ import {
     ResponsiveOverlay,
     Row,
     RowGroup,
+    SandboxVerbs,
     SearchBar,
     SegmentedControl,
     SkeletonRows,
@@ -108,6 +114,22 @@ const PANEL_HEIGHTS = [
 ] as const;
 const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
 
+/* One machine, invented — a healthy sandbox and a stopped one that lost a port to it, which between them show
+ * every state the row has: the running dot and the stopped word, a resting sync and a halted one, a mirrored
+ * port and a contested one, and both halves of the power slot. */
+const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
+    { slug: `work`, name: `work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
+    { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
+];
+const KIT_PAIRINGS: readonly MachineFolderRow[] = [
+    { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching` },
+    { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
+];
+const KIT_PORTS: readonly MachinePortRow[] = [
+    { port: 5173, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/node_modules/.bin/vite` },
+    { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
+];
+
 // Live state for the parts that have any. One flag per surface, which is also what the surfaces themselves do.
 const modalSize = ref<(typeof MODAL_SIZES)[number]>(`md`);
 const modalOpen = ref(false);
@@ -150,10 +172,21 @@ const PICKER_OPTIONS = [
     <Page width="full">
         <PageHeader title="Design kit" description="Every shared part, every state, and the scales they are drawn from.">
             <template #actions>
-                <SegmentedControl :model-value="scheme" :options="[{ label: `Light`, value: `light` }, { label: `Dark`, value: `dark` }]" @update:model-value="setScheme" />
+                <SegmentedControl
+                    :model-value="scheme"
+                    :options="[
+                        { label: `Light`, value: `light` },
+                        { label: `Dark`, value: `dark` },
+                    ]"
+                    @update:model-value="setScheme"
+                />
                 <SegmentedControl
                     :model-value="textSize"
-                    :options="[{ label: `Compact`, value: `compact` }, { label: `Default`, value: `default` }, { label: `Large`, value: `large` }]"
+                    :options="[
+                        { label: `Compact`, value: `compact` },
+                        { label: `Default`, value: `default` },
+                        { label: `Large`, value: `large` },
+                    ]"
                     @update:model-value="setTextSize"
                 />
             </template>
@@ -221,7 +254,13 @@ const PICKER_OPTIONS = [
                         <span class="w-32 shrink-0 text-3xs text-subtle">Modal {{ name }}</span>
                         <span
                             class="block h-4 rounded bg-success/30"
-                            :class="{ 'w-modal-sm': name === `sm`, 'w-modal': name === `md`, 'w-modal-lg': name === `lg`, 'w-modal-xl': name === `xl`, 'w-modal-full': name === `full` }"
+                            :class="{
+                                'w-modal-sm': name === `sm`,
+                                'w-modal': name === `md`,
+                                'w-modal-lg': name === `lg`,
+                                'w-modal-xl': name === `xl`,
+                                'w-modal-full': name === `full`,
+                            }"
                         ></span>
                     </div>
                     <div v-for="height in PANEL_HEIGHTS" :key="height.name" class="flex items-center gap-3">
@@ -243,7 +282,12 @@ const PICKER_OPTIONS = [
                     <Notice :of="{ tone: `warning`, title: `Two files are still unsaved.` }" />
                     <Notice :of="{ tone: `info`, title: `A newer version installs when you quit.` }" />
                     <Notice
-                        :of="{ tone: `danger`, title: `The push was rejected.`, detail: `non-fast-forward`, action: { label: `Retry`, run: () => {} } }"
+                        :of="{
+                            tone: `danger`,
+                            title: `The push was rejected.`,
+                            detail: `non-fast-forward`,
+                            action: { label: `Retry`, run: () => {} },
+                        }"
                         dismiss-label="Dismiss"
                     />
                     <Notice tone="info">
@@ -258,8 +302,8 @@ const PICKER_OPTIONS = [
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Containers</h2>
                 <p class="text-xs text-muted">
-                    Card is the box. ScrollFrame is the box that scrolls itself — it owns the contract, so a view never writes one. A
-                    docked pane that fills a region the shell already framed wants neither.
+                    Card is the box. ScrollFrame is the box that scrolls itself — it owns the contract, so a view never writes one. A docked pane that
+                    fills a region the shell already framed wants neither.
                 </p>
                 <div class="flex flex-wrap items-start gap-4">
                     <Card class="w-64"><p class="text-xs text-content">A card. Padding and radius come from the density tokens.</p></Card>
@@ -296,6 +340,27 @@ const PICKER_OPTIONS = [
                 </div>
             </section>
 
+            <!-- ── ONE COMPUTER'S SANDBOXES ──────────────────────────────────────────────────────────── -->
+            <!-- Here because TWO apps draw this: the Computers tab and the desktop app's manager window. That
+                 window cannot be opened in a browser, so this is the only place the two can be compared side by
+                 side — which is exactly how they drifted into different button sets in the first place. -->
+            <section class="flex flex-col gap-4">
+                <h2 :class="ui.sectionLabel()">A machine's sandboxes</h2>
+                <div class="rounded-xl border border-line bg-canvas p-4">
+                    <MachineDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES" :watcher="{ running: true, pid: 4821 }">
+                        <template #heading><span :class="ui.sectionLabel()">Sandboxes on this computer</span></template>
+                        <template #actions="{ group }">
+                            <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
+                        </template>
+                    </MachineDetail>
+                </div>
+                <MachineRunLog
+                    :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"
+                    :running="true"
+                    note="Running on that computer — it keeps going even if you leave this page."
+                />
+            </section>
+
             <!-- ── MARKS AND BADGES ──────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Badges and marks</h2>
@@ -306,9 +371,13 @@ const PICKER_OPTIONS = [
                     <StatusBadge v-for="variant in STATUS_VARIANTS" :key="variant" :variant="variant" :label="variant" dot size="sm" />
                 </div>
                 <div class="flex flex-wrap items-center gap-4">
-                    <span class="flex items-center gap-2"><ChangeStatusMark status="modified" /><span class="text-xs text-content">modified</span></span>
+                    <span class="flex items-center gap-2"
+                        ><ChangeStatusMark status="modified" /><span class="text-xs text-content">modified</span></span
+                    >
                     <span class="flex items-center gap-2"><ChangeStatusMark status="added" /><span class="text-xs text-content">added</span></span>
-                    <span class="flex items-center gap-2"><ChangeStatusMark status="deleted" /><span class="text-xs text-content">deleted</span></span>
+                    <span class="flex items-center gap-2"
+                        ><ChangeStatusMark status="deleted" /><span class="text-xs text-content">deleted</span></span
+                    >
                     <DiffStat :additions="128" :deletions="42" />
                     <ProgressRing :value="0.41" :size="24" />
                     <ProgressRing :value="0.86" :size="24" />
@@ -327,7 +396,9 @@ const PICKER_OPTIONS = [
             <!-- ── FIGURES ───────────────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Figures</h2>
-                <p class="text-xs text-muted">Three shapes that look alike in a list of names and are not: a tally line, a stat strip, a bar chart.</p>
+                <p class="text-xs text-muted">
+                    Three shapes that look alike in a list of names and are not: a tally line, a stat strip, a bar chart.
+                </p>
                 <StatusTally :items="COUNTS" />
                 <StatStrip :items="STATS" />
                 <div class="max-w-read-lg"><BarChart :items="BARS" /></div>
@@ -380,7 +451,11 @@ const PICKER_OPTIONS = [
                         <span class="ui-field-label">SegmentedControl</span>
                         <SegmentedControl
                             v-model="segment"
-                            :options="[{ label: `All`, value: `all`, badge: 12 }, { label: `Mine`, value: `mine` }, { label: `Failing`, value: `bad`, badge: 2 }]"
+                            :options="[
+                                { label: `All`, value: `all`, badge: 12 },
+                                { label: `Mine`, value: `mine` },
+                                { label: `Failing`, value: `bad`, badge: 2 },
+                            ]"
                         />
                     </div>
                     <div class="flex flex-col gap-1">
@@ -446,7 +521,9 @@ const PICKER_OPTIONS = [
             @cancel="confirmOpen = false"
             @confirm="confirmOpen = false"
         >
-            <template #item="{ item }"><span class="truncate text-content">{{ item }}</span></template>
+            <template #item="{ item }"
+                ><span class="truncate text-content">{{ item }}</span></template
+            >
             <p class="mt-3 text-xs text-muted">This can't be undone.</p>
         </ConfirmDialog>
 

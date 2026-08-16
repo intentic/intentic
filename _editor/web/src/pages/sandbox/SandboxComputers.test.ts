@@ -186,6 +186,48 @@ it(`names the image each sandbox on the machine is running`, () => {
     expect(el.textContent ?? ``).toContain(`ghcr.io/intentic/sandbox:2.3.1`);
 });
 
+/* THE VERB ROW, WHICH IS NOW ONE ROW FOR TWO APPS. This tab and the desktop app's manager window drive the same
+ * containers on the same machine and had grown different sets of buttons — this one had Restart and no log tail,
+ * that one a log tail and no Restart, and neither offered the rollback both of their backends could already do.
+ * The buttons come from the kit now (<SandboxVerbs>), so what is asserted here is what a reader of EITHER app
+ * gets: pinned from this side because it is the side with a test runner, and it is the same component.
+ *
+ * A manageable row is a machine this sandbox can reach right now (`hostId`, `online`) whose group has a
+ * container — the three conditions `manageable` names. */
+const managed = (running: boolean): Computer => ({
+    key: `laptop`,
+    label: `laptop`,
+    syncEnrolled: true,
+    platform: `linux`,
+    hostId: `host-1`,
+    online: true,
+    report: {
+        hostname: `laptop`,
+        os: `linux`,
+        agents: { sync: `1.183.0` },
+        sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running, image: `ghcr.io/intentic/sandbox:2.3.1` }],
+        pairings: [],
+        ports: [],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim() ?? ``);
+
+it(`offers the same verbs a running sandbox has in the desktop app`, () => {
+    expect(labels(mount([managed(true)]))).toEqual(expect.arrayContaining([`Restart`, `Stop`, `Update`, `Roll back`, `Logs`, `Remove`]));
+});
+
+// Start replaces Restart and Stop rather than joining them: a stopped sandbox has nothing to restart, and Update
+// is still offered — a stopped one is exactly what somebody wants on a newer image before starting it again.
+it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
+    const found = labels(mount([managed(false)]));
+    expect(found).toEqual(expect.arrayContaining([`Start`, `Update`, `Roll back`, `Logs`, `Remove`]));
+    expect(found).not.toContain(`Stop`);
+    expect(found).not.toContain(`Restart`);
+});
+
 /* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,
  * and this row said "desktop sync 0.1.0" throughout — true, and useless without the version it should have been.
  * Both halves are asserted: the fact, inside the door chip it is about, and the one command that resolves it.

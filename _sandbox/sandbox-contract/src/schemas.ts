@@ -5379,14 +5379,19 @@ export type MachineSandbox = z.infer<typeof MachineSandboxSchema>;
 /* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE — the Computers view's buttons, and the only thing that changes a
  * machine's fleet from a browser.
  *
- * All seven ops travel one route because they are one decision to the person clicking, however differently they
- * behave underneath: three are a docker call that returns in a second, three run the `ic` flow for minutes, and
- * one deletes. Splitting them by duration would put the same button on two doors and give the view two shapes to
- * render. So every op answers as a STREAM of lines ending in a result — the fast ones simply have little to say.
+ * All eight ops travel one route because they are one decision to the person clicking, however differently they
+ * behave underneath: three are a docker call that returns in a second, three run the `ic` flow for minutes, one
+ * deletes, and one only reads. Splitting them by duration would put the same button on two doors and give the
+ * view two shapes to render. So every op answers as a STREAM of lines ending in a result — the fast ones simply
+ * have little to say, and `logs` is the case where the lines ARE the answer.
  *
- * The machine enforces which of them it will do: `sandboxes` covers the first six, removal takes its own switch,
- * and a refusal comes back as the machine's own sentence naming the control to flip. */
-export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "update", "rebuild", "rollback", "remove"]);
+ * `logs` is here rather than on a route of its own for the same reason: it is a button in the same row as the
+ * other seven, on a container that may be too broken to answer any other way, and the stream shape already
+ * carries "many lines, then an outcome" exactly as a log tail wants to arrive.
+ *
+ * The machine enforces which of them it will do: `sandboxes` covers the first six and the log tail, removal takes
+ * its own switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
+export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "update", "rebuild", "rollback", "remove", "logs"]);
 export type MachineSandboxOp = z.infer<typeof MachineSandboxOpSchema>;
 
 export const MachineSandboxFlowSchema = z.object({

@@ -48,12 +48,12 @@ const {
     sandboxes = [],
     watcher,
 } = defineProps<{
-    pairings?: MachineFolderRow[];
-    ports?: MachinePortRow[];
-    /* The containers on the machine, when the caller knows them — only one does, because the daemon fills them
-     * by reading docker and a sandbox cannot look for itself. Absent, every row below is a folder and its ports,
-     * which is exactly what this component drew before a container was ever passed to it. */
-    sandboxes?: MachineSandboxRow[];
+    pairings?: readonly MachineFolderRow[];
+    ports?: readonly MachinePortRow[];
+    /* The containers on the machine, when the caller knows them — the desktop app from its own `docker ps`, the
+     * daemon from a `host`-capability one. Absent, every row below is a folder and its ports, which is exactly
+     * what this component drew before a container was ever passed to it. */
+    sandboxes?: readonly MachineSandboxRow[];
     watcher?: MachineWatcherState | undefined;
 }>();
 
