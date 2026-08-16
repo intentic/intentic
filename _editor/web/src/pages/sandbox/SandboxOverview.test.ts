@@ -31,6 +31,8 @@ vi.mock(`../../composables/sandbox/useSandbox`, () => ({
 vi.mock(`../../composables/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ info: ref(undefined), installed: ref(undefined), latest: ref(undefined), updateAvailable: ref(false) }),
 }));
+vi.mock(`../../composables/workspace/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
+vi.mock(`../../composables/sandbox/useSandboxAvailability`, () => ({ useSandboxAvailability: () => ref(`live`) }));
 vi.mock(`./SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));

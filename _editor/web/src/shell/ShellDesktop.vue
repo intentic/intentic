@@ -13,7 +13,6 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useRole } from "../composables/sandbox/useRole";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
-import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
@@ -344,17 +343,14 @@ let areaCommands: readonly Disposable[] = [];
 
 onMounted(() => {
     areaCommands = [
-        // Gated on `reachable`, exactly as the tiles themselves are inert while the daemon is unreachable: every
-        // area behind them is served by that machine, so a chord that navigates there would only swap one gate
-        // screen for another. (The sandbox switcher above deliberately does NOT gate — that is the way out.)
-        publishContextKey(`sandboxReachable`, reachable),
+        // Keyboard navigation follows the tiles: cached workspace views remain useful while live actions wait
+        // for exact reachability, so a transient stall must not strand the reader in one area.
         registerCommand({
             owner: `builtin`,
             command: `view.previousArea`,
             title: `Previous Rail Area`,
             icon: `chevron-up`,
             keybinding: `Alt+ArrowUp`,
-            when: `sandboxReachable`,
             handler: () => cycleArea(-1),
         }),
         registerCommand({
@@ -363,7 +359,6 @@ onMounted(() => {
             title: `Next Rail Area`,
             icon: `chevron-down`,
             keybinding: `Alt+ArrowDown`,
-            when: `sandboxReachable`,
             handler: () => cycleArea(1),
         }),
     ];
@@ -485,8 +480,9 @@ useKeybindings();
                  the gap between runs IS the heading; the mobile menu, which has the width, spells them out.
                  THIS is the one part of the rail that scrolls — see .icon-rail-nav.
 
-                 The views (and the "+") all talk to the daemon, so they are inert while it is unreachable — the
-                 gate in <main> is the only thing to see anyway. The switcher and account stay live. -->
+                 Navigation remains live while the daemon catches up: cached views are still useful, and the
+                 workspace gate itself decides whether there is anything truthful to paint. Actions inside a
+                 view keep using exact reachability. -->
             <div class="icon-rail-nav flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <span v-if="at > 0" class="my-1 icon-rail-divider h-px bg-line"></span>
@@ -509,9 +505,7 @@ useKeybindings();
                             v-else
                             :to="tile.to"
                             class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                            :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                            :tabindex="reachable ? undefined : -1"
-                            :aria-disabled="!reachable"
+                            :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                             :aria-label="tileLabel(tile)"
                             v-tooltip.right="tileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
@@ -546,8 +540,6 @@ useKeybindings();
                 v-if="connectedVpns.length > 0"
                 to="/sandbox/status"
                 class="icon-rail-tile flex items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
-                :class="{ 'pointer-events-none opacity-40': !reachable }"
-                :tabindex="reachable ? undefined : -1"
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"
             >
@@ -561,8 +553,6 @@ useKeybindings();
                 v-if="forwardedPorts.length > 0"
                 to="/sandbox/ports"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-warning transition-colors hover:bg-overlay"
-                :class="{ 'pointer-events-none opacity-40': !reachable }"
-                :tabindex="reachable ? undefined : -1"
                 :aria-label="forwardedLabel"
                 v-tooltip.right="forwardedLabel"
             >
@@ -583,9 +573,7 @@ useKeybindings();
                 :key="tile.to"
                 :to="tile.to"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
-                :tabindex="reachable ? undefined : -1"
-                :aria-disabled="!reachable"
+                :class="{ 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
@@ -603,8 +591,8 @@ useKeybindings();
 
             <!-- The terminal: toggles the one global panel from any view, highlighted while it is open, badged
                  with the number of live sessions (shells, dev servers, agent shells, jobs — background
-                 processes are excluded, they never idle). Inert while the daemon is unreachable, like the view
-                 tiles: every session lives on that machine, so there is nothing to open without it. Absent
+                 processes are excluded, they never idle). Inert while the daemon is unreachable: unlike cached
+                 route content, opening a PTY has no useful offline form. Absent
                  below maintainer — a PTY is the whole sandbox, and the daemon refuses the socket anyway. -->
             <button
                 v-if="canShip"
@@ -635,10 +623,8 @@ useKeybindings();
                 to="/capabilities"
                 :class="[
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
-                    { 'pointer-events-none opacity-40': !reachable, 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
+                    { 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
-                :tabindex="reachable ? undefined : -1"
-                :aria-disabled="!reachable"
                 aria-label="Add a capability"
                 v-tooltip.right="'Add a capability'"
             >
@@ -662,8 +648,8 @@ useKeybindings();
                 </div>
                 <!-- …and the same for the ONE terminal panel — sandbox-global (shells + dev servers), persistent
                      across views. Its slot is INSIDE the gate, which is what keeps a docked terminal off screen
-                     while the daemon is unreachable: the panel parks itself when its slot goes away, rather than
-                     presenting dead shells. -->
+                     for an initial/blocked connection: through a transient stall it stays mounted and its own
+                     socket recovery keeps the last scrollback visible. -->
                 <div ref="terminalDock" class="contents"></div>
             </SandboxGate>
         </main>

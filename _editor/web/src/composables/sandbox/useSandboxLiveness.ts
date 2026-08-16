@@ -137,7 +137,11 @@ const attempt = async (): Promise<void> => {
     }
     const sandboxId = activeSandboxId.value;
     if (sandboxId === undefined) {
-        signalConnection({ kind: `failed`, failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }) });
+        signalConnection({
+            kind: `failed`,
+            failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }),
+            at: Date.now(),
+        });
         return;
     }
     /* Still no address after the refresh — so say that, BEFORE signalling `connect`. Reaching the try below
@@ -153,6 +157,7 @@ const attempt = async (): Promise<void> => {
         signalConnection({
             kind: `failed`,
             failure: classifyFailure({ unaddressed: true, message: `This sandbox has never reported an address.` }),
+            at: Date.now(),
         });
         return;
     }
@@ -174,7 +179,11 @@ const attempt = async (): Promise<void> => {
         }
         // The daemon answered and then closed the body without erroring. Reported as a failure so the machine
         // throttles the next attempt — otherwise a 200-then-immediately-close daemon is a zero-delay hot loop.
-        signalConnection({ kind: `failed`, failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }) });
+        signalConnection({
+            kind: `failed`,
+            failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }),
+            at: Date.now(),
+        });
     } catch (error) {
         if (!running || switchedDuring(sandboxId)) {
             return;
@@ -193,7 +202,7 @@ const attempt = async (): Promise<void> => {
             return;
         }
         const failure = failureOf(error);
-        signalConnection({ kind: `failed`, failure });
+        signalConnection({ kind: `failed`, failure, at: Date.now() });
         if (failure.kind === `unauthenticated`) {
             // The daemon rejected the bearer we hold (session secret rotated, expiry raced the margin). Drop
             // the session so the fast retry re-establishes from a Google proof instead of replaying a dead one.

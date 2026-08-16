@@ -11,7 +11,10 @@ import { commandShortcut, registerCommand } from "../composables/commands/useCom
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
+import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
+import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
 /* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
@@ -20,6 +23,9 @@ import { bashCommand, psCommand } from "../environments/scriptCommand";
  * hub (opened from here). */
 
 const sandbox = useSandbox();
+const { hasSnapshot } = useWorkspaceTree();
+const availability = useSandboxAvailability(hasSnapshot);
+const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 const router = useRouter();
 const route = useRoute();
 /* Everything the sandbox needs from its owner (sandboxAttention): a corner badge on the chip, and one routed row
@@ -37,8 +43,15 @@ const { cmdOs } = useOsPreference();
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? `Sandboxes`;
     const tooltip = attentionBadge.value?.tooltip;
-    return tooltip === undefined ? name : `${name} · ${tooltip}`;
+    const status =
+        availability.value === `live` || availability.value === `stale` ? undefined : `Sandbox ${availabilityVisual.value.label.toLowerCase()}`;
+    return [name, status, tooltip].filter((part) => part !== undefined).join(` · `);
 });
+
+// A short retry keeps the healthy dot it had — changing colour is itself the alarm we are avoiding. Only a
+// sustained wait or a cause requiring action earns a visible state change.
+const connectionDotClass = computed(() => availabilityVisual.value.dotClass);
+const connectionLabel = computed(() => availabilityVisual.value.label.toLowerCase());
 
 const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
     info: `text-link`,
@@ -76,8 +89,8 @@ const pick = (option: SandboxSummary): void => {
  * layouts because matchesChord falls back to the PHYSICAL key for the number row (⌥1 produces "¡"), which is
  * the same reason the sibling family can't be Alt+letter.
  *
- * NOT gated on `reachable`, unlike the rail tiles behind this control: an unreachable sandbox is the single
- * best reason to be pressing this at all. */
+ * NOT gated on `reachable`: a sandbox that needs attention is the single best reason to be pressing this at
+ * all, and the rest of the shell likewise keeps cached navigation available through transient stalls. */
 const SWITCH_SLOTS = 9;
 // The row's own chord, read back from the registry rather than printed as a literal "Alt+N", so a remap in
 // Settings → Keybindings — or an unbind — is what the popover shows. Reactive, like every commandShortcut read.
@@ -214,7 +227,7 @@ const confirmRemove = async (): Promise<void> => {
         </span>
         <span
             class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
-            :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
+            :class="connectionDotClass"
         ></span>
     </span>
 
@@ -286,8 +299,8 @@ const confirmRemove = async (): Promise<void> => {
                 <span
                     v-if="option.id === sandbox.activeSandboxId.value"
                     class="shrink-0 h-1.5 w-1.5 rounded-full"
-                    :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
-                    v-tooltip.top="sandbox.reachable.value ? 'online' : 'offline'"
+                    :class="connectionDotClass"
+                    v-tooltip.top="connectionLabel"
                 ></span>
                 <!-- Says what it is before it is clicked, so the jump back to setup reads as the answer to the
                      row rather than as the switcher losing its place. Same chrome as "Shared" — both are facts

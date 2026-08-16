@@ -215,6 +215,10 @@ export function useWorkspaceTree() {
     };
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);
+    // A successful empty workspace is still a snapshot. Consumers that need to distinguish "nothing has been
+    // read" from "the root is empty" must use this rather than tree.length — an empty workspace is exactly the
+    // place where replacing the editor with a reconnect screen would be most misleading.
+    const hasSnapshot = computed(() => query.data.value !== undefined);
     const root = computed(() => query.data.value?.root ?? ``);
     // How many of the ROOT's own entries the daemon's entry budget cut (0 = the root listing is complete).
     const rootHidden = computed(() => query.data.value?.hidden ?? 0);
@@ -310,6 +314,7 @@ export function useWorkspaceTree() {
 
     return {
         tree,
+        hasSnapshot,
         root,
         rootHidden,
         entriesByPath,

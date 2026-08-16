@@ -13,14 +13,13 @@ import { pushBadge } from "../composables/workspace/pushBadge";
 import { useChanges } from "../composables/workspace/useChanges";
 import { usePushFlow } from "../composables/workspace/usePushFlow";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
-import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* The mobile shell's bottom navigation: four fixed thumb-size tabs. Agents is the primary on-the-go surface —
  * glance at the fleet, tap in to drive one — and carries the "agents need you" badge; Review carries the
  * things-to-act-on badge (agent drafts + uncommitted changes); Menu carries what the sandbox needs from its
  * owner, standing in for the desktop rail's sandbox chip, which a phone has nowhere to put. Everything the
- * desktop rail holds beyond these lives on the Menu page. Tabs that talk to the daemon are inert while it's
- * unreachable — Menu stays live because sandbox switching lives there.
+ * desktop rail holds beyond these lives on the Menu page. Navigation stays live while the sandbox catches up:
+ * cached files, reviews and transcripts remain useful, while actions inside them still require reachability.
  *
  * REVIEW IS THE DRAFTS EXTENSION'S TILE, PROMOTED. The queue moved out of the app, so the tab reads its route
  * and its owed-count off the same registry entry the desktop rail and the mobile menu render — naming the id
@@ -32,14 +31,11 @@ interface Tab {
     readonly to: string;
     readonly label: string;
     readonly icon: IconName;
-    // Whether the tab's target needs a reachable daemon (Menu doesn't — it hosts the sandbox switcher).
-    readonly needsSandbox: boolean;
     // What the tab says without being opened — the same shape the desktop rail badges with, so one renderer
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
 }
 
-const { reachable } = useSandbox();
 const { attention } = useAgents();
 const changes = useChanges();
 const pushFlow = usePushFlow();
@@ -78,20 +74,18 @@ const tabs = computed<readonly Tab[]>(() => [
         to: `/agents`,
         label: `Agents`,
         icon: `robot`,
-        needsSandbox: true,
         ...(attention.value > 0
             ? { badge: { count: attention.value, tooltip: `${attention.value} need${attention.value === 1 ? `s` : ``} you` } }
             : {}),
     },
-    { to: `/workspace`, label: `Files`, icon: `file-tree`, needsSandbox: true },
+    { to: `/workspace`, label: `Files`, icon: `file-tree` },
     {
         to: draftsTile.value?.to ?? `/workspace`,
         label: `Review`,
         icon: `send`,
-        needsSandbox: true,
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
     },
-    { to: `/menu`, label: `Menu`, icon: `bars`, needsSandbox: false, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
+    { to: `/menu`, label: `Menu`, icon: `bars`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
 
 // ONE label per tab, badge included — the rail's tileLabel rule. A badge is a glyph or a bare number, so the
@@ -111,9 +105,7 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
             :key="tab.to"
             :to="tab.to"
             class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors active:bg-overlay"
-            :class="{ 'pointer-events-none opacity-40': tab.needsSandbox && !reachable, 'text-link': isNavActive(tab.to) }"
-            :tabindex="tab.needsSandbox && !reachable ? -1 : undefined"
-            :aria-disabled="tab.needsSandbox && !reachable"
+            :class="{ 'text-link': isNavActive(tab.to) }"
             :aria-label="tabLabel(tab)"
         >
             <!-- One badge for every tab — a `mark` replaces the number where the amount isn't what you act on.

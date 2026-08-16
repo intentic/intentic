@@ -60,6 +60,13 @@ export interface ConnectionState {
     readonly attempt: number;
     // How long the driver should wait before the next attempt. 0 whenever no retry is pending.
     readonly retryDelayMs: number;
+    // Whether this sandbox has delivered a real frame in this browser session. A previously-live workspace can
+    // keep painting through a transport retry; a first visit has no truthful state to preserve yet.
+    readonly everOnline: boolean;
+    // When the current run of observed failures began. Attempts may open and close several times while the
+    // sandbox is starved; keeping one clock across them lets presentation react to elapsed unavailability
+    // rather than to how quickly a proxy happens to reject retries.
+    readonly unavailableSince: number | undefined;
     // Bumped on every sandbox switch. The driver stamps its in-flight attempt with the generation it started
     // under and drops any result whose generation is stale, so a slow failure against the PREVIOUS sandbox
     // can never write a failure onto the new one.
@@ -71,6 +78,8 @@ export const initialConnection: ConnectionState = {
     failure: undefined,
     attempt: 0,
     retryDelayMs: 0,
+    everOnline: false,
+    unavailableSince: undefined,
     generation: 0,
 };
 
@@ -81,7 +90,7 @@ export type ConnectionSignal =
     | { readonly kind: "opened" }
     // A frame arrived (heartbeat or payload). Proves the connection is alive right now.
     | { readonly kind: "frame" }
-    | { readonly kind: "failed"; readonly failure: ConnectionFailure }
+    | { readonly kind: "failed"; readonly failure: ConnectionFailure; readonly at: number }
     // The user switched sandboxes. `lastKnownOnline` is what this browser last observed for the INCOMING
     // sandbox, which the shell paints optimistically (stale-while-revalidate) while the stream re-establishes.
     | { readonly kind: "switched"; readonly lastKnownOnline: boolean }
@@ -109,12 +118,24 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
             // failed attempt corrects a wrong guess.
             return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
         case `opened`:
+            // Response headers are not application liveness. A proxy can answer 200 and leave the body silent;
+            // only a decoded frame proves this daemon is serving again. Keeping the previous failure clock here
+            // also prevents a 200-then-close loop from looking like a string of fresh, momentary outages.
+            return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
         case `frame`: {
             if (state.phase === `online` && state.failure === undefined) {
                 // Steady state — every heartbeat would otherwise mint an identical object and wake every watcher.
                 return state;
             }
-            return { ...state, phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0 };
+            return {
+                ...state,
+                phase: `online`,
+                failure: undefined,
+                attempt: 0,
+                retryDelayMs: 0,
+                everOnline: true,
+                unavailableSince: undefined,
+            };
         }
         case `failed`: {
             // A blocked cause pins the backoff at the ceiling rather than walking up from 1s: the answer is
@@ -127,6 +148,7 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
                 failure: signal.failure,
                 attempt,
                 retryDelayMs: blocked ? retryDelayMs(RETRY_DELAYS_MS.length) : retryDelayMs(state.attempt),
+                unavailableSince: state.unavailableSince ?? signal.at,
             };
         }
         case `switched`:
@@ -138,6 +160,8 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
                 failure: undefined,
                 attempt: 0,
                 retryDelayMs: 0,
+                everOnline: signal.lastKnownOnline,
+                unavailableSince: undefined,
                 generation: state.generation + 1,
             };
         case `retargeted`:
@@ -148,17 +172,6 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
             return { ...initialConnection, generation: state.generation };
     }
 };
-
-/* Whether a painted-but-unreachable workspace should yield to the full connecting gate.
- *
- * One failed attempt used to flip it — so a daemon that missed a few heartbeats under build/test load cost a
- * full-screen "reconnecting" takeover for a blip the next attempt healed. A BLOCKED cause still gates at once
- * (the answer will not change on its own, and painting an operable workspace over a 403 misleads), but a
- * transient cause has to fail twice: with the retry ladder that is ~5–10s of genuinely dead air before the
- * takeover, while a stall rides on the (accurately stale) workspace it was already showing. */
-const SUSTAINED_FAILURES = 2;
-export const showOutageGate = (state: ConnectionState): boolean =>
-    state.failure !== undefined && (isBlocked(state.failure) || state.attempt >= SUSTAINED_FAILURES);
 
 /* A watchdog callback that itself arrived late proves the browser's scheduler was paused (a huge transcript
  * render, background throttling, machine sleep). Aborting the SSE as the FIRST task after that pause turns a

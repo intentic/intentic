@@ -13,6 +13,9 @@ import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
+import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
+import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import { environment } from "../environments/environment";
 import AccountCredits from "../shell/AccountCredits.vue";
 
@@ -48,6 +51,9 @@ const extensionRow = (active: ActiveExtension): AreaRow => {
 
 const router = useRouter();
 const sandbox = useSandbox();
+const { hasSnapshot } = useWorkspaceTree();
+const availability = useSandboxAvailability(hasSnapshot);
+const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 const { user, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
@@ -166,7 +172,8 @@ const logout = async (): Promise<void> => {
                 <span
                     v-if="option.id === sandbox.activeSandboxId.value"
                     class="h-2 w-2 shrink-0 rounded-full"
-                    :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
+                    :class="availabilityVisual.dotClass"
+                    :aria-label="availabilityVisual.label"
                 ></span>
             </button>
             <button

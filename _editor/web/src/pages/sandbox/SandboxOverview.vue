@@ -6,6 +6,9 @@ import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
+import { sandboxAvailabilityVisual } from "../../composables/sandbox/availability";
+import { useSandboxAvailability } from "../../composables/sandbox/useSandboxAvailability";
+import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
@@ -28,6 +31,9 @@ import SandboxUpdateCard from "./SandboxUpdateCard.vue";
  * the chip badge with the other four instead of a row that says "Ready" for the rest of the sandbox's life. */
 
 const sandbox = useSandbox();
+const { hasSnapshot } = useWorkspaceTree();
+const availability = useSandboxAvailability(hasSnapshot);
+const availabilityBadge = computed(() => sandboxAvailabilityVisual(availability.value));
 const { info, installed, latest, updateAvailable, isLoading: infoLoading } = useSandboxVersion();
 const outline = useSandboxOutline(infoLoading);
 
@@ -82,8 +88,9 @@ const subline = computed<{ text: string; tone: string }>(() => {
     if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
     if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
     if (editing.value) return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
-    if (sandbox.reachable.value) return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
-    return { text: `Reconnecting to the workspace…`, tone: `text-muted` };
+    if (availability.value === `busy`) return { text: `The sandbox is busy — live actions resume automatically.`, tone: `text-muted` };
+    if (availability.value === `starting` || availability.value === `warming`) return { text: `Getting the workspace ready…`, tone: `text-muted` };
+    return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
 });
 
 const startEdit = async (): Promise<void> => {
@@ -312,12 +319,7 @@ const save = async (): Promise<void> => {
                                     </button>
                                 </div>
                             </div>
-                            <StatusBadge
-                                class="shrink-0"
-                                :variant="sandbox.reachable.value ? 'success' : 'neutral'"
-                                :label="sandbox.reachable.value ? 'Online' : 'Offline'"
-                                dot
-                            />
+                            <StatusBadge class="shrink-0" :variant="availabilityBadge.variant" :label="availabilityBadge.label" dot />
                         </div>
                         <p class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>

@@ -39,6 +39,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useVoiceInput } from "../composables/chat/useVoiceInput";
 import { useStickToBottom } from "../composables/chat/useStickToBottom";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
+import { isBlocked } from "../composables/sandbox/connection";
 import { jsonBody } from "../composables/sandbox/jsonBody";
 import { useEditorSelection } from "../composables/workspace/useEditorSelection";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -177,6 +178,7 @@ const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because
 // waiting will not fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
+const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
 const { mobile, keyboardInset } = useDevice();
 
 /* Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
@@ -279,6 +281,9 @@ const trialNotice = computed(() => {
     return `${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
 });
 const retryTrial = async (): Promise<void> => {
+    if (!reachable.value) {
+        return;
+    }
     await loadTrialStatus();
     await props.conversation.resume();
 };
@@ -292,6 +297,9 @@ const retryTrial = async (): Promise<void> => {
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const outageResume = computed(() => props.conversation.failures.outageResume.value);
 const enableOutageResume = async (): Promise<void> => {
+    if (!reachable.value) {
+        return;
+    }
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
@@ -384,6 +392,9 @@ const { designs: loopDesigns } = useLoopDesigns();
 const loopFailure = ref<string>();
 const pickedLoop = computed(() => loopDesigns.value.find((design) => design.id === props.conversation.loopId.value));
 const endLoop = async (): Promise<void> => {
+    if (!reachable.value) {
+        return;
+    }
     // Stops the LOOP, not the turn: whatever iteration is running finishes and lands. Abandoning it outright is
     // this plus the Stop button beside it, which is exactly how it reads on screen.
     await stopLoop(props.conversation.conversationId).catch(() => undefined);
@@ -552,6 +563,9 @@ const toggleVoice = (): void => {
         cancelVoiceSend();
         return;
     }
+    if (!reachable.value) {
+        return;
+    }
     startVoice(onVoiceTranscript);
 };
 
@@ -602,6 +616,9 @@ const voiceErrorMessage = computed(() => {
 // workspace tree); a daemon-side sweep of stale dirs is the upgrade path if they pile up.
 
 const attach = (file: File): void => {
+    if (!reachable.value) {
+        return;
+    }
     const controller = new AbortController();
     // reactive() explicitly: entries are mutated through this reference (progress ticks), not via the
     // array ref's proxy, so the raw object wouldn't trigger updates. The entry lands on the tab active at
@@ -648,7 +665,7 @@ const removeAttachment = (attachment: PendingAttachment): void => {
 
 const onPaste = (event: ClipboardEvent): void => {
     const files = Array.from(event.clipboardData?.files ?? []);
-    if (files.length === 0) {
+    if (files.length === 0 || !reachable.value) {
         return;
     }
     event.preventDefault();
@@ -661,7 +678,7 @@ const onPaste = (event: ClipboardEvent): void => {
 // panel: with several open, a dropped screenshot belongs to the chat it was dropped on.
 const dragDepth = ref(0);
 const onDragEnter = (event: DragEvent): void => {
-    if (!connected.value || !event.dataTransfer?.types.includes(`Files`)) {
+    if (!reachable.value || !connected.value || !event.dataTransfer?.types.includes(`Files`)) {
         return;
     }
     dragDepth.value += 1;
@@ -671,7 +688,7 @@ const onDragLeave = (): void => {
 };
 const onDrop = (event: DragEvent): void => {
     dragDepth.value = 0;
-    if (!connected.value || !event.dataTransfer) {
+    if (!reachable.value || !connected.value || !event.dataTransfer) {
         return;
     }
     // collectDroppedFiles must be called synchronously in the drop handler (drag-store validity window).
@@ -815,6 +832,9 @@ const canSend = computed(() => {
     return staged.value || continueOffer.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
 });
 const sendHint = computed(() => {
+    if (!reachable.value) {
+        return `The sandbox is busy — keep typing; Send is available when it is ready.`;
+    }
     if (sendBlock.value !== undefined) {
         return sendBlock.value;
     }
@@ -890,6 +910,9 @@ const history = computed(() => (activeSandboxId.value === undefined ? undefined 
  * and ↑ brings it straight back for anyone who wants to continue with an instruction attached rather than
  * plain. Down here beside the ring rather than up with the offer, so it reads after the thing it writes to. */
 const continueTurn = (): void => {
+    if (!reachable.value) {
+        return;
+    }
     const text = continuation.value;
     void send(text);
     history.value?.record(text);
@@ -1173,6 +1196,9 @@ const placeDraft = async (): Promise<void> => {
 const submit = (): void => {
     workflowFailure.value = undefined;
     loopFailure.value = undefined;
+    if (!reachable.value) {
+        return;
+    }
     /* THE ARMED VOICE INTERCEPTS EVERYTHING — placed words are not a turn, so no gate below (a plan to revise,
      * a turn to steer, a queue to flush, a continuation to offer) applies to them; and it RETURNS either way,
      * because falling through with an empty box would let a press meant as "place" become a Continue. The
@@ -1416,7 +1442,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     // claim on the key. Only while it's GENERATING: a turn parked on a card is spending nothing, and losing a
     // plan the user is still reading to a stray Escape costs far more than the keystroke saves — the Stop
     // button is the deliberate way out of that one.
-    if (event.key === `Escape` && streaming.value && !awaitingDecision.value) {
+    if (event.key === `Escape` && streaming.value && !awaitingDecision.value && reachable.value) {
         event.preventDefault();
         stop();
         return;
@@ -1732,8 +1758,8 @@ watch(
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
 
-                <!-- The composer and the notices that gate it. All of it talks to the daemon, so it yields to a
-                     hint while the sandbox is unreachable; the transcript above stays readable.
+                <!-- The composer and the notices that gate it. A transiently busy sandbox disables live actions,
+                     but leaves the draft mounted so the interruption cannot eat or discourage work in progress.
                      It is the LAST ROW OF THE TRANSCRIPT, stuck to the bottom edge, rather than a band beneath
                      it. In its own row it was panel background wrapped around the box, and that padding read as
                      chrome the composer was mounted on — which is what a chat's most-used control should least
@@ -1755,10 +1781,12 @@ watch(
                         {{
                             denied
                                 ? `Chat is unavailable — this Google account has no access to this sandbox.`
-                                : `Chat is available once your sandbox is connected.`
+                                : blocked
+                                  ? `Chat is available after this sandbox finishes setup.`
+                                  : `The sandbox is busy — keep typing. Send is available when it is ready.`
                         }}
                     </p>
-                    <template v-else>
+                    <template v-if="!blocked">
                         <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing
                          (the branch, the diff, the transcript and every counter stay — this tab is the proof), so
                          the line states a fact rather than raising an alarm. It carries the one thing no other
@@ -1773,7 +1801,7 @@ watch(
                             <button
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="busyIds.includes(activeArchived.id)"
+                                :disabled="!reachable || busyIds.includes(activeArchived.id)"
                                 v-tooltip.top="'Put this agent back on the board now'"
                                 @click="restore([activeArchived.id])"
                             >
@@ -1796,7 +1824,7 @@ watch(
                                 v-if="trialHealthIssue"
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="streaming"
+                                :disabled="!reachable || streaming"
                                 @click="retryTrial"
                             >
                                 Retry
@@ -1847,7 +1875,7 @@ watch(
                                 v-if="!outageResume.scheduled"
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
+                                :disabled="!reachable || sandboxSettings === undefined || saveSandboxSettings.isPending.value"
                                 @click="enableOutageResume"
                             >
                                 Enable auto-resume
@@ -1875,6 +1903,7 @@ watch(
                                 v-if="!autoContinue"
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
+                                :disabled="!reachable"
                                 v-tooltip.top="'Keep pressing Continue for me whenever a turn stops short'"
                                 @click="setAutoContinue(true)"
                             >
@@ -1883,6 +1912,7 @@ watch(
                             <button
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                :disabled="!reachable"
                                 v-tooltip.top="'Pick up where it left off, without retyping'"
                                 @click="continueTurn"
                             >
@@ -2173,6 +2203,7 @@ watch(
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                             :class="{ 'composer-active': looping || pickedLoop !== undefined || pickedWorkflow !== undefined }"
+                                            :disabled="looping && !reachable"
                                             @click="looping ? endLoop() : (runThroughOpen = !runThroughOpen)"
                                             v-tooltip.top="runThroughHint"
                                             :aria-pressed="looping"
@@ -2236,6 +2267,7 @@ watch(
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
                                             :class="{ 'composer-active': voiceOn }"
+                                            :disabled="!reachable && !voiceOn"
                                             @click="toggleVoice"
                                             v-tooltip.top="voiceHint"
                                             :aria-pressed="voiceOn"
@@ -2260,6 +2292,7 @@ watch(
                                             v-if="streaming"
                                             type="button"
                                             class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
+                                            :disabled="!reachable"
                                             @click="stop"
                                             v-tooltip.top="stopHint"
                                             :aria-label="stopLabel"
@@ -2273,7 +2306,7 @@ watch(
                                         <button
                                             type="submit"
                                             class="composer-send shrink-0 max-md:h-11 max-md:w-11"
-                                            :disabled="!canSend"
+                                            :disabled="!canSend || !reachable"
                                             v-tooltip.top="sendHint"
                                             aria-label="Send"
                                         >

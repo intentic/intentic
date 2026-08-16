@@ -15,7 +15,7 @@ import { connectionNotice } from "./connectionNotice";
  * "unreachable" screen. The connection machine flips to `online` the moment the daemon answers, and the real
  * views render. */
 
-const { active, daemonUrl, connection } = useSandbox();
+const { active, connection } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 const router = useRouter();
@@ -34,19 +34,10 @@ const signIn = (): void => {
 </script>
 
 <template>
-    <GateCard icon="box" :title="notice.title" spinner>
+    <GateCard icon="box" :title="notice.title" :spinner="notice.action === undefined">
         <p class="text-sm text-muted">{{ notice.body }}</p>
-        <template v-if="notice.showDetail">
-            <a :href="daemonUrl" target="_blank" rel="noopener" class="break-all font-mono text-xs text-muted underline-offset-2 hover:underline">
-                {{ daemonUrl }}
-            </a>
-            <p class="text-xs text-warning">{{ connection.failure?.message }}</p>
-        </template>
         <template #actions>
             <Button v-if="notice.action === `setup`" label="Finish setup" icon-pos="right" severity="secondary" @click="openSetup">
-                <template #icon><Icon name="arrow-right" /></template>
-            </Button>
-            <Button v-else-if="notice.action === `reconnect`" label="Reconnect" icon-pos="right" severity="secondary" @click="openSetup">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <Button v-else-if="notice.action === `signin`" label="Sign in again" icon-pos="right" severity="secondary" @click="signIn">

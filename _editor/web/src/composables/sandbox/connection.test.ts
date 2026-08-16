@@ -6,7 +6,6 @@ import {
     type ConnectionState,
     initialConnection,
     isBlocked,
-    showOutageGate,
     watchdogRecoveryDelay,
 } from "./connection";
 
@@ -17,6 +16,7 @@ const drive = (...signals: readonly ConnectionSignal[]): ConnectionState => sign
 const network = (message = `tunnel down`) => classifyFailure({ message });
 const watchdog = () => classifyFailure({ watchdog: true, message: `The sandbox stopped responding.` });
 const forbidden = () => classifyFailure({ status: 403, message: `not a member` });
+const failed = (failure = network(), at = 1_000): ConnectionSignal => ({ kind: `failed`, failure, at });
 
 describe(`classifyFailure`, () => {
     it(`tells our own watchdog apart from a network failure`, () => {
@@ -49,26 +49,6 @@ describe(`classifyFailure`, () => {
     });
 });
 
-describe(`showOutageGate`, () => {
-    it(`rides out one transient failure and gates on the second`, () => {
-        // One missed-watchdog blip (a daemon briefly starved under its own builds) heals on the next attempt;
-        // tearing the workspace down for it is what made every stall read as an outage.
-        expect(showOutageGate(drive({ kind: `failed`, failure: watchdog() }))).toBe(false);
-        expect(showOutageGate(drive({ kind: `failed`, failure: watchdog() }, { kind: `failed`, failure: network() }))).toBe(true);
-    });
-
-    it(`gates a blocked cause immediately — retrying will not change a 403`, () => {
-        expect(showOutageGate(drive({ kind: `failed`, failure: forbidden() }))).toBe(true);
-    });
-
-    it(`never gates while nothing has failed`, () => {
-        expect(showOutageGate(initialConnection)).toBe(false);
-        expect(showOutageGate(drive({ kind: `connect` }, { kind: `opened` }))).toBe(false);
-        // Recovery clears the gate even after a long run of failures.
-        expect(showOutageGate(drive({ kind: `failed`, failure: network() }, { kind: `failed`, failure: network() }, { kind: `frame` }))).toBe(false);
-    });
-});
-
 describe(`watchdogRecoveryDelay`, () => {
     it(`an on-time silence trips without grace`, () => {
         expect(watchdogRecoveryDelay(999)).toBe(0);
@@ -82,16 +62,25 @@ describe(`watchdogRecoveryDelay`, () => {
 
 describe(`applyConnectionSignal`, () => {
     it(`comes online on the first frame and forgets the previous cause`, () => {
-        const state = drive({ kind: `connect` }, { kind: `failed`, failure: network() }, { kind: `connect` }, { kind: `opened` });
+        const state = drive({ kind: `connect` }, failed(), { kind: `connect` }, { kind: `opened` }, { kind: `frame` });
         expect(state.phase).toBe(`online`);
         expect(state.failure).toBeUndefined();
         expect(state.attempt).toBe(0);
+        expect(state.everOnline).toBe(true);
+        expect(state.unavailableSince).toBeUndefined();
+    });
+
+    it(`does not call response headers a recovery before a frame arrives`, () => {
+        const state = drive({ kind: `frame` }, failed(network(), 2_000), { kind: `connect` }, { kind: `opened` });
+        expect(state.phase).toBe(`connecting`);
+        expect(state.failure?.kind).toBe(`network`);
+        expect(state.unavailableSince).toBe(2_000);
     });
 
     it(`keeps the last cause visible while reconnecting`, () => {
         // The connecting gate names why the last reach failed. Blanking it on the retry would leave the user
         // watching an unexplained spinner for the whole backoff window.
-        const state = drive({ kind: `connect` }, { kind: `failed`, failure: watchdog() }, { kind: `connect` });
+        const state = drive({ kind: `connect` }, failed(watchdog()), { kind: `connect` });
         expect(state.phase).toBe(`connecting`);
         expect(state.failure?.kind).toBe(`timeout`);
     });
@@ -99,12 +88,12 @@ describe(`applyConnectionSignal`, () => {
     it(`returns the identical object for a heartbeat on an already-online connection`, () => {
         // ~1 frame every 2s for the life of the session: minting a new state each time would wake every
         // watcher of the connection for no change.
-        const online = drive({ kind: `connect` }, { kind: `opened` });
+        const online = drive({ kind: `connect` }, { kind: `opened` }, { kind: `frame` });
         expect(applyConnectionSignal(online, { kind: `frame` })).toBe(online);
     });
 
     it(`walks the backoff up over consecutive failures and caps it`, () => {
-        const fail = { kind: `failed`, failure: network() } as const;
+        const fail = failed();
         expect(drive({ kind: `connect` }, fail).retryDelayMs).toBe(1000);
         expect(drive({ kind: `connect` }, fail, fail).retryDelayMs).toBe(2000);
         expect(drive({ kind: `connect` }, fail, fail, fail).retryDelayMs).toBe(4000);
@@ -112,8 +101,18 @@ describe(`applyConnectionSignal`, () => {
     });
 
     it(`earns back the fast first retry after a healthy stream`, () => {
-        const fail = { kind: `failed`, failure: network() } as const;
-        const state = drive({ kind: `connect` }, fail, fail, fail, { kind: `connect` }, { kind: `opened` }, { kind: `connect` }, fail);
+        const fail = failed();
+        const state = drive(
+            { kind: `connect` },
+            fail,
+            fail,
+            fail,
+            { kind: `connect` },
+            { kind: `opened` },
+            { kind: `frame` },
+            { kind: `connect` },
+            fail,
+        );
         expect(state.retryDelayMs).toBe(1000);
         expect(state.attempt).toBe(1);
     });
@@ -121,7 +120,7 @@ describe(`applyConnectionSignal`, () => {
     it(`pins a blocked cause at the ceiling instead of hammering`, () => {
         // A 403 is the daemon working exactly as configured. Walking the backoff up from 1s would mean four
         // pointless round trips before it settles down.
-        const state = drive({ kind: `connect` }, { kind: `failed`, failure: forbidden() });
+        const state = drive({ kind: `connect` }, failed(forbidden()));
         expect(state.phase).toBe(`blocked`);
         expect(state.retryDelayMs).toBe(5000);
     });
@@ -129,7 +128,7 @@ describe(`applyConnectionSignal`, () => {
     it(`clears the outgoing sandbox's failure on a switch`, () => {
         // The previous sandbox being denied says nothing about the incoming one; carrying the cause across
         // would render its gate against the wrong sandbox.
-        const state = drive({ kind: `connect` }, { kind: `failed`, failure: forbidden() }, { kind: `switched`, lastKnownOnline: false });
+        const state = drive({ kind: `connect` }, failed(forbidden()), { kind: `switched`, lastKnownOnline: false });
         expect(state.failure).toBeUndefined();
         expect(state.phase).toBe(`connecting`);
         expect(state.attempt).toBe(0);
@@ -147,7 +146,7 @@ describe(`applyConnectionSignal`, () => {
     });
 
     it(`corrects a wrong optimistic guess on the first failed attempt`, () => {
-        const state = drive({ kind: `switched`, lastKnownOnline: true }, { kind: `connect` }, { kind: `failed`, failure: network() });
+        const state = drive({ kind: `switched`, lastKnownOnline: true }, { kind: `connect` }, failed());
         expect(state.phase).toBe(`retrying`);
     });
 
@@ -161,14 +160,14 @@ describe(`applyConnectionSignal`, () => {
         // Promotion: the loopback shortcut qualified mid-stream, so the driver aborts to reconnect onto it.
         // That abort is deliberate; recording it as a failure would put a "reconnecting" gate over a workspace
         // that is about to get FASTER, and would make the first attempt on the new address wait out a backoff.
-        const promoted = drive({ kind: `connect` }, { kind: `opened` }, { kind: `retargeted` });
+        const promoted = drive({ kind: `connect` }, { kind: `opened` }, { kind: `frame` }, { kind: `retargeted` });
         expect(promoted.phase).toBe(`connecting`);
         expect(promoted.failure).toBeUndefined();
         expect(promoted.retryDelayMs).toBe(0);
 
         // Demotion: the shortcut died after a run of real failures. The tunnel is known-good, so the ladder
         // those failures built must not be carried onto it — the next attempt goes out immediately.
-        const demoted = drive({ kind: `failed`, failure: network() }, { kind: `failed`, failure: network() }, { kind: `retargeted` });
+        const demoted = drive(failed(network(), 1_000), failed(network(), 2_000), { kind: `retargeted` });
         expect(demoted.attempt).toBe(0);
         expect(demoted.retryDelayMs).toBe(0);
 
@@ -180,6 +179,8 @@ describe(`applyConnectionSignal`, () => {
         const state = drive({ kind: `switched`, lastKnownOnline: false }, { kind: `connect` }, { kind: `opened` }, { kind: `disconnect` });
         expect(state.phase).toBe(`idle`);
         expect(state.failure).toBeUndefined();
+        expect(state.everOnline).toBe(false);
+        expect(state.unavailableSince).toBeUndefined();
         // A late attempt from before the teardown must still read as stale if the loop restarts.
         expect(state.generation).toBe(1);
     });
