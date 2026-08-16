@@ -292,8 +292,21 @@ jobs:
           fetch-depth: 0
           clean: false
       - uses: ./.github/actions/pnpm-setup
+      # THE PREDECESSOR COMMIT, spelled out, because work lands on main by direct push here and not only through
+      # pull requests. Left to its own default the script would compare against `origin/main` — which on a push
+      # to main IS the commit being pushed, so every migration would be diffed against itself and the check
+      # would pass by construction on exactly the event it exists to police. Same two-sided answer the `changes`
+      # job computes, and the same zero-SHA fallback for a first push or a force-push, which has nothing behind
+      # it to compare with; the script says so and still runs the half that needs no history.
       - shell: bash
-        run: bash _tools/scripts/check-migrations.sh
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          bash _tools/scripts/check-migrations.sh "$base"
 
   # The CI job image itself. Runs only when _tools/ci-base changes — every other pipeline skips it. It cannot
   # run inside ci-base (building that is the point), so it runs on the host runner directly.
