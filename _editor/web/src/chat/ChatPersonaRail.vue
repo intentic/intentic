@@ -20,9 +20,11 @@
      holding eleven conversations and wearing their attention bar, outweighing the personas the list exists to
      show. Unpinned chats already have a home, and it is the Agents cut.
 
-     ITS SELECTION IS ITS OWN (`picked`). Walking in from the Agents cut leaves this list unringed and every
-     group shut, and walking back out leaves that cut on the conversation it was already reading — the two are
-     a list of work and a list of people, not one selection drawn twice.
+     IT OPENS ON WHOEVER YOU ARE ALREADY TALKING TO. If the chat you walk in from is pinned to a persona, that
+     row is ringed and its group is already open on that chat — the list answers "where am I" before you press
+     anything, which is the one thing a switcher must never make you work out for yourself. Walking in from an
+     UNPINNED chat rings nobody, because there is nobody to ring. After that the ring is this list's own
+     (`picked`), and walking back out leaves the Agents cut on the conversation it was already reading.
 
      WITH NO CARDS AT ALL the rail says what a persona is and offers the way to make one. A mode whose whole
      subject is personas, on a workspace with none, has to explain itself. -->
@@ -48,7 +50,7 @@ const emit = defineEmits<{ select: [id: string] }>();
 
 const router = useRouter();
 const { personas } = usePersonas();
-const { conversations } = useChat();
+const { activeId, conversations } = useChat();
 const { agentById } = useAgents();
 
 /* WHAT THIS WINDOW IS HOLDING FOR EACH PERSONA. The pick lives on the conversation (Conversation.actsAs) and
@@ -61,18 +63,24 @@ const chatsOf = (id: string) =>
         .map((conversation) => ({ conversation, agent: agentById(conversation.conversationId) }))
         .toSorted((a, b) => (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0));
 
-/* THE CHAT THIS RAIL ITSELF PUT ON SCREEN, and the only thing it draws a selection ring from.
+/* THE CHAT THIS RAIL IS RINGING — the one it put on screen itself, or the one you arrived holding.
  *
- * IT IS DELIBERATELY NOT THE WINDOW'S ACTIVE CHAT. This list used to ring whichever persona owned whatever was
- * active, which meant walking in from the Agents cut lit up a row you had not chosen — the persona that
- * happened to own the conversation you were last reading — and made the two cuts feel like one selection seen
- * twice. They are not: one is a list of work and the other a list of people, and picking somebody here should
- * not read as a statement about where you were.
+ * SEEDED ONCE, AT THE MOMENT THE COLUMN BECOMES THIS LIST (the host mounts the rail on the switch, so setup IS
+ * the switch), from the window's focused chat and only when that chat NAMES A PERSONA. Without the seed, going
+ * to the Agents cut and back left you looking at the very conversation you were in with nobody ringed for it —
+ * the list disowning a chat that is, by its own rule, one of this persona's. A pinned chat is a fact about
+ * the chat, not a claim about what you pressed here, so the list can state it on arrival without inventing
+ * anything.
  *
- * It lives in a plain ref rather than anywhere shared because the rail is unmounted the moment the switch goes
- * back to Agents (the host swaps the whole column), so entering this cut always starts clean — which is
- * exactly the intent, and needs no clearing written for it. */
-const picked = ref<string | undefined>(undefined);
+ * AND ONLY ON ARRIVAL, never as a live mirror of the focus. Whatever moves the chat while this column is up —
+ * a pane, a keyboard cycle, a turn landing somewhere else — must not drag the ring around a list you are
+ * reading: one is a list of work and the other a list of people, and they are not one selection drawn twice.
+ * A plain ref, so it starts from the arrival state every time the switch remounts the rail. */
+const arrivedIn = conversations.value.find(
+    (conversation) => conversation.conversationId === activeId.value && conversation.actsAs.value !== undefined,
+);
+const arrivedAs = arrivedIn?.actsAs.value;
+const picked = ref<string | undefined>(arrivedIn?.conversationId);
 
 interface PersonaRow {
     readonly key: string;
@@ -157,7 +165,11 @@ const startAs = (row: PersonaRow): void => {
  * IT OPENS FROM THE COUNT, not from the card. The card's press is the fast path ("talk to them") and it stays
  * one press; the disclosure is its own smaller target beside it. Offered from ONE chat rather than two: with
  * one there is nothing to choose between, but there is still a second chat to start. */
-const expanded = ref<Set<string>>(new Set());
+/* The persona you ARRIVED inside is open from the first frame, for the same reason its row is ringed: the chat
+ * being highlighted is a row in that group, and a group shut over it would be pointing at something the reader
+ * cannot see. Seeded rather than left to the watch below, which fires on CHANGE and so has nothing to say
+ * about the state the list mounted in. */
+const expanded = ref<Set<string>>(new Set(arrivedAs === undefined ? [] : [arrivedAs]));
 const isExpanded = (row: PersonaRow): boolean => expanded.value.has(row.key);
 const toggleExpanded = (row: PersonaRow): void => {
     const next = new Set(expanded.value);
@@ -168,9 +180,9 @@ const toggleExpanded = (row: PersonaRow): void => {
 };
 
 /* The persona you have OPENED FROM HERE expands itself, so the rail shows where the press landed rather than
- * making you find it. Keyed to this rail's own pick, not to the window's active chat: walking in from the
- * Agents cut must not fling a group open about a conversation you were reading somewhere else. Fires only when
- * that pick changes — a reader who then collapses it has said something, and it must not spring back open. */
+ * making you find it. Keyed to this rail's own pick, not to the window's active chat: once the list is up, a
+ * chat focused from somewhere else must not fling a group open under the reader. Fires only when that pick
+ * changes — a reader who then collapses it has said something, and it must not spring back open. */
 watch(
     () => rows.value.find((row) => row.open)?.key,
     (key) => {

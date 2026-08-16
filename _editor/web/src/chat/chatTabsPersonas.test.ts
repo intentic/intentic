@@ -252,8 +252,9 @@ it("shows no disclosure on a persona with no chats", async () => {
 });
 
 /* THE PERSONA YOU OPENED FROM HERE expands itself, so the rail shows where the press landed. Keyed to this
- * rail's own pick rather than to the window's active chat — which is what keeps walking in from the Agents cut
- * from flinging a group open about a conversation you were reading somewhere else. */
+ * rail's own pick rather than to the window's active chat — so once the list is up, a chat focused from
+ * somewhere else never flings a group open under the reader. (Arrival is the one exception, and it is a
+ * different act with its own tests above.) */
 it("expands the persona you press, and only then", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`]);
@@ -262,6 +263,38 @@ it("expands the persona you press, and only then", async () => {
     rowFor(el, `Work`)?.click();
     await settle();
     expect(sessionRows(el)).toHaveLength(1);
+});
+
+/* --- Arriving from the Agents cut --------------------------------------------------------------------------
+ * The two cuts share one transcript, so the chat you switch over holding is still the chat on screen. If it
+ * names a persona, this list has to say so: coming back to find your own conversation open with nobody ringed
+ * for it is the list disowning a chat that is, by its own rule, one of that persona's. */
+it("rings the persona of the chat you walk in from, and opens it on that chat", async () => {
+    useChatGrouping().set(`lane`);
+    const el = await mountList();
+    await pinTo(`work`, [`talking-as-work`]);
+
+    useChatGrouping().set(`persona`);
+    await settle();
+    expect(rowFor(el, `Work`)?.classList.contains(`rail-card-on`)).toBe(true);
+    // ...and the chat itself, which means its group is open from the first frame — a ring on a row nobody can
+    // see is not a highlight.
+    expect(sessionRows(el)).toHaveLength(1);
+    expect(el.querySelector(`[aria-label^="Open "]`)?.classList.contains(`rail-card-on`)).toBe(true);
+});
+
+// An UNPINNED chat rings nobody, because there is nobody to ring — the seed is a fact the chat carries, never
+// a guess about which person you might have meant.
+it("rings nobody when the chat you walk in from names no persona", async () => {
+    useChatGrouping().set(`lane`);
+    const el = await mountList();
+    openAgentConversation({ id: `nobody-in-particular`, provider: `claude`, harness: `native` });
+    await settle();
+
+    useChatGrouping().set(`persona`);
+    await settle();
+    expect(rowFor(el, `Work`)?.classList.contains(`rail-card-on`)).toBe(false);
+    expect(sessionRows(el)).toEqual([]);
 });
 
 /* --- Detached from the Agents cut -------------------------------------------------------------------------
