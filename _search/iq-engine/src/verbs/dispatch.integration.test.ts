@@ -49,6 +49,12 @@ test("find: a zero-hit prose phrase escalates semantically unless literal intent
     const literal = await engine.run(request({ verb: "find", query: "how are widgets built for the registry?", options: { literal: true } }));
     expect(literal.exitCode).toBe(1);
     expect(literal.result.total).toBe(0);
+
+    // Terminal prose punctuation is scanned once rather than matched by an end-anchored repetition. A pasted
+    // run of punctuation stays prose and cannot make zero-hit recovery polynomial in the query length.
+    const emphatic = await engine.run(request({ verb: "find", query: `how are widgets built for the registry${"!".repeat(2_000)}` }));
+    expect(emphatic.exitCode).toBe(0);
+    expect(emphatic.result.note).toContain("answered semantically");
 });
 
 test("files: fuzzy filename search, ranked", async () => {

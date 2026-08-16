@@ -2,6 +2,7 @@ import {
     createStreamingPainter,
     failureNotice,
     framePainter,
+    GatewayRefusal,
     type GatewayCtx,
     type ListenerMessage,
     type StreamPoster,
@@ -116,7 +117,7 @@ export const addressesUs = (message: TelegramMessage, usernames: ReadonlySet<str
  * the chat accepts; the next bot is only tried when NOTHING was posted (a partial spill re-sent through a
  * second bot would duplicate its own chunks). Chunked at the same ceiling a streamed reply spills at. */
 export const deliverToChat = async (connections: ReadonlyMap<string, TelegramConnection>, chatId: string, text: string): Promise<void> => {
-    let refusal: unknown = new Error("no Telegram bot is connected");
+    let refusal: unknown = new GatewayRefusal("no Telegram bot is connected");
     for (const connection of connections.values()) {
         let posted = false;
         try {

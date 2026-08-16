@@ -343,7 +343,16 @@ const REGEX_INTENT = /[|()[\]*+?^$\\]/;
 const isPhrase = (query: string): boolean => {
     // A terminal question mark is punctuation on the most obvious prose shape, not the regex quantifier. Keep
     // metacharacters inside the phrase as explicit pattern intent (`foo? bar`, `a|b label`).
-    const candidate = query.trim().replace(/[?!.]+$/, "");
+    const trimmed = query.trim();
+    let end = trimmed.length;
+    while (end > 0) {
+        const character = trimmed[end - 1];
+        if (character !== "?" && character !== "!" && character !== ".") {
+            break;
+        }
+        end -= 1;
+    }
+    const candidate = trimmed.slice(0, end);
     return !REGEX_INTENT.test(candidate) && candidate.split(/\s+/).length > 1;
 };
 

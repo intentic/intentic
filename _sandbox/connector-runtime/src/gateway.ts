@@ -43,6 +43,21 @@ export interface SlotView<THandle> {
 
 export type CloseReason = "superseded" | "dead" | "shutdown";
 
+// A connector may decline a delivery with a sentence deliberately written for the owner. Everything else is
+// an internal/provider exception: its message or stack belongs in the gateway log, never in the HTTP response.
+export class GatewayRefusal extends Error {
+    readonly response: string;
+
+    constructor(response: string) {
+        super(response);
+        this.name = "GatewayRefusal";
+        this.response = response;
+    }
+}
+
+export const deliveryErrorResponse = (provider: string, error: unknown): string =>
+    error instanceof GatewayRefusal ? error.response : `the ${provider} connector could not deliver that message`;
+
 // The per-provider half of a gateway, returned by the spec's create(ctx) so it can close over the listener and
 // connection pool it builds from the ctx.
 export interface GatewayHooks<TConfig, THandle> {
@@ -289,7 +304,10 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                     try {
                         await hooks.deliver(channelId, text);
                     } catch (error) {
-                        return send(error instanceof Error ? error.message : String(error), 502);
+                        if (!(error instanceof GatewayRefusal)) {
+                            log.error({ err: error }, "delivery failed");
+                        }
+                        return send(deliveryErrorResponse(spec.provider, error), 502);
                     }
                     return send("ok");
                 }
@@ -300,7 +318,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                 return send("not found", 404);
             } catch (error) {
                 log.error({ err: error }, "control request failed");
-                return send(`error: ${error instanceof Error ? error.message : String(error)}`, 500);
+                return send("internal gateway error", 500);
             }
         })();
     });

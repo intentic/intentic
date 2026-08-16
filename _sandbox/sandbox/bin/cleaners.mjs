@@ -5,7 +5,7 @@
 // filter never breaks.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes. Always stripped (pure noise).
@@ -343,15 +343,22 @@ const secretValueCache = new Map();
 
 const readIfChanged = (path, name) => {
     try {
-        const { mtimeMs, size } = statSync(path);
-        const stamp = `${mtimeMs}:${size}`;
-        const cached = secretValueCache.get(path);
-        if (cached?.stamp === stamp) {
-            return cached.values;
+        // Open once, then inspect and read that descriptor. A path-level stat followed by a path-level read
+        // lets a replacement or symlink swap redirect the secret reader between the two operations.
+        const descriptor = openSync(path, "r");
+        try {
+            const { mtimeMs, size } = fstatSync(descriptor);
+            const stamp = `${mtimeMs}:${size}`;
+            const cached = secretValueCache.get(path);
+            if (cached?.stamp === stamp) {
+                return cached.values;
+            }
+            const values = harvest(readFileSync(descriptor, "utf8"), path, name);
+            secretValueCache.set(path, { stamp, values });
+            return values;
+        } finally {
+            closeSync(descriptor);
         }
-        const values = harvest(readFileSync(path, "utf8"), path, name);
-        secretValueCache.set(path, { stamp, values });
-        return values;
     } catch {
         // Absent, unreadable, or malformed: the name patterns still run. Never a reason to fail a command.
         return [];

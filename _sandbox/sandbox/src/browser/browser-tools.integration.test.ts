@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { browserServerSpec, browserServersOf, isolatedBrowserSpec } from "./browser-tools.js";
+import { browserServerSpec, browserServersOf, isolatedBrowserSpec, writeBrowserConfig } from "./browser-tools.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "./session-store.js";
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
@@ -13,6 +13,14 @@ const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: 
 // Whether the image actually has Chromium decides what browserServersOf can return, and CI images may not.
 // Asserting the SHAPE of each spec is version-independent; the wiring test below adapts.
 const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot())).servers).length > 0;
+
+test("browser MCP configs live in a private directory and cannot replace an existing file", async () => {
+    const server = `permissions-${process.hrtime.bigint()}`;
+    const path = await writeBrowserConfig(server, 41_237);
+    expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    await expect(writeBrowserConfig(server, 41_237)).rejects.toMatchObject({ code: "EEXIST" });
+});
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
     const spec = browserServerSpec(

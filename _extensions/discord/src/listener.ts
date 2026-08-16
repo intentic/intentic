@@ -1,4 +1,11 @@
-import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
+import {
+    createStreamingPainter,
+    failureNotice,
+    framePainter,
+    GatewayRefusal,
+    type GatewayCtx,
+    type ListenerMessage,
+} from "@intentic/connector-runtime";
 import type { Client, Message } from "discord.js";
 
 // The text side of the gateway: for every human-authored message a subscribed bot sees, build a normalized
@@ -66,7 +73,7 @@ export const deliverToChannel = async (subscribed: ReadonlyMap<string, Client>, 
         }
         return;
     }
-    throw new Error("no connected Discord bot can post in this channel");
+    throw new GatewayRefusal("no connected Discord bot can post in this channel");
 };
 
 export interface DiscordListener {

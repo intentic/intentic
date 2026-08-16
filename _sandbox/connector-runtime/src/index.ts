@@ -5,7 +5,9 @@ export {
     type ConnectorEntry,
     type GatewayControl,
     type GatewayHooks,
+    GatewayRefusal,
     type GatewaySpec,
+    deliveryErrorResponse,
     runConnectorGateway,
     type SlotView,
 } from "./gateway.js";

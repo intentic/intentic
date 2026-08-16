@@ -1,4 +1,11 @@
-import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, type ListenerMessage } from "@intentic/connector-runtime";
+import {
+    createStreamingPainter,
+    failureNotice,
+    framePainter,
+    GatewayRefusal,
+    type GatewayCtx,
+    type ListenerMessage,
+} from "@intentic/connector-runtime";
 import type { SlackConnection } from "./client.js";
 
 /* The inbound half of the gateway: every Socket Mode envelope a connected app receives becomes a normalized
@@ -101,7 +108,7 @@ export const toHistory = (
  * accepts; the next app is only tried when NOTHING was posted (a partial spill re-sent through a second app
  * would duplicate its own chunks). Chunked at the same ceiling a streamed reply spills at. */
 export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string): Promise<void> => {
-    let refusal: unknown = new Error("no Slack app is connected");
+    let refusal: unknown = new GatewayRefusal("no Slack app is connected");
     for (const connection of connections.values()) {
         let posted = false;
         try {

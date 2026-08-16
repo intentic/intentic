@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { extensionRuntimeDir, type ListenerPairing } from "@intentic/sandbox-contract";
-import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
+import { type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";
 import {
     closeWhatsAppConnection,
     forgetWhatsAppConnection,
@@ -126,7 +126,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
             deliver: async (channelId, text) => {
                 const connection = firstReady();
                 if (connection === undefined) {
-                    throw new Error("WhatsApp is not connected — pair the device from the capability card first.");
+                    throw new GatewayRefusal("WhatsApp is not connected — pair the device from the capability card first.");
                 }
                 for (let base = 0; base < text.length; base += WHATSAPP_MAX) {
                     await connection.sendText(chatJidOf(channelId), text.slice(base, base + WHATSAPP_MAX));

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
@@ -64,7 +64,10 @@ const resolveMcpCli = (): string => {
  * It has to travel in a CONFIG FILE because @playwright/mcp has no flag for browser args; `browser.launchOptions`
  * in a `--config` file is the documented seam, and the CLI's own flags are merged over it (config first, flags
  * last), so everything below still wins where the two overlap. */
-const configDir = join(tmpdir(), "intentic-browser-mcp");
+// Private per daemon process: configs name executables and arguments the child will trust, so a shared /tmp
+// directory would let another local user pre-create or replace one before the MCP reads it. mkdtemp creates
+// this with mode 0700 and an unpredictable suffix; every file below is exclusive and 0600 as the second half.
+const configDir = mkdtempSync(join(tmpdir(), "intentic-browser-mcp-"));
 
 // A config file's whole life is one turn's Chromium, but nothing deletes it when that Chromium dies (the MCP
 // is not ours to hook). Sweeping the dir on the way in keeps it to the handful of turns in flight, without a
@@ -119,10 +122,13 @@ const freePort = async (): Promise<number> => {
     return bindEphemeral();
 };
 
-const writeBrowserConfig = async (server: string, port: number): Promise<string> => {
+export const writeBrowserConfig = async (server: string, port: number): Promise<string> => {
     await mkdir(configDir, { recursive: true });
     const path = join(configDir, `${server}-${port}.json`);
-    await writeFile(path, JSON.stringify({ browser: { launchOptions: { args: [`--remote-debugging-port=${port}`] } } }));
+    await writeFile(path, JSON.stringify({ browser: { launchOptions: { args: [`--remote-debugging-port=${port}`] } } }), {
+        flag: "wx",
+        mode: 0o600,
+    });
     return path;
 };
 
@@ -399,7 +405,7 @@ const startBrowserMux = async (
     };
     const manifestPath = join(configDir, `mux-${nonce}.json`);
     try {
-        await writeFile(manifestPath, JSON.stringify(manifest));
+        await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
         const mux = spawn(process.execPath, [MUX_SCRIPT, manifestPath], {
             env: { ...process.env, ...workloadStamp(context.conversationId) },
             stdio: ["ignore", "ignore", "ignore"],
@@ -411,11 +417,16 @@ const startBrowserMux = async (
          * socket FILES in one synchronous pass of the mux's startup, so their presence is awaited here, briefly:
          * a mux that produced no sockets within the window has plainly died, and the eager specs take over. */
         const last = Object.values(owners).at(-1)?.socket;
-        for (let waited = 0; last !== undefined && !existsSync(last); waited += 50) {
-            if (waited >= 3_000 || mux.exitCode !== null) {
-                return undefined;
+        if (last !== undefined) {
+            for (let waited = 0; ; waited += 50) {
+                if (existsSync(last)) {
+                    break;
+                }
+                if (waited >= 3_000 || mux.exitCode !== null) {
+                    return undefined;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 50));
             }
-            await new Promise((resolve) => setTimeout(resolve, 50));
         }
         return bridges;
     } catch {

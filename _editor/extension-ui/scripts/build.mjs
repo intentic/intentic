@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, cpSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { extensionUiNames } from "../names.mjs";
@@ -173,17 +173,32 @@ log(`kept ${reachable.size} of the emitted declarations`);
 // `@intentic/ui` is not something a consumer can install, so the published declarations must not name it.
 for (const name of [`index.d.ts`, `format.d.ts`]) {
     const file = join(DIST, `types/extension-ui/src`, name);
-    if (!existsSync(file)) {
-        continue;
+    let descriptor;
+    try {
+        descriptor = openSync(file, `r+`);
+    } catch (error) {
+        if (error !== null && typeof error === `object` && `code` in error && error.code === `ENOENT`) {
+            continue;
+        }
+        throw error;
     }
-    const rewritten = readFileSync(file, `utf8`).replaceAll(/"@intentic\/ui(\/[^"]*)?"/gu, (_, sub) => {
-        const target = join(DIST, `types/ui/src`, sub === undefined ? `index.js` : `${sub.slice(1)}/index.js`);
-        const withoutIndex = join(DIST, `types/ui/src`, `${sub === undefined ? `index` : sub.slice(1)}.js`);
-        const chosen = existsSync(withoutIndex.replace(/\.js$/u, `.d.ts`)) ? withoutIndex : target;
-        const rel = relative(dirname(file), chosen);
-        return `"${rel.startsWith(`.`) ? rel : `./${rel}`}"`;
-    });
-    writeFileSync(file, rewritten);
+    try {
+        const rewritten = readFileSync(descriptor, `utf8`).replaceAll(/"@intentic\/ui(\/[^"]*)?"/gu, (_, sub) => {
+            const target = join(DIST, `types/ui/src`, sub === undefined ? `index.js` : `${sub.slice(1)}/index.js`);
+            const withoutIndex = join(DIST, `types/ui/src`, `${sub === undefined ? `index` : sub.slice(1)}.js`);
+            const chosen = existsSync(withoutIndex.replace(/\.js$/u, `.d.ts`)) ? withoutIndex : target;
+            const rel = relative(dirname(file), chosen);
+            return `"${rel.startsWith(`.`) ? rel : `./${rel}`}"`;
+        });
+        const bytes = Buffer.from(rewritten);
+        let written = 0;
+        while (written < bytes.length) {
+            written += writeSync(descriptor, bytes, written, bytes.length - written, written);
+        }
+        ftruncateSync(descriptor, bytes.length);
+    } finally {
+        closeSync(descriptor);
+    }
 }
 
 // ── 5. The runtime: the host bridge ──────────────────────────────────────────────────────────────────────
