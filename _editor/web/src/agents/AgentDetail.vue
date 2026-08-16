@@ -268,10 +268,19 @@ const confirmDiscard = (): void => {
                 compact
                 @reveal="identityOpen = true"
             />
-            <!-- No tooltip: the chip prints status.label already, and hovering it to be told the word you are
-                 reading is the kind of hint that teaches people not to hover anything. -->
-            <span v-if="status !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs" :class="status.class">
-                <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
+            <!-- A registered mobile agent also carries the Chat | Changes switch. Below @md those fixed-width
+                 controls leave the title only a few pixels when a longer status such as "Running" arrives, so
+                 the status compresses to its glyph until the HEADER (not the window) has room for its words.
+                 The chip keeps its full accessible name in both forms; draft/unregistered mobile chats have no
+                 mode switch competing for the row, so they keep the words at every width. -->
+            <span
+                v-if="status !== undefined"
+                class="inline-flex shrink-0 items-center gap-1 text-2xs"
+                :class="status.class"
+                :aria-label="status.label"
+            >
+                <Icon :name="status.icon" :spin="status.spin" class="text-2xs" aria-hidden="true" />
+                <span :class="mobile && reviewable ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
             <SegmentedControl v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
             <template v-if="reviewable">
