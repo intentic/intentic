@@ -10,16 +10,24 @@
 
 ## Status
 
-Six of the ten recommendations are applied. Each finding below carries its own status line; the
-table at the end is the summary.
+Nine of the ten recommendations are applied. Each finding below carries its own status line;
+the table at the end is the summary.
 
 **Applied:** A1 (the unfireable trigger, plus prepass invariant 10 for the class) · A2 (the
-`dind-host` tag skew) · B3 (`actionlint` + `zizmor` gating in `preflight`) · B4 (`registry`'s
-pins) · C1 (the duplicate desktop build) · part of §D (two stale claims in `ci-runner.md`).
+`dind-host` tag skew) · A3 (the path filters, now computed from the dependency graph) · B1
+(the Windows smoke tier, three copies → one) · B2 (the workspace-survival allowlist) · B3
+(`actionlint` + `zizmor` gating in `preflight`, and the whole `artipacked` backlog) · B4
+(`registry`'s pins) · C1 (the duplicate desktop build) · part of §D.
 
-**Still open:** A3 (`turbo --affected` for the path filters) · B1 (the reusable-workflow
-extraction) · B2 (the workspace-survival allowlist) · A1's structural half (tagging with a
-GitHub App token) · the `artipacked` backlog described under B3.
+**Still open:** A1's structural half (tagging with a GitHub App token, which needs a credential
+only a maintainer can create) · the desktop-container half of B1 · C2/C3 (the runner topology,
+which is a provisioning decision rather than a code change).
+
+**A3 found a live defect while it was being replaced.** The regexes claimed `_editor` held no
+dependency of any image-bound package. It was false — the three extensions baked into the
+sandbox image depend on `@intentic/extension-ui`, which re-exports `@intentic/ui` out of
+`_editor/ui` — so every UI-kit change had been skipping the image rebuild, silently, for as long
+as the filter has existed.
 
 ---
 
@@ -167,8 +175,37 @@ not at all.
 
 ### A3. The path filters encode a dependency claim nothing verifies
 
-**Severity: medium — the failure mode is silent under-testing, which is the worst kind. OPEN.**
-This is the largest remaining item and the one most worth doing next.
+**Severity: medium — the failure mode is silent under-testing, which is the worst kind. APPLIED,
+and it found a live defect on the way.**
+
+`_tools/scripts/affected.mjs` now answers the four product triggers by walking the workspace
+dependency graph — every `package.json`'s `workspace:` edges, the same graph turbo reads — from
+the changed files up through every package that transitively depends on one. The image payload
+is read out of `prepare-image-trees.sh`'s own `TREES`/`BUNDLES`, so the list that file already
+warns about ("both times an extension joined the payload the filter was the line that was
+missed") has no fourth copy.
+
+Not `turbo --affected`, which would be authoritative, for one reason: the `changes` job runs
+before any install — it is ~23 seconds and it is a DAG root gating the whole pipeline — and
+turbo lives in `node_modules`. Putting a 2m21s–3m43s install on that root to ask a question the
+manifests already answer is the wrong trade. The walker was checked against `pnpm ls -r`: same
+84 projects, no misses.
+
+**The claim the old regexes rested on was false.** They asserted that `_editor`, `_platform` and
+`_site` held no dependency of any image-bound package. `@intentic/ext-memory`,
+`ext-knowledge` and `ext-deployments` — all three baked into the sandbox image — depend on
+`@intentic/extension-ui`, which depends on `@intentic/ui` in `_editor/ui`. Every UI-kit change
+had been skipping the image rebuild.
+
+Verified by replaying both implementations over 150 commits of history: 62 identical, 88
+differing. The differences fall into two families and both were checked against the real
+manifests — `images: false → true` on UI-kit commits (the bug above), and `platform: true →
+false` on vscode/connectors/tooling commits, where the old regex matched a whole group
+directory and the graph shows no edge to `api` or `web`.
+
+What stayed a regex is the small remainder a package graph cannot answer, listed together at the
+bottom of the script so the distinction stays visible: the `ic` Rust crate, the shims bundled
+into the installer, Dockerfiles and feature packs, the assembly scripts, and the workflow files.
 
 Five hand-written regexes in the `changes` job decide what runs. Two of them rest on an
 explicitly hand-verified, machine-unchecked claim:
@@ -209,6 +246,28 @@ Dockerfiles turbo does not model) stay as they are, including the excellent `mis
 
 ### B1. Nine desktop jobs are one job shape written nine times
 
+**Status: HALF APPLIED — the Windows tier is done, the desktop container shell is not.**
+
+`windows-smoke.yml` is one reusable workflow with four inputs, called three times. It replaces
+three copies of the same eleven steps whose comments pointed at each other ("for the reason
+ci.yml's desktop-verify-windows spells out"), which is knowledge that only stays true while
+somebody keeps three files in step. One behaviour was fixed on the way: the installer arguments
+are now built as a PowerShell array rather than interpolated, because PowerShell drops an empty
+native argument — `--expected-version $env:X` with no version would have handed the parser a
+bare flag and let it swallow `--keep-installed`, which on the nightly would both fail the
+version assertion and uninstall the app tiers 2 and 3 were about to use.
+
+**The desktop container shell was deliberately not extracted**, and the reason is worth
+recording rather than leaving as an omission. Ten jobs share a ~14-line preamble (container,
+volumes, credentials, `CARGO_HOME`, checkout, pnpm-setup) but their bodies have nothing in
+common. Collapsing them needs either a `run`-string input — an injection shape that would force
+a suppression in the very lint added under B3 — or moving eight job bodies into new shell files,
+a large mechanical change with no way to exercise it here. The saving is ~80 lines against a new
+indirection. It is the one item in this audit where the duplication is currently the better
+trade; revisit it if those bodies become scripts for their own reasons.
+
+The original argument:
+
 `desktop-check`, `ic-check`, `desktop-verify`, `desktop-windows-build` (ci) · `windows-build`,
 `linux-build` (release) · `desktop-setup`, `desktop-windows-build`, `update-survival`
 (nightly).
@@ -242,6 +301,26 @@ Realistic outcome: `ci.yml` drops from 974 lines to roughly 550, `nightly.yml` r
 and the three Windows preambles become one.
 
 ### B2. `clean: false` is shared mutable state, patched at each point of pain
+
+**Status: APPLIED, for two of the three incidents.**
+
+`.github/actions/prepare-workspace` is a `git clean -ffdx` with the kept set named — the thing
+`clean: false` was always approximating, and which `verify.yml`'s own checkout comment describes
+as the intent ("the Actions equivalent of `GIT_CLEAN_FLAGS: -ffdx -e node_modules`"). The
+allowlist is `node_modules`, `.turbo`, `.cache`, `.image-out`, `dist`, `generated`, `.astro`,
+`*.tsbuildinfo`. `dist-bin` is deliberately outside it, which is the whole point: that is where
+the desktop bundles and machine agents stage, and a stale one was incidents 2 and 3.
+
+Verified against a scratch repository with all eight kept patterns and both incident shapes
+present: every cache survived, `pkg/dist-bin/BUNDLE.deb` and `windows-artifacts/setup.exe` were
+removed. It runs in the eight jobs that stage or download artifacts, and it replaced the
+bespoke "Clear the staging directories" step and both `rm -rf windows-artifacts` lines.
+
+**It does not cover incident 1**, and that is stated in the action rather than implied: the
+frozen injected copies are stale content *inside* `node_modules`, which the allowlist keeps.
+Only the `pnpm-setup` composite's state-file removal reaches that. Two of the three, one rule.
+
+The original argument:
 
 Keeping the workspace between jobs is the right call — it is worth minutes per job and the
 measurement in `ci-runner.md` supports it. But it makes the workspace a mutable object shared
@@ -511,25 +590,38 @@ Ranked by (correctness × cost-to-fix), highest first.
 | 2 | Promote `dind-host:latest` in `images-merge` | §A2 — live tag skew on any arm64 failure | ~1h | **done** |
 | 3 | Gate the `0.0.0` desktop jobs on "no release planned" | §C1/§C2 — 2-4 runner-hours per releasing push, clears the Windows path | ~half a day | **done** |
 | 4 | `actionlint` + `zizmor` in `preflight` | §B3 — closes the silent-no-op class with off-the-shelf tools | ~2h | **done** |
-| 5 | Replace the path-filter regexes with `turbo --affected` | §A3 — deletes an unverifiable claim, kills five regexes | ~1-2 days | open |
-| 6 | `desktop-job.yml` + `windows-smoke.yml` reusable workflows | §B1 — 9 and 3 duplicates → 1 each; `ci.yml` ~-40% | ~1-2 days | open |
-| 7 | `prepare-workspace` composite with an explicit survival allowlist | §B2 — replaces three ad-hoc patches with one rule | ~half a day | open |
+| 5 | Replace the path-filter regexes with a dependency-graph walk | §A3 — deletes an unverifiable claim (which was false), kills five regexes | ~1-2 days | **done** |
+| 6 | `windows-smoke.yml` reusable workflow | §B1 — 3 duplicates → 1. The desktop-container half is deliberately not done; §B1 says why | ~1-2 days | **half** |
+| 7 | `prepare-workspace` composite with an explicit survival allowlist | §B2 — replaces two of three ad-hoc patches with one rule | ~half a day | **done** |
 | 8 | Pin `registry`'s actions and its scan package | §B4 — write access to `main` via a floating dependency | ~1h | **done** |
 | 9 | Tag with a GitHub App token; retire `dispatch-publish.sh` | §A1 structural — removes the mechanism, not the instance | ~half a day | open |
 | 10 | Move long-form reasoning from `ci.yml` into `ci-runner.md` | §D — prose already drifted once, into bug #1 | ongoing | partial |
 
-Items 5 and 6 are the structural ones and are worth doing in that order — the filter cleanup
-shrinks what the reusable workflows have to parameterise. Item 9 is small and retires both
-`dispatch-publish.sh` and invariant 10.
+Item 9 is what remains and it is small, but it needs a credential only a maintainer can create:
+a GitHub App installation token (or a PAT) for the tag push. Doing it retires `dispatch-publish.sh`,
+its `actions: write` grant, and prepass invariant 10 in one go.
 
-**What the applied changes have not been through:** a real pipeline. Everything above was
-verified locally — `actionlint` and `zizmor` clean on both repositories and confirmed to fail
-on injected defects, all ten prepass invariants passing, invariant 10 confirmed to catch the
-restored bug, the promote script dry-run against a stub `docker`, every shell script
-syntax-checked, and the DAG re-derived (widest wave 6 before and after; wave 3 drops from 6
-jobs to 4). What cannot be checked from here is the first run itself: the `preflight` job's new
-network fetch, and `release.yml`'s output reaching `ci.yml`'s `needs` context. Watch those two
-on the first main pipeline.
+The `artipacked` backlog under B3 is closed: 31 of the 33 checkouts now set
+`persist-credentials: false`, the two that run semantic-release keep it and say why, and
+`zizmor` runs with **no confidence floor** so a checkout added without the flag fails the lint
+rather than eroding the cleanup one job at a time.
+
+**What the applied changes have not been through:** a real pipeline. What *was* checked here:
+`actionlint` and `zizmor` clean on both repositories at full sensitivity and confirmed to fail
+on injected defects (a dangling `needs`, a `${{ }}` in a `run:` block, a checkout without
+`persist-credentials`); all prepass invariants passing, with invariant 10 confirmed to catch the
+restored trigger bug; `affected.mjs` replayed against 150 commits and its two disagreement
+families traced back to the real manifests; its package walker compared against `pnpm ls -r`
+(84 projects, no misses); the workspace allowlist exercised against a scratch repo holding both
+incident shapes; the promote script dry-run against a stub `docker`; every shell script
+syntax-checked; `pnpm verify` green; and the DAG re-derived (widest wave 6 before and after,
+wave 3 down from 6 jobs to 4).
+
+What cannot be checked from here is the first run itself. Watch these on the first main
+pipeline: the `preflight` job's new network fetch of the two linters; `release.yml`'s `version`
+output reaching `ci.yml`'s `needs` context; `prepare-workspace` on a workspace that has been
+accumulating for weeks; and the three `windows-smoke.yml` callers against the one Windows
+machine.
 
 ---
 

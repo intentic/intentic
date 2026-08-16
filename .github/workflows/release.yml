@@ -53,6 +53,11 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
     steps:
+      # ONE OF THE TWO CHECKOUTS IN THIS REPOSITORY THAT KEEPS ITS CREDENTIAL. Every other one sets
+      # `persist-credentials: false` — the token checkout writes into .git/config outlives the job on a
+      # workspace six runner processes share (docs/ci-runner.md, "The token a checkout leaves behind"). These
+      # two run semantic-release, which reaches the git remote, and whether its own GITHUB_TOKEN-derived auth
+      # URL fully replaces the persisted header is not a thing to find out by breaking a release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -81,6 +86,7 @@ jobs:
       contents: read
       packages: read
     env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       CARGO_HOME: /ci-cache/cargo
       CARGO_TARGET_DIR: /ci-cache/desktop-release-windows-target
       XWIN_CACHE_DIR: /ci-cache/xwin
@@ -91,11 +97,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
       # Match release-prepare's transient package state before the UI is compiled into the candidate.
-      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
-      - run: bash _tools/scripts/build-desktop.sh "${{ needs.plan.outputs.version }}" --windows-only
+      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
+      - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --windows-only
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release-candidate
@@ -122,9 +130,12 @@ jobs:
     # Off the fleet, so off the fleet's cache — for the reason ci.yml's images-arm64 spells out: turbo creates
     # the directory it is pointed at, and /ci-cache does not exist on a GitHub-hosted runner.
     env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       TURBO_CACHE_DIR: ${{ github.workspace }}/.turbo-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -143,9 +154,9 @@ jobs:
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
       - run: pnpm install --frozen-lockfile
-      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/prepare-image-trees.sh
-      - run: TAGS="${{ needs.plan.outputs.version }}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
 
   # The amd64 halves of the released images, on the fleet, while Windows verifies — the exact counterpart of
   # sandbox-arm64, and the ~11 minutes that used to run INSIDE the publish job's publishCmd, serialized after
@@ -170,9 +181,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -187,10 +201,10 @@ jobs:
             .image-out/iq-models
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/prepare-image-trees.sh
-      - run: TAGS="${{ needs.plan.outputs.version }}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
-      - run: TAGS="${{ needs.plan.outputs.version }}" IMAGES=dind-host bash _tools/scripts/publish-images.sh
+      - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      - run: TAGS="$RELEASE_VERSION" IMAGES=dind-host bash _tools/scripts/publish-images.sh
 
   # The release's Linux-side artifacts, while Windows verifies: the Linux desktop bundles — installed and
   # launched on a bare Debian HERE, before they are uploaded — and the cross-compiled machine agents. These
@@ -219,6 +233,7 @@ jobs:
       contents: read
       packages: read
     env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       CARGO_HOME: /ci-cache/cargo
       # The same target dir the publish job used when it built these bundles itself, so the warm release-profile
       # cache carries straight over; still its own directory for the lock-and-fingerprint reasons ci.yml's
@@ -232,7 +247,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
       # Build BEFORE stamping (release-prepare.sh's old rule #1, now living here): versions sit only in
       # package.json, but package.json is a turbo hash input — stamping first invalidates the whole closure
@@ -244,7 +261,7 @@ jobs:
           filters=()
           for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
           pnpm turbo run build "${filters[@]}"
-      - run: bash _tools/scripts/set-versions.sh "${{ needs.plan.outputs.version }}"
+      - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/build-agent-binaries.sh _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
       - run: bash _tools/scripts/build-agent-binaries.sh _computers/host intentic-host linux-x64 linux-arm64 windows-x64
@@ -252,7 +269,7 @@ jobs:
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
       - run: bash _tools/scripts/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
-      - run: bash _tools/scripts/build-desktop.sh "${{ needs.plan.outputs.version }}" --linux-only
+      - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --linux-only
       # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
       # AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open intentic:// at it.
       - run: bash _tools/scripts/verify-desktop-install.sh
@@ -273,39 +290,18 @@ jobs:
 
   # A real interactive Windows session installs the candidate, handles a cold and warm OS deep link, proves the
   # WebView loaded local content, and uninstalls while the tray process is still alive.
+  # By its exact versioned name, unlike ci.yml's glob, and with `expected-version` set: this job knows the
+  # version being released, so a candidate built at any other one fails here rather than being verified and
+  # published as this release. Tier 1 only — the deep tiers need a Docker daemon and a connected account, and
+  # a release must not wait on either.
   windows-verify:
     needs: [plan, windows-build]
     if: ${{ needs.windows-build.result == 'success' }}
-    runs-on: [self-hosted, windows-desktop]
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    env:
-      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: windows-release-candidate
-          path: windows-release-candidate
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      # Subtree only, for the reason ci.yml's desktop-verify-windows spells out: a whole-workspace install
-      # compiles native packages this machine has no toolchain for.
-      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
-      - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
-      # Reconcile before asserting, for the reason ci.yml's desktop-verify-windows spells out — and here it
-      # matters more: a release that stalls for want of a hand-cleaned runner stalls the publish behind it.
-      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-      - run: node _tools/desktop-smoke-windows/dist/main.js doctor
-      # By its exact versioned name, unlike ci.yml's glob: this job knows the version being released, so a
-      # candidate built at any other one fails here rather than being verified and published as this release.
-      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer "windows-release-candidate/Intentic-$($env:RELEASE_VERSION)-x64-setup.exe" --expected-version $env:RELEASE_VERSION
-      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-        if: always()
+    uses: ./.github/workflows/windows-smoke.yml
+    with:
+      artifact-name: windows-release-candidate
+      installer: Intentic-${{ needs.plan.outputs.version }}-x64-setup.exe
+      expected-version: ${{ needs.plan.outputs.version }}
 
   # semantic-release recomputes the plan as a safety check. release-prepare.sh refuses if it differs, then
   # ASSEMBLES rather than builds: every artifact arrives from the parallel jobs above, already verified —
@@ -348,28 +344,29 @@ jobs:
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:
+      # The other checkout that keeps its credential — see `plan` above. This is the job that actually pushes
+      # the tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      # Empty the staging directories BEFORE the downloads land in them, because nothing else empties them any
-      # more. `clean: false` keeps this runner's checkout between jobs (docs/ci-runner.md — it is what keeps
-      # node_modules warm), so these directories still hold whatever the last desktop job on this runner put
-      # there: ci.yml's desktop-verify builds a complete set of `0.0.0` Linux bundles on this same label, and
-      # they sit here until something deletes them. While this job BUILT the release set, build-desktop.sh's
-      # `rm -rf "$OUT"` was that something; assembling stages already-verified bytes into the directory
-      # instead, so it must not — and the leftovers became this job's problem.
+      # The staging directories are already empty when the downloads land, because prepare-workspace above
+      # removed them — `dist-bin` is deliberately outside its allowlist, and that is the rule this job used to
+      # carry as a hand-written `rm -rf` of five named paths.
       #
-      # They are not cosmetic. publish-github.sh attaches `dist-bin/*` by glob and the attestation signs the
+      # Why it matters here more than anywhere: `clean: false` keeps this runner's checkout between jobs
+      # (docs/ci-runner.md — it is what keeps node_modules warm), so those directories held whatever the last
+      # desktop job on this runner put there, and ci.yml's desktop-verify builds a complete set of `0.0.0`
+      # Linux bundles on this same label. While this job BUILT the release set, build-desktop.sh's
+      # `rm -rf "$OUT"` cleared them as a side effect; assembling stages already-verified bytes into the
+      # directory instead, so it must not — and the leftovers became this job's problem.
+      #
+      # They were never cosmetic. publish-github.sh attaches `dist-bin/*` by glob and the attestation signs the
       # same four directories, so a stale bundle would be published as part of this release, over the name of
       # a version it is not; and the assemble step refuses to guess between two artifacts of one kind, which
       # is what failed run 31697229807 (`2 'deb' artifacts … expected one`).
-      - name: Clear the staging directories
-        shell: bash
-        run: |
-          rm -rf windows-release-candidate \
-            _editor/desktop-app/dist-bin _sandbox/sync/dist-bin _computers/host/dist-bin _sandbox/ic/dist-bin
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: windows-release-candidate
@@ -397,7 +394,7 @@ jobs:
       # AFTER semantic-release for the obvious reason — the tag they check out does not exist until it has
       # run — and before the attestation below, which is about a different set of artifacts entirely.
       - name: Publish to npm and the editor marketplaces
-        run: bash _tools/scripts/dispatch-publish.sh "${{ needs.plan.outputs.version }}"
+        run: bash _tools/scripts/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
 
       # --- provenance -------------------------------------------------------------------------------------
       # Everything below binds what we just published to the commit it was built from, in a public
@@ -427,7 +424,9 @@ jobs:
       # says why a second copy is worth having; it never fails the job.
       - name: Attach the provenance to the Release
         shell: bash
-        run: bash _tools/scripts/attach-provenance.sh "${PLANNED_RELEASE_VERSION}" "${{ steps.attest-assets.outputs.bundle-path }}"
+        env:
+          BUNDLE_PATH: ${{ steps.attest-assets.outputs.bundle-path }}
+        run: bash _tools/scripts/attach-provenance.sh "${PLANNED_RELEASE_VERSION}" "${BUNDLE_PATH}"
 
       # The images are named by digest rather than by tag because a tag is a pointer and provenance about a
       # pointer proves nothing — `stable` moves on the next release. imagetools reads the digest the merge
@@ -436,7 +435,7 @@ jobs:
         id: digests
         shell: bash
         run: |
-          version="${{ needs.plan.outputs.version }}"
+          version="$PLANNED_RELEASE_VERSION"
           for image in sandbox dind-host; do
             digest="$(docker buildx imagetools inspect "ghcr.io/intentic/$image:$version" --format '{{json .Manifest.Digest}}' | tr -d '"')"
             echo "==> ghcr.io/intentic/$image@$digest"

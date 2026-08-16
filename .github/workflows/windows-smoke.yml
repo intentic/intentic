@@ -1,0 +1,178 @@
+# The Windows desktop smoke tiers, as ONE definition called three times.
+#
+# WHAT THIS REPLACES. ci.yml's `desktop-verify-windows`, release.yml's `windows-verify` and nightly.yml's
+# `desktop-windows` were three copies of the same eleven steps — checkout, download the artifact, pnpm,
+# node, a subtree-filtered install, a subtree-filtered build, reconcile, doctor, install, run, teardown —
+# differing in an artifact name, an installer path and how far up the tiers they go. Each copy carried its own
+# comments, and those comments pointed at each other ("for the reason ci.yml's desktop-verify-windows spells
+# out"), which is the shape of knowledge that only stays true while somebody keeps three files in step.
+#
+# A reusable workflow rather than a composite action, for the reason verify.yml gives: `runs-on` and the
+# `timeout-minutes` are job-level keys a composite action cannot set, and this is a whole job.
+#
+# THE ONE WINDOWS MACHINE. `[self-hosted, windows-desktop]` is a label the Linux fleet does not carry, and that
+# is load-bearing: `runs-on` is an AND over labels, so a Windows box carrying `intentic` would be handed
+# container jobs it cannot run. There is exactly one such machine and it runs one job at a time, so every call
+# to this workflow serializes against every other — see docs/ci-runner-windows.md, including why it must be
+# started from a logged-in session rather than installed as a service (a service session has no desktop, and
+# every assertion here reads a window).
+name: windows smoke
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: The uploaded artifact holding the installer (and, for a deep run, the ic binary).
+        required: true
+        type: string
+      installer:
+        description: >-
+          Path to the installer inside windows-artifacts/. A glob is fine — Resolve-Path takes either, errors
+          when nothing matches, and GitHub's PowerShell stops on error, so a missing installer fails at this
+          step instead of reaching the harness as an empty argument.
+        required: true
+        type: string
+      expected-version:
+        description: >-
+          Assert the installer carries this exact version. The release passes it: a candidate built at any
+          other version then fails here rather than being verified and published as this release. Empty on the
+          CI and nightly runs, which build at 0.0.0 and do not know a version to demand.
+        required: false
+        default: ""
+        type: string
+      deep:
+        description: >-
+          Run tiers 2 and 3 as well — the two that need a real Docker daemon and a connected account, which is
+          what puts them in the nightly rather than beside tier 1 on every main push. Turns on the registry
+          login, `doctor --needs-docker`, and `--keep-installed` (tiers 2 and 3 run the scripts the INSTALLER
+          put on the machine, so the install has to survive the tier that made it).
+        required: false
+        default: false
+        type: boolean
+      sandbox-image:
+        description: The sandbox image tier 2 stands up. Only read when `deep` is true.
+        required: false
+        default: ""
+        type: string
+      timeout-minutes:
+        required: false
+        default: 45
+        type: number
+
+permissions:
+  contents: read
+  # The registry login a deep run needs: the sandbox image is a private package and THIS machine's daemon
+  # pulls it, so the login has to be here rather than on the Linux side.
+  packages: read
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, windows-desktop]
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      # Every input reaches the steps through the environment rather than by `${{ }}` interpolation into a
+      # `run:` block — that substitution happens before the shell parses the line, so a value would become
+      # script rather than an argument to it. These inputs come from three in-repo callers and are not
+      # attacker-reachable, but this is the file a fourth caller gets copied from.
+      INSTALLER: windows-artifacts/${{ inputs.installer }}
+      EXPECTED_VERSION: ${{ inputs.expected-version }}
+      SANDBOX_E2E_IMAGE: ${{ inputs.sandbox-image }}
+      # Names a Docker volume on this machine holding an AI account connected ONCE by hand — the product's own
+      # answer to "several sandboxes, one set of credentials", and the one step CI cannot fake (connecting an
+      # account is a subscription OAuth flow through a browser). Absent, tier 3 stands down NAMING it and
+      # everything up to the turn still runs: a tier that cannot reach its credential has nothing to say, and
+      # must not fail.
+      INTENTIC_AGENT_AUTH_VOLUME: ${{ vars.WINDOWS_AGENT_AUTH_VOLUME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: windows-artifacts
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: inputs.deep
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No pnpm-setup composite here: that action is written for the Linux container jobs (it points the store
+      # and turbo cache at /ci-cache, which does not exist on this box). A plain install is what this needs.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      # Scoped to the smoke tier's own subtree rather than the whole workspace: this box carries Node, pnpm and
+      # Git and nothing else (docs/ci-runner-windows.md), while the workspace at large pulls native packages
+      # that fall back to compiling on Windows — @discordjs/opus publishes no prebuild for the Node ABI we pin,
+      # so a full install ends in node-gyp hunting for a Python and an MSVC toolchain this machine is
+      # deliberately without. Nothing the tier loads lives outside the subtree.
+      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
+      # The tier reads window titles through @intentic/desktop, so both packages are built rather than run from
+      # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
+      # arrangement, not something plain node applies.
+      - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
+
+      # RECONCILE, THEN ASSERT. The teardown at the end runs after every tier, but "after" is exactly what a
+      # cancelled job, a lost runner or a reboot mid-install does not get — and what it leaves behind is an
+      # installed app, which the doctor is right to refuse and which then needs a person. Reconciling first
+      # makes the machine's expected state something this job reaches on its own, so a replacement runner needs
+      # no hand-cleaning to take over. Teardown is idempotent and cannot fail, so a clean machine walks through
+      # it; anything the doctor still objects to afterwards is a state teardown could not reach, and worth a
+      # human. Nothing here can heal a runner registered as a SERVICE — that is the one machine property a job
+      # cannot fix from inside itself, and the doctor names it with its remedy.
+      #
+      # It matters most on the release, where a run stalled for want of a hand-cleaned runner stalls the
+      # publish behind it; and on a deep run, which creates a sandbox container and a network that a nightly
+      # cut short would otherwise leave on the machine.
+      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
+
+      # The machine, not the product, and separately: a runner in the wrong state fails every assertion below
+      # for reasons that have nothing to do with the build, and this is the step that says so.
+      - run: node _tools/desktop-smoke-windows/dist/main.js doctor
+        if: ${{ !inputs.deep }}
+      - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
+        if: inputs.deep
+
+      # TIER 1, the thing no other job in this repository can do: the shipped installer, executed on Windows.
+      # Everything else the pipeline knows about it comes from reading it as an archive. This installs it
+      # unattended on a clean machine, asserts what landed on disk, fires a real intentic:// link at a machine
+      # where the app has never run — the state a first-time user is in, and the half that was broken on Linux
+      # for months while every after-launch assertion passed — launches it, fires the link again at the running
+      # instance, and uninstalls it with the app still running (its tray is where it lives, so that is the
+      # ordinary state at uninstall time).
+      #
+      # THE ARGUMENTS ARE BUILT, NOT INTERPOLATED, and that is not style. PowerShell DROPS an empty argument
+      # when calling a native executable, so `--expected-version $env:EXPECTED_VERSION` with no version set
+      # would hand node a bare `--expected-version` and the flag parser would swallow whatever came next —
+      # `--keep-installed` on a deep run, which would then both fail the version assertion and silently
+      # uninstall the app tiers 2 and 3 are about to use. Appending each flag only when it has a value is the
+      # spelling that has no such case. (`$smokeArgs`, not `$args`: that one is a PowerShell automatic.)
+      - run: |
+          $smokeArgs = @("install", "--installer", (Resolve-Path $env:INSTALLER))
+          if ($env:EXPECTED_VERSION) { $smokeArgs += @("--expected-version", $env:EXPECTED_VERSION) }
+          if ($env:KEEP_INSTALLED -eq "true") { $smokeArgs += "--keep-installed" }
+          node _tools/desktop-smoke-windows/dist/main.js @smokeArgs
+        env:
+          KEEP_INSTALLED: ${{ inputs.deep }}
+
+      # TIER 2 — runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs
+      # no Cloudflare and no platform, and waits for the sandbox daemon to answer. Reading those scripts from
+      # the source tree would test a file no user ever runs. It pulls the sandbox image, which is why this is
+      # nightly.
+      - run: node _tools/desktop-smoke-windows/dist/main.js setup --sandbox-image $env:SANDBOX_E2E_IMAGE --ic-bin windows-artifacts/ic-windows-amd64.exe
+        if: inputs.deep
+      # TIER 3 — reaches that sandbox from the HOST, at the loopback address a browser on this machine derives,
+      # proves the gate is real, drives it with the credential a program is meant to hold, and runs one turn.
+      - run: node _tools/desktop-smoke-windows/dist/main.js agents
+        if: inputs.deep
+
+      # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
+      # reconcile above to notice — and because a deep run deliberately left the app installed.
+      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
+        if: always()

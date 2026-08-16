@@ -209,7 +209,7 @@ the pipeline.
 | --- | --- |
 | `[self-hosted, intentic]` (17) | ci: changes, preflight, migrations, ci-base, ci-desktop, e2e-hermetic, images, images-merge, images-platform · verify ×3 · release: plan, images-amd64 · nightly: e2e, images-public · action-publish, vscode-publish, rollback |
 | `[self-hosted, intentic, desktop]` (10) | ci: desktop-check, ic-check, desktop-verify, desktop-windows-build · release: windows-build, linux-build, publish · nightly: desktop-setup, desktop-windows-build, update-survival |
-| `[self-hosted, windows-desktop]` (3) | ci: desktop-verify-windows · release: windows-verify · nightly: desktop-windows |
+| `[self-hosted, windows-desktop]` (1 definition, 3 callers) | `windows-smoke.yml`, called by ci (`desktop-verify-windows`), release (`windows-verify`) and nightly (`desktop-windows`) |
 
 Regenerate rather than edit — this table went stale once already, and a stale one reads as a capacity claim:
 
@@ -281,6 +281,26 @@ container:
 
 Mounting the host socket is what makes a **dind service unnecessary**, along with its TLS certificate dance.
 The runner user must be in the `docker` group.
+
+### The token a checkout leaves behind
+
+`actions/checkout` writes the job's `GITHUB_TOKEN` into `.git/config` as an `http.extraheader` so that later
+`git` calls authenticate. On an **ephemeral** runner that is harmless — the whole machine goes away. Here it is
+not: the workspace persists by design (`clean: false`, which is what keeps `node_modules` warm), and six runner
+processes share one host, so the header sits in the tree while the next job runs.
+
+**So every checkout sets `persist-credentials: false`, with exactly two exceptions.** `release.yml`'s `plan`
+and `publish` run `semantic-release`, which reaches the git remote; both keep the default and say so at the
+step. semantic-release builds its own authenticated URL from `GITHUB_TOKEN` and probably does not need the
+persisted header, but "probably" is not worth finding out by breaking a release — that pair is the one place
+where the token is deliberately left in place.
+
+Nothing else in the pipeline pushes: `publish-action.sh` clones with its own PAT, and `publish-github.sh`,
+`ship-stable.sh` and `rollback-stable.sh` all speak to the API with `GITHUB_TOKEN` from the environment rather
+than through git.
+
+`zizmor` reports the general case as `artipacked`; the two exceptions above are why it runs at
+`--min-confidence high` rather than gating on that audit (`_tools/scripts/lint-workflows.sh`).
 
 ### The two host jobs, and the ownership hazard they carry
 

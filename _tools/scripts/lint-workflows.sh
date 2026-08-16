@@ -86,11 +86,14 @@ echo "actionlint:"
 echo "  clean"
 
 echo "zizmor:"
-# --min-confidence high: everything below that tier is a shape worth knowing about rather than a fact, and a
-# gate that fails on maybes is a gate people learn to re-run. The Low-confidence backlog (34 `artipacked`
-# findings — checkouts that persist the token into a workspace six jobs share) is real and is tracked in
-# docs/ci-audit.md; it needs per-job judgement about which checkouts the release actually pushes from, which
-# is not something to guess at inside a lint step.
+# AT FULL SENSITIVITY — no confidence floor, which is only possible because the findings were fixed rather
+# than filtered. This started at 186 findings and ran at `--min-confidence high` to keep the gate meaningful
+# while the Low-confidence backlog (34 `artipacked` — checkouts persisting the token into a workspace six jobs
+# share) was still open. That backlog is now 2, both named by line in .github/zizmor.yml with the reason.
+#
+# The floor is gone deliberately: at `high`, adding a checkout without `persist-credentials: false` would have
+# passed silently and the cleanup would have eroded one job at a time. Running with no floor is what makes the
+# fix stick.
 "$CACHE_ROOT/zizmor-$ZIZMOR_VERSION/zizmor" \
-    --no-progress --no-online-audits --min-confidence high \
+    --no-progress --no-online-audits \
     --config .github/zizmor.yml .github/workflows/ .github/actions/

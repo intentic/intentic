@@ -65,6 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
       # The sandbox image is a private package and the host daemon behind the mounted socket holds no registry
       # credential — pulls authenticate client-side, so this login is what testcontainers presents.
@@ -105,7 +106,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       # dind-host and the sandbox image are private packages; the docker CLI sends this login to the host
       # daemon with each pull.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -140,7 +143,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/build-desktop.sh 0.0.0 --windows-only
       - run: bash _tools/scripts/build-ic.sh windows-x64
@@ -148,7 +153,7 @@ jobs:
       # the paths' common ancestor, and the tiers below ask for these two by name.
       - run: |
           . _tools/scripts/desktop-artifacts.sh
-          rm -rf windows-artifacts && mkdir -p windows-artifacts
+          mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -172,50 +177,19 @@ jobs:
   # by hand — the product's own answer to "several sandboxes, one set of credentials". Absent it, the tier
   # stands down NAMING it and everything up to the turn still runs, which is the same contract every other
   # gated tier in this file has: a tier that cannot reach its credential has nothing to say, and must not fail.
+  # The DEEP call: tiers 1, 2 and 3. Two and three are the ones that need a real Docker daemon and a connected
+  # account, which is what puts them here rather than in ci.yml beside tier 1. The 120-minute budget is for
+  # them — tier 2 pulls a full sandbox image before it can wait on the daemon.
   desktop-windows:
     needs: [desktop-windows-build]
     if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' }}
-    runs-on: [self-hosted, windows-desktop]
-    timeout-minutes: 120
-    env:
-      SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
-      INTENTIC_AGENT_AUTH_VOLUME: ${{ vars.WINDOWS_AGENT_AUTH_VOLUME }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: windows-desktop-artifacts-nightly
-          path: windows-artifacts
-      # The sandbox image is a private package, and the setup pulls it with THIS machine's daemon — so the
-      # login has to be here, not on the Linux side.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      # Subtree only, for the reason ci.yml's desktop-verify-windows spells out: a whole-workspace install
-      # compiles native packages this machine has no toolchain for.
-      - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
-      - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
-      # Reconcile before asserting, for the reason ci.yml's desktop-verify-windows spells out. More is at stake
-      # here than an install: these tiers create a sandbox container and a network, and a nightly cut short
-      # between the install and the teardown below leaves all of it on the machine.
-      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-      - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
-      # --keep-installed: tiers 2 and 3 run the scripts the INSTALLER put on the machine, so the install has to
-      # survive the tier that made it. Reading them from the source tree would test a file no user ever runs.
-      - run: node _tools/desktop-smoke-windows/dist/main.js install --installer (Resolve-Path windows-artifacts/Intentic-*-x64-setup.exe) --keep-installed
-      - run: node _tools/desktop-smoke-windows/dist/main.js setup --sandbox-image $env:SANDBOX_E2E_IMAGE --ic-bin windows-artifacts/ic-windows-amd64.exe
-      - run: node _tools/desktop-smoke-windows/dist/main.js agents
-      # Always: the sandbox this created holds a container and a network, and the install it ran on is
-      # deliberately left in place by --keep-installed.
-      - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-        if: always()
+    uses: ./.github/workflows/windows-smoke.yml
+    with:
+      artifact-name: windows-desktop-artifacts-nightly
+      installer: Intentic-*-x64-setup.exe
+      deep: true
+      sandbox-image: ghcr.io/intentic/sandbox:latest
+      timeout-minutes: 120
 
   # The published images are readable WITHOUT a credential — the one thing no other job here can see. Every job
   # in this file and in ci.yml opens with a `docker login ghcr.io`, including desktop-setup above, which runs
@@ -239,6 +213,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
       - run: bash _tools/scripts/verify-images-public.sh
 
@@ -267,7 +242,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           clean: false
+      - uses: ./.github/actions/prepare-workspace
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io

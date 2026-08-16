@@ -1,10 +1,11 @@
 # zizmor's view of this repository's deliberate exceptions.
 #
-# THIS FILE IS THE GATE'S CREDIBILITY. zizmor at `--min-confidence high` reports 30 findings against these
-# workflows and every one of them is a decision somebody made on purpose. Left unsuppressed the lint is noise,
-# and a noisy lint is one people stop reading and then delete — which is how the checks that would have caught
-# the three unfireable publish triggers were never there in the first place. Suppressed WITHOUT a reason it is
-# worse: a silent allowlist that grows.
+# THIS FILE IS THE GATE'S CREDIBILITY. zizmor started at 186 findings here. Most were fixed — every
+# High-confidence template injection, and 31 of the 33 checkouts that persisted their token — which is what
+# lets lint-workflows.sh run it with NO confidence floor at all. What is left below is four decisions somebody
+# made on purpose. Left unsuppressed they are noise, and a noisy lint is one people stop reading and then
+# delete — which is how the checks that would have caught the three unfireable publish triggers were never
+# there in the first place. Suppressed WITHOUT a reason it is worse: a silent allowlist that grows.
 #
 # So each entry below names the trade and says what would have to change for it to go away. A new entry that
 # cannot write those two things is a finding to fix, not to add here.
@@ -60,3 +61,22 @@ rules:
     adhoc-packages:
         ignore:
             - npm-publish.yml
+
+    # The two checkouts that keep their credential, named by line so a THIRD one fails the lint.
+    #
+    # Every other checkout in this repository now sets `persist-credentials: false`: the token checkout writes
+    # into .git/config outlives the job on a workspace six runner processes share, and nothing else here
+    # pushes (docs/ci-runner.md, "The token a checkout leaves behind"). These two run semantic-release, which
+    # reaches the git remote — it builds its own authenticated URL from GITHUB_TOKEN and probably does not need
+    # the persisted header, but "probably" is not worth finding out by breaking a release.
+    #
+    # LINE-SCOPED ON PURPOSE, not file-scoped: a file-wide ignore would silently cover the next checkout added
+    # to release.yml, which is exactly the erosion that made this a 34-finding backlog in the first place. The
+    # line numbers going stale is the point — a moved exception has to be re-read and re-approved.
+    #
+    # DELETE THIS SUPPRESSION IF: someone confirms against a real release that semantic-release pushes fine
+    # without the persisted header. Then both jobs join the other thirty-one and this block goes.
+    artipacked:
+        ignore:
+            - release.yml:61
+            - release.yml:349
