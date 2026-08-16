@@ -19,5 +19,6 @@ export {
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    freshness,
     timeAgo,
 } from "@intentic/ui/format";

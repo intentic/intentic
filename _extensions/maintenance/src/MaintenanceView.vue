@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel } from "@intentic/sandbox-contract/chores";
-import { Button, Notice, noticeOf, PageAction, RowGroup, SegmentedControl, SplitView, type AgentRunChoice } from "@intentic/extension-ui";
+import { CHORE_KINDS, CHORES, type ChoreVerdict, repoLabel, repoName } from "@intentic/sandbox-contract/chores";
+import {
+    Button,
+    Notice,
+    noticeOf,
+    PageAction,
+    RepoRail,
+    type RepoRailAll,
+    type RepoRailGroup,
+    RowGroup,
+    SegmentedControl,
+    SplitView,
+    type AgentRunChoice,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
 import ChoreRow from "./ChoreRow.vue";
 import { host } from "./host";
 import MaintenanceSkeleton from "./MaintenanceSkeleton.vue";
-import RepoRail from "./RepoRail.vue";
 import RepoScope from "./RepoScope.vue";
 import { conversationIdOf } from "./runs";
 import { useChores } from "./useChores";
@@ -76,16 +87,45 @@ const rowKey = (verdict: ChoreVerdict): string => `${verdict.repo}|${verdict.cho
 // a snooze that outlives the reason for it is indistinguishable from the chore being wrong.
 const SNOOZE_MS = 30 * 86_400_000;
 
-// What the rail lists. The count is what is DUE — thirteen chores is the same number everywhere and says nothing —
-// and `carrying` rides along as the row's colour, since one live advisory and one dependency drift are not the
-// same morning's work (RepoRail).
-const repos = computed(() =>
+/* WHAT THE RAIL LISTS. The count is what is DUE, not how many chores exist: thirteen is the same number in every
+ * repository and says nothing. Whether any of them is a risk being CARRIED is the row's COLOUR rather than a
+ * second number — one live advisory and one dependency drift are not the same morning's work, but two numbers in
+ * a 16rem column read as "1 5" with nothing saying which is which, and the reader who needs the distinction is
+ * scanning, not hovering. Tint is the encoding the rows themselves already use for the same fact (ChoreRow's
+ * badge is warning for `carrying` and info for everything else), so the rail and the list say it the same way.
+ * The tooltip is where the split is spelled out, because that is a question you ask of one row at a time. */
+const railTone = (carrying: number): string => (carrying > 0 ? `text-warning` : ``);
+const railNote = (due: number, carrying: number): string =>
+    carrying === 0 ? `${due} due` : `${due} due · ${carrying} a risk being carried right now`;
+
+const counts = computed(() =>
     byRepo.value.map(({ repo: at, verdicts }) => ({
         repo: at,
         due: verdicts.filter((verdict) => verdict.state === `due`).length,
         carrying: verdicts.filter((verdict) => verdict.state === `due` && verdict.severity === `warning`).length,
     })),
 );
+
+// One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
+const railGroups = computed<RepoRailGroup[]>(() => [
+    {
+        key: `repos`,
+        rows: counts.value.map((entry) => ({
+            value: entry.repo,
+            label: repoName(entry.repo),
+            icon: `folder`,
+            meta: String(entry.due),
+            tone: railTone(entry.carrying),
+            tooltip: railNote(entry.due, entry.carrying),
+        })),
+    },
+]);
+
+const railAll = computed<RepoRailAll>(() => {
+    const due = counts.value.reduce((sum, entry) => sum + entry.due, 0);
+    const carrying = counts.value.reduce((sum, entry) => sum + entry.carrying, 0);
+    return { icon: `wrench`, meta: String(due), tone: railTone(carrying), tooltip: railNote(due, carrying) };
+});
 
 /* The rail exists when the view is the thing choosing the scope, and not when the host already fixed it — which is
  * the whole difference between the two surfaces. Deliberately NOT "when there is more than one repository": that
@@ -268,7 +308,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         </template>
 
         <template v-if="railed" #rail>
-            <RepoRail v-model="repo" :repos="repos" />
+            <RepoRail v-model="repo" :groups="railGroups" :all="railAll" memory="maintenance.repo" />
         </template>
 
         <template #detail>

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { Icon, type NavGroup, NavRail, Row, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { freshness, Icon, type NavGroup, NavRail, Row, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { SearchHit } from "./contract";
 import { folderOf, toneOfType } from "./knowledgeNote";
-import { freshness } from "./noteTime";
 
 /* WHICH NOTE — the search's answers, as the thing you pick from.
  *

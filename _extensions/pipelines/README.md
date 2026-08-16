@@ -13,7 +13,8 @@ CI as it actually went: runs, their jobs, and which failures are a streak rather
 
 - [src/usePipelines.ts](src/usePipelines.ts) — the run list, from the connected provider.
 - [src/repoStandings.ts](src/repoStandings.ts) — how loudly each repository is asking, which is the board's order.
-- [src/RepoRail.vue](src/RepoRail.vue) — the scope column: all repositories, or one.
+- [src/PipelinesView.vue](src/PipelinesView.vue) — the board, and the rows it hands the kit's `<RepoRail>` for the
+  scope column: all repositories, or one.
 - [src/pipelineDag.ts](src/pipelineDag.ts) — jobs and their dependencies as a drawable graph.
 - [src/ciStreaks.ts](src/ciStreaks.ts) — the distinction the badge rests on: a flake versus a broken main.
 - [src/failureHistory.ts](src/failureHistory.ts) — what has failed before, so a repeat reads as one.

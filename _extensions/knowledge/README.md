@@ -51,7 +51,9 @@ express a typed graph, so this reads the one it was already expressing.
 - [src/contract.ts](src/contract.ts) — the extension's OWN wire contract, imported by both halves so their wire
   cannot drift.
 - [src/KnowledgeView.vue](src/KnowledgeView.vue) — the section: search, the list, the note, the health strip.
-- [src/NotePane.vue](src/NotePane.vue) — one note: read, map, source, and what it is connected to.
+- [src/KnowledgePane.vue](src/KnowledgePane.vue) — one note: read, map, source, and what it is connected to. The
+  frame around it — the action cluster, the delete confirmation, the read-and-write surface — is the kit's
+  `<NoteEditor>`, shared with Memory.
 - [plugin/skills/knowledge/SKILL.md](plugin/skills/knowledge/SKILL.md) — when the agent reads the knowledge base and
   when it writes to it.
 

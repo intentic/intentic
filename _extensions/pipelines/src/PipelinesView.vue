@@ -8,6 +8,10 @@ import {
     noticeOf,
     PageAction,
     ProgressRing,
+    RepoRail,
+    type RepoRailAll,
+    type RepoRailGroup,
+    type RepoRailRow,
     RowGroup,
     SplitView,
     type AgentRunChoice,
@@ -19,8 +23,7 @@ import { openFailures, supersededBy } from "./ciStreaks";
 import { useFailureHistory } from "./useFailureHistory";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
-import RepoRail from "./RepoRail.vue";
-import { repoStandings } from "./repoStandings";
+import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
 
@@ -62,6 +65,46 @@ const scopeRepo = computed<string | undefined>({
  * question you just asked, and it is where the "No runs yet" sentence now lives. */
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
+
+/* WHAT THE RAIL LISTS. ONE NUMBER PER ROW, and it is BROKEN BRANCHES — the same edge-not-level rule as the rail
+ * badge (ciStreaks), so a repository three runs deep in one breakage says "1" and not "3". A repository that is
+ * fine says 0, and that zero is worth printing: a board you cannot use to confirm there is nothing wrong is only
+ * half a board. But a number is only worth printing where a zero MEANS something — in the silent group nothing
+ * has ever run, so "0 branches failing" would be a claim about a repository nobody has heard from.
+ *
+ * The second fact a row could carry — a webhook that never registered, so the numbers beside it may be stale — is
+ * the number's COLOUR rather than a second number, and `standingNote` is where the whole state is spelled out.
+ *
+ * The vendor glyph rather than a folder: which host a repository is on decides where its runs come from and where
+ * "open pipelines" lands, and it is free here — the sections below already carry it.
+ *
+ * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list: an
+ * empty repository and a healthy one both show nothing, and the heading is what tells them apart. Only that group
+ * is named — a heading over everything else would name a distinction nobody is making. */
+const railRow = (standing: RepoStanding): RepoRailRow => ({
+    value: standing.repo.repo,
+    label: standing.repo.repo,
+    icon: standing.repo.host,
+    meta: standing.silent ? `` : String(standing.failing),
+    tone: standing.failing > 0 ? `text-danger` : standing.repo.hookWarning === undefined ? `` : `text-warning`,
+    tooltip: standingNote(standing),
+    mono: true,
+});
+
+const railGroups = computed<RepoRailGroup[]>(() => [
+    { key: `reporting`, rows: standings.value.filter((standing) => !standing.silent).map(railRow) },
+    { key: `silent`, label: `No runs yet`, rows: standings.value.filter((standing) => standing.silent).map(railRow) },
+]);
+
+const railAll = computed<RepoRailAll>(() => {
+    const failing = standings.value.reduce((sum, standing) => sum + standing.failing, 0);
+    return {
+        icon: `bolt`,
+        meta: String(failing),
+        tone: failing > 0 ? `text-danger` : ``,
+        tooltip: failing === 0 ? `Nothing failing anywhere` : `${failing} branches failing across the workspace`,
+    };
+});
 
 // Which jobs keep breaking — free of extra requests, since the rows already load these same job lists.
 const { recurring } = useFailureHistory(scopedRuns);
@@ -205,7 +248,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
              only thing on screen — and unlike Maintenance, whose report always carries the workspace root
              alongside, a workspace with exactly one CI-mapped repo is an ordinary case here. -->
         <template v-if="repos.length > 1" #rail>
-            <RepoRail v-model="scopeRepo" :standings="standings" />
+            <RepoRail v-model="scopeRepo" :groups="railGroups" :all="railAll" memory="pipelines.repo" />
         </template>
 
         <template #detail>

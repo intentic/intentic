@@ -1,26 +1,27 @@
 <script setup lang="ts">
 import {
-    Button,
-    ui,
-    CodeField,
-    CopyButton,
+    freshness,
     formatBytes,
     formatTimestamp,
     Icon,
     InfoTable,
     Markdown,
-    ScrollFrame,
+    NoteEditor,
     SegmentedControl,
     StatusBadge,
     type StatusVariant,
+    useNoteDraft,
 } from "@intentic/extension-ui";
-import { computed, ref, toRef, watch } from "vue";
+import { computed, ref, toRef } from "vue";
 import { linkifyNoteRefs, toneOfType } from "./knowledgeNote";
 import NoteGraph from "./NoteGraph.vue";
-import { freshness } from "./noteTime";
 import { useNote, useNoteMutations } from "./useKnowledge";
 
-/* ONE NOTE — what it is, what it says, and what it is connected to.
+/* ONE KNOWLEDGE NOTE — what it is, what it says, and what it is connected to.
+ *
+ * The FRAME is <NoteEditor>'s: the action cluster, the delete confirmation, the error strip, and the one
+ * surface the markdown is both read and written on. What is left here is what makes this a KNOWLEDGE note
+ * rather than any other — the three views, the header's facts, and the connections bar.
  *
  * THREE VIEWS OF THE SAME THING, because a knowledge note genuinely has three: the prose you read, the map of
  * what it connects to, and the file underneath. They are one control rather than three panels stacked down the
@@ -31,11 +32,7 @@ import { useNote, useNoteMutations } from "./useKnowledge";
  * THE CONNECTIONS ARE ALWAYS ON SCREEN, under whichever view is open — they are the reason this is a knowledge
  * base rather than a folder, and putting them behind the map tab would mean the answer to "what else is about
  * this" required knowing to go and look. Each one is a link, with the relationship named, so following a chain
- * is a click per step.
- *
- * Source and edit are ONE surface (<CodeField>, readonly or not) — the memory extension's rule and its reason:
- * a note that changed typeface and colour the moment you picked up the pen was two implementations of the same
- * pane, and they drifted. */
+ * is a click per step. */
 
 const { path } = defineProps<{ path: string }>();
 const emit = defineEmits<{ open: [path: string]; filter: [path: string]; forgotten: [] }>();
@@ -50,46 +47,36 @@ const { save, remove } = useNoteMutations();
 
 const raw = computed(() => note.value?.content ?? ``);
 const view = ref<`read` | `map` | `source`>(`read`);
-const confirming = ref(false);
-// Leaving the note drops the confirmation but never the draft — one is a question that expired, the other is
-// the reader's unsaved words.
-watch(
-    () => path,
-    () => {
-        confirming.value = false;
-        view.value = `read`;
-    },
-);
 
-const source = computed<string>({
-    get: () => draft.value ?? raw.value,
-    set: (next) => {
-        draft.value = next;
-    },
+// Leaving the note puts the view back but never the draft — one is where you happened to be looking, the other
+// is the reader's unsaved words. The confirmation and the last error go with it, inside the composable.
+const {
+    source,
+    editing,
+    confirming,
+    error: writeError,
+    saving,
+    removing,
+    startEdit,
+    cancelEdit,
+    saveDraft,
+    forget,
+} = useNoteDraft({
+    draft,
+    raw: () => raw.value,
+    save: (content) => save.mutateAsync({ path, content }),
+    remove: () => remove.mutateAsync({ path }),
+    note: () => path,
+    onLeave: () => (view.value = `read`),
+    onRemoved: () => emit(`forgotten`),
 });
 
-const startEdit = (): void => {
-    draft.value = raw.value;
+// Editing lands on the SOURCE, because the source is what is being edited — and it is where Cancel leaves you,
+// looking at the file you just decided not to change.
+const edit = (): void => {
+    startEdit();
     view.value = `source`;
 };
-const cancelEdit = (): void => {
-    draft.value = undefined;
-};
-const saveDraft = async (): Promise<void> => {
-    if (draft.value === undefined) {
-        return;
-    }
-    await save.mutateAsync({ path, content: draft.value });
-    draft.value = undefined;
-};
-const forget = async (): Promise<void> => {
-    await remove.mutateAsync({ path });
-    draft.value = undefined;
-    confirming.value = false;
-    emit(`forgotten`);
-};
-
-const mutationError = computed(() => save.error.value?.message ?? remove.error.value?.message);
 
 // The header's plain facts, as a label→value block. `InfoTable` rather than a hand-rolled grid because keeping
 // the value column aligned across rows is the whole of it, and that is where a hand-roll drifts.
@@ -111,10 +98,25 @@ const onProseClick = (event: MouseEvent): void => {
 
 <template>
     <!-- The pane is the note; the bar under it is what the note is CONNECTED to. Two elements rather than one,
-         because <ScrollFrame>'s body scrolls and the connections must not scroll away — they are the reason this is a
-         knowledge base rather than a folder, and on a long note they would otherwise be a page down. -->
+         because <NoteEditor>'s body scrolls and the connections must not scroll away — they are the reason this is
+         a knowledge base rather than a folder, and on a long note they would otherwise be a page down. -->
     <div class="flex min-h-0 flex-1 flex-col gap-2">
-        <ScrollFrame grow :title="note?.summary.title ?? `…`">
+        <NoteEditor
+            v-model:source="source"
+            v-model:confirming="confirming"
+            :title="note?.summary.title ?? `…`"
+            :raw="raw"
+            :editing="editing"
+            :show-source="view === `source`"
+            :loading="isLoading"
+            :saving="saving"
+            :removing="removing"
+            :error="noteError ?? writeError"
+            @edit="edit"
+            @cancel="cancelEdit"
+            @save="saveDraft"
+            @remove="forget"
+        >
             <template #lead>
                 <Icon name="file" class="shrink-0 text-xs text-subtle" />
             </template>
@@ -129,7 +131,6 @@ const onProseClick = (event: MouseEvent): void => {
                     size="xs"
                     :label="note.summary.type"
                 />
-                <StatusBadge v-if="draft !== undefined" variant="warning" size="xs" label="Unsaved" />
             </template>
             <template #description>
                 <span v-if="note?.summary.aliases.length">Also called {{ note.summary.aliases.join(`, `) }}.</span>
@@ -148,40 +149,13 @@ const onProseClick = (event: MouseEvent): void => {
                 </template>
             </template>
 
-            <template #actions>
-                <template v-if="draft !== undefined">
-                    <Button label="Cancel" size="small" severity="secondary" @click="cancelEdit" />
-                    <Button label="Save" size="small" :loading="save.isPending.value" @click="saveDraft">
-                        <template #icon><Icon name="save" /></template>
-                    </Button>
-                </template>
-                <template v-else>
-                    <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                    <button type="button" :class="ui.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="startEdit">
-                        <Icon name="pencil" />
-                    </button>
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
-                        aria-label="Delete this note"
-                        v-tooltip.top="'Delete'"
-                        @click="confirming = true"
-                    >
-                        <Icon name="trash" />
-                    </button>
-                </template>
-            </template>
-
             <!-- WHICH VIEW rides a row of its own rather than the header's, and that is width, not taste: a
                  header's title, badges and actions share ONE shrinking row, and this control is ~140px of it —
                  beside three icon buttons in a pane this narrow, the note's own NAME truncated to a single
                  letter. It also belongs here on the merits: the switch is about the body underneath it, not
-                 about the note the header names.
-
-                 Destructive and irreversible, so the delete confirmation rides this slot too, where a long note
-                 cannot scroll the question away from the answer. -->
+                 about the note the header names. -->
             <template #strips>
-                <div v-if="draft === undefined" class="flex items-center gap-2 border-b border-line px-4 py-1.5">
+                <div class="flex items-center gap-2 border-b border-line px-4 py-1.5">
                     <SegmentedControl
                         v-model="view"
                         size="xs"
@@ -192,55 +166,30 @@ const onProseClick = (event: MouseEvent): void => {
                         ]"
                     />
                 </div>
-                <div v-if="confirming" class="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2.5">
-                    <span class="text-xs text-danger">
-                        Delete “{{ note?.summary.title }}”? Anything that links to it becomes a link to a note nobody has written.
-                    </span>
-                    <div class="flex shrink-0 items-center gap-1.5">
-                        <Button label="Keep it" size="small" severity="secondary" @click="confirming = false" />
-                        <Button label="Delete it" size="small" severity="danger" :loading="remove.isPending.value" @click="forget" />
-                    </div>
-                </div>
-                <div v-if="noteError || mutationError" class="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">
-                    {{ noteError ?? mutationError }}
-                </div>
             </template>
 
-            <p v-if="isLoading && draft === undefined" class="px-4 py-6 text-xs text-subtle">Loading…</p>
+            <template #confirm> Delete “{{ note?.summary.title }}”? Anything that links to it becomes a link to a note nobody has written. </template>
+
+            <NoteGraph v-if="view === `map`" :path="path" @open="emit(`open`, $event)" />
 
             <template v-else>
-                <NoteGraph v-if="view === `map` && draft === undefined" :path="path" @open="emit(`open`, $event)" />
-
-                <CodeField
-                    v-else-if="view === `source` || draft !== undefined"
-                    v-model="source"
-                    lang="markdown"
-                    :readonly="draft === undefined"
-                    aria-label="Note source"
-                    @keydown.ctrl.s.prevent="saveDraft"
-                    @keydown.meta.s.prevent="saveDraft"
-                    @keydown.esc="cancelEdit"
+                <!-- The header's plain facts, above the prose: these are what somebody came to look up.
+                     Padded by a wrapper rather than by the table, because horizontal padding on a <table>
+                     does not indent its cells — the labels sat flush against the panel's edge. -->
+                <div v-if="facts.length > 0" class="px-5 pt-4">
+                    <InfoTable :rows="facts" />
+                </div>
+                <Markdown
+                    v-if="(note?.body ?? ``).trim() !== ``"
+                    :source="note?.body ?? ``"
+                    :decorate="decorate"
+                    class="px-5 py-4"
+                    style="--prose-measure: 74ch"
+                    @click="onProseClick"
                 />
-
-                <template v-else>
-                    <!-- The header's plain facts, above the prose: these are what somebody came to look up.
-                         Padded by a wrapper rather than by the table, because horizontal padding on a <table>
-                         does not indent its cells — the labels sat flush against the panel's edge. -->
-                    <div v-if="facts.length > 0" class="px-5 pt-4">
-                        <InfoTable :rows="facts" />
-                    </div>
-                    <Markdown
-                        v-if="(note?.body ?? ``).trim() !== ``"
-                        :source="note?.body ?? ``"
-                        :decorate="decorate"
-                        class="px-5 py-4"
-                        style="--prose-measure: 74ch"
-                        @click="onProseClick"
-                    />
-                    <p v-else class="px-5 py-4 text-xs text-subtle">No text yet — this note is its header.</p>
-                </template>
+                <p v-else class="px-5 py-4 text-xs text-subtle">No text yet — this note is its header.</p>
             </template>
-        </ScrollFrame>
+        </NoteEditor>
 
         <!-- WHAT THIS IS CONNECTED TO, under every view and outside the scroller. Each entry is a step you can
          take, and the relationship's name is what tells you whether taking it will answer your question. -->

@@ -20,7 +20,8 @@ What the agent has chosen to remember, as notes you can read and edit.
 - [src/useMemory.ts](src/useMemory.ts) — reading and writing the note set, via the extension's own namespace
   (no `permissions.sandbox` entry: an extension's own backend needs no grant).
 - [src/MemoryView.vue](src/MemoryView.vue) — the section: which note is open, and the drafts held across switches.
-- [src/NotePane.vue](src/NotePane.vue) — one note, open.
+- [src/MemoryPane.vue](src/MemoryPane.vue) — one note, open. The frame around it is the kit's `<NoteEditor>`,
+  shared with Knowledge; what is here is the frontmatter, the index's standing, and the sibling references.
 
 ## How it fits
 

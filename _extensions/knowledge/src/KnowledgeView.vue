@@ -15,7 +15,7 @@ import {
 import { computed, ref, watch } from "vue";
 import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
 import NoteIndex from "./NoteIndex.vue";
-import NotePane from "./NotePane.vue";
+import KnowledgePane from "./KnowledgePane.vue";
 
 /* THE KNOWLEDGE SECTION — the owner's knowledge base: notes about the world this work happens in, and the graph
  * those notes already form.
@@ -255,7 +255,7 @@ const startKnowledge = async (): Promise<void> => {
                 <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
             </div>
 
-            <NotePane
+            <KnowledgePane
                 v-if="selected"
                 :key="selected"
                 v-model:draft="draft"

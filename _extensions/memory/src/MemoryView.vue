@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "./contract";
-import { ui, formatBytes, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions } from "@intentic/extension-ui";
+import { ui, formatBytes, freshness, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
-import { freshness } from "./noteTime";
-import NotePane from "./NotePane.vue";
+import MemoryPane from "./MemoryPane.vue";
 import { useMemory } from "./useMemory";
 
 /* The memory extension: what the agent carries between sessions — the MEMORY.md index it loads at the start of
@@ -168,7 +167,7 @@ const openSibling = (name: string): void => {
 
             <!-- Keyed by note so a switch resets its scroll and view mode, but the draft above it is keyed by
                  note too and so survives the remount. -->
-            <NotePane
+            <MemoryPane
                 v-else-if="note"
                 :key="selected"
                 v-model:draft="draft"

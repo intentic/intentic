@@ -131,3 +131,16 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
     }
     return days ? `${Math.floor(hours / 24)}d ago` : formatDateTime(at);
 };
+
+/* Freshness at the width a ROW has for it: `timeAgo`'s phrasing while it stays relative, a bare calendar day
+ * once it would not.
+ *
+ * `timeAgo` past a day falls back to the absolute local timestamp ("Jul 27, 2026, 21:06:40") — three times the
+ * width of a list row's whole meta line, and two wrapped lines on a phone. For anything MEASURED IN DAYS AND
+ * WEEKS rather than in minutes — a knowledge note, a memory note — that fallback is the common case here and
+ * not the rare one, so it would set the width of every row it appeared in.
+ *
+ * Every caller pairs this with the exact moment in a `title`, so nothing is lost; the age simply stops setting
+ * the width of the row it sits in. In the kit rather than beside either reader because the two extensions that
+ * wanted it had each written this line out, byte for byte, under a comment giving the same reason. */
+export const freshness = (at: number): string => (Date.now() - at < 86_400_000 ? timeAgo(at) : formatDate(at));

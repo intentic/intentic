@@ -73,6 +73,11 @@ export { default as Modal } from "./components/Modal.vue";
 // the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
 export { default as NavRail } from "./components/NavRail.vue";
 export { type NavGroup } from "./components/navRail.js";
+// One markdown note, read and curated: the action cluster, the delete confirmation, the error strip, and the
+// one surface a file is both read and written on. Two extensions had each built the frame around <ScrollFrame>;
+// `useNoteDraft` is the lifecycle underneath it, which they had each built too.
+export { default as NoteEditor } from "./components/NoteEditor.vue";
+export { type NoteDraft, type NoteDraftOptions, useNoteDraft } from "./composables/useNoteDraft.js";
 // How the app says something went wrong: a sentence it wrote, the raw cause underneath, at most one way out.
 // The stack is what a view with more than one thing wrong renders — it ranks by severity and collapses repeats,
 // so the reading order stops being an accident of where the boxes sit in the template.
@@ -101,6 +106,10 @@ export { default as ProgressRing } from "./components/ProgressRing.vue";
 // has been typed into it.
 export { default as ProseField } from "./components/ProseField.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
+// "Which repository", as the narrowing column two workspace-wide boards had each written: the pinned "all" row,
+// one number per repository, and the same rail folded into a <Picker> once the split is too narrow for it.
+export { default as RepoRail } from "./components/RepoRail.vue";
+export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/repoRail.js";
 // The drag strip between two panes. Four screens had written it by hand before this existed, and the fifth
 // caller was an extension, which could not have reached any of the four.
 export { default as ResizeSeam } from "./components/ResizeSeam.vue";
@@ -141,6 +150,7 @@ export {
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    freshness,
     initialsOf,
     timeAgo,
 } from "./lib/format.js";

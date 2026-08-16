@@ -87,6 +87,18 @@ export {
     Modal,
     type NavGroup,
     NavRail,
+    /* <NoteEditor> and `useNoteDraft` ship because TWO extensions are a pane that reads a markdown file, lets
+     * somebody correct it and lets them delete it — knowledge and memory — and they had built the same thing
+     * twice: the same Copy/Edit/Delete cluster, the same Cancel/Save pair, the same in-place confirmation, the
+     * same draft-or-file binding, the same read-and-write-on-one-surface rule. They had already drifted in the
+     * ways a second copy does: one cleared its confirmation when a write failed and the other did not, and
+     * NEITHER caught a failing write, so the error strip filled in from the mutation while the click handler's
+     * promise rejected into the console. The component is the chrome and the composable is the lifecycle,
+     * separately, because what a note LOOKS like past the frame is exactly where the two panes differ. */
+    NoteEditor,
+    type NoteDraft,
+    type NoteDraftOptions,
+    useNoteDraft,
     /* <NoticeStack> and its model ship beside <ConfirmDialog> for the same reason <InfoDialog> does: a view
      * with several async actions needs somewhere for their failures to land that isn't one action's own row,
      * and a hand-rolled error strip is the first thing to disagree with the app's about tone and dismissal.
@@ -115,6 +127,15 @@ export {
     type PickerOption,
     type PickerOptions,
     ProgressRing,
+    /* <RepoRail> ships for the reason <SplitView> did, one level in: two extensions scope a workspace-wide
+     * board to one repository — maintenance and pipelines — and both had written the same column. Same pinned
+     * "All repositories" row outside every group, same one-number-per-row rule with the second fact as its
+     * colour, same swap to a <Picker> at the width the split folds at. What differs between them is the report
+     * behind it, which is why the rows arrive as data. */
+    RepoRail,
+    type RepoRailAll,
+    type RepoRailGroup,
+    type RepoRailRow,
     /* The writing field and the drag seam ship for the same reason <SplitView> did: an extension view that
      * wants prose typeset as a document, or a pane the reader can size, would otherwise hand-roll one — and
      * both recipes have a failure mode (a replica that disagrees with its field; a drag bound to the window)
@@ -177,6 +198,7 @@ export {
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    freshness,
     timeAgo,
 } from "./format.js";
 /* The figure vocabulary that <Markdown> renders from prose and <MarkdownFigure> renders from data. Types only —
